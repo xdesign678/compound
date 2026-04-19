@@ -128,6 +128,8 @@ button {
   position: relative;
   overflow: hidden;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Header */
@@ -209,7 +211,8 @@ button {
 
 /* Main */
 .app-main {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
