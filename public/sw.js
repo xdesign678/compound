@@ -1,6 +1,6 @@
 // Compound PWA Service Worker
-const CACHE_NAME = 'compound-v6';
-const RUNTIME_CACHE = 'compound-runtime-v6';
+const CACHE_NAME = 'compound-v7';
+const RUNTIME_CACHE = 'compound-runtime-v7';
 
 // App shell files to precache
 const PRECACHE_URLS = [
