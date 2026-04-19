@@ -1,0 +1,99 @@
+export type SourceType = 'link' | 'text' | 'file' | 'article' | 'book' | 'pdf' | 'gist';
+
+export interface Source {
+  id: string;
+  title: string;
+  type: SourceType;
+  author?: string;
+  url?: string;
+  rawContent: string;
+  ingestedAt: number;
+}
+
+export interface Concept {
+  id: string;
+  title: string;
+  summary: string;
+  body: string;
+  sources: string[];
+  related: string[];
+  createdAt: number;
+  updatedAt: number;
+  version: number;
+}
+
+export type ActivityType = 'ingest' | 'query' | 'lint';
+
+export interface ActivityLog {
+  id: string;
+  type: ActivityType;
+  title: string;
+  details: string;
+  relatedSourceIds?: string[];
+  relatedConceptIds?: string[];
+  at: number;
+}
+
+export interface AskMessage {
+  id: string;
+  role: 'user' | 'ai';
+  text: string;
+  citedConcepts?: string[];
+  savedAsConceptId?: string;
+  suggestedTitle?: string;
+  suggestedSummary?: string;
+  at: number;
+}
+
+export interface IngestRequest {
+  source: {
+    title: string;
+    type: SourceType;
+    author?: string;
+    url?: string;
+    rawContent: string;
+  };
+  existingConcepts: Array<{ id: string; title: string; summary: string }>;
+}
+
+export interface IngestResponse {
+  newConcepts: Array<{
+    title: string;
+    summary: string;
+    body: string;
+    relatedConceptIds: string[];
+  }>;
+  updatedConcepts: Array<{
+    id: string;
+    newBody: string;
+    newSummary?: string;
+    addRelatedIds?: string[];
+  }>;
+  activitySummary: string;
+}
+
+export interface QueryRequest {
+  question: string;
+  concepts: Array<{ id: string; title: string; summary: string; body?: string }>;
+  conversationHistory?: Array<{ role: 'user' | 'ai'; text: string }>;
+}
+
+export interface QueryResponse {
+  answer: string;
+  citedConceptIds: string[];
+  archivable: boolean;
+  suggestedTitle?: string;
+  suggestedSummary?: string;
+}
+
+export interface LintRequest {
+  concepts: Array<{ id: string; title: string; summary: string; related: string[] }>;
+}
+
+export interface LintResponse {
+  findings: Array<{
+    type: 'contradiction' | 'orphan' | 'missing-link' | 'duplicate';
+    message: string;
+    conceptIds: string[];
+  }>;
+}
