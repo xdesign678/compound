@@ -68,41 +68,39 @@ export default function Page() {
       <Toast />
       <Header conceptCount={conceptCount} sourceCount={sourceCount} linkCount={linkCount} />
 
-      <div className="app-content-area">
-        <main className="app-main">
-          {!ready ? (
-            <div className="loading-skeleton" aria-label="正在加载..." aria-busy="true">
-              <div className="skeleton skeleton-header" />
-              <div className="skeleton skeleton-card" />
-              <div className="skeleton skeleton-card" />
-              <div className="skeleton skeleton-card" style={{ opacity: 0.7 }} />
-              <div className="skeleton skeleton-card" style={{ opacity: 0.4 }} />
-            </div>
-          ) : detail ? (
-            <div key={detail.id} className="detail-view">
-              {detail.type === 'concept' ? (
-                <ConceptDetail id={detail.id} />
-              ) : (
-                <SourceDetail id={detail.id} />
-              )}
-            </div>
-          ) : tab === 'wiki' ? (
-            <div key="wiki" className="tab-view"><WikiView /></div>
-          ) : tab === 'sources' ? (
-            <div key="sources" className="tab-view"><SourcesView /></div>
-          ) : tab === 'ask' ? (
-            <div key="ask" className="tab-view" style={{ height: '100%' }}><AskView /></div>
-          ) : (
-            <div key="activity" className="tab-view"><ActivityView /></div>
-          )}
-        </main>
-
-        {showFab && ready && (
-          <button className="fab" onClick={openModal} aria-label="添加资料">
-            <Icon.Plus />
-          </button>
+      <main className="app-main">
+        {!ready ? (
+          <div className="loading-skeleton" aria-label="正在加载..." aria-busy="true">
+            <div className="skeleton skeleton-header" />
+            <div className="skeleton skeleton-card" />
+            <div className="skeleton skeleton-card" />
+            <div className="skeleton skeleton-card" style={{ opacity: 0.7 }} />
+            <div className="skeleton skeleton-card" style={{ opacity: 0.4 }} />
+          </div>
+        ) : detail ? (
+          <div key={detail.id} className="detail-view">
+            {detail.type === 'concept' ? (
+              <ConceptDetail id={detail.id} />
+            ) : (
+              <SourceDetail id={detail.id} />
+            )}
+          </div>
+        ) : tab === 'wiki' ? (
+          <div key="wiki" className="tab-view"><WikiView /></div>
+        ) : tab === 'sources' ? (
+          <div key="sources" className="tab-view"><SourcesView /></div>
+        ) : tab === 'ask' ? (
+          <div key="ask" className="tab-view" style={{ height: '100%' }}><AskView /></div>
+        ) : (
+          <div key="activity" className="tab-view"><ActivityView /></div>
         )}
-      </div>
+      </main>
+
+      {showFab && ready && (
+        <button className="fab" onClick={openModal} aria-label="添加资料">
+          <Icon.Plus />
+        </button>
+      )}
 
       <TabBar />
       <IngestModal />
