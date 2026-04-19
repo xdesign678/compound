@@ -19,6 +19,7 @@ const THIN_THRESHOLD = 200;
 
 export function HealthView() {
   const openConcept = useAppStore((s) => s.openConcept);
+  const openModal = useAppStore((s) => s.openModal);
   const lintFindings = useAppStore((s) => s.lintFindings);
   const lastLintAt = useAppStore((s) => s.lastLintAt);
   const lintRunning = useAppStore((s) => s.lintRunning);
@@ -137,6 +138,15 @@ export function HealthView() {
     }
   };
 
+  const findingAction = (f: Finding) => {
+    // 孤岛/陈旧/单薄 → 补充资料
+    if (['orphan', 'stale', 'thin'].includes(f.type)) {
+      return { label: '补充资料', action: () => openModal() };
+    }
+    // 矛盾/缺链/重复 → 查看第一个概念
+    return { label: '查看详情', action: () => f.conceptIds[0] && openConcept(f.conceptIds[0]) };
+  };
+
   if (!concepts) {
     return <div className="empty-state">加载中...</div>;
   }
@@ -177,26 +187,34 @@ export function HealthView() {
           </div>
         ) : (
           <div className="finding-list">
-            {allFindings.map((f, i) => (
-              <div key={i} className={`finding-item type-${f.type}`}>
-                <div className="finding-icon">{findingIcon(f.type)}</div>
-                <div className="finding-body">
-                  <div className="finding-badge">{findingLabel(f.type)}</div>
-                  <div className="finding-msg">{f.message}</div>
-                  <div className="finding-chips">
-                    {f.conceptIds.map((cid) => (
-                      <button
-                        key={cid}
-                        className="concept-chip"
-                        onClick={() => openConcept(cid)}
-                      >
-                        {conceptTitleMap.get(cid) ?? cid}
+            {allFindings.map((f, i) => {
+              const act = findingAction(f);
+              return (
+                <div key={i} className={`finding-item type-${f.type}`}>
+                  <div className="finding-icon">{findingIcon(f.type)}</div>
+                  <div className="finding-body">
+                    <div className="finding-top-row">
+                      <span className="finding-badge">{findingLabel(f.type)}</span>
+                      <button className="finding-action-btn" onClick={act.action}>
+                        {act.label}
                       </button>
-                    ))}
+                    </div>
+                    <div className="finding-msg">{f.message}</div>
+                    <div className="finding-chips">
+                      {f.conceptIds.map((cid) => (
+                        <button
+                          key={cid}
+                          className="concept-chip"
+                          onClick={() => openConcept(cid)}
+                        >
+                          {conceptTitleMap.get(cid) ?? cid}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

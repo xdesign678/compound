@@ -1254,6 +1254,12 @@ button {
   flex: 1;
   min-width: 0;
 }
+.finding-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
 .finding-badge {
   display: inline-block;
   font-size: var(--text-2xs);
@@ -1261,7 +1267,19 @@ button {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  margin-bottom: 3px;
+}
+.finding-action-btn {
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  color: var(--brand-clay);
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: var(--brand-clay-soft);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.finding-action-btn:hover {
+  background: rgba(217, 119, 87, 0.2);
 }
 .finding-msg {
   font-size: var(--text-sm);
