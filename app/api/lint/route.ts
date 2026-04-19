@@ -35,6 +35,7 @@ ${listing}
       responseFormat: 'json_object',
       temperature: 0.3,
       maxTokens: 2000,
+      llmConfig: body.llmConfig,
     });
 
     const parsed = parseJSON<LintResponse>(raw);

@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { getDb } from './db';
+import { getLlmConfig } from './llm-config';
 import type {
   Source,
   Concept,
@@ -23,10 +24,14 @@ async function addBidirectionalLinks(db: ReturnType<typeof getDb>, sourceId: str
 }
 
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
+  const llmConfig = getLlmConfig();
+  const payload = llmConfig.apiKey
+    ? { ...(body as object), llmConfig }
+    : body;
   const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');

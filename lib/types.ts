@@ -45,6 +45,12 @@ export interface AskMessage {
   at: number;
 }
 
+export interface LlmConfig {
+  apiKey?: string;
+  apiUrl?: string;
+  model?: string;
+}
+
 export interface IngestRequest {
   source: {
     title: string;
@@ -54,6 +60,7 @@ export interface IngestRequest {
     rawContent: string;
   };
   existingConcepts: Array<{ id: string; title: string; summary: string }>;
+  llmConfig?: LlmConfig;
 }
 
 export interface IngestResponse {
@@ -76,6 +83,7 @@ export interface QueryRequest {
   question: string;
   concepts: Array<{ id: string; title: string; summary: string; body?: string }>;
   conversationHistory?: Array<{ role: 'user' | 'ai'; text: string }>;
+  llmConfig?: LlmConfig;
 }
 
 export interface QueryResponse {
@@ -88,6 +96,7 @@ export interface QueryResponse {
 
 export interface LintRequest {
   concepts: Array<{ id: string; title: string; summary: string; related: string[] }>;
+  llmConfig?: LlmConfig;
 }
 
 export interface LintResponse {

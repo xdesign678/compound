@@ -52,6 +52,7 @@ ${existingList || '(目前为空)'}
       responseFormat: 'json_object',
       temperature: 0.5,
       maxTokens: 4000,
+      llmConfig: body.llmConfig,
     });
 
     const parsed = parseJSON<IngestResponse>(raw);

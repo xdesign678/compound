@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useAppStore } from '@/lib/store';
 import { lintWiki } from '@/lib/api-client';
 import { getDb } from '@/lib/db';
 import { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } from '@/lib/seed';
-import type { LintResponse } from '@/lib/types';
+import { getLlmConfig, saveLlmConfig, PRESET_MODELS } from '@/lib/llm-config';
+import type { LintResponse, LlmConfig } from '@/lib/types';
 
 export function SettingsDrawer() {
   const isOpen = useAppStore((s) => s.settingsOpen);
@@ -19,6 +20,19 @@ export function SettingsDrawer() {
   const [lintResult, setLintResult] = useState<LintResponse | null>(null);
   const [lintLoading, setLintLoading] = useState(false);
   const [confirming, setConfirming] = useState<'seed' | 'clear' | null>(null);
+
+  const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
+  const [llmSaved, setLlmSaved] = useState(false);
+
+  useEffect(() => {
+    setLlmConfig(getLlmConfig());
+  }, []);
+
+  function saveLlm() {
+    saveLlmConfig(llmConfig);
+    setLlmSaved(true);
+    setTimeout(() => setLlmSaved(false), 2000);
+  }
 
   async function handleLint() {
     setLintLoading(true);
@@ -68,9 +82,111 @@ export function SettingsDrawer() {
       <div className="modal" role="dialog" aria-modal="true" aria-label="设置" onClick={(e) => e.stopPropagation()}>
         <div className="modal-handle" />
         <h3>设置 · 工具</h3>
-        <p className="modal-desc">
-          由 <strong>Claude Sonnet 4.6</strong> (HappyCapy AI Gateway) 提供编译与查询能力。
-        </p>
+
+        {/* LLM 配置 */}
+        <div className="settings-section" style={{ padding: 0, marginBottom: 20 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>LLM 配置</div>
+          <div className="desc" style={{ marginBottom: 12 }}>
+            填写后将覆盖服务器端默认配置。留空则使用服务端环境变量。
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--text-secondary)' }}>
+                API Key
+              </span>
+              <input
+                type="password"
+                placeholder="sk-... 或 OpenRouter key"
+                value={llmConfig.apiKey || ''}
+                onChange={(e) => setLlmConfig((c) => ({ ...c, apiKey: e.target.value }))}
+                style={{
+                  padding: '8px 10px',
+                  border: '1px solid var(--border-section)',
+                  borderRadius: 8,
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 13,
+                  background: 'var(--bg-muted)',
+                  color: 'var(--text-primary)',
+                  outline: 'none',
+                }}
+              />
+            </label>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--text-secondary)' }}>
+                模型
+              </span>
+              <input
+                type="text"
+                placeholder="anthropic/claude-sonnet-4.6"
+                value={llmConfig.model || ''}
+                onChange={(e) => setLlmConfig((c) => ({ ...c, model: e.target.value }))}
+                style={{
+                  padding: '8px 10px',
+                  border: '1px solid var(--border-section)',
+                  borderRadius: 8,
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 13,
+                  background: 'var(--bg-muted)',
+                  color: 'var(--text-primary)',
+                  outline: 'none',
+                }}
+              />
+            </label>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {PRESET_MODELS.map((p) => (
+                <button
+                  key={p.value}
+                  onClick={() => setLlmConfig((c) => ({ ...c, model: p.value }))}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    border: '1px solid var(--border-section)',
+                    background: llmConfig.model === p.value ? 'var(--brand-clay)' : 'var(--bg-muted)',
+                    color: llmConfig.model === p.value ? '#fff' : 'var(--text-secondary)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--text-secondary)' }}>
+                API URL <span style={{ fontWeight: 400 }}>(可选，默认 OpenRouter)</span>
+              </span>
+              <input
+                type="text"
+                placeholder="https://openrouter.ai/api/v1/chat/completions"
+                value={llmConfig.apiUrl || ''}
+                onChange={(e) => setLlmConfig((c) => ({ ...c, apiUrl: e.target.value }))}
+                style={{
+                  padding: '8px 10px',
+                  border: '1px solid var(--border-section)',
+                  borderRadius: 8,
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 13,
+                  background: 'var(--bg-muted)',
+                  color: 'var(--text-primary)',
+                  outline: 'none',
+                }}
+              />
+            </label>
+
+            <button
+              className="modal-btn primary"
+              onClick={saveLlm}
+              style={{ marginTop: 4 }}
+            >
+              {llmSaved ? '已保存 ✓' : '保存配置'}
+            </button>
+          </div>
+        </div>
 
         <div className="settings-section" style={{ padding: 0, marginBottom: 20 }}>
           <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>

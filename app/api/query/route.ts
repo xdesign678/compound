@@ -51,6 +51,7 @@ ${body.question}
       responseFormat: 'json_object',
       temperature: 0.4,
       maxTokens: 2000,
+      llmConfig: body.llmConfig,
     });
 
     const parsed = parseJSON<QueryResponse>(raw);

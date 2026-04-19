@@ -1,14 +1,37 @@
 /**
- * Server-side helper for calling HappyCapy AI Gateway (OpenAI-compatible).
+ * Server-side helper for calling any OpenAI-compatible LLM API.
  * Runs only in Next.js API routes — API key is never exposed to the browser.
+ *
+ * Env vars:
+ *   LLM_API_URL   – chat completions endpoint (default: OpenRouter)
+ *   LLM_API_KEY   – API key for the endpoint
+ *   LLM_MODEL     – model identifier (default: anthropic/claude-sonnet-4.6)
+ *
+ * Legacy fallback: AI_GATEWAY_API_KEY / AI_GATEWAY_URL are also accepted.
  */
 
-const GATEWAY_URL = 'https://ai-gateway.happycapy.ai/api/v1/chat/completions';
-const DEFAULT_MODEL = 'anthropic/claude-sonnet-4.6';
+const HAPPYCAPY_GATEWAY = 'https://ai-gateway.happycapy.ai/api/v1/chat/completions';
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+function getGatewayUrl(): string {
+  if (process.env.LLM_API_URL) return process.env.LLM_API_URL;
+  if (process.env.AI_GATEWAY_API_KEY) return HAPPYCAPY_GATEWAY;
+  return OPENROUTER_URL;
+}
+
+function getDefaultModel(): string {
+  return process.env.LLM_MODEL || 'anthropic/claude-sonnet-4.6';
+}
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
+}
+
+export interface LlmConfigOverride {
+  apiKey?: string;
+  apiUrl?: string;
+  model?: string;
 }
 
 export interface ChatOptions {
@@ -17,16 +40,20 @@ export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
   responseFormat?: 'json_object' | 'text';
+  llmConfig?: LlmConfigOverride;
 }
 
 export async function chat(opts: ChatOptions): Promise<string> {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
+  const apiKey = opts.llmConfig?.apiKey || process.env.LLM_API_KEY || process.env.AI_GATEWAY_API_KEY;
   if (!apiKey) {
-    throw new Error('AI_GATEWAY_API_KEY not set');
+    throw new Error('LLM_API_KEY (or AI_GATEWAY_API_KEY) not set');
   }
 
+  const gatewayUrl = opts.llmConfig?.apiUrl || getGatewayUrl();
+  const model = opts.llmConfig?.model || opts.model || getDefaultModel();
+
   const body: Record<string, unknown> = {
-    model: opts.model || DEFAULT_MODEL,
+    model,
     messages: opts.messages,
     temperature: opts.temperature ?? 0.4,
     max_tokens: opts.maxTokens ?? 4000,
@@ -36,7 +63,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
     body.response_format = { type: 'json_object' };
   }
 
-  const res = await fetch(GATEWAY_URL, {
+  const res = await fetch(gatewayUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
