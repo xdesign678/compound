@@ -19,10 +19,10 @@ export function AskView() {
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const history = useLiveQuery(async () => {
-    const all = await getDb().askHistory.toArray();
-    return all.sort((a, b) => a.at - b.at);
-  }, []);
+  const history = useLiveQuery(
+    async () => getDb().askHistory.orderBy('at').toArray(),
+    []
+  );
 
   const conceptCount = useLiveQuery(async () => getDb().concepts.count(), []);
 
@@ -69,15 +69,11 @@ export function AskView() {
         role: 'ai',
         text: resp.answer,
         citedConcepts: resp.citedConceptIds,
+        suggestedTitle: resp.archivable ? resp.suggestedTitle : undefined,
+        suggestedSummary: resp.archivable ? resp.suggestedSummary : undefined,
         at: Date.now(),
       };
       await db.askHistory.put(aiMsg);
-
-      // Store archivability suggestion on the message
-      if (resp.archivable && resp.suggestedTitle) {
-        aiMsg.suggestedTitle = resp.suggestedTitle;
-        aiMsg.suggestedSummary = resp.suggestedSummary;
-      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await db.askHistory.put({
@@ -102,16 +98,18 @@ export function AskView() {
       await db.askHistory.update(msg.id, { savedAsConceptId: newId });
     } catch (err) {
       console.error(err);
+      alert('归档失败，请重试');
     } finally {
       setArchiving(null);
     }
   }
 
-  const db = getDb();
-  const conceptTitles = useLiveQuery(async () => {
-    const concepts = await db.concepts.toArray();
-    const shuffled = concepts.sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, 3).map(c => c.title);
+  const [conceptTitles, setConceptTitles] = useState<string[]>([]);
+  useEffect(() => {
+    getDb().concepts.toArray().then((concepts) => {
+      const shuffled = concepts.sort(() => Math.random() - 0.5);
+      setConceptTitles(shuffled.slice(0, 3).map(c => c.title));
+    });
   }, []);
 
   const suggestions = useMemo(() => {
@@ -128,7 +126,7 @@ export function AskView() {
         <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 8px 0' }}>
           <button
             style={{ fontSize: 12, color: 'var(--text-tertiary)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px' }}
-            onClick={() => clearAskHistory()}
+            onClick={() => { if (window.confirm('确认清空所有对话记录？')) clearAskHistory(); }}
           >
             新对话
           </button>
@@ -241,9 +239,9 @@ function CitedList({ ids, onClick }: { ids: string[]; onClick: (id: string) => v
   return (
     <>
       {concepts.map((c) => (
-        <div key={c!.id} className="ms-item" onClick={() => onClick(c!.id)}>
+        <button key={c!.id} className="ms-item" onClick={() => onClick(c!.id)}>
           {c!.title}
-        </div>
+        </button>
       ))}
     </>
   );

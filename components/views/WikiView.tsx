@@ -11,10 +11,10 @@ export function WikiView() {
   const openConcept = useAppStore((s) => s.openConcept);
   const freshIds = useAppStore((s) => s.freshConceptIds);
 
-  const concepts = useLiveQuery(async () => {
-    const all = await getDb().concepts.toArray();
-    return all.sort((a, b) => b.updatedAt - a.updatedAt);
-  }, []);
+  const concepts = useLiveQuery(
+    async () => getDb().concepts.orderBy('updatedAt').reverse().toArray(),
+    []
+  );
 
   const sourceCount = useLiveQuery(async () => {
     return getDb().sources.count();
@@ -39,8 +39,7 @@ export function WikiView() {
     return concepts.filter(
       (c) =>
         c.title.toLowerCase().includes(q) ||
-        c.summary.toLowerCase().includes(q) ||
-        c.body.toLowerCase().includes(q)
+        c.summary.toLowerCase().includes(q)
     );
   }, [concepts, deferredQuery]);
 
@@ -82,6 +81,7 @@ export function WikiView() {
           <input
             className="search-input"
             placeholder="搜索概念、资料、引用..."
+            aria-label="搜索概念"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />

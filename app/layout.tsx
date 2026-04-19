@@ -57,8 +57,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  maximumScale: 5,
+  userScalable: true,
   viewportFit: 'cover',
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#faf9f5' },
@@ -73,23 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
       className={`${inter.variable} ${geistMono.variable} ${lora.variable} ${notoSerifSC.variable}`}
     >
-      <head>
-        {/* Fix mobile viewport height: sets --vh to actual window.innerHeight for older browsers */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function(){
-                function setVh(){
-                  var vh = window.innerHeight * 0.01;
-                  document.documentElement.style.setProperty('--vh', vh + 'px');
-                }
-                setVh();
-                window.addEventListener('resize', setVh);
-              })();
-            `,
-          }}
-        />
-      </head>
+      <head />
       <body>
         {children}
         <ServiceWorkerRegister />

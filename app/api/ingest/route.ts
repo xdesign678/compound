@@ -86,8 +86,7 @@ ${existingList || '(目前为空)'}
 
     return NextResponse.json(parsed);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('[ingest] error:', msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error('[ingest] error:', err instanceof Error ? err.message : String(err));
+    return NextResponse.json({ error: 'Ingest processing failed. Please check your API configuration.' }, { status: 500 });
   }
 }

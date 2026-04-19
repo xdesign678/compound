@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '@/lib/store';
 import { ingestSource } from '@/lib/api-client';
 import { Icon } from './Icons';
 import { NoteEditor } from './NoteEditor';
 import type { SourceType } from '@/lib/types';
 
-type Step = 'choose' | 'text' | 'link' | 'processing';
+type Step = 'choose' | 'link' | 'processing';
 
 export function IngestModal() {
   const isOpen = useAppStore((s) => s.modalOpen);
@@ -17,29 +17,7 @@ export function IngestModal() {
   const markFresh = useAppStore((s) => s.markFresh);
 
   const modalRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = modalRef.current;
-    if (!el) return;
-    const focusable = el.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    first?.focus();
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Tab') {
-        if (e.shiftKey) {
-          if (document.activeElement === first) { e.preventDefault(); last?.focus(); }
-        } else {
-          if (document.activeElement === last) { e.preventDefault(); first?.focus(); }
-        }
-      }
-    };
-    el.addEventListener('keydown', handleKeyDown);
-    return () => el.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const [step, setStep] = useState<Step>('choose');
   const [title, setTitle] = useState('');
@@ -49,6 +27,44 @@ export function IngestModal() {
   const [submitting, setSubmitting] = useState(false);
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const safeTimeout = useCallback((fn: () => void, ms: number) => {
+    const id = setTimeout(fn, ms);
+    timersRef.current.push(id);
+    return id;
+  }, []);
+
+  useEffect(() => {
+    return () => { timersRef.current.forEach(clearTimeout); };
+  }, []);
+
+  useEffect(() => {
+    const el = modalRef.current;
+    if (!el || !isOpen) return;
+    const focusable = el.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    first?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        const current = el.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        const f = current[0];
+        const l = current[current.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === f) { e.preventDefault(); l?.focus(); }
+        } else {
+          if (document.activeElement === l) { e.preventDefault(); f?.focus(); }
+        }
+      }
+    };
+    el.addEventListener('keydown', handleKeyDown);
+    return () => el.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, step]);
 
   function reset() {
     setStep('choose');
@@ -77,12 +93,12 @@ export function IngestModal() {
         `完成 · 新建 ${result.newConceptIds.length} 个概念，更新 ${result.updatedConceptIds.length} 个`,
         false
       );
-      setTimeout(() => hideToast(), 3500);
+      safeTimeout(() => hideToast(), 3500);
       reset();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       showToast(`摄入失败: ${msg.slice(0, 80)}`, false);
-      setTimeout(() => hideToast(), 4500);
+      safeTimeout(() => hideToast(), 4500);
       setSubmitting(false);
     }
   }
@@ -111,7 +127,7 @@ export function IngestModal() {
         `完成 · 新建 ${result.newConceptIds.length} 个概念,更新 ${result.updatedConceptIds.length} 个`,
         false
       );
-      setTimeout(() => hideToast(), 3500);
+      safeTimeout(() => hideToast(), 3500);
       reset();
       close();
     } catch (err) {
@@ -163,64 +179,6 @@ export function IngestModal() {
               </button>
             </div>
             <button className="modal-btn" onClick={handleClose}>取消</button>
-          </>
-        )}
-
-        {step === 'text' && (
-          <>
-            <h3>粘贴文本</h3>
-            <p className="modal-desc">贴一段笔记、文章节选或随手写的想法。AI 会提炼概念并链入你的 Wiki。</p>
-            <div className="form-field">
-              <label htmlFor="text-title">标题</label>
-              <input
-                id="text-title"
-                className="form-input"
-                placeholder="例如: 对 Karpathy Wiki 的思考"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-            </div>
-            <div className="form-field">
-              <label htmlFor="text-author">作者(可选)</label>
-              <input
-                id="text-author"
-                className="form-input"
-                placeholder="例如: 自己"
-                value={author}
-                onChange={(e) => setAuthor(e.target.value)}
-              />
-            </div>
-            <div className="form-field">
-              <label htmlFor="text-content">正文</label>
-              <textarea
-                id="text-content"
-                className="form-textarea"
-                placeholder="粘贴或输入文本..."
-                rows={8}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-              />
-            </div>
-            {error && (
-              <div style={{
-                padding: '8px 12px',
-                background: '#fee2e2',
-                color: '#991b1b',
-                borderRadius: 6,
-                fontSize: 13,
-                marginTop: 8
-              }}>
-                {error}
-              </div>
-            )}
-            <button
-              className="modal-btn primary"
-              disabled={!title.trim() || !content.trim() || submitting}
-              onClick={() => handleSubmit('text')}
-            >
-              {submitting ? '编译中...' : '送入 AI 编译'}
-            </button>
-            <button className="modal-btn" onClick={() => setStep('choose')}>返回</button>
           </>
         )}
 

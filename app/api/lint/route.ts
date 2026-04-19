@@ -15,6 +15,9 @@ export async function POST(req: Request) {
     if (body.concepts.length === 0) {
       return NextResponse.json({ findings: [] });
     }
+    if (body.concepts.length > 500) {
+      return NextResponse.json({ error: 'Too many concepts' }, { status: 400 });
+    }
 
     // Read LLM config from request headers (preferred) or fall back to body
     const apiKey = req.headers.get('x-user-api-key') || undefined;
@@ -58,8 +61,7 @@ ${listing}
 
     return NextResponse.json(parsed);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('[lint] error:', msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error('[lint] error:', err instanceof Error ? err.message : String(err));
+    return NextResponse.json({ error: 'Lint processing failed. Please check your API configuration.' }, { status: 500 });
   }
 }

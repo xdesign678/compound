@@ -12,7 +12,6 @@ const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
 
 export function TabBar() {
   const tab = useAppStore((s) => s.tab);
-  const detail = useAppStore((s) => s.detail);
   const setTab = useAppStore((s) => s.setTab);
 
   return (

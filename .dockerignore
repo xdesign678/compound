@@ -3,3 +3,9 @@ node_modules
 npm-debug.log*
 .git
 .env*.local
+.gitignore
+*.md
+.vscode
+.idea
+scripts
+tsconfig.tsbuildinfo

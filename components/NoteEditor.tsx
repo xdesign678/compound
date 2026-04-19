@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { renderMarkdown } from '@/lib/format';
 import DOMPurify from 'dompurify';
 
@@ -30,7 +30,10 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
     onDone(title, body ? trimmed : trimmed);
   }
 
-  const rendered = DOMPurify.sanitize(renderMarkdown(text || ''));
+  const rendered = useMemo(
+    () => (mode === 'preview' ? DOMPurify.sanitize(renderMarkdown(text || '')) : ''),
+    [text, mode]
+  );
   const hasContent = text.trim().length > 0;
 
   return (

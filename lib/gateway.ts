@@ -29,8 +29,8 @@ function validateApiUrl(url: string): void {
     throw new Error('Invalid API URL: must be a public HTTPS endpoint');
   }
 
-  // Block IPv6 localhost
-  if (hostname === '::1' || hostname === '[::1]') {
+  // Block localhost hostnames
+  if (hostname === 'localhost' || hostname === '::1' || hostname === '[::1]') {
     throw new Error('Invalid API URL: must be a public HTTPS endpoint');
   }
 

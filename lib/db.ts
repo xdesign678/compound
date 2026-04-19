@@ -15,6 +15,13 @@ export class CompoundDB extends Dexie {
       activity: 'id, at, type',
       askHistory: 'id, at',
     });
+    // v2: add MultiEntry indexes for sources/related arrays on concepts
+    this.version(2).stores({
+      sources: 'id, ingestedAt, type',
+      concepts: 'id, updatedAt, createdAt, *sources, *related',
+      activity: 'id, at, type',
+      askHistory: 'id, at',
+    });
   }
 }
 

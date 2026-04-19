@@ -10,21 +10,23 @@ export function SourcesView() {
   const openSource = useAppStore((s) => s.openSource);
   const openModal = useAppStore((s) => s.openModal);
 
-  const sources = useLiveQuery(async () => {
-    const all = await getDb().sources.toArray();
-    return all.sort((a, b) => b.ingestedAt - a.ingestedAt);
-  }, []);
+  const sources = useLiveQuery(
+    async () => getDb().sources.orderBy('ingestedAt').reverse().toArray(),
+    []
+  );
 
   const conceptCountBySource = useLiveQuery(async () => {
-    const concepts = await getDb().concepts.toArray();
+    if (!sources) return new Map<string, number>();
+    const db = getDb();
     const map = new Map<string, number>();
-    for (const c of concepts) {
-      for (const sid of c.sources) {
-        map.set(sid, (map.get(sid) || 0) + 1);
-      }
-    }
+    await Promise.all(
+      sources.map(async (s) => {
+        const count = await db.concepts.where('sources').equals(s.id).count();
+        map.set(s.id, count);
+      })
+    );
     return map;
-  }, []);
+  }, [sources]);
 
   if (!sources) return <div className="empty-state">加载中...</div>;
 

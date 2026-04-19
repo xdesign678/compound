@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useAppStore } from '@/lib/store';
 import { lintWiki } from '@/lib/api-client';
@@ -83,15 +83,23 @@ export function SettingsDrawer() {
 
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
   const [llmSaved, setLlmSaved] = useState(false);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const safeTimeout = useCallback((fn: () => void, ms: number) => {
+    const id = setTimeout(fn, ms);
+    timersRef.current.push(id);
+    return id;
+  }, []);
 
   useEffect(() => {
     setLlmConfig(getLlmConfig());
+    return () => { timersRef.current.forEach(clearTimeout); };
   }, []);
 
   function saveLlm() {
     saveLlmConfig(llmConfig);
     setLlmSaved(true);
-    setTimeout(() => setLlmSaved(false), 2000);
+    safeTimeout(() => setLlmSaved(false), 2000);
   }
 
   async function handleLint() {
@@ -102,11 +110,11 @@ export function SettingsDrawer() {
       const res = await lintWiki();
       setLintResult(res);
       showToast(res.findings.length === 0 ? 'Wiki 结构健康' : `发现 ${res.findings.length} 处建议`, false);
-      setTimeout(() => hideToast(), 3000);
+      safeTimeout(() => hideToast(), 3000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       showToast(`体检失败: ${msg.slice(0, 80)}`, false);
-      setTimeout(() => hideToast(), 4000);
+      safeTimeout(() => hideToast(), 4000);
     } finally {
       setLintLoading(false);
     }
@@ -134,7 +142,7 @@ export function SettingsDrawer() {
     setConfirming(null);
     close();
     showToast('已清空所有数据', false);
-    setTimeout(() => hideToast(), 2500);
+    safeTimeout(() => hideToast(), 2500);
   }
 
   return (

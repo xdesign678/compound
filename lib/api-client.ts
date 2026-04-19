@@ -15,12 +15,15 @@ import type {
 } from './types';
 
 async function addBidirectionalLinks(db: ReturnType<typeof getDb>, sourceId: string, relatedIds: string[], now: number) {
-  for (const relId of relatedIds) {
-    const c = await db.concepts.get(relId);
-    if (c && !c.related.includes(sourceId)) {
-      await db.concepts.update(relId, { related: [...c.related, sourceId], updatedAt: now });
+  const fetched = await db.concepts.bulkGet(relatedIds);
+  await db.transaction('rw', db.concepts, async () => {
+    for (let i = 0; i < relatedIds.length; i++) {
+      const c = fetched[i];
+      if (c && !c.related.includes(sourceId)) {
+        await db.concepts.update(relatedIds[i], { related: [...c.related, sourceId], updatedAt: now });
+      }
     }
-  }
+  });
 }
 
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
@@ -106,11 +109,14 @@ export async function ingestSource(input: {
     };
   });
 
-  // 5. Pre-fetch existing concepts to update (reads before transaction)
+  // 5. Pre-fetch existing concepts to update (bulk read before transaction)
   const updatedConceptIds: string[] = [];
   const updatedConceptDocs: Concept[] = [];
-  for (const upd of resp.updatedConcepts) {
-    const c = await db.concepts.get(upd.id);
+  const updIds = resp.updatedConcepts.map((u) => u.id);
+  const updFetched = await db.concepts.bulkGet(updIds);
+  for (let i = 0; i < resp.updatedConcepts.length; i++) {
+    const upd = resp.updatedConcepts[i];
+    const c = updFetched[i];
     if (!c) continue;
     const sources = c.sources.includes(source.id) ? c.sources : [...c.sources, source.id];
     const related = new Set(c.related);
@@ -128,11 +134,16 @@ export async function ingestSource(input: {
     updatedConceptIds.push(c.id);
   }
 
-  // Pre-fetch concepts that need bidirectional link updates (reads before transaction)
+  // Pre-fetch concepts that need bidirectional link updates (bulk read)
+  const biDirRelIds = Array.from(new Set(newConcepts.flatMap((nc) => nc.related)));
+  const biDirFetched = await db.concepts.bulkGet(biDirRelIds);
+  const biDirMap = new Map<string, Concept>();
+  biDirRelIds.forEach((rid, i) => { if (biDirFetched[i]) biDirMap.set(rid, biDirFetched[i]!); });
+
   const biDirUpdates: Array<{ id: string; related: string[] }> = [];
   for (const nc of newConcepts) {
     for (const relId of nc.related) {
-      const c = await db.concepts.get(relId);
+      const c = biDirMap.get(relId);
       if (c && !c.related.includes(nc.id)) {
         biDirUpdates.push({ id: relId, related: [...c.related, nc.id] });
       }

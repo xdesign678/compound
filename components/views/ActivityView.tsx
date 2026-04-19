@@ -7,10 +7,10 @@ import { formatRelativeTime, groupActivityByDate } from '@/lib/format';
 import { Icon } from '../Icons';
 
 export function ActivityView() {
-  const items = useLiveQuery(async () => {
-    const all = await getDb().activity.toArray();
-    return all.sort((a, b) => b.at - a.at);
-  }, []);
+  const items = useLiveQuery(
+    async () => getDb().activity.orderBy('at').reverse().toArray(),
+    []
+  );
 
   if (!items) return <div className="empty-state">加载中...</div>;
   if (items.length === 0) {

@@ -74,8 +74,7 @@ ${body.question}
 
     return NextResponse.json(parsed);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('[query] error:', msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error('[query] error:', err instanceof Error ? err.message : String(err));
+    return NextResponse.json({ error: 'Query processing failed. Please check your API configuration.' }, { status: 500 });
   }
 }

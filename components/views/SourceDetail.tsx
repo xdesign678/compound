@@ -13,10 +13,10 @@ export function SourceDetail({ id }: { id: string }) {
   const [showRaw, setShowRaw] = useState(false);
 
   const source = useLiveQuery(async () => getDb().sources.get(id), [id]);
-  const generated = useLiveQuery(async () => {
-    const all = await getDb().concepts.toArray();
-    return all.filter((c) => c.sources.includes(id));
-  }, [id]);
+  const generated = useLiveQuery(
+    async () => getDb().concepts.where('sources').equals(id).toArray(),
+    [id]
+  );
 
   if (!source) return <div className="empty-state">未找到资料</div>;
 

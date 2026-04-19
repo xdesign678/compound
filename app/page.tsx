@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
@@ -9,16 +10,16 @@ import { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } from '@/lib/seed';
 import { Header } from '@/components/Header';
 import { TabBar } from '@/components/TabBar';
 import { Toast } from '@/components/Toast';
-import { IngestModal } from '@/components/IngestModal';
-import { SettingsDrawer } from '@/components/SettingsDrawer';
 import { Icon } from '@/components/Icons';
 
-import { WikiView } from '@/components/views/WikiView';
-import { SourcesView } from '@/components/views/SourcesView';
-import { AskView } from '@/components/views/AskView';
-import { ActivityView } from '@/components/views/ActivityView';
-import { ConceptDetail } from '@/components/views/ConceptDetail';
-import { SourceDetail } from '@/components/views/SourceDetail';
+const IngestModal = dynamic(() => import('@/components/IngestModal').then(m => ({ default: m.IngestModal })), { ssr: false });
+const SettingsDrawer = dynamic(() => import('@/components/SettingsDrawer').then(m => ({ default: m.SettingsDrawer })), { ssr: false });
+const WikiView = dynamic(() => import('@/components/views/WikiView').then(m => ({ default: m.WikiView })), { ssr: false });
+const SourcesView = dynamic(() => import('@/components/views/SourcesView').then(m => ({ default: m.SourcesView })), { ssr: false });
+const AskView = dynamic(() => import('@/components/views/AskView').then(m => ({ default: m.AskView })), { ssr: false });
+const ActivityView = dynamic(() => import('@/components/views/ActivityView').then(m => ({ default: m.ActivityView })), { ssr: false });
+const ConceptDetail = dynamic(() => import('@/components/views/ConceptDetail').then(m => ({ default: m.ConceptDetail })), { ssr: false });
+const SourceDetail = dynamic(() => import('@/components/views/SourceDetail').then(m => ({ default: m.SourceDetail })), { ssr: false });
 
 export default function Page() {
   const tab = useAppStore((s) => s.tab);
@@ -31,22 +32,30 @@ export default function Page() {
     setMounted(true);
   }, []);
 
-  const concepts = useLiveQuery(
-    async () => (mounted ? getDb().concepts.toArray() : undefined),
+  const conceptCount = useLiveQuery(
+    async () => (mounted ? getDb().concepts.count() : undefined),
     [mounted]
   );
-  const sources = useLiveQuery(
-    async () => (mounted ? getDb().sources.toArray() : undefined),
+  const sourceCount = useLiveQuery(
+    async () => (mounted ? getDb().sources.count() : undefined),
+    [mounted]
+  );
+  const linkCount = useLiveQuery(
+    async () => {
+      if (!mounted) return undefined;
+      const all = await getDb().concepts.toArray();
+      return all.reduce((s, c) => s + c.related.length, 0);
+    },
     [mounted]
   );
 
   // Auto-seed on first run (no onboarding screen)
   const seedingRef = useRef(false);
   useEffect(() => {
-    if (!mounted || concepts === undefined || sources === undefined) return;
+    if (!mounted || conceptCount === undefined || sourceCount === undefined) return;
     if (seedingRef.current) return;
     if (localStorage.getItem('compound_seeded')) return;
-    if (concepts.length > 0 || sources.length > 0) return;
+    if (conceptCount > 0 || sourceCount > 0) return;
     seedingRef.current = true;
     (async () => {
       const db = getDb();
@@ -55,18 +64,17 @@ export default function Page() {
       await db.activity.bulkPut(SEED_ACTIVITY);
       localStorage.setItem('compound_seeded', '1');
     })();
-  }, [mounted, concepts, sources]);
+  }, [mounted, conceptCount, sourceCount]);
 
-  const ready = mounted && concepts !== undefined && sources !== undefined;
-  const conceptCount = concepts?.length ?? 0;
-  const sourceCount = sources?.length ?? 0;
-  const linkCount = concepts?.reduce((s, c) => s + c.related.length, 0) ?? 0;
+  const ready = mounted && conceptCount !== undefined && sourceCount !== undefined;
+  const modalOpen = useAppStore((s) => s.modalOpen);
+  const settingsOpen = useAppStore((s) => s.settingsOpen);
   const showFab = !detail && (tab === 'wiki' || tab === 'sources');
 
   return (
     <div className="app-shell">
       <Toast />
-      <Header conceptCount={conceptCount} sourceCount={sourceCount} linkCount={linkCount} />
+      <Header conceptCount={conceptCount ?? 0} sourceCount={sourceCount ?? 0} linkCount={linkCount ?? 0} />
 
       <main className="app-main">
         {!ready ? (
@@ -103,8 +111,8 @@ export default function Page() {
       )}
 
       <TabBar />
-      <IngestModal />
-      <SettingsDrawer />
+      {modalOpen && <IngestModal />}
+      {settingsOpen && <SettingsDrawer />}
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { getDb } from './db';
 
 export type TabId = 'wiki' | 'sources' | 'ask' | 'activity';
 
@@ -61,5 +60,8 @@ export const useAppStore = create<AppState>((set) => ({
     return { freshConceptIds: next };
   }),
   clearFresh: () => set({ freshConceptIds: {} }),
-  clearAskHistory: async () => { await getDb().askHistory.clear(); },
+  clearAskHistory: async () => {
+    const { getDb } = await import('./db');
+    await getDb().askHistory.clear();
+  },
 }));
