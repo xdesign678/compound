@@ -31,7 +31,8 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   if (llmConfig.apiUrl) headers['X-User-Api-Url'] = llmConfig.apiUrl;
   if (llmConfig.model) headers['X-User-Model'] = llmConfig.model;
   // Also embed in body as fallback (some proxies strip custom headers)
-  const payload = llmConfig.apiKey
+  const hasConfig = !!(llmConfig.apiKey || llmConfig.model || llmConfig.apiUrl);
+  const payload = hasConfig
     ? { ...(body as object), llmConfig }
     : body;
   const res = await fetch(path, {

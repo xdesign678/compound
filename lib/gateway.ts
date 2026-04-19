@@ -56,7 +56,11 @@ const HAPPYCAPY_GATEWAY = 'https://ai-gateway.happycapy.ai/api/v1/chat/completio
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 function getGatewayUrl(): string {
+  // Explicit URL always wins
   if (process.env.LLM_API_URL) return process.env.LLM_API_URL;
+  // If user has set LLM_API_KEY, they're using OpenRouter (or custom)
+  if (process.env.LLM_API_KEY) return OPENROUTER_URL;
+  // Legacy: AI_GATEWAY_API_KEY → internal HappyCapy gateway (sandbox only)
   if (process.env.AI_GATEWAY_API_KEY) return HAPPYCAPY_GATEWAY;
   return OPENROUTER_URL;
 }
