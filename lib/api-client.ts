@@ -26,13 +26,18 @@ async function addBidirectionalLinks(db: ReturnType<typeof getDb>, sourceId: str
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
   const llmConfig = getLlmConfig();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  // Send via headers (fast path)
   if (llmConfig.apiKey) headers['X-User-Api-Key'] = llmConfig.apiKey;
   if (llmConfig.apiUrl) headers['X-User-Api-Url'] = llmConfig.apiUrl;
   if (llmConfig.model) headers['X-User-Model'] = llmConfig.model;
+  // Also embed in body as fallback (some proxies strip custom headers)
+  const payload = llmConfig.apiKey
+    ? { ...(body as object), llmConfig }
+    : body;
   const res = await fetch(path, {
     method: 'POST',
     headers,
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
