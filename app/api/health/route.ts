@@ -11,12 +11,20 @@ export async function GET(req: Request) {
 
   const llmConfig = (apiKey || apiUrl || model) ? { apiKey, apiUrl, model } : undefined;
 
+  // Diagnostic: show key shape without revealing it
+  const rawKey = apiKey || process.env.LLM_API_KEY || process.env.AI_GATEWAY_API_KEY || '';
+  const keyDiag = rawKey
+    ? { length: rawKey.length, prefix: rawKey.slice(0, 6), suffix: rawKey.slice(-4) }
+    : null;
+
   const envStatus = {
     LLM_API_KEY: !!process.env.LLM_API_KEY,
-    LLM_API_URL: !!process.env.LLM_API_URL,
+    LLM_API_KEY_len: (process.env.LLM_API_KEY || '').length,
+    LLM_API_URL: process.env.LLM_API_URL || false,
     LLM_MODEL: process.env.LLM_MODEL || '(default)',
     AI_GATEWAY_API_KEY: !!process.env.AI_GATEWAY_API_KEY,
     override: !!llmConfig,
+    keyDiag,
   };
 
   try {
