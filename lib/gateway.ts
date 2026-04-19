@@ -90,7 +90,9 @@ export interface ChatOptions {
 }
 
 export async function chat(opts: ChatOptions): Promise<string> {
-  const apiKey = opts.llmConfig?.apiKey || process.env.LLM_API_KEY || process.env.AI_GATEWAY_API_KEY;
+  // Strip quotes/whitespace that some hosting panels add to env vars
+  const clean = (s?: string) => s?.replace(/^["'\s]+|["'\s]+$/g, '') || '';
+  const apiKey = clean(opts.llmConfig?.apiKey) || clean(process.env.LLM_API_KEY) || clean(process.env.AI_GATEWAY_API_KEY);
   if (!apiKey) {
     throw new Error('LLM_API_KEY (or AI_GATEWAY_API_KEY) not set');
   }
