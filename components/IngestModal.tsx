@@ -48,6 +48,7 @@ export function IngestModal() {
   const [content, setContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function reset() {
     setStep('choose');
@@ -57,6 +58,7 @@ export function IngestModal() {
     setContent('');
     setSubmitting(false);
     setNoteEditorOpen(false);
+    setError(null);
   }
 
   async function handleNoteEditorDone(noteTitle: string, noteContent: string) {
@@ -94,8 +96,8 @@ export function IngestModal() {
   async function handleSubmit(type: SourceType) {
     if (!content.trim() || !title.trim()) return;
     setSubmitting(true);
+    setError(null);
     showToast('AI 正在分析并编译到 Wiki...', true);
-    close();
     try {
       const result = await ingestSource({
         title: title.trim(),
@@ -111,10 +113,11 @@ export function IngestModal() {
       );
       setTimeout(() => hideToast(), 3500);
       reset();
+      close();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      showToast(`摄入失败: ${msg.slice(0, 80)}`, false);
-      setTimeout(() => hideToast(), 4500);
+      hideToast();
+      setError(`摄入失败: ${msg.slice(0, 80)}`);
       setSubmitting(false);
     }
   }
@@ -198,6 +201,18 @@ export function IngestModal() {
                 onChange={(e) => setContent(e.target.value)}
               />
             </div>
+            {error && (
+              <div style={{
+                padding: '8px 12px',
+                background: '#fee2e2',
+                color: '#991b1b',
+                borderRadius: 6,
+                fontSize: 13,
+                marginTop: 8
+              }}>
+                {error}
+              </div>
+            )}
             <button
               className="modal-btn primary"
               disabled={!title.trim() || !content.trim() || submitting}
@@ -238,6 +253,18 @@ export function IngestModal() {
                 onChange={(e) => setContent(e.target.value)}
               />
             </div>
+            {error && (
+              <div style={{
+                padding: '8px 12px',
+                background: '#fee2e2',
+                color: '#991b1b',
+                borderRadius: 6,
+                fontSize: 13,
+                marginTop: 8
+              }}>
+                {error}
+              </div>
+            )}
             <button
               className="modal-btn primary"
               disabled={!title.trim() || !content.trim() || submitting}

@@ -12,6 +12,7 @@ import type { AskMessage } from '@/lib/types';
 
 export function AskView() {
   const openConcept = useAppStore((s) => s.openConcept);
+  const clearAskHistory = useAppStore((s) => s.clearAskHistory);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [archiving, setArchiving] = useState<string | null>(null);
@@ -106,17 +107,33 @@ export function AskView() {
     }
   }
 
+  const db = getDb();
+  const conceptTitles = useLiveQuery(async () => {
+    const concepts = await db.concepts.toArray();
+    const shuffled = concepts.sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, 3).map(c => c.title);
+  }, []);
+
   const suggestions = useMemo(() => {
     if ((conceptCount ?? 0) === 0) return [];
-    return [
-      'Karpathy 为什么反对 RAG?',
-      'Memex 和 LLM Wiki 有什么关系?',
-      '为什么说 bookkeeping 是关键?',
-    ];
-  }, [conceptCount]);
+    if (conceptTitles && conceptTitles.length > 0) {
+      return conceptTitles.map(t => `${t}是什么？`);
+    }
+    return ['这个知识库里有什么内容？', '最近添加了哪些资料？', '请总结一下主要概念'];
+  }, [conceptCount, conceptTitles]);
 
   return (
     <div className="ask-view">
+      {history && history.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 8px 0' }}>
+          <button
+            style={{ fontSize: 12, color: 'var(--text-tertiary)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px' }}
+            onClick={() => clearAskHistory()}
+          >
+            新对话
+          </button>
+        </div>
+      )}
       <div className="ask-messages" ref={messagesRef}>
         {history && history.length === 0 && !loading ? (
           <div className="ask-empty">

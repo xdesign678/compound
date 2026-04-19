@@ -25,13 +25,14 @@ async function addBidirectionalLinks(db: ReturnType<typeof getDb>, sourceId: str
 
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
   const llmConfig = getLlmConfig();
-  const payload = llmConfig.apiKey
-    ? { ...(body as object), llmConfig }
-    : body;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (llmConfig.apiKey) headers['X-User-Api-Key'] = llmConfig.apiKey;
+  if (llmConfig.apiUrl) headers['X-User-Api-Url'] = llmConfig.apiUrl;
+  if (llmConfig.model) headers['X-User-Model'] = llmConfig.model;
   const res = await fetch(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    headers,
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -54,7 +55,7 @@ export async function ingestSource(input: {
   const db = getDb();
   const now = Date.now();
 
-  // 1. Save source
+  // 1. Build source record (will be written inside transaction later)
   const source: Source = {
     id: 's-' + nanoid(8),
     title: input.title.trim(),
@@ -64,7 +65,6 @@ export async function ingestSource(input: {
     rawContent: input.rawContent,
     ingestedAt: now,
   };
-  await db.sources.put(source);
 
   // 2. Gather existing concepts
   const existing = await db.concepts.toArray();
@@ -82,7 +82,7 @@ export async function ingestSource(input: {
   // 3. Call API
   const resp = await postJSON<IngestResponse>('/api/ingest', req);
 
-  // 4. Apply new concepts
+  // 4. Build new concepts list (pure computation, no DB writes yet)
   const newConceptIds: string[] = [];
   const newConcepts: Concept[] = resp.newConcepts.map((nc) => {
     const id = 'c-' + nanoid(8);
@@ -100,8 +100,9 @@ export async function ingestSource(input: {
     };
   });
 
-  // 5. Apply updates to existing
+  // 5. Pre-fetch existing concepts to update (reads before transaction)
   const updatedConceptIds: string[] = [];
+  const updatedConceptDocs: Concept[] = [];
   for (const upd of resp.updatedConcepts) {
     const c = await db.concepts.get(upd.id);
     if (!c) continue;
@@ -117,21 +118,22 @@ export async function ingestSource(input: {
       updatedAt: now,
       version: c.version + 1,
     };
-    await db.concepts.put(next);
+    updatedConceptDocs.push(next);
     updatedConceptIds.push(c.id);
   }
 
-  // 6. Bulk add new concepts
-  if (newConcepts.length > 0) {
-    await db.concepts.bulkPut(newConcepts);
-  }
-
-  // 7. Bidirectional linking: ensure existing concepts list new ones too
+  // Pre-fetch concepts that need bidirectional link updates (reads before transaction)
+  const biDirUpdates: Array<{ id: string; related: string[] }> = [];
   for (const nc of newConcepts) {
-    await addBidirectionalLinks(db, nc.id, nc.related, now);
+    for (const relId of nc.related) {
+      const c = await db.concepts.get(relId);
+      if (c && !c.related.includes(nc.id)) {
+        biDirUpdates.push({ id: relId, related: [...c.related, nc.id] });
+      }
+    }
   }
 
-  // 8. Activity log
+  // Build activity log record
   const activity: ActivityLog = {
     id: 'a-' + nanoid(8),
     type: 'ingest',
@@ -141,7 +143,30 @@ export async function ingestSource(input: {
     relatedConceptIds: [...newConceptIds, ...updatedConceptIds],
     at: now,
   };
-  await db.activity.put(activity);
+
+  // 6-8. All writes wrapped in a single Dexie transaction
+  await db.transaction('rw', [db.sources, db.concepts, db.activity], async () => {
+    // Save source
+    await db.sources.put(source);
+
+    // Apply updates to existing concepts
+    for (const next of updatedConceptDocs) {
+      await db.concepts.put(next);
+    }
+
+    // Bulk add new concepts
+    if (newConcepts.length > 0) {
+      await db.concepts.bulkPut(newConcepts);
+    }
+
+    // Bidirectional linking: update related lists on existing concepts
+    for (const { id, related } of biDirUpdates) {
+      await db.concepts.update(id, { related, updatedAt: now });
+    }
+
+    // Activity log
+    await db.activity.put(activity);
+  });
 
   return { newConceptIds, updatedConceptIds, activityId: activity.id };
 }
@@ -151,11 +176,25 @@ export async function askWiki(
   history: Array<{ role: 'user' | 'ai'; text: string }>
 ): Promise<QueryResponse> {
   const db = getDb();
-  const concepts = await db.concepts.toArray();
+  const allConcepts = await db.concepts.toArray();
+
+  // 基于问题关键词预筛选，限制发送量最多 50 个
+  const keywords = question.toLowerCase().split(/\W+/).filter(k => k.length > 2);
+  let conceptsToSend = allConcepts;
+  if (keywords.length > 0) {
+    const scored = allConcepts.map(c => {
+      const text = `${c.title} ${c.summary || ''}`.toLowerCase();
+      const score = keywords.filter(k => text.includes(k)).length;
+      return { ...c, _score: score };
+    });
+    // 优先高分，保留至少10个（即使无匹配）
+    const sorted = scored.sort((a, b) => b._score - a._score);
+    conceptsToSend = sorted.slice(0, 50).map(({ _score, ...c }) => c);
+  }
 
   const req: QueryRequest = {
     question,
-    concepts: concepts.map((c) => ({
+    concepts: conceptsToSend.map((c) => ({
       id: c.id,
       title: c.title,
       summary: c.summary,

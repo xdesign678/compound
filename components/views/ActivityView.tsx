@@ -1,5 +1,6 @@
 'use client';
 
+import DOMPurify from 'dompurify';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { formatRelativeTime, groupActivityByDate } from '@/lib/format';
@@ -40,7 +41,7 @@ export function ActivityView() {
             <div key={it.id} className={`activity-item type-${it.type}`}>
               <div className="a-icon">{iconFor(it.type)}</div>
               <div className="a-body">
-                <div className="a-title" dangerouslySetInnerHTML={{ __html: it.title.replace(/<em>/g, '<span class="emphasis">').replace(/<\/em>/g, '</span>') }} />
+                <div className="a-title" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(it.title.replace(/<em>/g, '<span class="emphasis">').replace(/<\/em>/g, '</span>')) }} />
                 <div className="a-details">{it.details}</div>
                 <div className="a-time">{formatRelativeTime(it.at)}</div>
               </div>

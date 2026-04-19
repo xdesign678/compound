@@ -44,8 +44,8 @@ export function WikiView() {
     );
   }, [concepts, deferredQuery]);
 
-  const fresh = useMemo(() => filtered.filter((c) => freshIds.has(c.id)), [filtered, freshIds]);
-  const others = useMemo(() => filtered.filter((c) => !freshIds.has(c.id)), [filtered, freshIds]);
+  const fresh = useMemo(() => filtered.filter((c) => freshIds[c.id]), [filtered, freshIds]);
+  const others = useMemo(() => filtered.filter((c) => !freshIds[c.id]), [filtered, freshIds]);
 
   if (!concepts) {
     return <div className="empty-state">加载中...</div>;
@@ -56,7 +56,7 @@ export function WikiView() {
   const renderCard = (c: (typeof concepts)[number]) => (
     <button
       key={c.id}
-      className={`concept-card ${freshIds.has(c.id) ? 'fresh' : ''}`}
+      className={`concept-card ${freshIds[c.id] ? 'fresh' : ''}`}
       onClick={() => openConcept(c.id)}
     >
       <div className="title">{c.title}</div>
@@ -69,7 +69,7 @@ export function WikiView() {
         <span>·</span>
         <span>来自 {c.sources.length} 份资料</span>
         <span>·</span>
-        <span className={freshIds.has(c.id) ? 'updated' : ''}>{formatRelativeTime(c.updatedAt)}</span>
+        <span className={freshIds[c.id] ? 'updated' : ''}>{formatRelativeTime(c.updatedAt)}</span>
       </div>
     </button>
   );

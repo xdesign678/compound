@@ -12,8 +12,17 @@ export async function POST(req: Request) {
     if (!body?.question?.trim()) {
       return NextResponse.json({ error: 'question is required' }, { status: 400 });
     }
+    if (!Array.isArray(body.concepts)) {
+      return NextResponse.json({ error: 'concepts must be an array' }, { status: 400 });
+    }
 
-    if (body.concepts && body.concepts.length > 500) {
+    // Read LLM config from request headers (preferred) or fall back to body
+    const apiKey = req.headers.get('x-user-api-key') || undefined;
+    const apiUrl = req.headers.get('x-user-api-url') || undefined;
+    const model = req.headers.get('x-user-model') || undefined;
+    const llmConfig = (apiKey || apiUrl || model) ? { apiKey, apiUrl, model } : body.llmConfig;
+
+    if (body.concepts.length > 500) {
       return NextResponse.json({ error: 'Too many concepts' }, { status: 400 });
     }
 
@@ -51,7 +60,7 @@ ${body.question}
       responseFormat: 'json_object',
       temperature: 0.4,
       maxTokens: 2000,
-      llmConfig: body.llmConfig,
+      llmConfig,
     });
 
     const parsed = parseJSON<QueryResponse>(raw);

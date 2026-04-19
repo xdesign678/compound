@@ -1,4 +1,5 @@
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 marked.setOptions({
   gfm: true,
@@ -23,6 +24,13 @@ export function renderMarkdown(md: string): string {
     /\[C(\d+)\]/g,
     '<span class="citation" data-citation-index="$1">C$1</span>'
   );
+
+  if (typeof window !== 'undefined') {
+    html = DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: ['p', 'strong', 'em', 'ul', 'ol', 'li', 'code', 'pre', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'span', 'a', 'br', 'hr'],
+      ALLOWED_ATTR: ['class', 'data-concept-id', 'data-citation-index', 'href', 'target'],
+    });
+  }
 
   return html;
 }

@@ -90,7 +90,7 @@ export default function Page() {
         ) : tab === 'sources' ? (
           <div key="sources" className="tab-view"><SourcesView /></div>
         ) : tab === 'ask' ? (
-          <div key="ask" className="tab-view" style={{ height: '100%' }}><AskView /></div>
+          <div key="ask" className="tab-view ask-tab"><AskView /></div>
         ) : (
           <div key="activity" className="tab-view"><ActivityView /></div>
         )}

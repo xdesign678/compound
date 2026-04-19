@@ -26,7 +26,7 @@ export function ConceptDetail({ id }: { id: string }) {
 
   if (!concept) return <div className="empty-state">未找到概念</div>;
 
-  const isFresh = freshIds.has(concept.id);
+  const isFresh = freshIds[concept.id];
 
   return (
     <div className="concept-detail">

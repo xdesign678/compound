@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getDb } from './db';
 
 export type TabId = 'wiki' | 'sources' | 'ask' | 'activity';
 
@@ -19,7 +20,7 @@ interface AppState {
   modalOpen: boolean;
   settingsOpen: boolean;
   toast: ToastState;
-  freshConceptIds: Set<string>;
+  freshConceptIds: Record<string, true>;
 
   setTab: (t: TabId) => void;
   openConcept: (id: string) => void;
@@ -33,6 +34,7 @@ interface AppState {
   hideToast: () => void;
   markFresh: (ids: string[]) => void;
   clearFresh: () => void;
+  clearAskHistory: () => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -41,7 +43,7 @@ export const useAppStore = create<AppState>((set) => ({
   modalOpen: false,
   settingsOpen: false,
   toast: { visible: false, text: '', loading: false },
-  freshConceptIds: new Set(),
+  freshConceptIds: {} as Record<string, true>,
 
   setTab: (t) => set({ tab: t, detail: null }),
   openConcept: (id) => set({ detail: { type: 'concept', id } }),
@@ -53,10 +55,11 @@ export const useAppStore = create<AppState>((set) => ({
   closeSettings: () => set({ settingsOpen: false }),
   showToast: (text, loading = false) => set({ toast: { visible: true, text, loading } }),
   hideToast: () => set((s) => ({ toast: { ...s.toast, visible: false } })),
-  markFresh: (ids) => set((s) => {
-    const next = new Set(s.freshConceptIds);
-    ids.forEach((id) => next.add(id));
+  markFresh: (ids: string[]) => set((s) => {
+    const next = { ...s.freshConceptIds };
+    ids.forEach(id => { next[id] = true; });
     return { freshConceptIds: next };
   }),
-  clearFresh: () => set({ freshConceptIds: new Set() }),
+  clearFresh: () => set({ freshConceptIds: {} }),
+  clearAskHistory: async () => { await getDb().askHistory.clear(); },
 }));

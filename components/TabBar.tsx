@@ -18,7 +18,7 @@ export function TabBar() {
   return (
     <nav className="tabbar" role="tablist" aria-label="主导航">
       {TABS.map((t) => {
-        const isActive = tab === t.id && !detail;
+        const isActive = tab === t.id;
         return (
           <button
             key={t.id}

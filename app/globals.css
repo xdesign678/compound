@@ -13,7 +13,7 @@
   --text-primary: #141413;
   --text-body: rgba(20, 20, 19, 0.85);
   --text-secondary: #5e5d59;
-  --text-tertiary: #b0aea5;
+  --text-tertiary: #7a7870;
   --text-on-button: #faf9f5;
 
   --font-sans: var(--font-inter), Inter, system-ui, -apple-system, sans-serif;
@@ -27,6 +27,16 @@
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.12);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.16);
+
+  /* Type Scale */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-md: 17px;
+  --text-lg: 20px;
+  --text-xl: 26px;
+  --text-2xl: 32px;
 }
 
 .dark {
@@ -42,7 +52,7 @@
   --text-primary: #ece9e1;
   --text-body: rgba(236, 233, 225, 0.85);
   --text-secondary: #9b9b95;
-  --text-tertiary: #6b6b66;
+  --text-tertiary: #8a8a84;
   --text-on-button: #1a1a18;
 
   --border-light: rgba(236, 233, 225, 0.08);
@@ -61,7 +71,7 @@ body {
 }
 
 body {
-  font-family: var(--font-reading);
+  font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.55;
   color: var(--text-body);
@@ -270,7 +280,7 @@ button {
 
 /* FAB */
 .fab {
-  position: fixed;
+  position: absolute;
   right: 20px;
   bottom: calc(72px + env(safe-area-inset-bottom, 0px));
   width: 52px;
@@ -323,6 +333,11 @@ button {
 }
 .search-input::placeholder {
   color: var(--text-tertiary);
+}
+.search-input:focus {
+  border-color: var(--brand-clay);
+  background: var(--bg-card);
+  outline: none;
 }
 .search-wrap > svg {
   position: absolute;
@@ -384,6 +399,12 @@ button {
 .concept-card:active {
   background: var(--bg-hover);
   transform: scale(0.995);
+}
+@media (hover: hover) {
+  .concept-card:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-default);
+  }
 }
 .concept-card .title {
   font-family: var(--font-sans);
@@ -668,6 +689,11 @@ button {
 }
 .source-card:active {
   background: var(--bg-hover);
+}
+@media (hover: hover) {
+  .source-card:hover {
+    background: var(--bg-hover);
+  }
 }
 .source-card .s-icon {
   width: 40px;
@@ -1554,4 +1580,9 @@ button {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Ask tab height */
+.ask-tab {
+  height: 100%;
 }

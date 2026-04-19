@@ -32,7 +32,15 @@ export function SourceDetail({ id }: { id: string }) {
 
       {source.url && (
         <p style={{ marginBottom: 16, fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
-          {source.url}
+          <a
+            href={source.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="source-url-link"
+            style={{ color: 'var(--brand-clay)', textDecoration: 'none', wordBreak: 'break-all', fontSize: '13px' }}
+          >
+            {source.url}
+          </a>
         </p>
       )}
 

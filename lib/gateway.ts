@@ -10,6 +10,48 @@
  * Legacy fallback: AI_GATEWAY_API_KEY / AI_GATEWAY_URL are also accepted.
  */
 
+function validateApiUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('Invalid API URL: must be a public HTTPS endpoint');
+  }
+
+  if (parsed.protocol !== 'https:') {
+    throw new Error('Invalid API URL: must be a public HTTPS endpoint');
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  // Block cloud metadata endpoints
+  if (hostname === 'metadata.google.internal' || hostname === '169.254.169.254') {
+    throw new Error('Invalid API URL: must be a public HTTPS endpoint');
+  }
+
+  // Block IPv6 localhost
+  if (hostname === '::1' || hostname === '[::1]') {
+    throw new Error('Invalid API URL: must be a public HTTPS endpoint');
+  }
+
+  // Block private IP ranges
+  const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (ipv4Match) {
+    const [, a, b] = ipv4Match.map(Number);
+    const octets = ipv4Match.slice(1).map(Number);
+    const [o1, o2] = octets;
+    if (
+      o1 === 127 ||                          // 127.x.x.x — loopback
+      o1 === 10 ||                           // 10.x.x.x — private
+      (o1 === 172 && o2 >= 16 && o2 <= 31) || // 172.16-31.x.x — private
+      (o1 === 192 && o2 === 168) ||          // 192.168.x.x — private
+      (o1 === 169 && o2 === 254)             // 169.254.x.x — link-local / cloud metadata
+    ) {
+      throw new Error('Invalid API URL: must be a public HTTPS endpoint');
+    }
+  }
+}
+
 const HAPPYCAPY_GATEWAY = 'https://ai-gateway.happycapy.ai/api/v1/chat/completions';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -65,6 +107,8 @@ export async function chat(opts: ChatOptions): Promise<string> {
   if (opts.responseFormat === 'json_object') {
     body.response_format = { type: 'json_object' };
   }
+
+  validateApiUrl(gatewayUrl);
 
   const res = await fetch(gatewayUrl, {
     method: 'POST',

@@ -9,9 +9,18 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as LintRequest;
-    if (!body?.concepts || body.concepts.length === 0) {
+    if (!Array.isArray(body?.concepts)) {
+      return NextResponse.json({ error: 'concepts must be an array' }, { status: 400 });
+    }
+    if (body.concepts.length === 0) {
       return NextResponse.json({ findings: [] });
     }
+
+    // Read LLM config from request headers (preferred) or fall back to body
+    const apiKey = req.headers.get('x-user-api-key') || undefined;
+    const apiUrl = req.headers.get('x-user-api-url') || undefined;
+    const model = req.headers.get('x-user-model') || undefined;
+    const llmConfig = (apiKey || apiUrl || model) ? { apiKey, apiUrl, model } : body.llmConfig;
 
     const listing = body.concepts
       .map((c) =>
@@ -35,7 +44,7 @@ ${listing}
       responseFormat: 'json_object',
       temperature: 0.3,
       maxTokens: 2000,
-      llmConfig: body.llmConfig,
+      llmConfig,
     });
 
     const parsed = parseJSON<LintResponse>(raw);
