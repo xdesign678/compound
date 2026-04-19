@@ -49,7 +49,10 @@ export async function chat(opts: ChatOptions): Promise<string> {
     throw new Error('LLM_API_KEY (or AI_GATEWAY_API_KEY) not set');
   }
 
-  const gatewayUrl = opts.llmConfig?.apiUrl || getGatewayUrl();
+  // If the user provided their own key but no explicit URL, default to OpenRouter.
+  // Don't inherit the server-side URL (which may point to a private gateway).
+  const gatewayUrl = opts.llmConfig?.apiUrl
+    || (opts.llmConfig?.apiKey ? OPENROUTER_URL : getGatewayUrl());
   const model = opts.llmConfig?.model || opts.model || getDefaultModel();
 
   const body: Record<string, unknown> = {
