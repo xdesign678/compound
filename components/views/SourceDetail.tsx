@@ -6,6 +6,7 @@ import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { SourceTypeIcon } from '../Icons';
+import { Prose } from '../Prose';
 
 export function SourceDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
@@ -58,20 +59,14 @@ export function SourceDetail({ id }: { id: string }) {
         {showRaw ? (
           <div
             style={{
-              fontFamily: 'var(--font-reading)',
-              fontSize: 14,
-              lineHeight: 1.7,
-              color: 'var(--text-body)',
               background: 'var(--bg-muted)',
               padding: 14,
               borderRadius: 10,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              maxHeight: 400,
+              maxHeight: 500,
               overflowY: 'auto',
             }}
           >
-            {source.rawContent}
+            <Prose markdown={source.rawContent} />
           </div>
         ) : (
           <button className="modal-btn" onClick={() => setShowRaw(true)}>
