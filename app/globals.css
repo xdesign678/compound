@@ -86,12 +86,12 @@ button {
 
 /* App shell — responsive container */
 .app-shell {
-  width: 100%;
-  height: 100vh; /* ultimate fallback */
-  height: calc(var(--vh, 1vh) * 100); /* JS-measured exact height */
-  height: 100dvh; /* modern browsers: dynamic viewport */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: var(--bg-primary);
-  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -106,12 +106,10 @@ button {
     min-height: 100dvh;
   }
   .app-shell {
+    position: relative;
     max-width: 560px;
-    height: 100vh;
-    height: calc(var(--vh, 1vh) * 100);
     height: 100dvh;
     box-shadow: 0 0 0 1px var(--border-section), 0 8px 32px rgba(0, 0, 0, 0.08);
-    position: relative; /* so fixed tabbar positions relative to this on desktop */
   }
   /* On desktop, tabbar stays in flex flow — no need for fixed */
   .tabbar {
@@ -217,14 +215,13 @@ button {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   position: relative;
-  /* Room for fixed tab bar (approx 64px) + safe area */
-  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 16px;
 }
 .app-main::-webkit-scrollbar {
   width: 0;
 }
 
-/* Tab bar — fixed to bottom of screen for reliable positioning */
+/* Tab bar — part of flex layout, always at bottom */
 .tabbar {
   display: flex;
   background: rgba(250, 249, 245, 0.92);
@@ -232,13 +229,8 @@ button {
   -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid var(--border-section);
   padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  flex-shrink: 0;
   z-index: 40;
-  /* Clamp to max-width container on desktop */
-  max-width: inherit;
 }
 .dark .tabbar {
   background: rgba(26, 26, 24, 0.92);
