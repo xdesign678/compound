@@ -452,6 +452,22 @@ button {
   vertical-align: middle;
 }
 
+/* End-of-list hint — fills blank space below cards */
+.list-end-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px 80px;
+  min-height: 30vh;
+}
+.list-end-hint span {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+  opacity: 0.6;
+}
+
 /* Concept detail */
 .concept-detail {
   padding: 20px 20px 100px;

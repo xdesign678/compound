@@ -127,6 +127,9 @@ export function WikiView() {
               <div className="concept-list">{others.map(renderCard)}</div>
             </>
           )}
+          <div className="list-end-hint">
+            <span>{filtered.length} 个概念 · 点击 + 添加更多知识</span>
+          </div>
         </>
       )}
     </>
