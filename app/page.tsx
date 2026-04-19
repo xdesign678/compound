@@ -10,6 +10,7 @@ import { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } from '@/lib/seed';
 import { Header } from '@/components/Header';
 import { TabBar } from '@/components/TabBar';
 import { Toast } from '@/components/Toast';
+import { SwipeBack } from '@/components/SwipeBack';
 import { Icon } from '@/components/Icons';
 
 const IngestModal = dynamic(() => import('@/components/IngestModal').then(m => ({ default: m.IngestModal })), { ssr: false });
@@ -74,6 +75,7 @@ export default function Page() {
   return (
     <div className="app-shell">
       <Toast />
+      <SwipeBack />
       <Header conceptCount={conceptCount ?? 0} sourceCount={sourceCount ?? 0} linkCount={linkCount ?? 0} />
 
       <main className="app-main">
