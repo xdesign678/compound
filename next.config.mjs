@@ -3,7 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
   experimental: {
-    serverActions: { allowedOrigins: ['localhost:8080'] },
+    serverActions: { allowedOrigins: ['localhost:8080', 'zhishiku.zeabur.app'] },
   },
   async headers() {
     return [
