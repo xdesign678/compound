@@ -101,19 +101,17 @@ button {
   body {
     background: var(--bg-secondary);
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
     min-height: 100dvh;
   }
   .app-shell {
-    position: relative;
+    /* Keep position:fixed but constrain width and center */
     max-width: 560px;
-    height: 100dvh;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
     box-shadow: 0 0 0 1px var(--border-section), 0 8px 32px rgba(0, 0, 0, 0.08);
-  }
-  /* On desktop, tabbar stays in flex flow — no need for fixed */
-  .tabbar {
-    position: static;
   }
   .app-main {
     padding-bottom: 0;
