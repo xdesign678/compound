@@ -94,7 +94,8 @@ button {
   background: var(--bg-primary);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: hidden; /* fallback */
+  overflow: clip;   /* prevents programmatic scrollTop changes */
 }
 
 @media (min-width: 768px) {
