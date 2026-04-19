@@ -23,8 +23,8 @@ const TAB_TITLES: Record<string, { t: string; s: (h: HeaderProps) => string }> =
     s: () => '答案来自你的知识库',
   },
   activity: {
-    t: '活动日志',
-    s: () => 'AI 最近做了什么',
+    t: 'Wiki 维护',
+    s: () => '健康检查与活动日志',
   },
 };
 

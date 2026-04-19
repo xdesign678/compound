@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 
 export type TabId = 'wiki' | 'sources' | 'ask' | 'activity';
+export type ActivitySubTab = 'health' | 'log';
+export type ActivityFilterType = 'all' | 'ingest' | 'query' | 'lint';
 
 interface DetailState {
   type: 'concept' | 'source';
@@ -13,6 +15,12 @@ interface ToastState {
   loading: boolean;
 }
 
+export interface LintFinding {
+  type: 'contradiction' | 'orphan' | 'missing-link' | 'duplicate';
+  message: string;
+  conceptIds: string[];
+}
+
 interface AppState {
   tab: TabId;
   detail: DetailState | null;
@@ -20,6 +28,13 @@ interface AppState {
   settingsOpen: boolean;
   toast: ToastState;
   freshConceptIds: Record<string, true>;
+
+  // Activity tab state
+  activitySubTab: ActivitySubTab;
+  activityFilter: ActivityFilterType;
+  lintFindings: LintFinding[];
+  lastLintAt: number | null;
+  lintRunning: boolean;
 
   setTab: (t: TabId) => void;
   openConcept: (id: string) => void;
@@ -34,6 +49,10 @@ interface AppState {
   markFresh: (ids: string[]) => void;
   clearFresh: () => void;
   clearAskHistory: () => Promise<void>;
+  setActivitySubTab: (t: ActivitySubTab) => void;
+  setActivityFilter: (f: ActivityFilterType) => void;
+  setLintResult: (findings: LintFinding[]) => void;
+  setLintRunning: (v: boolean) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -43,6 +62,12 @@ export const useAppStore = create<AppState>((set) => ({
   settingsOpen: false,
   toast: { visible: false, text: '', loading: false },
   freshConceptIds: {} as Record<string, true>,
+
+  activitySubTab: 'health',
+  activityFilter: 'all',
+  lintFindings: [],
+  lastLintAt: typeof window !== 'undefined' ? (() => { const v = localStorage.getItem('compound_last_lint'); return v ? Number(v) : null; })() : null,
+  lintRunning: false,
 
   setTab: (t) => set({ tab: t, detail: null }),
   openConcept: (id) => set({ detail: { type: 'concept', id } }),
@@ -64,4 +89,12 @@ export const useAppStore = create<AppState>((set) => ({
     const { getDb } = await import('./db');
     await getDb().askHistory.clear();
   },
+  setActivitySubTab: (t) => set({ activitySubTab: t }),
+  setActivityFilter: (f) => set({ activityFilter: f }),
+  setLintResult: (findings) => {
+    const now = Date.now();
+    localStorage.setItem('compound_last_lint', String(now));
+    set({ lintFindings: findings, lastLintAt: now, lintRunning: false });
+  },
+  setLintRunning: (v) => set({ lintRunning: v }),
 }));
