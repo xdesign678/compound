@@ -71,21 +71,25 @@ function domToMarkdown(el: HTMLElement): string {
 }
 
 export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
-  const titleRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
-  const [hasContent, setHasContent] = useState(false);
-  const [titleValue, setTitleValue] = useState('');
+  const [hasTitle, setHasTitle] = useState(false);
 
   useEffect(() => {
-    const el = editorRef.current;
-    if (!el) return;
+    // Focus title on mount
+    titleRef.current?.focus();
+  }, []);
 
-    // Init with a single paragraph
-    el.innerHTML = '<p><br></p>';
+  useEffect(() => {
+    const titleEl = titleRef.current;
+    const editorEl = editorRef.current;
+    if (!titleEl || !editorEl) return;
+
+    editorEl.innerHTML = '<p><br></p>';
 
     function getParentBlock(node: Node): Element | null {
       let cur: Node | null = node;
-      while (cur && cur !== el) {
+      while (cur && cur !== editorEl) {
         if (cur.nodeType === Node.ELEMENT_NODE) {
           const tag = (cur as Element).tagName;
           if (['P', 'H1', 'H2', 'H3', 'LI', 'BLOCKQUOTE', 'DIV'].includes(tag)) {
@@ -130,7 +134,39 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
       }
     }
 
-    function handleKeyDown(e: KeyboardEvent) {
+    function handleTitleKeyDown(e: KeyboardEvent) {
+      // Prevent newline in title, Enter jumps to body
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!editorEl) return;
+        editorEl.focus();
+        // Place cursor at start of editor
+        const sel = window.getSelection();
+        if (sel) {
+          const range = document.createRange();
+          const firstBlock = editorEl.firstChild;
+          if (firstBlock) {
+            const firstText = firstBlock.firstChild;
+            if (firstText) {
+              range.setStart(firstText, 0);
+            } else {
+              range.setStart(firstBlock, 0);
+            }
+          } else {
+            range.setStart(editorEl as Node, 0);
+          }
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      }
+    }
+
+    function handleTitleInput() {
+      setHasTitle(!!(titleRef.current?.textContent?.trim()));
+    }
+
+    function handleEditorKeyDown(e: KeyboardEvent) {
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0) return;
       const range = sel.getRangeAt(0);
@@ -157,7 +193,6 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
 
         const block = getParentBlock(node);
         if (!block) return;
-        // Only trigger if text before cursor equals the whole block text (we're at start)
         if ((block.textContent ?? '').trim() !== (node.textContent ?? '').trim()) return;
 
         if (text === '#') { e.preventDefault(); convertBlock(block, 'h1', 2); }
@@ -168,26 +203,22 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
       }
     }
 
-    function handleInput() {
-      setHasContent(!!(editorRef.current?.textContent?.trim()));
-    }
-
-    el.addEventListener('keydown', handleKeyDown);
-    el.addEventListener('input', handleInput);
+    titleEl.addEventListener('keydown', handleTitleKeyDown);
+    titleEl.addEventListener('input', handleTitleInput);
+    editorEl.addEventListener('keydown', handleEditorKeyDown);
     return () => {
-      el.removeEventListener('keydown', handleKeyDown);
-      el.removeEventListener('input', handleInput);
+      titleEl.removeEventListener('keydown', handleTitleKeyDown);
+      titleEl.removeEventListener('input', handleTitleInput);
+      editorEl.removeEventListener('keydown', handleEditorKeyDown);
     };
   }, []);
 
   function handleDone() {
-    const title = titleValue.trim();
+    const title = titleRef.current?.textContent?.trim() || '';
+    if (!title) return;
     const content = domToMarkdown(editorRef.current!);
-    if (!title || !content) return;
-    onDone(title, content);
+    onDone(title, content || title);
   }
-
-  const canSubmit = titleValue.trim().length > 0 && hasContent;
 
   return (
     <div className="note-editor-overlay">
@@ -210,8 +241,8 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
           </button>
         </div>
         <button
-          className={`note-editor-done ${canSubmit ? 'enabled' : ''}`}
-          disabled={!canSubmit}
+          className={`note-editor-done ${hasTitle ? 'enabled' : ''}`}
+          disabled={!hasTitle}
           onClick={handleDone}
         >
           完成
@@ -219,15 +250,13 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
       </div>
 
       <div className="note-editor-scroll">
-        <input
+        <div
           ref={titleRef}
-          className="note-editor-title-input"
-          placeholder="笔记标题..."
-          value={titleValue}
-          onChange={(e) => setTitleValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); editorRef.current?.focus(); }
-          }}
+          contentEditable
+          suppressContentEditableWarning
+          className="note-editor-title-inline"
+          data-placeholder="无标题"
+          spellCheck={false}
         />
 
         <div className="note-editor-hints">
@@ -242,14 +271,7 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
           contentEditable
           suppressContentEditableWarning
           className="note-editor-content"
-          data-placeholder="开始输入，所见即所得..."
-          onFocus={() => {
-            const el = editorRef.current;
-            if (!el) return;
-            if (el.innerHTML === '<p><br></p>' || !el.textContent?.trim()) {
-              // Clear placeholder look
-            }
-          }}
+          data-placeholder="开始输入..."
         />
       </div>
     </div>

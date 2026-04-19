@@ -1460,13 +1460,12 @@ button {
   gap: 0;
 }
 
-.note-editor-title-input {
+.note-editor-title-inline {
   width: 100%;
   background: transparent;
-  border: none;
   outline: none;
   font-family: var(--font-sans);
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.02em;
@@ -1474,9 +1473,14 @@ button {
   padding: 0 0 14px;
   border-bottom: 1px solid var(--border-section);
   margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  word-break: break-all;
 }
-.note-editor-title-input::placeholder {
+.note-editor-title-inline:empty::before {
+  content: attr(data-placeholder);
   color: var(--text-tertiary);
+  pointer-events: none;
 }
 
 .note-editor-hints {
