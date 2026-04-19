@@ -74,7 +74,8 @@ ${existingList || '(目前为空)'}
 
     return NextResponse.json(parsed);
   } catch (err) {
-    console.error('[ingest] error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[ingest] error:', msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
