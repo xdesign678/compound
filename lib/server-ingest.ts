@@ -10,6 +10,7 @@
 import { nanoid } from 'nanoid';
 import { repo, getServerDb } from './server-db';
 import { runIngestLLM } from './ingest-core';
+import { toCategoryKeys } from './types';
 import type {
   Source,
   Concept,
@@ -52,6 +53,9 @@ export async function ingestSourceToServerDb(
 
   // 2. Gather existing concepts for LLM context
   const allConcepts = repo.listConcepts();
+  const existingCategories = Array.from(
+    new Set(allConcepts.flatMap((concept) => concept.categoryKeys || []))
+  );
 
   // 3. Call LLM (no DB writes yet)
   const resp = await runIngestLLM({
@@ -67,6 +71,7 @@ export async function ingestSourceToServerDb(
       title: c.title,
       summary: c.summary,
     })),
+    existingCategories,
     // llmConfig omitted → falls through to server env (LLM_API_KEY etc.)
   });
 
@@ -74,6 +79,7 @@ export async function ingestSourceToServerDb(
   const newConceptIds: string[] = [];
   const newConcepts: Concept[] = resp.newConcepts.map((nc) => {
     const id = 'c-' + nanoid(8);
+    const categories = nc.categories || [];
     newConceptIds.push(id);
     return {
       id,
@@ -82,6 +88,8 @@ export async function ingestSourceToServerDb(
       body: nc.body,
       sources: [source.id],
       related: nc.relatedConceptIds || [],
+      categories,
+      categoryKeys: toCategoryKeys(categories),
       createdAt: now,
       updatedAt: now,
       version: 1,

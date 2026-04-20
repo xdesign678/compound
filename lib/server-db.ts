@@ -19,6 +19,7 @@ import type {
   Concept,
   ActivityLog,
   AskMessage,
+  CategoryTag,
   SourceType,
   ActivityType,
 } from './types';
@@ -144,6 +145,18 @@ function runMigrations(db: DB): void {
       value  TEXT NOT NULL
     );
   `);
+
+  const conceptColumns = new Set(
+    (db.prepare(`PRAGMA table_info(concepts)`).all() as Array<{ name: string }>).map((row) => row.name)
+  );
+
+  if (!conceptColumns.has('categories')) {
+    db.exec(`ALTER TABLE concepts ADD COLUMN categories TEXT NOT NULL DEFAULT '[]';`);
+  }
+
+  if (!conceptColumns.has('category_keys')) {
+    db.exec(`ALTER TABLE concepts ADD COLUMN category_keys TEXT NOT NULL DEFAULT '[]';`);
+  }
 }
 
 // --------------------------------------------------------------------
@@ -168,6 +181,8 @@ interface ConceptRow {
   body: string;
   sources: string;
   related: string;
+  categories: string;
+  category_keys: string;
   created_at: number;
   updated_at: number;
   version: number;
@@ -225,6 +240,8 @@ function rowToConcept(r: ConceptRow): Concept {
     body: r.body,
     sources: parseJsonArray<string>(r.sources),
     related: parseJsonArray<string>(r.related),
+    categories: parseJsonArray<CategoryTag>(r.categories),
+    categoryKeys: parseJsonArray<string>(r.category_keys),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     version: r.version,
@@ -321,8 +338,8 @@ export const repo = {
     getServerDb()
       .prepare(
         `INSERT OR REPLACE INTO concepts
-          (id, title, summary, body, sources, related, created_at, updated_at, version)
-          VALUES (@id, @title, @summary, @body, @sources, @related, @created_at, @updated_at, @version)`
+          (id, title, summary, body, sources, related, categories, category_keys, created_at, updated_at, version)
+          VALUES (@id, @title, @summary, @body, @sources, @related, @categories, @category_keys, @created_at, @updated_at, @version)`
       )
       .run({
         id: c.id,
@@ -331,6 +348,8 @@ export const repo = {
         body: c.body,
         sources: JSON.stringify(c.sources ?? []),
         related: JSON.stringify(c.related ?? []),
+        categories: JSON.stringify(c.categories ?? []),
+        category_keys: JSON.stringify(c.categoryKeys ?? []),
         created_at: c.createdAt,
         updated_at: c.updatedAt,
         version: c.version ?? 1,

@@ -74,6 +74,7 @@ export interface IngestRequest {
     rawContent: string;
   };
   existingConcepts: Array<{ id: string; title: string; summary: string }>;
+  existingCategories?: string[];
   llmConfig?: LlmConfig;
 }
 
