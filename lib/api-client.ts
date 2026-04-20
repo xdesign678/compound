@@ -108,8 +108,10 @@ export async function ingestSource(input: {
     existingConcepts: existing.map((c) => ({ id: c.id, title: c.title, summary: c.summary })),
   };
 
-  // Inject existing categories for LLM reference
-  const existingCategories = await getExistingCategories();
+  // Inject existing categories for LLM reference (derived from already-fetched existing concepts)
+  const existingCategories = Array.from(
+    new Set(existing.flatMap((c) => c.categoryKeys || []))
+  ).sort();
   const reqWithCategories = { ...req, existingCategories };
 
   // 3. Call API
@@ -349,25 +351,31 @@ export async function categorizeConcepts(
       existingCategories,
     };
 
-    const resp = await postJSON<CategorizeResponse>('/api/categorize', req);
+    try {
+      const resp = await postJSON<CategorizeResponse>('/api/categorize', req);
 
-    // Write results to Dexie
-    await db.transaction('rw', db.concepts, async () => {
+      // Write results to Dexie
+      await db.transaction('rw', db.concepts, async () => {
+        for (const result of resp.results) {
+          const categories = result.categories || [];
+          const categoryKeys = toCategoryKeys(categories);
+          await db.concepts.update(result.id, { categories, categoryKeys });
+        }
+      });
+
+      // Update existing categories list with newly created ones
       for (const result of resp.results) {
-        const categories = result.categories || [];
-        const categoryKeys = toCategoryKeys(categories);
-        await db.concepts.update(result.id, { categories, categoryKeys });
+        const cats = result.categories || [];
+        for (const cat of cats) {
+          const k1 = cat.primary;
+          const k2 = cat.secondary ? `${cat.primary}/${cat.secondary}` : cat.primary;
+          if (!existingCategories.includes(k1)) existingCategories.push(k1);
+          if (k2 !== k1 && !existingCategories.includes(k2)) existingCategories.push(k2);
+        }
       }
-    });
-
-    // Update existing categories list with newly created ones
-    for (const result of resp.results) {
-      for (const cat of result.categories) {
-        const k1 = cat.primary;
-        const k2 = cat.secondary ? `${cat.primary}/${cat.secondary}` : cat.primary;
-        if (!existingCategories.includes(k1)) existingCategories.push(k1);
-        if (k2 !== k1 && !existingCategories.includes(k2)) existingCategories.push(k2);
-      }
+    } catch {
+      // If one batch fails, skip it and continue with the next
+      // done count still advances; caller receives total attempted
     }
 
     done += batch.length;
