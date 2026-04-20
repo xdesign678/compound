@@ -71,9 +71,16 @@ function deriveTitle(filePath: string, content: string): string {
  * Returns the job id immediately so the client can start polling.
  */
 export function startGithubSync(): { jobId: string; existing?: boolean } {
+  // Recover zombie jobs from crashed/restarted previous runs.
+  const recovered = repo.recoverStaleSyncJobs(10 * 60 * 1000);
+  if (recovered > 0) {
+    console.log(`[github-sync-runner] recovered ${recovered} stale running job(s)`);
+  }
+
   // Only one active job at a time.
   const active = repo.getActiveSyncJob();
   if (active) {
+    console.log(`[github-sync-runner] reusing active job ${active.id}`);
     return { jobId: active.id, existing: true };
   }
 
@@ -93,9 +100,11 @@ export function startGithubSync(): { jobId: string; existing?: boolean } {
     started_at: now,
     finished_at: null,
   });
+  console.log(`[github-sync-runner] created job ${jobId}`);
 
   // Fire and forget — the loop handles its own errors and final status.
-  void runGithubSyncLoop(jobId).catch((err) => {
+  // Hold a reference on globalThis so the Promise isn't GC'd prematurely.
+  const promise = runGithubSyncLoop(jobId).catch((err) => {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[github-sync-runner] unexpected:', message);
     repo.updateSyncJob(jobId, {
@@ -105,15 +114,25 @@ export function startGithubSync(): { jobId: string; existing?: boolean } {
     });
   });
 
+  // Attach to a global set so Node doesn't treat it as unreferenced.
+  const g = globalThis as unknown as { __activeSyncPromises?: Set<Promise<void>> };
+  g.__activeSyncPromises ??= new Set();
+  g.__activeSyncPromises.add(promise);
+  void promise.finally(() => g.__activeSyncPromises?.delete(promise));
+
   return { jobId };
 }
 
 async function runGithubSyncLoop(jobId: string): Promise<void> {
+  console.log(`[github-sync-runner] ${jobId}: loop started`);
+
   let cfg;
   try {
     cfg = getGithubConfig();
+    console.log(`[github-sync-runner] ${jobId}: github config ok, repo=${cfg.owner}/${cfg.repo} branch=${cfg.branch}`);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    console.error(`[github-sync-runner] ${jobId}: github config error:`, message);
     repo.updateSyncJob(jobId, {
       status: 'failed',
       error: `GitHub 配置错误：${message}`,
@@ -126,8 +145,10 @@ async function runGithubSyncLoop(jobId: string): Promise<void> {
   let remote: Awaited<ReturnType<typeof listMarkdownFiles>>;
   try {
     remote = await listMarkdownFiles(cfg);
+    console.log(`[github-sync-runner] ${jobId}: listed ${remote.length} markdown files from GitHub`);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    console.error(`[github-sync-runner] ${jobId}: list failed:`, message);
     repo.updateSyncJob(jobId, {
       status: 'failed',
       error: `GitHub 列表失败：${message}`,
@@ -173,6 +194,7 @@ async function runGithubSyncLoop(jobId: string): Promise<void> {
   }
 
   repo.updateSyncJob(jobId, { total: plan.length });
+  console.log(`[github-sync-runner] ${jobId}: plan ready, ${plan.length} file(s) to process`);
 
   // 4. Serial execution with progress updates
   for (const item of plan) {
@@ -204,6 +226,9 @@ async function runGithubSyncLoop(jobId: string): Promise<void> {
           message: `新增概念 ${result.newConceptIds.length} · 更新 ${result.updatedConceptIds.length}`,
         }),
       });
+      console.log(
+        `[github-sync-runner] ${jobId}: ✓ ${item.path} (done=${row.done + 1}/${row.total})`
+      );
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       const row = repo.getSyncJob(jobId);
@@ -217,6 +242,7 @@ async function runGithubSyncLoop(jobId: string): Promise<void> {
           message: message.slice(0, 200),
         }),
       });
+      console.warn(`[github-sync-runner] ${jobId}: ✗ ${item.path} — ${message.slice(0, 200)}`);
     }
   }
 
@@ -228,6 +254,9 @@ async function runGithubSyncLoop(jobId: string): Promise<void> {
       current: null,
       finished_at: Date.now(),
     });
+    console.log(
+      `[github-sync-runner] ${jobId}: ✅ done — total=${final.total} success=${final.done} failed=${final.failed}`
+    );
   }
 }
 

@@ -401,6 +401,28 @@ export const repo = {
     return row ?? null;
   },
 
+  /**
+   * Recover jobs that are stuck in "running" state. This happens when the
+   * server restarts mid-sync — the fire-and-forget Promise dies, but the DB
+   * row stays `running` forever. Called on every sync start.
+   *
+   * @param maxAgeMs - Mark running jobs older than this as failed. Default 10 min.
+   * @returns Number of jobs recovered.
+   */
+  recoverStaleSyncJobs(maxAgeMs: number = 10 * 60 * 1000): number {
+    const cutoff = Date.now() - maxAgeMs;
+    const result = getServerDb()
+      .prepare(
+        `UPDATE sync_jobs
+         SET status = 'failed',
+             error = COALESCE(error, '服务重启导致任务中断（已自动回收）'),
+             finished_at = ?
+         WHERE status = 'running' AND started_at < ?`
+      )
+      .run(Date.now(), cutoff);
+    return result.changes;
+  },
+
   getSyncJob(id: string): SyncJobRow | null {
     const row = getServerDb().prepare(`SELECT * FROM sync_jobs WHERE id = ?`).get(id) as
       | SyncJobRow
