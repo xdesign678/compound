@@ -17,6 +17,11 @@ export interface Source {
   externalKey?: string;
 }
 
+export interface CategoryTag {
+  primary: string;
+  secondary: string;
+}
+
 export interface Concept {
   id: string;
   title: string;
@@ -27,6 +32,8 @@ export interface Concept {
   createdAt: number;
   updatedAt: number;
   version: number;
+  categories: CategoryTag[];
+  categoryKeys: string[];
 }
 
 export type ActivityType = 'ingest' | 'query' | 'lint';
@@ -76,6 +83,7 @@ export interface IngestResponse {
     summary: string;
     body: string;
     relatedConceptIds: string[];
+    categories?: Array<{ primary: string; secondary: string }>;
   }>;
   updatedConcepts: Array<{
     id: string;
@@ -112,4 +120,31 @@ export interface LintResponse {
     message: string;
     conceptIds: string[];
   }>;
+}
+
+export interface CategorizeRequest {
+  concepts: Array<{ id: string; title: string; summary: string; body: string }>;
+  existingCategories: string[];
+  llmConfig?: LlmConfig;
+}
+
+export interface CategorizeResponse {
+  results: Array<{
+    id: string;
+    categories: Array<{ primary: string; secondary: string }>;
+  }>;
+}
+
+/** Derive flat categoryKeys from structured categories for Dexie MultiEntry index. */
+export function toCategoryKeys(categories: CategoryTag[]): string[] {
+  const keys = new Set<string>();
+  for (const cat of categories) {
+    if (cat.primary) {
+      keys.add(cat.primary);
+      if (cat.secondary) {
+        keys.add(`${cat.primary}/${cat.secondary}`);
+      }
+    }
+  }
+  return Array.from(keys);
 }
