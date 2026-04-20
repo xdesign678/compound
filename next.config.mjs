@@ -2,6 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  // better-sqlite3 is a native module — keep it external so webpack doesn't try to bundle it.
+  serverExternalPackages: ['better-sqlite3'],
   experimental: {
     serverActions: { allowedOrigins: ['localhost:8080', 'zhishiku.zeabur.app'] },
   },

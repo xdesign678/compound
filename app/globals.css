@@ -2947,6 +2947,42 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   color: var(--ink-soft, var(--text-tertiary));
 }
 
+.gh-sync-progress-bar {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-tertiary, rgba(0, 0, 0, 0.06));
+  overflow: hidden;
+  margin: 8px 0 4px;
+}
+
+.gh-sync-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent, #2563eb), var(--accent-hover, #1d4ed8));
+  transition: width 0.3s ease;
+}
+
+.gh-sync-current {
+  font-size: 12px;
+  color: var(--ink-soft, var(--text-tertiary));
+  margin: 4px 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-sync-current code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 12px;
+  background: var(--bg-tertiary, rgba(0, 0, 0, 0.04));
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.gh-sync-log .gh-sync-row {
+  gap: 8px;
+}
+
 .btn-primary,
 .btn-ghost {
   padding: 8px 16px;

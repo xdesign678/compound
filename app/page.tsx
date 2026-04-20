@@ -85,6 +85,22 @@ export default function Page() {
     })();
   }, [mounted, conceptCount, sourceCount]);
 
+  // Pull cloud snapshot once on mount so all browsers share the same view.
+  const pulledRef = useRef(false);
+  useEffect(() => {
+    if (!mounted || pulledRef.current) return;
+    pulledRef.current = true;
+    (async () => {
+      try {
+        const { pullSnapshotFromCloud } = await import('@/lib/cloud-sync');
+        await pullSnapshotFromCloud();
+      } catch (e) {
+        // Non-fatal: local-only mode still works.
+        console.warn('[cloud-sync] snapshot pull failed:', e);
+      }
+    })();
+  }, [mounted]);
+
   const ready = mounted && conceptCount !== undefined && sourceCount !== undefined;
   const modalOpen = useAppStore((s) => s.modalOpen);
   const settingsOpen = useAppStore((s) => s.settingsOpen);

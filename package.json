@@ -9,7 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/dompurify": "^3.0.5",
+    "better-sqlite3": "^12.9.0",
     "dexie": "4.0.10",
     "dexie-react-hooks": "1.1.7",
     "dompurify": "^3.4.0",

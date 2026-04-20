@@ -41,3 +41,10 @@ next-env.d.ts
 
 # Local planning docs (not deployed)
 docs/plans/
+
+# SQLite (local dev fallback for DATA_DIR)
+/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
