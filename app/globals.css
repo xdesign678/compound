@@ -3096,9 +3096,9 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   color: var(--text-secondary);
 }
 
-.library-categorize-btn {
-  padding: 6px 14px !important;
-  font-size: 12px !important;
+.library-categorize-banner .library-categorize-btn {
+  padding: 6px 14px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -3145,7 +3145,12 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 .library-capsule.active {
   background: var(--brand-clay);
   border-color: var(--brand-clay);
-  color: #fff;
+  color: var(--text-on-button);
+}
+
+.dark .library-capsule.active {
+  background: var(--brand-clay);
+  border-color: var(--brand-clay);
 }
 
 .library-capsule.secondary {
@@ -3196,7 +3201,6 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 /* Desktop: multi-column grid */
 @media (min-width: 1024px) {
   .library-grid {
-    display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 12px;
     padding: 0 16px;

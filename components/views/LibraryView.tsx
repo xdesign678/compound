@@ -121,6 +121,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   }, [concepts, selectedPrimary, selectedSecondary, deferredQuery]);
 
   const handleCategorize = useCallback(async () => {
+    if (categorizing) return;
     setCategorizing(true);
     showToast('正在归类...', true);
     try {
@@ -136,7 +137,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
     } finally {
       setCategorizing(false);
     }
-  }, [showToast, hideToast]);
+  }, [categorizing, showToast, hideToast]);
 
   if (!concepts) {
     return <div className="empty-state">加载中...</div>;
@@ -185,6 +186,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
       <div className="library-filter-row">
         <button
           className={`library-capsule${selectedPrimary === null ? ' active' : ''}`}
+          aria-pressed={selectedPrimary === null}
           onClick={() => { setSelectedPrimary(null); setSelectedSecondary(null); }}
         >
           全部
@@ -194,6 +196,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
           <button
             key={cat.primary}
             className={`library-capsule${selectedPrimary === cat.primary ? ' active' : ''}`}
+            aria-pressed={selectedPrimary === cat.primary}
             onClick={() => {
               if (selectedPrimary === cat.primary) {
                 setSelectedPrimary(null);
@@ -216,6 +219,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
             <button
               key={sec.name}
               className={`library-capsule secondary${selectedSecondary === sec.name ? ' active' : ''}`}
+              aria-pressed={selectedSecondary === sec.name}
               onClick={() => {
                 setSelectedSecondary(selectedSecondary === sec.name ? null : sec.name);
               }}
@@ -254,8 +258,8 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                 <div className="summary">{c.summary}</div>
                 {c.categories && c.categories.length > 0 && (
                   <div className="library-card-tags">
-                    {c.categories.map((cat, i) => (
-                      <span key={i} className="library-card-tag">
+                    {c.categories.map((cat) => (
+                      <span key={`${cat.primary}-${cat.secondary ?? ''}`} className="library-card-tag">
                         {cat.secondary || cat.primary}
                       </span>
                     ))}
