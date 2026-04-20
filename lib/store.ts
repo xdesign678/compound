@@ -27,6 +27,7 @@ interface AppState {
   modalOpen: boolean;
   settingsOpen: boolean;
   obsidianImportOpen: boolean;
+  githubSyncOpen: boolean;
   toast: ToastState;
   freshConceptIds: Record<string, true>;
 
@@ -47,6 +48,8 @@ interface AppState {
   closeSettings: () => void;
   openObsidianImport: () => void;
   closeObsidianImport: () => void;
+  openGithubSync: () => void;
+  closeGithubSync: () => void;
   showToast: (text: string, loading?: boolean) => void;
   hideToast: () => void;
   markFresh: (ids: string[]) => void;
@@ -73,6 +76,7 @@ export const useAppStore = create<AppState>((set) => ({
   modalOpen: false,
   settingsOpen: false,
   obsidianImportOpen: false,
+  githubSyncOpen: false,
   toast: { visible: false, text: '', loading: false },
   freshConceptIds: {} as Record<string, true>,
 
@@ -92,6 +96,8 @@ export const useAppStore = create<AppState>((set) => ({
   closeSettings: () => set({ settingsOpen: false }),
   openObsidianImport: () => set({ obsidianImportOpen: true }),
   closeObsidianImport: () => set({ obsidianImportOpen: false }),
+  openGithubSync: () => set({ githubSyncOpen: true }),
+  closeGithubSync: () => set({ githubSyncOpen: false }),
   showToast: (text, loading = false) => set({ toast: { visible: true, text, loading } }),
   hideToast: () => set((s) => ({ toast: { ...s.toast, visible: false } })),
   markFresh: (ids: string[]) => set((s) => {

@@ -22,6 +22,13 @@ export class CompoundDB extends Dexie {
       activity: 'id, at, type',
       askHistory: 'id, at',
     });
+    // v3: index externalKey on sources for fast dedup lookups (GitHub / Obsidian sync)
+    this.version(3).stores({
+      sources: 'id, ingestedAt, type, externalKey',
+      concepts: 'id, updatedAt, createdAt, *sources, *related',
+      activity: 'id, at, type',
+      askHistory: 'id, at',
+    });
   }
 }
 

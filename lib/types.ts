@@ -8,6 +8,13 @@ export interface Source {
   url?: string;
   rawContent: string;
   ingestedAt: number;
+  /**
+   * 外部同步来源的唯一标识，用于去重与增量更新。
+   * 约定格式：
+   *   - `obsidian:{path}|{size}|{mtime}`（本地 Obsidian 导入）
+   *   - `github:{owner}/{repo}:{path}@{sha}`（GitHub 同步）
+   */
+  externalKey?: string;
 }
 
 export interface Concept {

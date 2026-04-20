@@ -34,6 +34,7 @@ export function Header(props: HeaderProps) {
   const back = useAppStore((s) => s.back);
   const openSettings = useAppStore((s) => s.openSettings);
   const openObsidianImport = useAppStore((s) => s.openObsidianImport);
+  const openGithubSync = useAppStore((s) => s.openGithubSync);
 
   if (detail) {
     return (
@@ -62,9 +63,17 @@ export function Header(props: HeaderProps) {
       <div className="header-actions">
         <button
           className="icon-btn"
+          onClick={openGithubSync}
+          aria-label="从 GitHub 同步"
+          title="从 GitHub 同步 Obsidian 笔记"
+        >
+          <Icon.Github />
+        </button>
+        <button
+          className="icon-btn"
           onClick={openObsidianImport}
           aria-label="从 Obsidian 批量导入"
-          title="从 Obsidian 批量导入"
+          title="从本地 Obsidian 文件夹批量导入"
         >
           <Icon.Ingest />
         </button>

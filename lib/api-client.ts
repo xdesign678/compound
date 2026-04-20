@@ -60,6 +60,7 @@ export async function ingestSource(input: {
   author?: string;
   url?: string;
   rawContent: string;
+  externalKey?: string;
 }): Promise<{ sourceId: string; newConceptIds: string[]; updatedConceptIds: string[]; activityId: string }> {
   const db = getDb();
   const now = Date.now();
@@ -73,6 +74,7 @@ export async function ingestSource(input: {
     url: input.url?.trim() || undefined,
     rawContent: input.rawContent,
     ingestedAt: now,
+    externalKey: input.externalKey,
   };
 
   // 2. Gather existing concepts

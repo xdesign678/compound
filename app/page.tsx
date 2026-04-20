@@ -17,6 +17,7 @@ import { Icon } from '@/components/Icons';
 const IngestModal = dynamic(() => import('@/components/IngestModal').then(m => ({ default: m.IngestModal })), { ssr: false });
 const SettingsDrawer = dynamic(() => import('@/components/SettingsDrawer').then(m => ({ default: m.SettingsDrawer })), { ssr: false });
 const ObsidianImportModal = dynamic(() => import('@/components/ObsidianImportModal').then(m => ({ default: m.ObsidianImportModal })), { ssr: false });
+const GithubSyncModal = dynamic(() => import('@/components/GithubSyncModal').then(m => ({ default: m.GithubSyncModal })), { ssr: false });
 const WikiView = dynamic(() => import('@/components/views/WikiView').then(m => ({ default: m.WikiView })), { ssr: false });
 const SourcesView = dynamic(() => import('@/components/views/SourcesView').then(m => ({ default: m.SourcesView })), { ssr: false });
 const AskView = dynamic(() => import('@/components/views/AskView').then(m => ({ default: m.AskView })), { ssr: false });
@@ -88,7 +89,9 @@ export default function Page() {
   const modalOpen = useAppStore((s) => s.modalOpen);
   const settingsOpen = useAppStore((s) => s.settingsOpen);
   const obsidianImportOpen = useAppStore((s) => s.obsidianImportOpen);
+  const githubSyncOpen = useAppStore((s) => s.githubSyncOpen);
   const openObsidianImport = useAppStore((s) => s.openObsidianImport);
+  const openGithubSync = useAppStore((s) => s.openGithubSync);
   const showFab = !detail && (tab === 'wiki' || tab === 'sources');
   const shouldShowDesktopDetail = isDesktop && (tab === 'wiki' || tab === 'sources' || detail !== null);
   const desktopSummary = ready
@@ -183,11 +186,19 @@ export default function Page() {
             <div className="desktop-sidebar-footer">
               <button
                 className="desktop-sidebar-btn"
+                onClick={openGithubSync}
+                aria-label="从 GitHub 同步"
+              >
+                <Icon.Github />
+                <span>从 GitHub 同步</span>
+              </button>
+              <button
+                className="desktop-sidebar-btn"
                 onClick={openObsidianImport}
                 aria-label="从 Obsidian 批量导入"
               >
                 <Icon.Ingest />
-                <span>导入 Obsidian</span>
+                <span>导入本地 Obsidian</span>
               </button>
               <button className="desktop-sidebar-btn" onClick={openSettings} aria-label="打开设置">
                 <Icon.Settings />
@@ -222,6 +233,7 @@ export default function Page() {
         {modalOpen && <IngestModal />}
         {settingsOpen && <SettingsDrawer />}
         {obsidianImportOpen && <ObsidianImportModal />}
+        {githubSyncOpen && <GithubSyncModal />}
       </div>
     );
   }
@@ -254,6 +266,7 @@ export default function Page() {
       {modalOpen && <IngestModal />}
       {settingsOpen && <SettingsDrawer />}
       {obsidianImportOpen && <ObsidianImportModal />}
+      {githubSyncOpen && <GithubSyncModal />}
     </div>
   );
 }
