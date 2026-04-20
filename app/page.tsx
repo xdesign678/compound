@@ -19,6 +19,7 @@ const SettingsDrawer = dynamic(() => import('@/components/SettingsDrawer').then(
 const ObsidianImportModal = dynamic(() => import('@/components/ObsidianImportModal').then(m => ({ default: m.ObsidianImportModal })), { ssr: false });
 const GithubSyncModal = dynamic(() => import('@/components/GithubSyncModal').then(m => ({ default: m.GithubSyncModal })), { ssr: false });
 const WikiView = dynamic(() => import('@/components/views/WikiView').then(m => ({ default: m.WikiView })), { ssr: false });
+const LibraryView = dynamic(() => import('@/components/views/LibraryView').then(m => ({ default: m.LibraryView })), { ssr: false });
 const SourcesView = dynamic(() => import('@/components/views/SourcesView').then(m => ({ default: m.SourcesView })), { ssr: false });
 const AskView = dynamic(() => import('@/components/views/AskView').then(m => ({ default: m.AskView })), { ssr: false });
 const ActivityView = dynamic(() => import('@/components/views/ActivityView').then(m => ({ default: m.ActivityView })), { ssr: false });
@@ -32,12 +33,15 @@ export default function Page() {
   const detail = useAppStore((s) => s.detail);
   const openModal = useAppStore((s) => s.openModal);
   const openSettings = useAppStore((s) => s.openSettings);
+  const homeStyle = useAppStore((s) => s.homeStyle);
+  const hydrateHomeStyle = useAppStore((s) => s.hydrateHomeStyle);
 
   // Only render dexie-driven content after client mount to avoid SSR/CSR mismatch
   const [mounted, setMounted] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   useEffect(() => {
     setMounted(true);
+    hydrateHomeStyle();
     const media = window.matchMedia(DESKTOP_MEDIA_QUERY);
     const syncLayout = () => setIsDesktop(isDesktopWidth(window.innerWidth) && media.matches);
 
@@ -49,7 +53,7 @@ export default function Page() {
       media.removeEventListener('change', syncLayout);
       window.removeEventListener('resize', syncLayout);
     };
-  }, []);
+  }, [hydrateHomeStyle]);
 
   const conceptCount = useLiveQuery(
     async () => (mounted ? getDb().concepts.count() : undefined),
@@ -147,7 +151,9 @@ export default function Page() {
     }
 
     if (tab === 'wiki') {
-      return <WikiView scrollRootSelector={scrollRootSelector} />;
+      return homeStyle === 'library'
+        ? <LibraryView scrollRootSelector={scrollRootSelector} />
+        : <WikiView scrollRootSelector={scrollRootSelector} />;
     }
     if (tab === 'sources') {
       return <SourcesView />;
