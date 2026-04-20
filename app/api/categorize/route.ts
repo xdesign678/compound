@@ -22,11 +22,12 @@ export async function POST(req: Request) {
     const llmConfig = (apiKey || apiUrl || model) ? { apiKey, apiUrl, model } : body.llmConfig;
 
     const conceptList = body.concepts
-      .map((c) => `- [${c.id}] ${c.title} — ${c.summary}\n  正文片段: ${c.body.slice(0, 200)}`)
+      .map((c) => `- [${c.id}] ${c.title} — ${c.summary}\n  正文片段: ${(c.body ?? '').slice(0, 200)}`)
       .join('\n');
 
-    const categoryList = body.existingCategories.length > 0
-      ? body.existingCategories.join(', ')
+    const existingCategories = body.existingCategories ?? [];
+    const categoryList = existingCategories.length > 0
+      ? existingCategories.join(', ')
       : '(暂无已有分类)';
 
     const userPrompt = `# 待分类概念(共 ${body.concepts.length} 个)
