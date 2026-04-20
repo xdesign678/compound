@@ -12,9 +12,11 @@ import { useAppStore } from '@/lib/store';
 export function Prose({
   markdown,
   citedConceptIds,
+  className,
 }: {
   markdown: string;
   citedConceptIds?: string[];
+  className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const openConcept = useAppStore((s) => s.openConcept);
@@ -41,5 +43,11 @@ export function Prose({
     return () => el.removeEventListener('click', handler);
   }, [openConcept, citedConceptIds]);
 
-  return <div ref={ref} className="prose" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(renderMarkdown(markdown)) }} />;
+  return (
+    <div
+      ref={ref}
+      className={className ? `prose ${className}` : 'prose'}
+      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(renderMarkdown(markdown)) }}
+    />
+  );
 }

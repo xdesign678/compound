@@ -7,9 +7,14 @@ import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { Icon } from '../Icons';
 
-export function WikiView() {
+interface WikiViewProps {
+  scrollRootSelector?: string;
+}
+
+export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   const openConcept = useAppStore((s) => s.openConcept);
   const freshIds = useAppStore((s) => s.freshConceptIds);
+  const detail = useAppStore((s) => s.detail);
 
   const concepts = useLiveQuery(
     async () => getDb().concepts.orderBy('updatedAt').reverse().toArray(),
@@ -25,12 +30,13 @@ export function WikiView() {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const main = document.querySelector('.app-main') as HTMLElement | null;
+    const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
     if (!main) return;
     const onScroll = () => setScrolled(main.scrollTop > 4);
+    onScroll();
     main.addEventListener('scroll', onScroll);
     return () => main.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [scrollRootSelector]);
 
   const filtered = useMemo(() => {
     if (!concepts) return [];
@@ -55,7 +61,7 @@ export function WikiView() {
   const renderCard = (c: (typeof concepts)[number]) => (
     <button
       key={c.id}
-      className={`concept-card ${freshIds[c.id] ? 'fresh' : ''}`}
+      className={`concept-card${freshIds[c.id] ? ' fresh' : ''}${detail?.type === 'concept' && detail.id === c.id ? ' active' : ''}`}
       onClick={() => openConcept(c.id)}
     >
       <div className="title">{c.title}</div>
@@ -76,6 +82,7 @@ export function WikiView() {
   return (
     <>
       <div className={`search-bar ${scrolled ? 'scrolled' : ''}`}>
+        <div className="search-label">检索概念、摘要与引用</div>
         <div className="search-wrap">
           <Icon.Search />
           <input
@@ -86,6 +93,10 @@ export function WikiView() {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
+      </div>
+      <div className="view-lead">
+        <div className="view-lead-kicker">知识 Wiki</div>
+        <p className="view-lead-copy">由资料逐步编译出的概念网络，适合回看、串联和继续提问。</p>
       </div>
       <div className="stats-row">
         <div className="stat">
@@ -103,7 +114,7 @@ export function WikiView() {
 
       {filtered.length === 0 ? (
         concepts.length === 0 ? (
-          <div className="empty-state" style={{ paddingTop: 80 }}>
+          <div className="empty-state empty-state-spacious">
             <div className="es-icon">
               <Icon.Sparkle />
             </div>

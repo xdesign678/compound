@@ -10,20 +10,24 @@ const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
   { id: 'activity', label: '活动', icon: <Icon.Activity /> },
 ];
 
-export function TabBar() {
+interface TabBarProps {
+  variant?: 'bottom' | 'sidebar';
+}
+
+export function TabBar({ variant = 'bottom' }: TabBarProps) {
   const tab = useAppStore((s) => s.tab);
   const setTab = useAppStore((s) => s.setTab);
+  const isSidebar = variant === 'sidebar';
 
   return (
-    <nav className="tabbar" role="tablist" aria-label="主导航">
+    <nav className={`tabbar${isSidebar ? ' tabbar-sidebar' : ''}`} aria-label="主导航">
       {TABS.map((t) => {
         const isActive = tab === t.id;
         return (
           <button
             key={t.id}
-            role="tab"
-            aria-selected={isActive}
-            className={`tab-item ${isActive ? 'active' : ''}`}
+            aria-current={isActive ? 'page' : undefined}
+            className={`tab-item${isActive ? ' active' : ''}${isSidebar ? ' sidebar' : ''}`}
             onClick={() => setTab(t.id)}
           >
             {t.icon}

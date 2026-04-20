@@ -60,7 +60,7 @@ export async function ingestSource(input: {
   author?: string;
   url?: string;
   rawContent: string;
-}): Promise<{ newConceptIds: string[]; updatedConceptIds: string[]; activityId: string }> {
+}): Promise<{ sourceId: string; newConceptIds: string[]; updatedConceptIds: string[]; activityId: string }> {
   const db = getDb();
   const now = Date.now();
 
@@ -185,7 +185,7 @@ export async function ingestSource(input: {
     await db.activity.put(activity);
   });
 
-  return { newConceptIds, updatedConceptIds, activityId: activity.id };
+  return { sourceId: source.id, newConceptIds, updatedConceptIds, activityId: activity.id };
 }
 
 export async function askWiki(

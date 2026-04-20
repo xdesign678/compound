@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
@@ -25,8 +25,13 @@ export function HealthView() {
   const lintRunning = useAppStore((s) => s.lintRunning);
   const setLintResult = useAppStore((s) => s.setLintResult);
   const setLintRunning = useAppStore((s) => s.setLintRunning);
+  const hydrateLastLintAt = useAppStore((s) => s.hydrateLastLintAt);
   const showToast = useAppStore((s) => s.showToast);
   const hideToast = useAppStore((s) => s.hideToast);
+
+  useEffect(() => {
+    hydrateLastLintAt();
+  }, [hydrateLastLintAt]);
 
   const concepts = useLiveQuery(() => getDb().concepts.toArray(), []);
   const sources = useLiveQuery(() => getDb().sources.toArray(), []);

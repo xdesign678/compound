@@ -34,3 +34,10 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# MCP / AI tooling local cache
+.serena/
+.verdent/
+
+# Local planning docs (not deployed)
+docs/plans/

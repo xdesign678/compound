@@ -29,8 +29,15 @@ export function ConceptDetail({ id }: { id: string }) {
   const isFresh = freshIds[concept.id];
 
   return (
-    <div className="concept-detail">
+    <article className="concept-detail">
+      <div className="detail-kicker-row">
+        <div className="detail-kicker">概念页</div>
+        {isFresh && <div className="detail-status">刚更新</div>}
+      </div>
       <h1>{concept.title}</h1>
+      <p className="detail-intro">
+        这是一页由 AI 根据原始资料持续整理的概念笔记，会随着新材料进入而被补充、改写和串联。
+      </p>
       <div className="detail-meta">
         <span>{isFresh ? '刚更新 · ' : '更新于 '}{formatRelativeTime(concept.updatedAt)}</span>
         <span>·</span>
@@ -88,6 +95,6 @@ export function ConceptDetail({ id }: { id: string }) {
           </div>
         )}
       </div>
-    </div>
+    </article>
   );
 }

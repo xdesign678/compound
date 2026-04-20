@@ -21,8 +21,15 @@ export function SourceDetail({ id }: { id: string }) {
   if (!source) return <div className="empty-state">未找到资料</div>;
 
   return (
-    <div className="concept-detail">
+    <article className="concept-detail">
+      <div className="detail-kicker-row">
+        <div className="detail-kicker">资料档案</div>
+        <div className="detail-status subtle">{source.type}</div>
+      </div>
       <h1>{source.title}</h1>
+      <p className="detail-intro">
+        这份资料作为原文档案保存，只读不改。知识库中的概念页会引用它，但不会覆盖它。
+      </p>
       <div className="detail-meta">
         {source.author && <><span>{source.author}</span><span>·</span></>}
         <span>{formatRelativeTime(source.ingestedAt)}</span>
@@ -31,20 +38,19 @@ export function SourceDetail({ id }: { id: string }) {
       </div>
 
       {source.url && (
-        <p style={{ marginBottom: 16, fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
+        <p className="detail-url">
           <a
             href={source.url}
             target="_blank"
             rel="noopener noreferrer"
             className="source-url-link"
-            style={{ color: 'var(--brand-clay)', textDecoration: 'none', wordBreak: 'break-all', fontSize: '13px' }}
           >
             {source.url}
           </a>
         </p>
       )}
 
-      <p style={{ fontFamily: 'var(--font-reading)', fontSize: 15, lineHeight: 1.65, color: 'var(--text-body)' }}>
+      <p className="detail-note">
         这份资料已被 AI 编译进你的 Wiki。原文保持不变(<strong>不可变层</strong>),AI 从中生成或更新了{' '}
         <strong>{generated?.length ?? 0} 个概念页</strong>。
       </p>
@@ -65,16 +71,8 @@ export function SourceDetail({ id }: { id: string }) {
       <div className="detail-section">
         <h3>原文</h3>
         {showRaw ? (
-          <div
-            style={{
-              background: 'var(--bg-muted)',
-              padding: 14,
-              borderRadius: 10,
-              maxHeight: 500,
-              overflowY: 'auto',
-            }}
-          >
-            <Prose markdown={source.rawContent} />
+          <div className="raw-content-panel">
+            <Prose markdown={source.rawContent} className="prose-raw" />
           </div>
         ) : (
           <button className="modal-btn" onClick={() => setShowRaw(true)}>
@@ -90,6 +88,6 @@ export function SourceDetail({ id }: { id: string }) {
           <span>资料摄入完成,生成 {generated?.length ?? 0} 个相关概念</span>
         </div>
       </div>
-    </div>
+    </article>
   );
 }

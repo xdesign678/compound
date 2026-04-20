@@ -123,9 +123,9 @@ export function AskView() {
   return (
     <div className="ask-view">
       {history && history.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 8px 0' }}>
+        <div className="ask-toolbar">
           <button
-            style={{ fontSize: 12, color: 'var(--text-tertiary)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px' }}
+            className="ask-reset-btn"
             onClick={() => { if (window.confirm('确认清空所有对话记录？')) clearAskHistory(); }}
           >
             新对话
@@ -135,6 +135,7 @@ export function AskView() {
       <div className="ask-messages" ref={messagesRef}>
         {history && history.length === 0 && !loading ? (
           <div className="ask-empty">
+            <div className="ask-empty-kicker">知识提问</div>
             <div className="big-icon">
               <Icon.Sparkle />
             </div>
@@ -158,7 +159,7 @@ export function AskView() {
             {history?.map((m, idx) => {
               if (m.role === 'user') {
                 return (
-                  <div key={m.id} className="msg">
+                  <div key={m.id} className="msg msg-user-row">
                     <div className="msg-user">{m.text}</div>
                   </div>
                 );
@@ -166,39 +167,43 @@ export function AskView() {
               const prev = history[idx - 1];
               const userQ = prev?.role === 'user' ? prev.text : null;
               return (
-                <div key={m.id} className="msg">
-                  <div className="msg-ai-label">Wiki 答案</div>
-                  <Prose markdown={m.text} citedConceptIds={m.citedConcepts} />
-                  {m.citedConcepts && m.citedConcepts.length > 0 && (
-                    <div className="msg-sources">
-                      <div className="ms-label">基于概念页</div>
-                      <CitedList ids={m.citedConcepts} onClick={openConcept} />
-                    </div>
-                  )}
-                  {m.citedConcepts && m.citedConcepts.length > 0 && (
-                    m.savedAsConceptId ? (
-                      <button className="save-as-page" disabled>
-                        <Icon.Save />
-                        已归档为 Wiki 页面
-                      </button>
-                    ) : (
-                      <button
-                        className="save-as-page"
-                        disabled={archiving === m.id}
-                        onClick={() => handleArchive(m, userQ)}
-                      >
-                        <Icon.Save />
-                        {archiving === m.id ? '归档中...' : '归档为新页面'}
-                      </button>
-                    )
-                  )}
+                <div key={m.id} className="msg msg-ai-row">
+                  <div className="msg-ai-card">
+                    <div className="msg-ai-label">Wiki 答案</div>
+                    <Prose markdown={m.text} citedConceptIds={m.citedConcepts} className="prose-answer" />
+                    {m.citedConcepts && m.citedConcepts.length > 0 && (
+                      <div className="msg-sources">
+                        <div className="ms-label">基于概念页</div>
+                        <CitedList ids={m.citedConcepts} onClick={openConcept} />
+                      </div>
+                    )}
+                    {m.citedConcepts && m.citedConcepts.length > 0 && (
+                      m.savedAsConceptId ? (
+                        <button className="save-as-page" disabled>
+                          <Icon.Save />
+                          已归档为 Wiki 页面
+                        </button>
+                      ) : (
+                        <button
+                          className="save-as-page"
+                          disabled={archiving === m.id}
+                          onClick={() => handleArchive(m, userQ)}
+                        >
+                          <Icon.Save />
+                          {archiving === m.id ? '归档中...' : '归档为新页面'}
+                        </button>
+                      )
+                    )}
+                  </div>
                 </div>
               );
             })}
             {loading && (
-              <div className="msg">
-                <div className="msg-ai-label loading">Wiki 思考中</div>
-                <div className="msg-ai-body" style={{ opacity: 0.6 }}>正在从 {conceptCount} 个概念页中综合...</div>
+              <div className="msg msg-ai-row">
+                <div className="msg-ai-card loading">
+                  <div className="msg-ai-label loading">Wiki 思考中</div>
+                  <div className="msg-ai-body">正在从 {conceptCount} 个概念页中综合...</div>
+                </div>
               </div>
             )}
           </>

@@ -26,6 +26,7 @@ interface AppState {
   detail: DetailState | null;
   modalOpen: boolean;
   settingsOpen: boolean;
+  obsidianImportOpen: boolean;
   toast: ToastState;
   freshConceptIds: Record<string, true>;
 
@@ -44,6 +45,8 @@ interface AppState {
   closeModal: () => void;
   openSettings: () => void;
   closeSettings: () => void;
+  openObsidianImport: () => void;
+  closeObsidianImport: () => void;
   showToast: (text: string, loading?: boolean) => void;
   hideToast: () => void;
   markFresh: (ids: string[]) => void;
@@ -53,6 +56,15 @@ interface AppState {
   setActivityFilter: (f: ActivityFilterType) => void;
   setLintResult: (findings: LintFinding[]) => void;
   setLintRunning: (v: boolean) => void;
+  hydrateLastLintAt: () => void;
+}
+
+function readStoredLintTimestamp() {
+  if (typeof window === 'undefined') return null;
+  const raw = localStorage.getItem('compound_last_lint');
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -60,13 +72,14 @@ export const useAppStore = create<AppState>((set) => ({
   detail: null,
   modalOpen: false,
   settingsOpen: false,
+  obsidianImportOpen: false,
   toast: { visible: false, text: '', loading: false },
   freshConceptIds: {} as Record<string, true>,
 
   activitySubTab: 'health',
   activityFilter: 'all',
   lintFindings: [],
-  lastLintAt: typeof window !== 'undefined' ? (() => { const v = localStorage.getItem('compound_last_lint'); return v ? Number(v) : null; })() : null,
+  lastLintAt: null,
   lintRunning: false,
 
   setTab: (t) => set({ tab: t, detail: null }),
@@ -77,6 +90,8 @@ export const useAppStore = create<AppState>((set) => ({
   closeModal: () => set({ modalOpen: false }),
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
+  openObsidianImport: () => set({ obsidianImportOpen: true }),
+  closeObsidianImport: () => set({ obsidianImportOpen: false }),
   showToast: (text, loading = false) => set({ toast: { visible: true, text, loading } }),
   hideToast: () => set((s) => ({ toast: { ...s.toast, visible: false } })),
   markFresh: (ids: string[]) => set((s) => {
@@ -97,4 +112,5 @@ export const useAppStore = create<AppState>((set) => ({
     set({ lintFindings: findings, lastLintAt: now, lintRunning: false });
   },
   setLintRunning: (v) => set({ lintRunning: v }),
+  hydrateLastLintAt: () => set({ lastLintAt: readStoredLintTimestamp() }),
 }));

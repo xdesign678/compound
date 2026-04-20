@@ -9,6 +9,7 @@ import { Icon, SourceTypeIcon } from '../Icons';
 export function SourcesView() {
   const openSource = useAppStore((s) => s.openSource);
   const openModal = useAppStore((s) => s.openModal);
+  const detail = useAppStore((s) => s.detail);
 
   const sources = useLiveQuery(
     async () => getDb().sources.orderBy('ingestedAt').reverse().toArray(),
@@ -32,20 +33,28 @@ export function SourcesView() {
 
   return (
     <div className="view-padding">
+      <div className="view-lead">
+        <div className="view-lead-kicker">资料档案</div>
+        <p className="view-lead-copy">这里保留你喂给知识库的原始材料。原文不被改写，只被引用和编译。</p>
+      </div>
       {sources.length === 0 ? (
-        <div className="empty-state" style={{ paddingTop: 60 }}>
+        <div className="empty-state empty-state-compact">
           <div className="es-icon">
             <Icon.Sources />
           </div>
           <h3>还没有资料</h3>
           <p>添加文章、笔记或书籍节选。资料是不可变层,AI 只读不改。</p>
-          <button className="modal-btn primary" style={{ maxWidth: 200, margin: '0 auto' }} onClick={openModal}>
+          <button className="modal-btn primary empty-state-action" onClick={openModal}>
             添加第一份资料
           </button>
         </div>
       ) : (
         sources.map((s) => (
-          <button key={s.id} className="source-card" onClick={() => openSource(s.id)}>
+          <button
+            key={s.id}
+            className={`source-card${detail?.type === 'source' && detail.id === s.id ? ' active' : ''}`}
+            onClick={() => openSource(s.id)}
+          >
             <div className="s-icon">
               <SourceTypeIcon type={s.type} />
             </div>

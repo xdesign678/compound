@@ -33,6 +33,7 @@ export function Header(props: HeaderProps) {
   const detail = useAppStore((s) => s.detail);
   const back = useAppStore((s) => s.back);
   const openSettings = useAppStore((s) => s.openSettings);
+  const openObsidianImport = useAppStore((s) => s.openObsidianImport);
 
   if (detail) {
     return (
@@ -53,11 +54,20 @@ export function Header(props: HeaderProps) {
   const meta = TAB_TITLES[tab];
   return (
     <header className="header">
-      <div>
+      <div className="header-copy">
+        <div className="header-kicker">Compound</div>
         <div className="header-title">{meta.t}</div>
         <div className="header-subtitle">{meta.s(props)}</div>
       </div>
       <div className="header-actions">
+        <button
+          className="icon-btn"
+          onClick={openObsidianImport}
+          aria-label="从 Obsidian 批量导入"
+          title="从 Obsidian 批量导入"
+        >
+          <Icon.Ingest />
+        </button>
         <button className="icon-btn" onClick={openSettings} aria-label="设置">
           <Icon.Settings />
         </button>
