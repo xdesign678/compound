@@ -33,6 +33,7 @@ export default function Page() {
   const detail = useAppStore((s) => s.detail);
   const openModal = useAppStore((s) => s.openModal);
   const openSettings = useAppStore((s) => s.openSettings);
+  const back = useAppStore((s) => s.back);
   const homeStyle = useAppStore((s) => s.homeStyle);
   const hydrateHomeStyle = useAppStore((s) => s.hydrateHomeStyle);
 
@@ -255,6 +256,18 @@ export default function Page() {
             )}
           </main>
         </div>
+
+        {/* Library mode: detail as modal overlay */}
+        {homeStyle === 'library' && detail && (
+          <div className="library-detail-overlay" onClick={back}>
+            <div className="library-detail-modal" onClick={(e) => e.stopPropagation()}>
+              <button className="library-detail-modal-close" onClick={back} aria-label="关闭">✕</button>
+              <div className="library-detail-modal-scroll">
+                {renderDetail()}
+              </div>
+            </div>
+          </div>
+        )}
 
         {modalOpen && <IngestModal />}
         {settingsOpen && <SettingsDrawer />}
