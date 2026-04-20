@@ -114,8 +114,9 @@ export default function Page() {
   const openObsidianImport = useAppStore((s) => s.openObsidianImport);
   const openGithubSync = useAppStore((s) => s.openGithubSync);
   const showFab = !detail && (tab === 'wiki' || tab === 'sources');
-  const shouldShowDesktopDetail = isDesktop && (
-    (tab === 'wiki' && homeStyle !== 'library') ||
+  const inLibraryMode = tab === 'wiki' && homeStyle === 'library';
+  const shouldShowDesktopDetail = isDesktop && !inLibraryMode && (
+    tab === 'wiki' ||
     tab === 'sources' ||
     detail !== null
   );
