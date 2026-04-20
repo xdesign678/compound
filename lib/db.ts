@@ -29,6 +29,19 @@ export class CompoundDB extends Dexie {
       activity: 'id, at, type',
       askHistory: 'id, at',
     });
+    // v4: add *categoryKeys MultiEntry index for category filtering
+    this.version(4).stores({
+      sources: 'id, ingestedAt, type, externalKey',
+      concepts: 'id, updatedAt, createdAt, *sources, *related, *categoryKeys',
+      activity: 'id, at, type',
+      askHistory: 'id, at',
+    }).upgrade(tx => {
+      // Backfill existing concepts with empty categories
+      return tx.table('concepts').toCollection().modify(concept => {
+        if (!concept.categories) concept.categories = [];
+        if (!concept.categoryKeys) concept.categoryKeys = [];
+      });
+    });
   }
 }
 
