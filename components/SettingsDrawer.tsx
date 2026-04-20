@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, type HomeStyle } from '@/lib/store';
 import { lintWiki } from '@/lib/api-client';
 import { getDb } from '@/lib/db';
 import { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } from '@/lib/seed';
@@ -76,6 +76,8 @@ export function SettingsDrawer() {
   const showToast = useAppStore((s) => s.showToast);
   const hideToast = useAppStore((s) => s.hideToast);
   const clearFresh = useAppStore((s) => s.clearFresh);
+  const homeStyle = useAppStore((s) => s.homeStyle);
+  const setHomeStyle = useAppStore((s) => s.setHomeStyle);
 
   const [lintResult, setLintResult] = useState<LintResponse | null>(null);
   const [lintLoading, setLintLoading] = useState(false);
@@ -244,6 +246,28 @@ export function SettingsDrawer() {
               )}
             </div>
           )}
+        </div>
+
+        {/* 首页样式 */}
+        <div className="settings-section" style={{ padding: 0, marginBottom: 20 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>首页样式</div>
+          <div className="desc" style={{ marginBottom: 12 }}>
+            Wiki 首页展示形式：动态流或分类知识库。
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              style={S.presetBtn(homeStyle === 'feed')}
+              onClick={() => setHomeStyle('feed')}
+            >
+              动态流
+            </button>
+            <button
+              style={S.presetBtn(homeStyle === 'library')}
+              onClick={() => setHomeStyle('library')}
+            >
+              知识库
+            </button>
+          </div>
         </div>
 
         <div className="settings-section" style={S.dataSection}>
