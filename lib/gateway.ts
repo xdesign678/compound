@@ -134,7 +134,10 @@ export async function chat(opts: ChatOptions): Promise<string> {
   const data = await res.json();
   const content = data?.choices?.[0]?.message?.content;
   if (typeof content !== 'string') {
-    throw new Error('Unexpected gateway response shape');
+    // Dump a preview of what the gateway actually returned so we can diagnose
+    // model-specific response shapes (reasoning content, tool_calls, etc).
+    const preview = JSON.stringify(data).slice(0, 600);
+    throw new Error(`Unexpected gateway response shape. Body preview: ${preview}`);
   }
   return content;
 }
