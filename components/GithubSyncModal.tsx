@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { Icon } from './Icons';
 import { pullSnapshotFromCloud } from '@/lib/cloud-sync';
+import { getPollFailurePlan } from '@/lib/github-sync-poll';
 
 type Phase = 'idle' | 'starting' | 'running' | 'done' | 'failed';
 
@@ -29,12 +30,22 @@ interface JobStatus {
 
 const POLL_INTERVAL_MS = 1500;
 
+class PollHttpError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 export function GithubSyncModal() {
   const open = useAppStore((s) => s.githubSyncOpen);
   const close = useAppStore((s) => s.closeGithubSync);
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [pollIssue, setPollIssue] = useState<string | null>(null);
   const [job, setJob] = useState<JobStatus | null>(null);
   const [pulling, setPulling] = useState(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,6 +56,7 @@ export function GithubSyncModal() {
     if (open) {
       setPhase('idle');
       setError(null);
+      setPollIssue(null);
       setJob(null);
       pulledAfterDoneRef.current = false;
     } else {
@@ -61,20 +73,21 @@ export function GithubSyncModal() {
     };
   }, [open]);
 
-  const pollOnce = useCallback(async (jobId: string) => {
+  const pollOnce = useCallback(async (jobId: string, consecutiveFailures = 0) => {
     try {
       const res = await fetch(`/api/sync/status?jobId=${encodeURIComponent(jobId)}`, {
         cache: 'no-store',
       });
       if (!res.ok) {
         const text = await res.text().catch(() => '');
-        throw new Error(`状态查询失败 (${res.status}): ${text.slice(0, 200)}`);
+        throw new PollHttpError(res.status, `状态查询失败 (${res.status}): ${text.slice(0, 200)}`);
       }
       const data = (await res.json()) as JobStatus;
+      setPollIssue(null);
       setJob(data);
       if (data.status === 'running') {
         setPhase('running');
-        pollTimerRef.current = setTimeout(() => void pollOnce(jobId), POLL_INTERVAL_MS);
+        pollTimerRef.current = setTimeout(() => void pollOnce(jobId, 0), POLL_INTERVAL_MS);
       } else if (data.status === 'done') {
         setPhase('done');
         // 任务成功后，自动把服务端新数据拉回本地 IndexedDB。
@@ -91,6 +104,22 @@ export function GithubSyncModal() {
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      const plan = getPollFailurePlan({
+        status: e instanceof PollHttpError ? e.status : undefined,
+        message: msg,
+        consecutiveFailures,
+      });
+
+      if (plan.shouldRetry) {
+        setPollIssue(plan.userMessage);
+        pollTimerRef.current = setTimeout(
+          () => void pollOnce(jobId, plan.nextFailureCount),
+          plan.retryDelayMs
+        );
+        return;
+      }
+
+      setPollIssue(null);
       setError(msg);
       setPhase('failed');
     }
@@ -99,6 +128,7 @@ export function GithubSyncModal() {
   const start = useCallback(async () => {
     setPhase('starting');
     setError(null);
+    setPollIssue(null);
     try {
       const res = await fetch('/api/sync/github/run', { method: 'POST' });
       if (!res.ok) {
@@ -171,6 +201,8 @@ export function GithubSyncModal() {
                 正在处理：<code>{job.current}</code>
               </p>
             )}
+
+            {phase === 'running' && pollIssue && <p className="gh-sync-hint">{pollIssue}</p>}
 
             {error && (
               <div className="gh-sync-error">
