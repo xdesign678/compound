@@ -19,7 +19,7 @@ export interface Source {
 
 export interface CategoryTag {
   primary: string;
-  secondary: string;
+  secondary?: string;
 }
 
 export interface Concept {
@@ -83,7 +83,7 @@ export interface IngestResponse {
     summary: string;
     body: string;
     relatedConceptIds: string[];
-    categories?: Array<{ primary: string; secondary: string }>;
+    categories?: CategoryTag[];
   }>;
   updatedConcepts: Array<{
     id: string;
@@ -131,7 +131,7 @@ export interface CategorizeRequest {
 export interface CategorizeResponse {
   results: Array<{
     id: string;
-    categories: Array<{ primary: string; secondary: string }>;
+    categories: CategoryTag[];
   }>;
 }
 
