@@ -3,6 +3,7 @@ import { create } from 'zustand';
 export type TabId = 'wiki' | 'sources' | 'ask' | 'activity';
 export type ActivitySubTab = 'health' | 'log';
 export type ActivityFilterType = 'all' | 'ingest' | 'query' | 'lint';
+export type HomeStyle = 'feed' | 'library';
 
 interface DetailState {
   type: 'concept' | 'source';
@@ -37,6 +38,7 @@ interface AppState {
   lintFindings: LintFinding[];
   lastLintAt: number | null;
   lintRunning: boolean;
+  homeStyle: HomeStyle;
 
   setTab: (t: TabId) => void;
   openConcept: (id: string) => void;
@@ -60,6 +62,8 @@ interface AppState {
   setLintResult: (findings: LintFinding[]) => void;
   setLintRunning: (v: boolean) => void;
   hydrateLastLintAt: () => void;
+  setHomeStyle: (s: HomeStyle) => void;
+  hydrateHomeStyle: () => void;
 }
 
 function readStoredLintTimestamp() {
@@ -68,6 +72,12 @@ function readStoredLintTimestamp() {
   if (!raw) return null;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function readStoredHomeStyle(): HomeStyle {
+  if (typeof window === 'undefined') return 'feed';
+  const raw = localStorage.getItem('compound_home_style');
+  return raw === 'library' ? 'library' : 'feed';
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -85,6 +95,7 @@ export const useAppStore = create<AppState>((set) => ({
   lintFindings: [],
   lastLintAt: null,
   lintRunning: false,
+  homeStyle: 'feed' as HomeStyle,
 
   setTab: (t) => set({ tab: t, detail: null }),
   openConcept: (id) => set({ detail: { type: 'concept', id } }),
@@ -119,4 +130,9 @@ export const useAppStore = create<AppState>((set) => ({
   },
   setLintRunning: (v) => set({ lintRunning: v }),
   hydrateLastLintAt: () => set({ lastLintAt: readStoredLintTimestamp() }),
+  setHomeStyle: (s) => {
+    localStorage.setItem('compound_home_style', s);
+    set({ homeStyle: s });
+  },
+  hydrateHomeStyle: () => set({ homeStyle: readStoredHomeStyle() }),
 }));
