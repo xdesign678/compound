@@ -103,14 +103,28 @@ export async function chat(opts: ChatOptions): Promise<string> {
     || (opts.llmConfig?.apiKey ? OPENROUTER_URL : getGatewayUrl());
   const model = opts.llmConfig?.model || opts.model || getDefaultModel();
 
+  // Reasoning models (MiniMax M2.x, OpenAI o1, DeepSeek-R1, Claude thinking) burn
+  // a large chunk of the token budget on internal reasoning BEFORE emitting the
+  // visible content. A small max_tokens truncates them mid-thought, so `content`
+  // comes back null. They also often reject/ignore `response_format: json_object`.
+  const isReasoningModel = /o1|r1|thinking|m2\.|reasoner/i.test(model);
+
+  // Raise the floor for reasoning models so the visible answer actually gets emitted.
+  const requestedMaxTokens = opts.maxTokens ?? 4000;
+  const maxTokens = isReasoningModel
+    ? Math.max(requestedMaxTokens, 2000)
+    : requestedMaxTokens;
+
   const body: Record<string, unknown> = {
     model,
     messages: opts.messages,
     temperature: opts.temperature ?? 0.4,
-    max_tokens: opts.maxTokens ?? 4000,
+    max_tokens: maxTokens,
   };
 
-  if (opts.responseFormat === 'json_object') {
+  // Only attach structured-output constraint for models that reliably support it.
+  // MiniMax & other reasoning models tend to 403 / misbehave with json_object.
+  if (opts.responseFormat === 'json_object' && !isReasoningModel) {
     body.response_format = { type: 'json_object' };
   }
 
@@ -132,14 +146,24 @@ export async function chat(opts: ChatOptions): Promise<string> {
   }
 
   const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== 'string') {
-    // Dump a preview of what the gateway actually returned so we can diagnose
-    // model-specific response shapes (reasoning content, tool_calls, etc).
-    const preview = JSON.stringify(data).slice(0, 600);
-    throw new Error(`Unexpected gateway response shape. Body preview: ${preview}`);
+  const choice = data?.choices?.[0];
+  const content = choice?.message?.content;
+  const finishReason = choice?.finish_reason;
+
+  if (typeof content === 'string' && content.length > 0) {
+    return content;
   }
-  return content;
+
+  // Diagnose why content is missing so the caller gets an actionable hint.
+  if (finishReason === 'length') {
+    throw new Error(
+      `Reasoning budget exhausted before content was emitted (finish_reason=length, model=${model}). ` +
+        `Try raising max_tokens (>=2000 for reasoning models) or pick a non-reasoning model.`
+    );
+  }
+
+  const preview = JSON.stringify(data).slice(0, 600);
+  throw new Error(`Unexpected gateway response shape. Body preview: ${preview}`);
 }
 
 /**
