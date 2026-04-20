@@ -113,7 +113,11 @@ export default function Page() {
   const openObsidianImport = useAppStore((s) => s.openObsidianImport);
   const openGithubSync = useAppStore((s) => s.openGithubSync);
   const showFab = !detail && (tab === 'wiki' || tab === 'sources');
-  const shouldShowDesktopDetail = isDesktop && (tab === 'wiki' || tab === 'sources' || detail !== null);
+  const shouldShowDesktopDetail = isDesktop && (
+    (tab === 'wiki' && homeStyle !== 'library') ||
+    tab === 'sources' ||
+    detail !== null
+  );
   const desktopSummary = ready
     ? `${conceptCount ?? 0} 个概念 · ${sourceCount ?? 0} 份资料 · ${linkCount ?? 0} 条引用`
     : '正在同步本地知识库';
