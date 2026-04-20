@@ -11,8 +11,11 @@ import type {
   QueryResponse,
   LintRequest,
   LintResponse,
+  CategorizeRequest,
+  CategorizeResponse,
   SourceType,
 } from './types';
+import { toCategoryKeys } from './types';
 
 async function addBidirectionalLinks(db: ReturnType<typeof getDb>, sourceId: string, relatedIds: string[], now: number) {
   const fetched = await db.concepts.bulkGet(relatedIds);
@@ -48,6 +51,21 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
     throw new Error(`${path} failed (${res.status}): ${text.slice(0, 200)}`);
   }
   return (await res.json()) as T;
+}
+
+/** Read all unique categoryKeys from Dexie for prompt injection. */
+export async function getExistingCategories(): Promise<string[]> {
+  const db = getDb();
+  const all = await db.concepts.toArray();
+  const keys = new Set<string>();
+  for (const c of all) {
+    if (c.categoryKeys) {
+      for (const k of c.categoryKeys) {
+        keys.add(k);
+      }
+    }
+  }
+  return Array.from(keys).sort();
 }
 
 /**
@@ -98,6 +116,7 @@ export async function ingestSource(input: {
   const newConcepts: Concept[] = resp.newConcepts.map((nc) => {
     const id = 'c-' + nanoid(8);
     newConceptIds.push(id);
+    const categories = nc.categories || [];
     return {
       id,
       title: nc.title.trim(),
@@ -108,6 +127,8 @@ export async function ingestSource(input: {
       createdAt: now,
       updatedAt: now,
       version: 1,
+      categories,
+      categoryKeys: toCategoryKeys(categories),
     };
   });
 
@@ -244,6 +265,8 @@ export async function archiveAnswerAsConcept(
     createdAt: now,
     updatedAt: now,
     version: 1,
+    categories: [],
+    categoryKeys: [],
   };
   await db.concepts.put(concept);
 
@@ -290,6 +313,64 @@ export async function lintWiki(): Promise<LintResponse> {
   await db.activity.put(activity);
 
   return resp;
+}
+
+/**
+ * Batch-categorize uncategorized concepts via /api/categorize.
+ * Processes in batches of 10. Calls onProgress after each batch.
+ * Returns the total number of concepts processed.
+ */
+export async function categorizeConcepts(
+  onProgress?: (done: number, total: number) => void
+): Promise<number> {
+  const db = getDb();
+  const all = await db.concepts.toArray();
+  const uncategorized = all.filter((c) => !c.categories || c.categories.length === 0);
+
+  if (uncategorized.length === 0) return 0;
+
+  const existingCategories = await getExistingCategories();
+  const BATCH_SIZE = 10;
+  let done = 0;
+
+  for (let i = 0; i < uncategorized.length; i += BATCH_SIZE) {
+    const batch = uncategorized.slice(i, i + BATCH_SIZE);
+    const req: CategorizeRequest = {
+      concepts: batch.map((c) => ({
+        id: c.id,
+        title: c.title,
+        summary: c.summary,
+        body: c.body,
+      })),
+      existingCategories,
+    };
+
+    const resp = await postJSON<CategorizeResponse>('/api/categorize', req);
+
+    // Write results to Dexie
+    await db.transaction('rw', db.concepts, async () => {
+      for (const result of resp.results) {
+        const categories = result.categories || [];
+        const categoryKeys = toCategoryKeys(categories);
+        await db.concepts.update(result.id, { categories, categoryKeys });
+      }
+    });
+
+    // Update existing categories list with newly created ones
+    for (const result of resp.results) {
+      for (const cat of result.categories) {
+        const k1 = cat.primary;
+        const k2 = cat.secondary ? `${cat.primary}/${cat.secondary}` : cat.primary;
+        if (!existingCategories.includes(k1)) existingCategories.push(k1);
+        if (k2 !== k1 && !existingCategories.includes(k2)) existingCategories.push(k2);
+      }
+    }
+
+    done += batch.length;
+    onProgress?.(done, uncategorized.length);
+  }
+
+  return uncategorized.length;
 }
 
 function escapeHTML(s: string): string {
