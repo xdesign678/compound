@@ -19,6 +19,7 @@ export interface IngestLLMInput {
     rawContent: string;
   };
   existingConcepts: Array<{ id: string; title: string; summary: string }>;
+  existingCategories?: string[];
   llmConfig?: { apiKey?: string; apiUrl?: string; model?: string };
 }
 
@@ -36,6 +37,10 @@ export async function runIngestLLM(input: IngestLLMInput): Promise<IngestRespons
     .map((c) => `- [${c.id}] ${c.title} — ${c.summary}`)
     .join('\n');
 
+  const categoryList = input.existingCategories && input.existingCategories.length > 0
+    ? `\n# 已有分类列表(请优先复用)\n\n${input.existingCategories.join(', ')}\n`
+    : '';
+
   const userPrompt = `# 新资料
 
 **标题**: ${input.source.title}
@@ -52,7 +57,7 @@ ${rawContent}
 ${existingList || '(目前为空)'}
 
 ---
-
+${categoryList}
 请按 system prompt 定义的 JSON schema 输出编译结果。只输出 JSON,不要任何其它内容。`;
 
   const raw = await chat({

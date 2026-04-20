@@ -108,8 +108,12 @@ export async function ingestSource(input: {
     existingConcepts: existing.map((c) => ({ id: c.id, title: c.title, summary: c.summary })),
   };
 
+  // Inject existing categories for LLM reference
+  const existingCategories = await getExistingCategories();
+  const reqWithCategories = { ...req, existingCategories };
+
   // 3. Call API
-  const resp = await postJSON<IngestResponse>('/api/ingest', req);
+  const resp = await postJSON<IngestResponse>('/api/ingest', reqWithCategories);
 
   // 4. Build new concepts list (pure computation, no DB writes yet)
   const newConceptIds: string[] = [];

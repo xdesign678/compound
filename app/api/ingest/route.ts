@@ -24,9 +24,15 @@ export async function POST(req: Request) {
     const model = req.headers.get('x-user-model') || undefined;
     const llmConfig = apiKey || apiUrl || model ? { apiKey, apiUrl, model } : body.llmConfig;
 
+    // Extract existing categories with runtime validation
+    const existingCategories = Array.isArray(body.existingCategories)
+      ? body.existingCategories.filter((c): c is string => typeof c === 'string')
+      : [];
+
     const parsed = await runIngestLLM({
       source: body.source,
       existingConcepts: body.existingConcepts,
+      existingCategories,
       llmConfig,
     });
 
