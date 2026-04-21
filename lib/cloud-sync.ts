@@ -18,6 +18,7 @@ import type { Source, Concept, ActivityLog, AskMessage } from './types';
 
 interface SnapshotResponse {
   fetchedAt: number;
+  mode?: 'full' | 'delta';
   counts: { sources: number; concepts: number; activity: number; ask: number };
   sources: Source[];
   concepts: Concept[];
@@ -43,8 +44,21 @@ export interface PullResult {
   };
 }
 
+function normalizeSnapshotTimestamp(value: number | string | null | undefined): number | null {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.trunc(parsed);
+}
+
+function buildSnapshotRequestPath(since: number | null): string {
+  if (!since) return '/api/data/snapshot';
+  const search = new URLSearchParams({ since: String(since) });
+  return `/api/data/snapshot?${search.toString()}`;
+}
+
 export async function pullSnapshotFromCloud(): Promise<PullResult> {
-  const res = await fetch('/api/data/snapshot', { cache: 'no-store' });
+  const since = getLastPullAt();
+  const res = await fetch(buildSnapshotRequestPath(since), { cache: 'no-store' });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`snapshot failed (${res.status}): ${text.slice(0, 200)}`);
@@ -142,8 +156,7 @@ export async function pullSnapshotFromCloud(): Promise<PullResult> {
 
 export function getLastPullAt(): number | null {
   try {
-    const v = localStorage.getItem(LAST_PULL_KEY);
-    return v ? Number(v) : null;
+    return normalizeSnapshotTimestamp(localStorage.getItem(LAST_PULL_KEY));
   } catch {
     return null;
   }
