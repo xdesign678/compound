@@ -3491,8 +3491,8 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 
 .library-detail-modal {
   position: relative;
-  width: clamp(560px, 48vw, 860px);
-  max-width: calc(100vw - 56px);
+  width: 50vw;
+  max-width: 50vw;
   height: 100%;
   background: var(--bg-primary);
   box-shadow: -16px 0 44px rgba(0, 0, 0, 0.16);
