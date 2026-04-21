@@ -109,7 +109,7 @@ export function SwipeBack() {
         justifyContent: 'center',
         opacity: 0,
         transform: 'translateX(-100%) translateY(-50%) scale(0.6)',
-        transition: 'opacity 0.15s ease, transform 0.15s ease',
+        transition: 'opacity var(--motion-duration-fast) var(--motion-ease-standard), transform var(--motion-duration-fast) var(--motion-ease-standard)',
         zIndex: 100,
         pointerEvents: 'none',
         boxShadow: 'var(--shadow-md)',

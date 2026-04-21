@@ -32,6 +32,12 @@
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.12);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.16);
 
+  --motion-duration-fast: 180ms;
+  --motion-duration-base: 240ms;
+  --motion-duration-slow: 320ms;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+
   /* Type Scale */
   --text-2xs: 11px;
   --text-xs: 12px;
@@ -169,7 +175,10 @@ button {
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
-  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .icon-btn:hover,
 .icon-btn:active {
@@ -194,7 +203,9 @@ button {
   padding: 6px 10px 6px 6px;
   margin-left: -6px;
   border-radius: 8px;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .back-btn:hover {
   background: var(--bg-hover);
@@ -327,7 +338,7 @@ button {
   justify-content: center;
   box-shadow: var(--shadow-md);
   z-index: 20;
-  transition: transform 0.15s ease;
+  transition: transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .fab:active {
   transform: scale(0.94);
@@ -345,7 +356,9 @@ button {
   padding: 14px 20px 14px;
   z-index: 5;
   border-bottom: 1px solid transparent;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition:
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    background var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .dark .search-bar {
   background: var(--bg-primary);
@@ -374,7 +387,10 @@ button {
   font-family: var(--font-sans);
   color: var(--text-primary);
   outline: none;
-  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard);
 }
 .search-input::placeholder {
   color: var(--text-tertiary);
@@ -455,7 +471,11 @@ button {
   border: 1px solid rgba(20, 20, 19, 0.07);
   border-radius: 12px;
   padding: 18px;
-  transition: all 0.18s ease;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
   cursor: pointer;
   text-align: left;
   width: 100%;
@@ -747,7 +767,9 @@ button {
   font-size: 13px;
   color: var(--text-primary);
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
   line-height: 1.3;
   display: flex;
   align-items: center;
@@ -983,7 +1005,10 @@ button {
   color: var(--text-primary);
   cursor: pointer;
   line-height: 1.55;
-  transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard);
   text-align: left;
   width: 100%;
   border: 1px solid rgba(20, 20, 19, 0.07);
@@ -1145,7 +1170,7 @@ button {
   font-size: 12px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .save-as-page svg {
   width: 12px;
@@ -1197,7 +1222,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--motion-duration-fast) var(--motion-ease-standard);
   flex-shrink: 0;
 }
 .ask-send-btn:disabled {
@@ -1308,7 +1333,11 @@ button {
   color: var(--text-secondary);
   border-radius: 8px;
   background: var(--bg-secondary);
-  transition: all 0.2s;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .activity-subtabs .subtab.active {
   background: var(--bg-button);
@@ -1332,7 +1361,10 @@ button {
   color: var(--text-secondary);
   border-radius: 20px;
   background: var(--bg-secondary);
-  transition: all 0.15s;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .filter-chip.active {
   background: var(--brand-clay-soft);
@@ -1491,7 +1523,10 @@ button {
   padding: 3px 10px;
   border-radius: 6px;
   background: var(--brand-clay-soft);
-  transition: all 0.15s;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
   white-space: nowrap;
 }
 .finding-action-btn:hover {
@@ -1516,7 +1551,7 @@ button {
   color: var(--brand-clay);
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--motion-duration-fast) var(--motion-ease-standard);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1546,7 +1581,7 @@ button {
   color: var(--text-on-button);
   background: var(--bg-button);
   border-radius: 10px;
-  transition: background 0.15s;
+  transition: background var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .lint-btn:hover:not(:disabled) {
   background: var(--bg-button-hover);
@@ -1582,7 +1617,7 @@ button {
   align-items: flex-end;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.25s ease;
+  transition: opacity var(--motion-duration-base) var(--motion-ease-standard);
 }
 .modal-overlay.visible {
   opacity: 1;
@@ -1594,12 +1629,17 @@ button {
   border-radius: 20px 20px 0 0;
   padding: 12px 20px calc(24px + env(safe-area-inset-bottom, 0px));
   transform: translateY(100%);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.96;
+  will-change: transform, opacity;
+  transition:
+    transform var(--motion-duration-slow) var(--motion-ease-emphasized),
+    opacity var(--motion-duration-base) var(--motion-ease-standard);
   max-height: 90%;
   overflow-y: auto;
 }
 .modal-overlay.visible .modal {
   transform: translateY(0);
+  opacity: 1;
 }
 .modal-handle {
   width: 36px;
@@ -1639,7 +1679,7 @@ button {
   border: 1px solid var(--border-light);
   border-radius: 12px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--motion-duration-fast) var(--motion-ease-standard);
   text-align: left;
   width: 100%;
 }
@@ -1685,7 +1725,7 @@ button {
   font-weight: 500;
   border: none;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .modal-btn:hover {
   background: var(--bg-hover);
@@ -1753,7 +1793,9 @@ button {
   box-shadow: var(--shadow-md);
   z-index: 60;
   opacity: 0;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    opacity var(--motion-duration-base) var(--motion-ease-standard),
+    transform var(--motion-duration-slow) var(--motion-ease-emphasized);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1847,18 +1889,18 @@ button {
 
 /* Page transition animations */
 @keyframes tabFadeIn {
-  from { opacity: 0; transform: translateY(5px); }
+  from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes slideUpIn {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(18px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 .tab-view {
-  animation: tabFadeIn 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  animation: tabFadeIn var(--motion-duration-fast) var(--motion-ease-standard) forwards;
 }
 .detail-view {
-  animation: slideUpIn 0.24s cubic-bezier(0.34, 1.2, 0.64, 1) forwards;
+  animation: slideUpIn var(--motion-duration-base) var(--motion-ease-emphasized) forwards;
 }
 
 /* Loading skeleton */
@@ -1902,7 +1944,7 @@ button {
   background: var(--bg-primary);
   display: flex;
   flex-direction: column;
-  animation: slideUpIn 0.22s cubic-bezier(0.34, 1.1, 0.64, 1) forwards;
+  animation: slideUpIn var(--motion-duration-base) var(--motion-ease-emphasized) forwards;
 }
 
 .note-editor-header {
@@ -1926,7 +1968,9 @@ button {
   color: var(--text-secondary);
   padding: 6px 10px;
   border-radius: 8px;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition:
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    background var(--motion-duration-fast) var(--motion-ease-standard);
   min-width: 48px;
   flex-shrink: 0;
 }
@@ -1951,7 +1995,10 @@ button {
   font-family: var(--font-sans);
   font-size: 14px;
   color: var(--text-secondary);
-  transition: all 0.15s ease;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
   min-width: 36px;
 }
 .note-toolbar-btn:hover {
@@ -1972,7 +2019,10 @@ button {
   color: var(--text-tertiary);
   padding: 6px 10px;
   border-radius: 8px;
-  transition: all 0.15s ease;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
   min-width: 48px;
   text-align: right;
   flex-shrink: 0;
@@ -2050,7 +2100,10 @@ button {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
-  transition: all 0.15s ease;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .note-mode-tab.active {
   background: var(--bg-primary);
@@ -2173,7 +2226,9 @@ button {
     border-radius: 8px;
     background: var(--bg-muted);
     color: var(--text-primary);
-    transition: background 0.15s ease, transform 0.15s ease;
+    transition:
+      background var(--motion-duration-fast) var(--motion-ease-standard),
+      transform var(--motion-duration-fast) var(--motion-ease-standard);
   }
 
   .desktop-sidebar-btn:hover {
@@ -2420,7 +2475,13 @@ h3 { font-size: clamp(1.25rem, 1.173rem + 0.327vw, 1.75rem); line-height: 1.3; }
 /* Interactive Elements (7.5px signature radius) */
 button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .form-textarea, .ask-textarea, .related-chip, .tab-item.sidebar, .lint-btn, .ingest-option {
   border-radius: 7.5px !important;
-  transition: all 0.2s ease !important;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    opacity var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard) !important;
 }
 
 /* Primary Button exact match */
@@ -2445,7 +2506,10 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   background: var(--bg-card) !important;
   border: 1px solid var(--border-light) !important;
   box-shadow: none !important;
-  transition: box-shadow 0.2s ease, transform 0.2s ease !important;
+  transition:
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard) !important;
 }
 
 .concept-card:hover, .source-card:hover, .ingest-option:hover {
@@ -2581,7 +2645,9 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   color: var(--ink, #1a1a18);
   border-radius: 999px;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 .obsidian-pill:hover {
@@ -3086,7 +3152,7 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 .gh-sync-progress-fill {
   height: 100%;
   background: var(--brand-clay);
-  transition: width 0.3s ease;
+  transition: width var(--motion-duration-slow) var(--motion-ease-standard);
 }
 
 .btn-primary,
@@ -3102,7 +3168,13 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   justify-content: center;
   gap: 8px;
   border: 1px solid var(--border-default);
-  transition: all 0.2s ease;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    opacity var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 .btn-primary {
@@ -3276,11 +3348,52 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   white-space: nowrap;
 }
 
+.library-filter-stack {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.library-filter-section {
+  margin: 0 16px;
+}
+
+.library-filter-section-secondary {
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(217, 119, 87, 0.12);
+  background:
+    linear-gradient(180deg, rgba(217, 119, 87, 0.08) 0%, rgba(217, 119, 87, 0.03) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.library-filter-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.library-filter-eyebrow {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-clay);
+}
+
+.library-filter-hint {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
 .library-filter-row {
   display: flex;
   gap: 8px;
-  padding: 0 16px;
-  margin-bottom: 6px;
+  margin-bottom: 0;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -3290,8 +3403,13 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   display: none;
 }
 
-.library-filter-secondary {
-  margin-bottom: 4px;
+.library-filter-row-primary {
+  padding: 0;
+}
+
+.library-filter-row-secondary {
+  gap: 6px;
+  padding: 0;
 }
 
 .library-capsule {
@@ -3308,12 +3426,34 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 .library-capsule:hover {
   border-color: var(--brand-clay);
   color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.library-filter-row-primary .library-capsule {
+  min-height: 44px;
+  padding: 8px 15px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(246, 242, 235, 0.92) 100%);
+  color: var(--text-primary);
+}
+
+.library-filter-row-primary .library-capsule.active {
+  background: var(--brand-clay);
+  border-color: var(--brand-clay);
+  color: var(--text-on-button);
+  box-shadow: 0 10px 24px rgba(217, 119, 87, 0.22);
 }
 
 .library-capsule.active {
@@ -3330,11 +3470,43 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 .library-capsule.secondary {
   font-size: 12px;
   padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(217, 119, 87, 0.12);
+  color: var(--text-secondary);
+}
+
+.library-capsule.secondary:hover {
+  border-color: rgba(217, 119, 87, 0.28);
+  color: var(--brand-clay);
+}
+
+.library-capsule.secondary.active {
+  background: var(--bg-primary);
+  border-color: rgba(217, 119, 87, 0.28);
+  color: var(--brand-clay);
+  box-shadow: 0 6px 16px rgba(217, 119, 87, 0.1);
 }
 
 .library-capsule-count {
   font-size: 11px;
   opacity: 0.7;
+}
+
+.library-filter-row-primary .library-capsule-count {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(95, 87, 78, 0.08);
+  color: inherit;
+  opacity: 0.78;
+}
+
+.library-filter-row-primary .library-capsule.active .library-capsule-count {
+  background: rgba(255, 255, 255, 0.18);
+  opacity: 1;
+}
+
+.library-filter-row-secondary .library-capsule-count {
+  opacity: 0.56;
 }
 
 .library-capsule.active .library-capsule-count {
@@ -3346,6 +3518,14 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   font-family: var(--font-sans);
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+@media (max-width: 680px) {
+  .library-filter-heading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
 }
 
 .library-grid {
@@ -3402,29 +3582,39 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
-  animation: library-overlay-in 0.18s ease;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--motion-duration-base) var(--motion-ease-standard),
+    background var(--motion-duration-base) var(--motion-ease-standard);
 }
 
-@keyframes library-overlay-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+.library-detail-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .library-detail-modal {
   position: relative;
-  width: 560px;
+  width: 50vw;
   max-width: 50vw;
   height: 100%;
   background: var(--bg-primary);
-  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.18);
+  box-shadow: -16px 0 44px rgba(0, 0, 0, 0.16);
   display: flex;
   flex-direction: column;
-  animation: library-modal-in 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  opacity: 0.92;
+  transform: translateX(36px) scale(0.985);
+  will-change: transform, opacity;
+  transition:
+    transform var(--motion-duration-slow) var(--motion-ease-emphasized),
+    opacity var(--motion-duration-base) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard);
 }
 
-@keyframes library-modal-in {
-  from { transform: translateX(40px); opacity: 0; }
-  to   { transform: translateX(0);    opacity: 1; }
+.library-detail-overlay.is-open .library-detail-modal {
+  opacity: 1;
+  transform: translateX(0) scale(1);
 }
 
 .library-detail-modal-scroll {
@@ -3450,10 +3640,14 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 .library-detail-modal-close:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+  transform: translateY(-1px);
 }
