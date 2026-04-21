@@ -566,7 +566,8 @@ button {
 /* Concept detail */
 .concept-detail {
   padding: 24px 20px 108px;
-  max-width: 720px;
+  width: 100%;
+  max-width: none;
 }
 .detail-kicker-row {
   display: flex;
@@ -756,7 +757,7 @@ button {
 
 .related-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 10px;
 }
 .related-chip {
@@ -2382,6 +2383,8 @@ button {
   .desktop-detail-scroll > .concept-detail {
     width: 100%;
     margin: 0 auto;
+    padding-left: clamp(24px, 3vw, 40px);
+    padding-right: clamp(24px, 3vw, 40px);
   }
 
   .suggested-questions {
@@ -3596,8 +3599,8 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 
 .library-detail-modal {
   position: relative;
-  width: 50vw;
-  max-width: 50vw;
+  width: min(72vw, 1120px);
+  max-width: calc(100vw - 24px);
   height: 100%;
   background: var(--bg-primary);
   box-shadow: -16px 0 44px rgba(0, 0, 0, 0.16);
@@ -3622,6 +3625,11 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+}
+
+.library-detail-modal-scroll > .concept-detail {
+  padding-left: clamp(24px, 3vw, 40px);
+  padding-right: clamp(24px, 3vw, 40px);
 }
 
 .library-detail-modal-close {
