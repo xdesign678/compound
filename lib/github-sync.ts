@@ -143,11 +143,23 @@ export async function listMarkdownFiles(
  */
 export async function fetchMarkdownContent(
   path: string,
-  cfg: GithubConfig = getGithubConfig()
+  cfg: GithubConfig = getGithubConfig(),
+  knownSha?: string
 ): Promise<GithubFileContent> {
   const url = `${GITHUB_API_BASE}/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(
     path
   )}?ref=${encodeURIComponent(cfg.branch)}`;
+
+  if (knownSha) {
+    const rawRes = await githubFetch(url, cfg, 'application/vnd.github.raw');
+    const content = await rawRes.text();
+    return {
+      path,
+      sha: knownSha,
+      content,
+      externalKey: buildExternalKey(cfg, path, knownSha),
+    };
+  }
 
   // Request metadata first (gives us the sha), then stream raw bytes.
   const metaRes = await githubFetch(url, cfg);

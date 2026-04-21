@@ -4,6 +4,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { Icon } from './Icons';
 import { pullSnapshotFromCloud } from '@/lib/cloud-sync';
+import { getPollFailurePlan } from '@/lib/github-sync-poll';
+import {
+  buildSyncStageItems,
+  getCurrentFileDisplay,
+  getSyncStatusCopy,
+} from '@/lib/github-sync-ui';
 
 type Phase = 'idle' | 'starting' | 'running' | 'done' | 'failed';
 
@@ -29,12 +35,22 @@ interface JobStatus {
 
 const POLL_INTERVAL_MS = 1500;
 
+class PollHttpError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 export function GithubSyncModal() {
   const open = useAppStore((s) => s.githubSyncOpen);
   const close = useAppStore((s) => s.closeGithubSync);
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [pollIssue, setPollIssue] = useState<string | null>(null);
   const [job, setJob] = useState<JobStatus | null>(null);
   const [pulling, setPulling] = useState(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,6 +61,7 @@ export function GithubSyncModal() {
     if (open) {
       setPhase('idle');
       setError(null);
+      setPollIssue(null);
       setJob(null);
       pulledAfterDoneRef.current = false;
     } else {
@@ -61,20 +78,21 @@ export function GithubSyncModal() {
     };
   }, [open]);
 
-  const pollOnce = useCallback(async (jobId: string) => {
+  const pollOnce = useCallback(async (jobId: string, consecutiveFailures = 0) => {
     try {
       const res = await fetch(`/api/sync/status?jobId=${encodeURIComponent(jobId)}`, {
         cache: 'no-store',
       });
       if (!res.ok) {
         const text = await res.text().catch(() => '');
-        throw new Error(`状态查询失败 (${res.status}): ${text.slice(0, 200)}`);
+        throw new PollHttpError(res.status, `状态查询失败 (${res.status}): ${text.slice(0, 200)}`);
       }
       const data = (await res.json()) as JobStatus;
+      setPollIssue(null);
       setJob(data);
       if (data.status === 'running') {
         setPhase('running');
-        pollTimerRef.current = setTimeout(() => void pollOnce(jobId), POLL_INTERVAL_MS);
+        pollTimerRef.current = setTimeout(() => void pollOnce(jobId, 0), POLL_INTERVAL_MS);
       } else if (data.status === 'done') {
         setPhase('done');
         // 任务成功后，自动把服务端新数据拉回本地 IndexedDB。
@@ -91,6 +109,22 @@ export function GithubSyncModal() {
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      const plan = getPollFailurePlan({
+        status: e instanceof PollHttpError ? e.status : undefined,
+        message: msg,
+        consecutiveFailures,
+      });
+
+      if (plan.shouldRetry) {
+        setPollIssue(plan.userMessage);
+        pollTimerRef.current = setTimeout(
+          () => void pollOnce(jobId, plan.nextFailureCount),
+          plan.retryDelayMs
+        );
+        return;
+      }
+
+      setPollIssue(null);
       setError(msg);
       setPhase('failed');
     }
@@ -99,6 +133,7 @@ export function GithubSyncModal() {
   const start = useCallback(async () => {
     setPhase('starting');
     setError(null);
+    setPollIssue(null);
     try {
       const res = await fetch('/api/sync/github/run', { method: 'POST' });
       if (!res.ok) {
@@ -120,61 +155,110 @@ export function GithubSyncModal() {
   const canClose = phase !== 'starting';
   const progressPct =
     job && job.total > 0 ? Math.round(((job.done + job.failed) / job.total) * 100) : 0;
+  const stageItems = buildSyncStageItems({ phase, pulling, job });
+  const currentFile = getCurrentFileDisplay(job?.current ?? null);
+  const statusCopy = getSyncStatusCopy({ phase, pulling, job, pollIssue, error });
 
   return (
     <div className="modal-overlay visible" onClick={canClose ? close : undefined}>
       <div className="modal gh-sync-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-handle" />
         <header className="gh-sync-header">
-          <div className="gh-sync-title">
-            <Icon.Github />
-            <h2>从 GitHub 同步</h2>
+          <div className="gh-sync-header-row">
+            <div className="gh-sync-title">
+              <span className="gh-sync-title-icon">
+                <Icon.Github />
+              </span>
+              <div>
+                <p className="gh-sync-eyebrow">{statusCopy.eyebrow}</p>
+                <h2>从 GitHub 同步</h2>
+              </div>
+            </div>
+            <button
+              className="icon-btn gh-sync-close"
+              onClick={close}
+              disabled={!canClose}
+              aria-label="关闭"
+            >
+              ×
+            </button>
           </div>
-          <button
-            className="icon-btn gh-sync-close"
-            onClick={close}
-            disabled={!canClose}
-            aria-label="关闭"
-          >
-            ×
-          </button>
+          <p className="gh-sync-subtitle">{statusCopy.description}</p>
         </header>
 
-        {phase === 'idle' && <IdleView onStart={start} error={error} />}
+        {(phase === 'idle' || (phase === 'failed' && !job)) && <IdleView onStart={start} error={error} />}
 
-        {phase === 'starting' && (
-          <div className="gh-sync-idle">
-            <p className="gh-sync-lede">🚀 正在启动服务端同步任务…</p>
-          </div>
-        )}
+        {phase === 'starting' && <StartingView stageItems={stageItems} />}
 
         {(phase === 'running' || phase === 'done' || phase === 'failed') && job && (
           <>
-            <div className="gh-sync-meta">
-              <span className="gh-sync-repo">
-                {phase === 'running' ? '🔄 服务端同步中' : phase === 'done' ? '✅ 同步完成' : '⚠️ 同步失败'}
-              </span>
-              <span className="gh-sync-stats">
-                共 {job.total} 个文件 · 成功 <strong>{job.done}</strong> · 失败{' '}
-                <strong>{job.failed}</strong>
-              </span>
-            </div>
+            <section className="gh-sync-panel gh-sync-stage-card">
+              <div className="gh-sync-panel-head">
+                <div>
+                  <p className="gh-sync-panel-kicker">同步阶段</p>
+                  <h3>现在进行到哪一步</h3>
+                </div>
+                <div className="gh-sync-badge">
+                  共 {job.total} 个文件
+                </div>
+              </div>
+              <div className="gh-sync-stage-list" aria-label="同步阶段">
+                {stageItems.map((item, index) => (
+                  <div
+                    key={item.id}
+                    className={`gh-sync-stage-item ${item.status}`}
+                    aria-current={item.status === 'current' ? 'step' : undefined}
+                  >
+                    <div className="gh-sync-stage-dot" />
+                    <span className="gh-sync-stage-label">{item.label}</span>
+                    {index < stageItems.length - 1 && <span className="gh-sync-stage-line" />}
+                  </div>
+                ))}
+              </div>
+            </section>
 
-            {job.total > 0 && (
+            <section className="gh-sync-panel gh-sync-focus-card">
+              <div className="gh-sync-panel-head">
+                <div>
+                  <p className="gh-sync-panel-kicker">当前处理文件</p>
+                  <h3>{currentFile.counter ? `当前文件 ${currentFile.counter}` : '正在准备同步内容'}</h3>
+                </div>
+                {job.total > 0 && (
+                  <div className="gh-sync-mini-stats">
+                    已处理 {job.done + job.failed} / {job.total}
+                  </div>
+                )}
+              </div>
+              <p className="gh-sync-focus-path" title={currentFile.path ?? job.current ?? ''}>
+                {currentFile.path ?? job.current ?? '服务端正在准备第一批同步内容…'}
+              </p>
+              {phase === 'running' && pollIssue && <p className="gh-sync-inline-hint">{pollIssue}</p>}
+            </section>
+
+            <section className="gh-sync-panel gh-sync-progress-card">
+              <div className="gh-sync-progress-meta">
+                <div>
+                  <p className="gh-sync-panel-kicker">同步进度</p>
+                  <h3>{progressPct}%</h3>
+                </div>
+                <div className="gh-sync-progress-stats">
+                  <span>成功 <strong>{job.done}</strong></span>
+                  <span>失败 <strong>{job.failed}</strong></span>
+                </div>
+              </div>
               <div className="gh-sync-progress-bar" aria-label="同步进度">
                 <div className="gh-sync-progress-fill" style={{ width: `${progressPct}%` }} />
               </div>
-            )}
+            </section>
 
-            {phase === 'running' && job.current && (
-              <p className="gh-sync-current">
-                正在处理：<code>{job.current}</code>
-              </p>
-            )}
-
-            {error && (
-              <div className="gh-sync-error">
-                <strong>失败原因：</strong>
+            {error && job.status === 'failed' && (
+              <div className="gh-sync-error gh-sync-panel">
+                <div className="gh-sync-panel-head">
+                  <div>
+                    <p className="gh-sync-panel-kicker">失败原因</p>
+                    <h3>需要先处理这个问题</h3>
+                  </div>
+                </div>
                 <pre>{error}</pre>
                 <p className="gh-sync-hint">
                   常见原因：<code>GITHUB_TOKEN</code>、<code>GITHUB_REPO</code> 未配置，或
@@ -183,44 +267,65 @@ export function GithubSyncModal() {
               </div>
             )}
 
-            <div className="gh-sync-list gh-sync-log">
-              {job.log.length === 0 ? (
-                <p className="gh-sync-lede">暂无日志，首次同步可能需要几秒扫描仓库…</p>
-              ) : (
-                job.log
-                  .slice()
-                  .reverse()
-                  .map((entry, i) => (
-                    <div
-                      key={`${entry.path}-${entry.at}-${i}`}
-                      className={`gh-sync-row ${entry.status === 'success' ? 'success' : 'failed'}`}
-                    >
-                      <span className="gh-sync-path" title={entry.path}>
-                        {entry.path}
-                      </span>
-                      <span
-                        className={`gh-sync-status ${
-                          entry.status === 'success' ? 'success' : 'failed'
-                        }`}
+            <section className="gh-sync-panel gh-sync-log-card">
+              <div className="gh-sync-panel-head">
+                <div>
+                  <p className="gh-sync-panel-kicker">同步时间线</p>
+                  <h3>服务端正在回传这些结果</h3>
+                </div>
+              </div>
+              <div className="gh-sync-list gh-sync-log">
+                {job.log.length === 0 ? (
+                  <div className="gh-sync-empty-state">
+                    <p className="gh-sync-empty-title">日志还在生成中</p>
+                    <p className="gh-sync-empty-desc">首次同步通常会先扫描仓库，再逐步写回进度。</p>
+                  </div>
+                ) : (
+                  job.log
+                    .slice()
+                    .reverse()
+                    .map((entry, i) => (
+                      <div
+                        key={`${entry.path}-${entry.at}-${i}`}
+                        className={`gh-sync-timeline-item ${entry.status}`}
                       >
-                        {entry.status === 'success' ? '✓' : '×'}{' '}
-                        {entry.message ?? ''}
-                      </span>
-                    </div>
-                  ))
-              )}
-            </div>
+                        <span className="gh-sync-timeline-dot" aria-hidden="true" />
+                        <div className="gh-sync-timeline-body">
+                          <div className="gh-sync-timeline-row">
+                            <span className="gh-sync-timeline-label">
+                              {entry.status === 'failed'
+                                ? '失败'
+                                : entry.status === 'success'
+                                  ? '成功'
+                                  : '提示'}
+                            </span>
+                            <span className="gh-sync-timeline-path" title={entry.path}>
+                              {entry.path}
+                            </span>
+                          </div>
+                          {entry.message && <p className="gh-sync-timeline-message">{entry.message}</p>}
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+            </section>
 
             <footer className="gh-sync-footer">
               {phase === 'running' && (
-                <span className="gh-sync-progress-text">
-                  进行中…{progressPct}% （关闭本窗口也不会中断，服务端会继续跑）
-                </span>
+                <>
+                  <span className="gh-sync-progress-text">
+                    关闭窗口不会中断，服务端会继续同步。
+                  </span>
+                  <button className="btn-primary" onClick={close}>
+                    后台继续
+                  </button>
+                </>
               )}
               {phase === 'done' && (
                 <>
                   <span className="gh-sync-progress-text">
-                    ✅ 完成 {pulling ? '· 正在拉取最新数据…' : '· 数据已同步到本地'}
+                    {pulling ? '正在拉取最新数据到本地…' : '最新数据已经同步到当前设备。'}
                   </span>
                   <button className="btn-primary" onClick={close}>
                     关闭
@@ -246,16 +351,32 @@ export function GithubSyncModal() {
 function IdleView({ onStart, error }: { onStart: () => void; error: string | null }) {
   return (
     <div className="gh-sync-idle">
-      <p className="gh-sync-lede">
-        点下面按钮启动<strong>服务端</strong>同步。Zeabur 后端会自动对比本地 SQLite 和远端仓库，
-        只处理有变动的 Markdown。关闭本页也不会中断，手机/电脑/任何浏览器都能看到同一份结果。
-      </p>
-      <button className="btn-primary" onClick={onStart}>
-        <Icon.Refresh /> <span>启动同步</span>
-      </button>
+      <section className="gh-sync-panel gh-sync-intro-card">
+        <div className="gh-sync-panel-head">
+          <div>
+            <p className="gh-sync-panel-kicker">同步说明</p>
+            <h3>小范围、清晰、可靠地同步远端 Markdown</h3>
+          </div>
+        </div>
+        <p className="gh-sync-lede">
+          服务端会先扫描 GitHub 仓库，再只处理真正有变动的内容。你可以随时关闭窗口，同步不会中断，
+          手机、电脑和其他浏览器稍后看到的都会是同一份结果。
+        </p>
+      </section>
+      <div className="gh-sync-footer gh-sync-footer-start">
+        <span className="gh-sync-progress-text">准备好后就可以开始本次同步。</span>
+        <button className="btn-primary" onClick={onStart}>
+          <Icon.Refresh /> <span>启动同步</span>
+        </button>
+      </div>
       {error && (
-        <div className="gh-sync-error">
-          <strong>启动失败：</strong>
+        <div className="gh-sync-error gh-sync-panel">
+          <div className="gh-sync-panel-head">
+            <div>
+              <p className="gh-sync-panel-kicker">启动失败</p>
+              <h3>服务端还没成功建立任务</h3>
+            </div>
+          </div>
           <pre>{error}</pre>
           <p className="gh-sync-hint">
             请在 Zeabur 控制台确认环境变量 <code>GITHUB_REPO</code>、<code>GITHUB_TOKEN</code>、
@@ -264,6 +385,49 @@ function IdleView({ onStart, error }: { onStart: () => void; error: string | nul
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function StartingView({
+  stageItems,
+}: {
+  stageItems: Array<{ id: string; label: string; status: 'done' | 'current' | 'upcoming' }>;
+}) {
+  return (
+    <div className="gh-sync-idle">
+      <section className="gh-sync-panel gh-sync-stage-card">
+        <div className="gh-sync-panel-head">
+          <div>
+            <p className="gh-sync-panel-kicker">同步阶段</p>
+            <h3>服务端正在建立同步任务</h3>
+          </div>
+        </div>
+        <div className="gh-sync-stage-list" aria-label="同步阶段">
+          {stageItems.map((item, index) => (
+            <div
+              key={item.id}
+              className={`gh-sync-stage-item ${item.status}`}
+              aria-current={item.status === 'current' ? 'step' : undefined}
+            >
+              <div className="gh-sync-stage-dot" />
+              <span className="gh-sync-stage-label">{item.label}</span>
+              {index < stageItems.length - 1 && <span className="gh-sync-stage-line" />}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="gh-sync-panel gh-sync-focus-card">
+        <div className="gh-sync-panel-head">
+          <div>
+            <p className="gh-sync-panel-kicker">当前处理文件</p>
+            <h3>正在连接服务端</h3>
+          </div>
+        </div>
+        <div className="gh-sync-skeleton gh-sync-skeleton-lg" />
+        <div className="gh-sync-skeleton gh-sync-skeleton-sm" />
+      </section>
     </div>
   );
 }

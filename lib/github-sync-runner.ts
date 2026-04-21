@@ -47,6 +47,15 @@ function appendLog(row: SyncJobRow, entry: LogEntry): string {
   return JSON.stringify(prev);
 }
 
+function appendLogByJobId(jobId: string, entry: LogEntry, patch: Partial<SyncJobRow> = {}): void {
+  const row = repo.getSyncJob(jobId);
+  if (!row) return;
+  repo.updateSyncJob(jobId, {
+    ...patch,
+    log: appendLog(row, entry),
+  });
+}
+
 function deriveTitle(filePath: string, content: string): string {
   const fm = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*\r?\n/);
   if (fm) {
@@ -142,6 +151,14 @@ async function runGithubSyncLoop(jobId: string): Promise<void> {
   }
 
   // 1. List remote files
+  repo.updateSyncJob(jobId, { current: '扫描 GitHub 仓库…' });
+  appendLogByJobId(jobId, {
+    at: Date.now(),
+    path: '仓库扫描',
+    status: 'success',
+    message: '开始扫描远端 Markdown 文件',
+  });
+
   let remote: Awaited<ReturnType<typeof listMarkdownFiles>>;
   try {
     remote = await listMarkdownFiles(cfg);
@@ -158,6 +175,7 @@ async function runGithubSyncLoop(jobId: string): Promise<void> {
   }
 
   // 2. Build local-by-path map from SQLite
+  repo.updateSyncJob(jobId, { current: `已扫描 ${remote.length} 个文件，正在比对本地差异…` });
   const localByPath = new Map<string, { id: string; externalKey: string }>();
   for (const row of repo.listGithubExternalKeys()) {
     const p = externalKeyPath(row.externalKey);
@@ -194,18 +212,24 @@ async function runGithubSyncLoop(jobId: string): Promise<void> {
   }
 
   repo.updateSyncJob(jobId, { total: plan.length });
+  appendLogByJobId(jobId, {
+    at: Date.now(),
+    path: '同步计划',
+    status: 'success',
+    message: `待处理 ${plan.length} 个文件`,
+  });
   console.log(`[github-sync-runner] ${jobId}: plan ready, ${plan.length} file(s) to process`);
 
   // 4. Serial execution with progress updates
-  for (const item of plan) {
+  for (const [index, item] of plan.entries()) {
     // Check if job was cancelled externally (status flipped to 'failed' etc.)
     const current = repo.getSyncJob(jobId);
     if (!current || current.status !== 'running') return;
 
-    repo.updateSyncJob(jobId, { current: item.path });
+    repo.updateSyncJob(jobId, { current: `[${index + 1}/${plan.length}] ${item.path}` });
 
     try {
-      const remoteFile = await fetchMarkdownContent(item.path, cfg);
+      const remoteFile = await fetchMarkdownContent(item.path, cfg, item.sha);
 
       // `ingestSourceToServerDb` handles the update-case dedup via externalKey.
       const result = await ingestSourceToServerDb({
@@ -251,7 +275,7 @@ async function runGithubSyncLoop(jobId: string): Promise<void> {
   if (final) {
     repo.updateSyncJob(jobId, {
       status: 'done',
-      current: null,
+      current: final.total === 0 ? '没有检测到需要同步的文件' : null,
       finished_at: Date.now(),
     });
     console.log(
