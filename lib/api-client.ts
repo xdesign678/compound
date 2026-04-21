@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { getDb } from './db';
+import { normalizeCategoryKeys, normalizeCategoryState } from './category-normalization';
 import { getLlmConfig } from './llm-config';
 import type {
   Source,
@@ -15,7 +16,6 @@ import type {
   CategorizeResponse,
   SourceType,
 } from './types';
-import { toCategoryKeys } from './types';
 
 async function addBidirectionalLinks(db: ReturnType<typeof getDb>, sourceId: string, relatedIds: string[], now: number) {
   const fetched = await db.concepts.bulkGet(relatedIds);
@@ -57,15 +57,7 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
 export async function getExistingCategories(): Promise<string[]> {
   const db = getDb();
   const all = await db.concepts.toArray();
-  const keys = new Set<string>();
-  for (const c of all) {
-    if (c.categoryKeys) {
-      for (const k of c.categoryKeys) {
-        keys.add(k);
-      }
-    }
-  }
-  return Array.from(keys).sort();
+  return normalizeCategoryKeys(all.flatMap((c) => c.categoryKeys || [])).sort();
 }
 
 /**
@@ -109,8 +101,8 @@ export async function ingestSource(input: {
   };
 
   // Inject existing categories for LLM reference (derived from already-fetched existing concepts)
-  const existingCategories = Array.from(
-    new Set(existing.flatMap((c) => c.categoryKeys || []))
+  const existingCategories = normalizeCategoryKeys(
+    existing.flatMap((c) => c.categoryKeys || [])
   ).sort();
   const reqWithCategories = { ...req, existingCategories };
 
@@ -122,7 +114,7 @@ export async function ingestSource(input: {
   const newConcepts: Concept[] = resp.newConcepts.map((nc) => {
     const id = 'c-' + nanoid(8);
     newConceptIds.push(id);
-    const categories = nc.categories || [];
+    const { categories, categoryKeys } = normalizeCategoryState({ categories: nc.categories || [] });
     return {
       id,
       title: nc.title.trim(),
@@ -134,7 +126,7 @@ export async function ingestSource(input: {
       updatedAt: now,
       version: 1,
       categories,
-      categoryKeys: toCategoryKeys(categories),
+      categoryKeys,
     };
   });
 
@@ -357,20 +349,20 @@ export async function categorizeConcepts(
       // Write results to Dexie
       await db.transaction('rw', db.concepts, async () => {
         for (const result of resp.results) {
-          const categories = result.categories || [];
-          const categoryKeys = toCategoryKeys(categories);
+          const { categories, categoryKeys } = normalizeCategoryState({
+            categories: result.categories || [],
+          });
           await db.concepts.update(result.id, { categories, categoryKeys });
         }
       });
 
       // Update existing categories list with newly created ones
       for (const result of resp.results) {
-        const cats = result.categories || [];
-        for (const cat of cats) {
-          const k1 = cat.primary;
-          const k2 = cat.secondary ? `${cat.primary}/${cat.secondary}` : cat.primary;
-          if (!existingCategories.includes(k1)) existingCategories.push(k1);
-          if (k2 !== k1 && !existingCategories.includes(k2)) existingCategories.push(k2);
+        const normalizedKeys = normalizeCategoryState({
+          categories: result.categories || [],
+        }).categoryKeys;
+        for (const key of normalizedKeys) {
+          if (!existingCategories.includes(key)) existingCategories.push(key);
         }
       }
     } catch {

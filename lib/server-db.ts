@@ -14,6 +14,7 @@ import Database, { type Database as DB } from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { normalizeCategoryState } from './category-normalization';
 import type {
   Source,
   Concept,
@@ -156,6 +157,35 @@ function runMigrations(db: DB): void {
 
   if (!conceptColumns.has('category_keys')) {
     db.exec(`ALTER TABLE concepts ADD COLUMN category_keys TEXT NOT NULL DEFAULT '[]';`);
+  }
+
+  normalizeStoredConceptCategories(db);
+}
+
+function normalizeStoredConceptCategories(db: DB): void {
+  const rows = db
+    .prepare(`SELECT id, categories, category_keys FROM concepts`)
+    .all() as Array<{ id: string; categories: string; category_keys: string }>;
+
+  const update = db.prepare(
+    `UPDATE concepts
+     SET categories = @categories, category_keys = @category_keys
+     WHERE id = @id`
+  );
+
+  for (const row of rows) {
+    const parsedCategories = parseJsonArray<CategoryTag>(row.categories);
+    const parsedCategoryKeys = parseJsonArray<string>(row.category_keys);
+    const normalized = normalizeCategoryState({
+      categories: parsedCategories,
+      categoryKeys: parsedCategoryKeys,
+    });
+
+    update.run({
+      id: row.id,
+      categories: JSON.stringify(normalized.categories),
+      category_keys: JSON.stringify(normalized.categoryKeys),
+    });
   }
 }
 

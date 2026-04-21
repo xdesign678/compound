@@ -1,3 +1,5 @@
+import { toNormalizedCategoryKeys } from './category-normalization';
+
 export type SourceType = 'link' | 'text' | 'file' | 'article' | 'book' | 'pdf' | 'gist';
 
 export interface Source {
@@ -138,14 +140,5 @@ export interface CategorizeResponse {
 
 /** Derive flat categoryKeys from structured categories for Dexie MultiEntry index. */
 export function toCategoryKeys(categories: CategoryTag[]): string[] {
-  const keys = new Set<string>();
-  for (const cat of categories) {
-    if (cat.primary) {
-      keys.add(cat.primary);
-      if (cat.secondary) {
-        keys.add(`${cat.primary}/${cat.secondary}`);
-      }
-    }
-  }
-  return Array.from(keys);
+  return toNormalizedCategoryKeys(categories);
 }

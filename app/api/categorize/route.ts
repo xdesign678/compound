@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { normalizeCategoryKeys, normalizeCategoryState } from '@/lib/category-normalization';
 import { chat, parseJSON } from '@/lib/gateway';
 import { CATEGORIZE_SYSTEM_PROMPT } from '@/lib/prompts';
 import type { CategorizeRequest, CategorizeResponse } from '@/lib/types';
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
       .map((c) => `- [${c.id}] ${c.title} — ${c.summary}\n  正文片段: ${(c.body ?? '').slice(0, 200)}`)
       .join('\n');
 
-    const existingCategories = body.existingCategories ?? [];
+    const existingCategories = normalizeCategoryKeys(body.existingCategories ?? []);
     const categoryList = existingCategories.length > 0
       ? existingCategories.join(', ')
       : '(暂无已有分类)';
@@ -57,6 +58,10 @@ ${categoryList}
 
     const parsed = parseJSON<CategorizeResponse>(raw);
     parsed.results = parsed.results || [];
+    parsed.results = parsed.results.map((result) => ({
+      ...result,
+      categories: normalizeCategoryState({ categories: result.categories || [] }).categories,
+    }));
 
     // Only return results for IDs that were actually requested
     const requestedIds = new Set(body.concepts.map((c) => c.id));
