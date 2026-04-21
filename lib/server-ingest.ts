@@ -9,8 +9,8 @@
 
 import { nanoid } from 'nanoid';
 import { repo, getServerDb } from './server-db';
+import { normalizeCategoryKeys, normalizeCategoryState } from './category-normalization';
 import { runIngestLLM } from './ingest-core';
-import { toCategoryKeys } from './types';
 import type {
   Source,
   Concept,
@@ -53,8 +53,8 @@ export async function ingestSourceToServerDb(
 
   // 2. Gather existing concepts for LLM context
   const allConcepts = repo.listConcepts();
-  const existingCategories = Array.from(
-    new Set(allConcepts.flatMap((concept) => concept.categoryKeys || []))
+  const existingCategories = normalizeCategoryKeys(
+    allConcepts.flatMap((concept) => concept.categoryKeys || [])
   );
 
   // 3. Call LLM (no DB writes yet)
@@ -79,7 +79,7 @@ export async function ingestSourceToServerDb(
   const newConceptIds: string[] = [];
   const newConcepts: Concept[] = resp.newConcepts.map((nc) => {
     const id = 'c-' + nanoid(8);
-    const categories = nc.categories || [];
+    const { categories, categoryKeys } = normalizeCategoryState({ categories: nc.categories || [] });
     newConceptIds.push(id);
     return {
       id,
@@ -89,7 +89,7 @@ export async function ingestSourceToServerDb(
       sources: [source.id],
       related: nc.relatedConceptIds || [],
       categories,
-      categoryKeys: toCategoryKeys(categories),
+      categoryKeys,
       createdAt: now,
       updatedAt: now,
       version: 1,

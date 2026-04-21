@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import { normalizeCategoryState } from './category-normalization';
 import type { Source, Concept, ActivityLog, AskMessage } from './types';
 
 export class CompoundDB extends Dexie {
@@ -40,6 +41,21 @@ export class CompoundDB extends Dexie {
       return tx.table('concepts').toCollection().modify(concept => {
         if (!concept.categories) concept.categories = [];
         if (!concept.categoryKeys) concept.categoryKeys = [];
+      });
+    });
+    this.version(5).stores({
+      sources: 'id, ingestedAt, type, externalKey',
+      concepts: 'id, updatedAt, createdAt, *sources, *related, *categoryKeys',
+      activity: 'id, at, type',
+      askHistory: 'id, at',
+    }).upgrade(tx => {
+      return tx.table('concepts').toCollection().modify(concept => {
+        const normalized = normalizeCategoryState({
+          categories: concept.categories || [],
+          categoryKeys: concept.categoryKeys || [],
+        });
+        concept.categories = normalized.categories;
+        concept.categoryKeys = normalized.categoryKeys;
       });
     });
   }
