@@ -1,5 +1,6 @@
 'use client';
 
+import Dexie from 'dexie';
 import DOMPurify from 'dompurify';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
@@ -20,9 +21,15 @@ export function ActivityLogView() {
 
   const items = useLiveQuery(
     async () => {
-      const all = await getDb().activity.orderBy('at').reverse().toArray();
-      if (filter === 'all') return all;
-      return all.filter((it) => it.type === filter);
+      const db = getDb();
+      if (filter === 'all') {
+        return db.activity.orderBy('at').reverse().toArray();
+      }
+      return db.activity
+        .where('[type+at]')
+        .between([filter, Dexie.minKey], [filter, Dexie.maxKey])
+        .reverse()
+        .toArray();
     },
     [filter]
   );

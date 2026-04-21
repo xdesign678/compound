@@ -239,6 +239,15 @@ interface AskRow {
   at: number;
 }
 
+interface TimeWindowOptions {
+  after?: number;
+  before?: number;
+}
+
+interface TimeWindowWithLimit extends TimeWindowOptions {
+  limit?: number;
+}
+
 function parseJsonArray<T>(s: string | null | undefined, fallback: T[] = []): T[] {
   if (!s) return fallback;
   try {
@@ -247,6 +256,29 @@ function parseJsonArray<T>(s: string | null | undefined, fallback: T[] = []): T[
   } catch {
     return fallback;
   }
+}
+
+function buildTimeWindowClause(column: string, options: TimeWindowOptions = {}): {
+  clause: string;
+  params: number[];
+} {
+  const clauses: string[] = [];
+  const params: number[] = [];
+
+  if (typeof options.after === 'number' && Number.isFinite(options.after)) {
+    clauses.push(`${column} > ?`);
+    params.push(Math.trunc(options.after));
+  }
+
+  if (typeof options.before === 'number' && Number.isFinite(options.before)) {
+    clauses.push(`${column} <= ?`);
+    params.push(Math.trunc(options.before));
+  }
+
+  return {
+    clause: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '',
+    params,
+  };
 }
 
 function rowToSource(r: SourceRow): Source {
@@ -346,10 +378,11 @@ export const repo = {
     getServerDb().prepare(`DELETE FROM sources WHERE id = ?`).run(id);
   },
 
-  listSources(): Source[] {
+  listSources(options: TimeWindowOptions = {}): Source[] {
+    const { clause, params } = buildTimeWindowClause('ingested_at', options);
     const rows = getServerDb()
-      .prepare(`SELECT * FROM sources ORDER BY ingested_at DESC`)
-      .all() as SourceRow[];
+      .prepare(`SELECT * FROM sources ${clause} ORDER BY ingested_at DESC`)
+      .all(...params) as SourceRow[];
     return rows.map(rowToSource);
   },
 
@@ -393,10 +426,11 @@ export const repo = {
     return row ? rowToConcept(row) : null;
   },
 
-  listConcepts(): Concept[] {
+  listConcepts(options: TimeWindowOptions = {}): Concept[] {
+    const { clause, params } = buildTimeWindowClause('updated_at', options);
     const rows = getServerDb()
-      .prepare(`SELECT * FROM concepts ORDER BY updated_at DESC`)
-      .all() as ConceptRow[];
+      .prepare(`SELECT * FROM concepts ${clause} ORDER BY updated_at DESC`)
+      .all(...params) as ConceptRow[];
     return rows.map(rowToConcept);
   },
 
@@ -426,18 +460,24 @@ export const repo = {
       });
   },
 
-  listActivity(limit = 500): ActivityLog[] {
+  listActivity(limitOrOptions: number | TimeWindowWithLimit = 500): ActivityLog[] {
+    const options = typeof limitOrOptions === 'number' ? { limit: limitOrOptions } : limitOrOptions;
+    const { clause, params } = buildTimeWindowClause('at', options);
+    const hasLimit = typeof options.limit === 'number' && Number.isFinite(options.limit);
     const rows = getServerDb()
-      .prepare(`SELECT * FROM activity ORDER BY at DESC LIMIT ?`)
-      .all(limit) as ActivityRow[];
+      .prepare(`SELECT * FROM activity ${clause} ORDER BY at DESC${hasLimit ? ' LIMIT ?' : ''}`)
+      .all(...(hasLimit ? [...params, Math.trunc(options.limit!)] : params)) as ActivityRow[];
     return rows.map(rowToActivity);
   },
 
   // ---- ask history -----------------------------------------------
-  listAskHistory(limit = 200): AskMessage[] {
+  listAskHistory(limitOrOptions: number | TimeWindowWithLimit = 200): AskMessage[] {
+    const options = typeof limitOrOptions === 'number' ? { limit: limitOrOptions } : limitOrOptions;
+    const { clause, params } = buildTimeWindowClause('at', options);
+    const hasLimit = typeof options.limit === 'number' && Number.isFinite(options.limit);
     const rows = getServerDb()
-      .prepare(`SELECT * FROM ask_history ORDER BY at DESC LIMIT ?`)
-      .all(limit) as AskRow[];
+      .prepare(`SELECT * FROM ask_history ${clause} ORDER BY at DESC${hasLimit ? ' LIMIT ?' : ''}`)
+      .all(...(hasLimit ? [...params, Math.trunc(options.limit!)] : params)) as AskRow[];
     return rows.map(rowToAsk);
   },
 

@@ -58,6 +58,12 @@ export class CompoundDB extends Dexie {
         concept.categoryKeys = normalized.categoryKeys;
       });
     });
+    this.version(6).stores({
+      sources: 'id, ingestedAt, type, externalKey',
+      concepts: 'id, updatedAt, createdAt, *sources, *related, *categoryKeys',
+      activity: 'id, at, type, [type+at]',
+      askHistory: 'id, at',
+    });
   }
 }
 

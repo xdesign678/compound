@@ -6,7 +6,10 @@
     "dev": "NODE_ENV=development next dev -p 8080 -H 0.0.0.0",
     "build": "next build",
     "start": "next start -p ${PORT:-3000} -H 0.0.0.0",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc -p tsconfig.typecheck.json --noEmit --pretty false",
+    "test": "node scripts/run-node-tests.mjs",
+    "check": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "@types/better-sqlite3": "^7.6.13",
