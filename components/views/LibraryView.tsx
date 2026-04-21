@@ -93,6 +93,11 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
     return node?.secondaries || [];
   }, [categoryTree, selectedPrimary]);
 
+  const currentPrimaryNode = useMemo(() => {
+    if (!selectedPrimary) return null;
+    return categoryTree.find((t) => t.primary === selectedPrimary) ?? null;
+  }, [categoryTree, selectedPrimary]);
+
   const filtered = useMemo(() => {
     if (!concepts) return [];
     let result = concepts;
@@ -183,53 +188,75 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
         </div>
       )}
 
-      <div className="library-filter-row">
-        <button
-          className={`library-capsule${selectedPrimary === null ? ' active' : ''}`}
-          aria-pressed={selectedPrimary === null}
-          onClick={() => { setSelectedPrimary(null); setSelectedSecondary(null); }}
-        >
-          全部
-          <span className="library-capsule-count">{concepts.length}</span>
-        </button>
-        {categoryTree.map((cat) => (
-          <button
-            key={cat.primary}
-            className={`library-capsule${selectedPrimary === cat.primary ? ' active' : ''}`}
-            aria-pressed={selectedPrimary === cat.primary}
-            onClick={() => {
-              if (selectedPrimary === cat.primary) {
-                setSelectedPrimary(null);
-                setSelectedSecondary(null);
-              } else {
-                setSelectedPrimary(cat.primary);
-                setSelectedSecondary(null);
-              }
-            }}
-          >
-            {cat.primary}
-            <span className="library-capsule-count">{cat.count}</span>
-          </button>
-        ))}
-      </div>
-
-      {selectedPrimary && currentSecondaries.length > 0 && (
-        <div className="library-filter-row library-filter-secondary">
-          {currentSecondaries.map((sec) => (
+      <div className="library-filter-stack">
+        <section className="library-filter-section library-filter-section-primary" aria-label="一级分类">
+          <div className="library-filter-heading">
+            <span className="library-filter-eyebrow">一级分类</span>
+            <span className="library-filter-hint">先选领域，再看细分方向</span>
+          </div>
+          <div className="library-filter-row library-filter-row-primary">
             <button
-              key={sec.name}
-              className={`library-capsule secondary${selectedSecondary === sec.name ? ' active' : ''}`}
-              aria-pressed={selectedSecondary === sec.name}
-              onClick={() => {
-                setSelectedSecondary(selectedSecondary === sec.name ? null : sec.name);
-              }}
+              className={`library-capsule${selectedPrimary === null ? ' active' : ''}`}
+              aria-pressed={selectedPrimary === null}
+              onClick={() => { setSelectedPrimary(null); setSelectedSecondary(null); }}
             >
-              {sec.name}
-              <span className="library-capsule-count">{sec.count}</span>
+              全部
+              <span className="library-capsule-count">{concepts.length}</span>
             </button>
-          ))}
-        </div>
-      )}
+            {categoryTree.map((cat) => (
+              <button
+                key={cat.primary}
+                className={`library-capsule${selectedPrimary === cat.primary ? ' active' : ''}`}
+                aria-pressed={selectedPrimary === cat.primary}
+                onClick={() => {
+                  if (selectedPrimary === cat.primary) {
+                    setSelectedPrimary(null);
+                    setSelectedSecondary(null);
+                  } else {
+                    setSelectedPrimary(cat.primary);
+                    setSelectedSecondary(null);
+                  }
+                }}
+              >
+                {cat.primary}
+                <span className="library-capsule-count">{cat.count}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {selectedPrimary && currentSecondaries.length > 0 && currentPrimaryNode && (
+          <section className="library-filter-section library-filter-section-secondary" aria-label="二级标签">
+            <div className="library-filter-heading">
+              <span className="library-filter-eyebrow">二级标签</span>
+              <span className="library-filter-hint">{selectedPrimary} 下的细分方向</span>
+            </div>
+            <div className="library-filter-row library-filter-row-secondary">
+              <button
+                className={`library-capsule secondary${selectedSecondary === null ? ' active' : ''}`}
+                aria-pressed={selectedSecondary === null}
+                onClick={() => setSelectedSecondary(null)}
+              >
+                全部方向
+                <span className="library-capsule-count">{currentPrimaryNode.count}</span>
+              </button>
+              {currentSecondaries.map((sec) => (
+                <button
+                  key={sec.name}
+                  className={`library-capsule secondary${selectedSecondary === sec.name ? ' active' : ''}`}
+                  aria-pressed={selectedSecondary === sec.name}
+                  onClick={() => {
+                    setSelectedSecondary(selectedSecondary === sec.name ? null : sec.name);
+                  }}
+                >
+                  {sec.name}
+                  <span className="library-capsule-count">{sec.count}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
 
       <div className="library-filter-status">{filterLabel}</div>
 

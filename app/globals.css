@@ -3348,11 +3348,52 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   white-space: nowrap;
 }
 
+.library-filter-stack {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.library-filter-section {
+  margin: 0 16px;
+}
+
+.library-filter-section-secondary {
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(217, 119, 87, 0.12);
+  background:
+    linear-gradient(180deg, rgba(217, 119, 87, 0.08) 0%, rgba(217, 119, 87, 0.03) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.library-filter-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.library-filter-eyebrow {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-clay);
+}
+
+.library-filter-hint {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
 .library-filter-row {
   display: flex;
   gap: 8px;
-  padding: 0 16px;
-  margin-bottom: 6px;
+  margin-bottom: 0;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -3362,8 +3403,13 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   display: none;
 }
 
-.library-filter-secondary {
-  margin-bottom: 4px;
+.library-filter-row-primary {
+  padding: 0;
+}
+
+.library-filter-row-secondary {
+  gap: 6px;
+  padding: 0;
 }
 
 .library-capsule {
@@ -3383,12 +3429,31 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   transition:
     background var(--motion-duration-fast) var(--motion-ease-standard),
     color var(--motion-duration-fast) var(--motion-ease-standard),
-    border-color var(--motion-duration-fast) var(--motion-ease-standard);
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 .library-capsule:hover {
   border-color: var(--brand-clay);
   color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.library-filter-row-primary .library-capsule {
+  min-height: 44px;
+  padding: 8px 15px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(246, 242, 235, 0.92) 100%);
+  color: var(--text-primary);
+}
+
+.library-filter-row-primary .library-capsule.active {
+  background: var(--brand-clay);
+  border-color: var(--brand-clay);
+  color: var(--text-on-button);
+  box-shadow: 0 10px 24px rgba(217, 119, 87, 0.22);
 }
 
 .library-capsule.active {
@@ -3405,11 +3470,43 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 .library-capsule.secondary {
   font-size: 12px;
   padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(217, 119, 87, 0.12);
+  color: var(--text-secondary);
+}
+
+.library-capsule.secondary:hover {
+  border-color: rgba(217, 119, 87, 0.28);
+  color: var(--brand-clay);
+}
+
+.library-capsule.secondary.active {
+  background: var(--bg-primary);
+  border-color: rgba(217, 119, 87, 0.28);
+  color: var(--brand-clay);
+  box-shadow: 0 6px 16px rgba(217, 119, 87, 0.1);
 }
 
 .library-capsule-count {
   font-size: 11px;
   opacity: 0.7;
+}
+
+.library-filter-row-primary .library-capsule-count {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(95, 87, 78, 0.08);
+  color: inherit;
+  opacity: 0.78;
+}
+
+.library-filter-row-primary .library-capsule.active .library-capsule-count {
+  background: rgba(255, 255, 255, 0.18);
+  opacity: 1;
+}
+
+.library-filter-row-secondary .library-capsule-count {
+  opacity: 0.56;
 }
 
 .library-capsule.active .library-capsule-count {
@@ -3421,6 +3518,14 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   font-family: var(--font-sans);
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+@media (max-width: 680px) {
+  .library-filter-heading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
 }
 
 .library-grid {
