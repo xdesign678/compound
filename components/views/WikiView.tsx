@@ -63,11 +63,6 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
       .count();
   }, [deferredQuery]);
 
-  const linkCount = useLiveQuery(async () => {
-    const all = await getDb().concepts.toArray();
-    return all.reduce((sum, concept) => sum + concept.related.length, 0);
-  }, []);
-
   const sourceCount = useLiveQuery(async () => {
     return getDb().sources.count();
   }, []);
@@ -138,10 +133,6 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
       <div className="stats-row">
         <div className="stat">
           <strong>{totalConceptCount ?? concepts.length}</strong> 概念
-        </div>
-        <span className="dot-sep">·</span>
-        <div className="stat">
-          <strong>{linkCount ?? 0}</strong> 引用
         </div>
         <span className="dot-sep">·</span>
         <div className="stat">

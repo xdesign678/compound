@@ -6,13 +6,12 @@ import { Icon } from './Icons';
 interface HeaderProps {
   conceptCount: number;
   sourceCount: number;
-  linkCount: number;
 }
 
 const TAB_TITLES: Record<string, { t: string; s: (h: HeaderProps) => string }> = {
   wiki: {
     t: '我的 Wiki',
-    s: (h) => `${h.conceptCount} 个概念 · ${h.linkCount} 条引用 · ${h.sourceCount} 份资料`,
+    s: (h) => `${h.conceptCount} 个概念 · ${h.sourceCount} 份资料`,
   },
   sources: {
     t: '原始资料',

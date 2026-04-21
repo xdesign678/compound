@@ -68,14 +68,6 @@ export default function Page() {
     async () => (mounted ? getDb().sources.count() : undefined),
     [mounted]
   );
-  const linkCount = useLiveQuery(
-    async () => {
-      if (!mounted) return undefined;
-      const all = await getDb().concepts.toArray();
-      return all.reduce((s, c) => s + c.related.length, 0);
-    },
-    [mounted]
-  );
 
   // Auto-seed on first run (no onboarding screen)
   const seedingRef = useRef(false);
@@ -125,7 +117,7 @@ export default function Page() {
     detail !== null
   );
   const desktopSummary = ready
-    ? `${conceptCount ?? 0} 个概念 · ${sourceCount ?? 0} 份资料 · ${linkCount ?? 0} 条引用`
+    ? `${conceptCount ?? 0} 个概念 · ${sourceCount ?? 0} 份资料`
     : '正在同步本地知识库';
 
   useEffect(() => {
@@ -213,7 +205,7 @@ export default function Page() {
     const copy = tab === 'sources'
       ? {
           title: '选择一份资料',
-          body: '左侧会保留资料列表，右侧展示原文摘要、来源信息和生成的概念。',
+          body: '左侧会保留资料列表，右侧以资料正文为主，头部补充来源信息和相关概念。',
         }
       : {
           title: '选择一个概念',
@@ -331,7 +323,7 @@ export default function Page() {
     <div className="app-shell">
       <Toast />
       <SwipeBack />
-      <Header conceptCount={conceptCount ?? 0} sourceCount={sourceCount ?? 0} linkCount={linkCount ?? 0} />
+      <Header conceptCount={conceptCount ?? 0} sourceCount={sourceCount ?? 0} />
 
       <main className="app-main">
         {!ready ? renderPrimaryView('.app-main') : detail ? (

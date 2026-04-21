@@ -18,6 +18,50 @@ import type {
   SourceType,
 } from './types';
 
+const CLIENT_CANDIDATE_LIMIT = 320;
+const QUERY_CANDIDATE_LIMIT = 50;
+
+function extractSearchTerms(text: string): string[] {
+  return Array.from(
+    new Set(
+      text
+        .toLowerCase()
+        .split(/[^a-z0-9\u4e00-\u9fff]+/i)
+        .map((part) => part.trim())
+        .filter((part) => part.length >= 2)
+    )
+  ).slice(0, 12);
+}
+
+async function findClientConceptCandidates(
+  searchText: string,
+  limit: number = CLIENT_CANDIDATE_LIMIT
+): Promise<Concept[]> {
+  const db = getDb();
+  const keywords = extractSearchTerms(searchText);
+  const collection = db.concepts.orderBy('updatedAt').reverse();
+
+  if (keywords.length === 0) {
+    return collection.limit(limit).toArray();
+  }
+
+  const matched = await collection
+    .filter((concept) => {
+      const haystack = `${concept.title}\n${concept.summary}`.toLowerCase();
+      return keywords.some((keyword) => haystack.includes(keyword));
+    })
+    .limit(limit)
+    .toArray();
+
+  if (matched.length >= Math.min(limit, 80)) {
+    return matched;
+  }
+
+  const fallback = await collection.limit(limit * 2).toArray();
+  const seen = new Set(matched.map((concept) => concept.id));
+  return [...matched, ...fallback.filter((concept) => !seen.has(concept.id))].slice(0, limit);
+}
+
 async function addBidirectionalLinks(db: ReturnType<typeof getDb>, sourceId: string, relatedIds: string[], now: number) {
   const fetched = await db.concepts.bulkGet(relatedIds);
   await db.transaction('rw', db.concepts, async () => {
@@ -57,8 +101,8 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
 /** Read all unique categoryKeys from Dexie for prompt injection. */
 export async function getExistingCategories(): Promise<string[]> {
   const db = getDb();
-  const all = await db.concepts.toArray();
-  return normalizeCategoryKeys(all.flatMap((c) => c.categoryKeys || [])).sort();
+  const keys = await db.concepts.orderBy('categoryKeys').uniqueKeys();
+  return normalizeCategoryKeys(keys.map((key) => String(key))).sort();
 }
 
 /**
@@ -90,7 +134,10 @@ export async function ingestSource(input: {
   };
 
   // 2. Gather existing concepts
-  const existing = await db.concepts.toArray();
+  const existing = await findClientConceptCandidates(
+    `${source.title}\n${source.rawContent.slice(0, 4000)}`,
+    CLIENT_CANDIDATE_LIMIT
+  );
   const req: IngestRequest = {
     source: {
       title: source.title,
@@ -218,21 +265,7 @@ export async function askWiki(
   history: Array<{ role: 'user' | 'ai'; text: string }>
 ): Promise<QueryResponse> {
   const db = getDb();
-  const allConcepts = await db.concepts.toArray();
-
-  // 基于问题关键词预筛选，限制发送量最多 50 个
-  const keywords = question.toLowerCase().split(/\W+/).filter(k => k.length > 2);
-  let conceptsToSend = allConcepts;
-  if (keywords.length > 0) {
-    const scored = allConcepts.map(c => {
-      const text = `${c.title} ${c.summary || ''}`.toLowerCase();
-      const score = keywords.filter(k => text.includes(k)).length;
-      return { ...c, _score: score };
-    });
-    // 优先高分，保留至少10个（即使无匹配）
-    const sorted = scored.sort((a, b) => b._score - a._score);
-    conceptsToSend = sorted.slice(0, 50).map(({ _score, ...c }) => c);
-  }
+  const conceptsToSend = await findClientConceptCandidates(question, QUERY_CANDIDATE_LIMIT);
 
   const hydrated = await ensureConceptsHydrated(conceptsToSend.map((concept) => concept.id));
   const hydratedMap = new Map(hydrated.map((concept) => [concept.id, concept]));
