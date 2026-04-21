@@ -14,6 +14,7 @@
  */
 
 import { getDb } from './db';
+import { mergeRemoteConcept, mergeRemoteSource } from './snapshot-merge';
 import type { Source, Concept, ActivityLog, AskMessage } from './types';
 
 interface SnapshotResponse {
@@ -44,6 +45,14 @@ export interface PullResult {
   };
 }
 
+interface ConceptDetailResponse {
+  concepts: Concept[];
+}
+
+interface SourceDetailResponse {
+  sources: Source[];
+}
+
 function normalizeSnapshotTimestamp(value: number | string | null | undefined): number | null {
   const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
   if (!Number.isFinite(parsed) || parsed <= 0) return null;
@@ -54,6 +63,30 @@ function buildSnapshotRequestPath(since: number | null): string {
   if (!since) return '/api/data/snapshot';
   const search = new URLSearchParams({ since: String(since) });
   return `/api/data/snapshot?${search.toString()}`;
+}
+
+async function fetchConceptDetails(ids: string[]): Promise<Concept[]> {
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+  if (uniqueIds.length === 0) return [];
+  const search = new URLSearchParams({ ids: uniqueIds.join(',') });
+  const res = await fetch(`/api/data/concepts?${search.toString()}`, { cache: 'no-store' });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`concept detail failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+  return ((await res.json()) as ConceptDetailResponse).concepts;
+}
+
+async function fetchSourceDetails(ids: string[]): Promise<Source[]> {
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+  if (uniqueIds.length === 0) return [];
+  const search = new URLSearchParams({ ids: uniqueIds.join(',') });
+  const res = await fetch(`/api/data/sources?${search.toString()}`, { cache: 'no-store' });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`source detail failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+  return ((await res.json()) as SourceDetailResponse).sources;
 }
 
 export async function pullSnapshotFromCloud(): Promise<PullResult> {
@@ -77,7 +110,7 @@ export async function pullSnapshotFromCloud(): Promise<PullResult> {
       const remote = snap.sources[i];
       const local = existing[i];
       if (!local || remote.ingestedAt >= local.ingestedAt) {
-        toPut.push(remote);
+        toPut.push(mergeRemoteSource(local, remote));
       } else {
         skipped.sources++;
       }
@@ -96,7 +129,7 @@ export async function pullSnapshotFromCloud(): Promise<PullResult> {
       const remote = snap.concepts[i];
       const local = existing[i];
       if (!local || remote.updatedAt >= local.updatedAt) {
-        toPut.push(remote);
+        toPut.push(mergeRemoteConcept(local, remote));
       } else {
         skipped.concepts++;
       }
@@ -160,4 +193,68 @@ export function getLastPullAt(): number | null {
   } catch {
     return null;
   }
+}
+
+export async function ensureConceptsHydrated(ids: string[]): Promise<Concept[]> {
+  const db = getDb();
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+  if (uniqueIds.length === 0) return [];
+
+  const existing = await db.concepts.bulkGet(uniqueIds);
+  const missingIds = uniqueIds.filter((id, index) => {
+    const concept = existing[index];
+    return !concept || concept.contentStatus !== 'full' || !concept.body.trim();
+  });
+
+  if (missingIds.length > 0) {
+    const concepts = await fetchConceptDetails(missingIds);
+    if (concepts.length > 0) {
+      await db.concepts.bulkPut(
+        concepts.map((concept) => ({
+          ...concept,
+          contentStatus: 'full' as const,
+        }))
+      );
+    }
+  }
+
+  const hydrated = await db.concepts.bulkGet(uniqueIds);
+  return hydrated.filter((concept): concept is Concept => Boolean(concept));
+}
+
+export async function ensureConceptHydrated(id: string): Promise<Concept | null> {
+  const [concept] = await ensureConceptsHydrated([id]);
+  return concept ?? null;
+}
+
+export async function ensureSourcesHydrated(ids: string[]): Promise<Source[]> {
+  const db = getDb();
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+  if (uniqueIds.length === 0) return [];
+
+  const existing = await db.sources.bulkGet(uniqueIds);
+  const missingIds = uniqueIds.filter((id, index) => {
+    const source = existing[index];
+    return !source || source.contentStatus !== 'full' || !source.rawContent.trim();
+  });
+
+  if (missingIds.length > 0) {
+    const sources = await fetchSourceDetails(missingIds);
+    if (sources.length > 0) {
+      await db.sources.bulkPut(
+        sources.map((source) => ({
+          ...source,
+          contentStatus: 'full' as const,
+        }))
+      );
+    }
+  }
+
+  const hydrated = await db.sources.bulkGet(uniqueIds);
+  return hydrated.filter((source): source is Source => Boolean(source));
+}
+
+export async function ensureSourceHydrated(id: string): Promise<Source | null> {
+  const [source] = await ensureSourcesHydrated([id]);
+  return source ?? null;
 }

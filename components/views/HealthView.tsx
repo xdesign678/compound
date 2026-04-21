@@ -60,7 +60,7 @@ export function HealthView() {
         });
       }
       // Thin: body too short
-      if (c.body.length < THIN_THRESHOLD) {
+      if (c.contentStatus === 'full' && c.body.length < THIN_THRESHOLD) {
         findings.push({
           type: 'thin',
           message: `"${c.title}" 内容较单薄 (${c.body.length} 字符)，建议补充更多资料`,

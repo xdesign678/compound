@@ -1,33 +1,43 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { Icon, SourceTypeIcon } from '../Icons';
 
+const PAGE_SIZE = 50;
+
 export function SourcesView() {
   const openSource = useAppStore((s) => s.openSource);
   const openModal = useAppStore((s) => s.openModal);
   const detail = useAppStore((s) => s.detail);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const sources = useLiveQuery(
-    async () => getDb().sources.orderBy('ingestedAt').reverse().toArray(),
-    []
+    async () => getDb().sources.orderBy('ingestedAt').reverse().limit(visibleCount).toArray(),
+    [visibleCount]
   );
+
+  const totalSourceCount = useLiveQuery(async () => getDb().sources.count(), []);
 
   const conceptCountBySource = useLiveQuery(async () => {
     if (!sources) return new Map<string, number>();
     const db = getDb();
     const map = new Map<string, number>();
     await Promise.all(
-      sources.map(async (s) => {
-        const count = await db.concepts.where('sources').equals(s.id).count();
-        map.set(s.id, count);
+      sources.map(async (source) => {
+        const count = await db.concepts.where('sources').equals(source.id).count();
+        map.set(source.id, count);
       })
     );
     return map;
   }, [sources]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, []);
 
   if (!sources) return <div className="empty-state">加载中...</div>;
 
@@ -37,7 +47,7 @@ export function SourcesView() {
         <div className="view-lead-kicker">资料档案</div>
         <p className="view-lead-copy">这里保留你喂给知识库的原始材料。原文不被改写，只被引用和编译。</p>
       </div>
-      {sources.length === 0 ? (
+      {(totalSourceCount ?? 0) === 0 ? (
         <div className="empty-state empty-state-compact">
           <div className="es-icon">
             <Icon.Sources />
@@ -49,25 +59,35 @@ export function SourcesView() {
           </button>
         </div>
       ) : (
-        sources.map((s) => (
-          <button
-            key={s.id}
-            className={`source-card${detail?.type === 'source' && detail.id === s.id ? ' active' : ''}`}
-            onClick={() => openSource(s.id)}
-          >
-            <div className="s-icon">
-              <SourceTypeIcon type={s.type} />
-            </div>
-            <div className="s-body">
-              <div className="s-title">{s.title}</div>
-              <div className="s-meta">
-                {s.author && <span>{s.author}</span>}
-                <span className="pill">{conceptCountBySource?.get(s.id) ?? 0} 概念</span>
-                <span className="pill">{formatRelativeTime(s.ingestedAt)}</span>
+        <>
+          {sources.map((source) => (
+            <button
+              key={source.id}
+              className={`source-card${detail?.type === 'source' && detail.id === source.id ? ' active' : ''}`}
+              onClick={() => openSource(source.id)}
+            >
+              <div className="s-icon">
+                <SourceTypeIcon type={source.type} />
               </div>
-            </div>
-          </button>
-        ))
+              <div className="s-body">
+                <div className="s-title">{source.title}</div>
+                <div className="s-meta">
+                  {source.author && <span>{source.author}</span>}
+                  <span className="pill">{conceptCountBySource?.get(source.id) ?? 0} 概念</span>
+                  <span className="pill">{formatRelativeTime(source.ingestedAt)}</span>
+                </div>
+              </div>
+            </button>
+          ))}
+          <div className="list-end-hint">
+            <span>已显示 {sources.length} / {totalSourceCount ?? sources.length} 份资料</span>
+          </div>
+          {sources.length < (totalSourceCount ?? 0) && (
+            <button className="modal-btn" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
+              加载更多
+            </button>
+          )}
+        </>
       )}
     </div>
   );

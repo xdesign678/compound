@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
+import { ensureSourceHydrated } from '@/lib/cloud-sync';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { SourceTypeIcon } from '../Icons';
@@ -17,6 +18,13 @@ export function SourceDetail({ id }: { id: string }) {
     async () => getDb().concepts.where('sources').equals(id).toArray(),
     [id]
   );
+
+  useEffect(() => {
+    if (!source || source.contentStatus === 'full') return;
+    void ensureSourceHydrated(id).catch((err) => {
+      console.warn('[source-detail] hydrate failed:', err);
+    });
+  }, [id, source]);
 
   if (!source) return <div className="empty-state">未找到资料</div>;
 
@@ -70,7 +78,9 @@ export function SourceDetail({ id }: { id: string }) {
 
       <div className="detail-section">
         <h3>原文</h3>
-        {showRaw ? (
+        {source.contentStatus !== 'full' ? (
+          <div className="empty-state empty-state-compact">原文加载中...</div>
+        ) : showRaw ? (
           <div className="raw-content-panel">
             <Prose markdown={source.rawContent} className="prose-raw" />
           </div>

@@ -106,10 +106,16 @@ export function AskView() {
 
   const [conceptTitles, setConceptTitles] = useState<string[]>([]);
   useEffect(() => {
-    getDb().concepts.toArray().then((concepts) => {
-      const shuffled = concepts.sort(() => Math.random() - 0.5);
-      setConceptTitles(shuffled.slice(0, 3).map(c => c.title));
-    });
+    getDb()
+      .concepts
+      .orderBy('updatedAt')
+      .reverse()
+      .limit(50)
+      .toArray()
+      .then((concepts) => {
+        const shuffled = concepts.sort(() => Math.random() - 0.5);
+        setConceptTitles(shuffled.slice(0, 3).map(c => c.title));
+      });
   }, []);
 
   const suggestions = useMemo(() => {

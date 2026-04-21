@@ -13,6 +13,8 @@ interface LibraryViewProps {
   scrollRootSelector?: string;
 }
 
+const PAGE_SIZE = 60;
+
 interface CategoryTree {
   primary: string;
   count: number;
@@ -67,6 +69,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   const [selectedSecondary, setSelectedSecondary] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
     const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
@@ -76,6 +79,10 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
     main.addEventListener('scroll', onScroll);
     return () => main.removeEventListener('scroll', onScroll);
   }, [scrollRootSelector]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [deferredQuery, selectedPrimary, selectedSecondary]);
 
   const categoryTree = useMemo(() => {
     if (!concepts) return [];
@@ -124,6 +131,8 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
 
     return result;
   }, [concepts, selectedPrimary, selectedSecondary, deferredQuery]);
+
+  const visibleConcepts = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
 
   const handleCategorize = useCallback(async () => {
     if (categorizing) return;
@@ -275,7 +284,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
       ) : (
         <>
           <div className="library-grid">
-            {filtered.map((c) => (
+            {visibleConcepts.map((c) => (
               <button
                 key={c.id}
                 className={`concept-card${detail?.type === 'concept' && detail.id === c.id ? ' active' : ''}`}
@@ -304,8 +313,13 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
             ))}
           </div>
           <div className="list-end-hint">
-            <span>{filtered.length} 个概念</span>
+            <span>已显示 {visibleConcepts.length} / {filtered.length} 个概念</span>
           </div>
+          {visibleConcepts.length < filtered.length && (
+            <button className="modal-btn" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
+              加载更多
+            </button>
+          )}
         </>
       )}
     </>

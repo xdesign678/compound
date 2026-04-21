@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { getDb } from './db';
+import { ensureConceptsHydrated } from './cloud-sync';
 import { normalizeCategoryKeys, normalizeCategoryState } from './category-normalization';
 import { getLlmConfig } from './llm-config';
 import type {
@@ -84,6 +85,7 @@ export async function ingestSource(input: {
     url: input.url?.trim() || undefined,
     rawContent: input.rawContent,
     ingestedAt: now,
+    contentStatus: 'full',
     externalKey: input.externalKey,
   };
 
@@ -125,6 +127,7 @@ export async function ingestSource(input: {
       createdAt: now,
       updatedAt: now,
       version: 1,
+      contentStatus: 'full',
       categories,
       categoryKeys,
     };
@@ -150,6 +153,7 @@ export async function ingestSource(input: {
       related: Array.from(related),
       updatedAt: now,
       version: c.version + 1,
+      contentStatus: 'full',
     };
     updatedConceptDocs.push(next);
     updatedConceptIds.push(c.id);
@@ -230,14 +234,20 @@ export async function askWiki(
     conceptsToSend = sorted.slice(0, 50).map(({ _score, ...c }) => c);
   }
 
+  const hydrated = await ensureConceptsHydrated(conceptsToSend.map((concept) => concept.id));
+  const hydratedMap = new Map(hydrated.map((concept) => [concept.id, concept]));
+
   const req: QueryRequest = {
     question,
-    concepts: conceptsToSend.map((c) => ({
+    concepts: conceptsToSend.map((c) => {
+      const full = hydratedMap.get(c.id) ?? c;
+      return {
       id: c.id,
       title: c.title,
       summary: c.summary,
-      body: c.body,
-    })),
+      body: full.body,
+      };
+    }),
     conversationHistory: history,
   };
 
@@ -263,6 +273,7 @@ export async function archiveAnswerAsConcept(
     createdAt: now,
     updatedAt: now,
     version: 1,
+    contentStatus: 'full',
     categories: [],
     categoryKeys: [],
   };
@@ -333,13 +344,18 @@ export async function categorizeConcepts(
 
   for (let i = 0; i < uncategorized.length; i += BATCH_SIZE) {
     const batch = uncategorized.slice(i, i + BATCH_SIZE);
+    const hydratedBatch = await ensureConceptsHydrated(batch.map((concept) => concept.id));
+    const hydratedMap = new Map(hydratedBatch.map((concept) => [concept.id, concept]));
     const req: CategorizeRequest = {
-      concepts: batch.map((c) => ({
+      concepts: batch.map((c) => {
+        const full = hydratedMap.get(c.id) ?? c;
+        return {
         id: c.id,
         title: c.title,
         summary: c.summary,
-        body: c.body,
-      })),
+        body: full.body,
+        };
+      }),
       existingCategories,
     };
 

@@ -1,7 +1,9 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
+import { ensureConceptHydrated } from '@/lib/cloud-sync';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { SourceTypeIcon } from '../Icons';
@@ -23,6 +25,13 @@ export function ConceptDetail({ id }: { id: string }) {
     const items = await Promise.all(concept.related.map((cid) => getDb().concepts.get(cid)));
     return items.filter(Boolean);
   }, [concept?.related.join(',')]);
+
+  useEffect(() => {
+    if (!concept || concept.contentStatus === 'full') return;
+    void ensureConceptHydrated(id).catch((err) => {
+      console.warn('[concept-detail] hydrate failed:', err);
+    });
+  }, [concept, id]);
 
   if (!concept) return <div className="empty-state">未找到概念</div>;
 
@@ -48,7 +57,11 @@ export function ConceptDetail({ id }: { id: string }) {
         <span>v{concept.version}</span>
       </div>
 
-      <Prose markdown={concept.body} />
+      {concept.contentStatus === 'full' ? (
+        <Prose markdown={concept.body} />
+      ) : (
+        <div className="empty-state empty-state-compact">正文加载中...</div>
+      )}
 
       {sources && sources.length > 0 && (
         <div className="detail-section">

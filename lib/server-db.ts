@@ -21,6 +21,7 @@ import type {
   ActivityLog,
   AskMessage,
   CategoryTag,
+  ContentStatus,
   SourceType,
   ActivityType,
 } from './types';
@@ -101,6 +102,7 @@ function runMigrations(db: DB): void {
     );
     CREATE INDEX IF NOT EXISTS idx_concepts_updated_at ON concepts(updated_at);
     CREATE INDEX IF NOT EXISTS idx_concepts_created_at ON concepts(created_at);
+    CREATE INDEX IF NOT EXISTS idx_concepts_title_ci ON concepts(title COLLATE NOCASE);
 
     CREATE TABLE IF NOT EXISTS activity (
       id              TEXT PRIMARY KEY,
@@ -246,6 +248,11 @@ interface TimeWindowOptions {
 
 interface TimeWindowWithLimit extends TimeWindowOptions {
   limit?: number;
+  offset?: number;
+}
+
+interface RecordQueryOptions extends TimeWindowWithLimit {
+  summariesOnly?: boolean;
 }
 
 function parseJsonArray<T>(s: string | null | undefined, fallback: T[] = []): T[] {
@@ -281,7 +288,33 @@ function buildTimeWindowClause(column: string, options: TimeWindowOptions = {}):
   };
 }
 
-function rowToSource(r: SourceRow): Source {
+function buildLimitClause(options: TimeWindowWithLimit = {}): {
+  clause: string;
+  params: number[];
+} {
+  const clauses: string[] = [];
+  const params: number[] = [];
+
+  if (typeof options.limit === 'number' && Number.isFinite(options.limit)) {
+    clauses.push('LIMIT ?');
+    params.push(Math.max(0, Math.trunc(options.limit)));
+  }
+
+  if (typeof options.offset === 'number' && Number.isFinite(options.offset)) {
+    if (clauses.length === 0) {
+      clauses.push('LIMIT -1');
+    }
+    clauses.push('OFFSET ?');
+    params.push(Math.max(0, Math.trunc(options.offset)));
+  }
+
+  return {
+    clause: clauses.length > 0 ? ` ${clauses.join(' ')}` : '',
+    params,
+  };
+}
+
+function rowToSource(r: SourceRow, contentStatus: ContentStatus = 'full'): Source {
   return {
     id: r.id,
     title: r.title,
@@ -290,11 +323,12 @@ function rowToSource(r: SourceRow): Source {
     url: r.url ?? undefined,
     rawContent: r.raw_content,
     ingestedAt: r.ingested_at,
+    contentStatus,
     externalKey: r.external_key ?? undefined,
   };
 }
 
-function rowToConcept(r: ConceptRow): Concept {
+function rowToConcept(r: ConceptRow, contentStatus: ContentStatus = 'full'): Concept {
   return {
     id: r.id,
     title: r.title,
@@ -307,7 +341,24 @@ function rowToConcept(r: ConceptRow): Concept {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     version: r.version,
+    contentStatus,
   };
+}
+
+function selectSourceColumns(summariesOnly = false): string {
+  return summariesOnly
+    ? `id, title, type, author, url, '' AS raw_content, ingested_at, external_key`
+    : '*';
+}
+
+function selectConceptColumns(summariesOnly = false): string {
+  return summariesOnly
+    ? `id, title, summary, '' AS body, sources, related, categories, category_keys, created_at, updated_at, version`
+    : '*';
+}
+
+function mapRowsById<T extends { id: string }>(rows: T[]): Map<string, T> {
+  return new Map(rows.map((row) => [row.id, row]));
 }
 
 function rowToActivity(r: ActivityRow): ActivityLog {
@@ -378,12 +429,30 @@ export const repo = {
     getServerDb().prepare(`DELETE FROM sources WHERE id = ?`).run(id);
   },
 
-  listSources(options: TimeWindowOptions = {}): Source[] {
+  listSources(options: RecordQueryOptions = {}): Source[] {
     const { clause, params } = buildTimeWindowClause('ingested_at', options);
+    const { clause: limitClause, params: limitParams } = buildLimitClause(options);
     const rows = getServerDb()
-      .prepare(`SELECT * FROM sources ${clause} ORDER BY ingested_at DESC`)
-      .all(...params) as SourceRow[];
-    return rows.map(rowToSource);
+      .prepare(
+        `SELECT ${selectSourceColumns(options.summariesOnly)} FROM sources ${clause} ORDER BY ingested_at DESC${limitClause}`
+      )
+      .all(...params, ...limitParams) as SourceRow[];
+    return rows.map((row) => rowToSource(row, options.summariesOnly ? 'partial' : 'full'));
+  },
+
+  getSourcesByIds(ids: string[], options: { summariesOnly?: boolean } = {}): Source[] {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) return [];
+    const placeholders = uniqueIds.map(() => '?').join(', ');
+    const rows = getServerDb()
+      .prepare(
+        `SELECT ${selectSourceColumns(options.summariesOnly)} FROM sources WHERE id IN (${placeholders})`
+      )
+      .all(...uniqueIds) as SourceRow[];
+    const rowMap = mapRowsById(
+      rows.map((row) => rowToSource(row, options.summariesOnly ? 'partial' : 'full'))
+    );
+    return uniqueIds.map((id) => rowMap.get(id)).filter((row): row is Source => Boolean(row));
   },
 
   /**
@@ -426,12 +495,30 @@ export const repo = {
     return row ? rowToConcept(row) : null;
   },
 
-  listConcepts(options: TimeWindowOptions = {}): Concept[] {
+  listConcepts(options: RecordQueryOptions = {}): Concept[] {
     const { clause, params } = buildTimeWindowClause('updated_at', options);
+    const { clause: limitClause, params: limitParams } = buildLimitClause(options);
     const rows = getServerDb()
-      .prepare(`SELECT * FROM concepts ${clause} ORDER BY updated_at DESC`)
-      .all(...params) as ConceptRow[];
-    return rows.map(rowToConcept);
+      .prepare(
+        `SELECT ${selectConceptColumns(options.summariesOnly)} FROM concepts ${clause} ORDER BY updated_at DESC${limitClause}`
+      )
+      .all(...params, ...limitParams) as ConceptRow[];
+    return rows.map((row) => rowToConcept(row, options.summariesOnly ? 'partial' : 'full'));
+  },
+
+  getConceptsByIds(ids: string[], options: { summariesOnly?: boolean } = {}): Concept[] {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) return [];
+    const placeholders = uniqueIds.map(() => '?').join(', ');
+    const rows = getServerDb()
+      .prepare(
+        `SELECT ${selectConceptColumns(options.summariesOnly)} FROM concepts WHERE id IN (${placeholders})`
+      )
+      .all(...uniqueIds) as ConceptRow[];
+    const rowMap = mapRowsById(
+      rows.map((row) => rowToConcept(row, options.summariesOnly ? 'partial' : 'full'))
+    );
+    return uniqueIds.map((id) => rowMap.get(id)).filter((row): row is Concept => Boolean(row));
   },
 
   findConceptByTitleCI(title: string): Concept | null {
@@ -439,6 +526,60 @@ export const repo = {
       .prepare(`SELECT * FROM concepts WHERE LOWER(title) = LOWER(?)`)
       .get(title) as ConceptRow | undefined;
     return row ? rowToConcept(row) : null;
+  },
+
+  listCategoryKeys(): string[] {
+    const rows = getServerDb()
+      .prepare(`SELECT category_keys FROM concepts`)
+      .all() as Array<{ category_keys: string }>;
+    return normalizeCategoryState({
+      categoryKeys: rows.flatMap((row) => parseJsonArray<string>(row.category_keys)),
+    }).categoryKeys;
+  },
+
+  findConceptCandidates(searchText: string, limit: number = 240): Concept[] {
+    const normalizedLimit = Math.max(1, Math.trunc(limit));
+    const keywords = Array.from(
+      new Set(
+        searchText
+          .toLowerCase()
+          .split(/[^a-z0-9\u4e00-\u9fff]+/i)
+          .map((part) => part.trim())
+          .filter((part) => part.length >= 2)
+      )
+    ).slice(0, 12);
+
+    if (keywords.length === 0) {
+      return this.listConcepts({ summariesOnly: true, limit: normalizedLimit });
+    }
+
+    const queryParts = keywords.map(
+      () => `(title LIKE ? COLLATE NOCASE OR summary LIKE ? COLLATE NOCASE)`
+    );
+    const queryParams = keywords.flatMap((keyword) => [`%${keyword}%`, `%${keyword}%`]);
+
+    const matchedRows = getServerDb()
+      .prepare(
+        `SELECT ${selectConceptColumns(true)}
+         FROM concepts
+         WHERE ${queryParts.join(' OR ')}
+         ORDER BY updated_at DESC
+         LIMIT ?`
+      )
+      .all(...queryParams, normalizedLimit) as ConceptRow[];
+
+    const matched = matchedRows.map((row) => rowToConcept(row, 'partial'));
+    if (matched.length >= Math.min(normalizedLimit, 80)) {
+      return matched;
+    }
+
+    const existingIds = new Set(matched.map((concept) => concept.id));
+    const fallback = this.listConcepts({
+      summariesOnly: true,
+      limit: normalizedLimit * 2,
+    }).filter((concept) => !existingIds.has(concept.id));
+
+    return [...matched, ...fallback].slice(0, normalizedLimit);
   },
 
   // ---- activity --------------------------------------------------

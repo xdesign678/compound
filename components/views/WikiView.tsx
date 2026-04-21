@@ -11,23 +11,70 @@ interface WikiViewProps {
   scrollRootSelector?: string;
 }
 
+const PAGE_SIZE = 60;
+
 export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   const openConcept = useAppStore((s) => s.openConcept);
   const freshIds = useAppStore((s) => s.freshConceptIds);
   const detail = useAppStore((s) => s.detail);
 
+  const [query, setQuery] = useState('');
+  const deferredQuery = useDeferredValue(query);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [scrolled, setScrolled] = useState(false);
+
   const concepts = useLiveQuery(
-    async () => getDb().concepts.orderBy('updatedAt').reverse().toArray(),
-    []
+    async () => {
+      const q = deferredQuery.trim().toLowerCase();
+      const collection = getDb().concepts.orderBy('updatedAt').reverse();
+      if (!q) {
+        return collection.limit(visibleCount).toArray();
+      }
+      return collection
+        .filter((concept) => {
+          return (
+            concept.title.toLowerCase().includes(q) ||
+            concept.summary.toLowerCase().includes(q)
+          );
+        })
+        .limit(visibleCount)
+        .toArray();
+    },
+    [deferredQuery, visibleCount]
   );
+
+  const totalConceptCount = useLiveQuery(async () => {
+    return getDb().concepts.count();
+  }, []);
+
+  const totalMatches = useLiveQuery(async () => {
+    const q = deferredQuery.trim().toLowerCase();
+    if (!q) return getDb().concepts.count();
+    return getDb()
+      .concepts
+      .orderBy('updatedAt')
+      .reverse()
+      .filter((concept) => {
+        return (
+          concept.title.toLowerCase().includes(q) ||
+          concept.summary.toLowerCase().includes(q)
+        );
+      })
+      .count();
+  }, [deferredQuery]);
+
+  const linkCount = useLiveQuery(async () => {
+    const all = await getDb().concepts.toArray();
+    return all.reduce((sum, concept) => sum + concept.related.length, 0);
+  }, []);
 
   const sourceCount = useLiveQuery(async () => {
     return getDb().sources.count();
   }, []);
 
-  const [query, setQuery] = useState('');
-  const deferredQuery = useDeferredValue(query);
-  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [deferredQuery]);
 
   useEffect(() => {
     const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
@@ -38,25 +85,12 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
     return () => main.removeEventListener('scroll', onScroll);
   }, [scrollRootSelector]);
 
-  const filtered = useMemo(() => {
-    if (!concepts) return [];
-    if (!deferredQuery.trim()) return concepts;
-    const q = deferredQuery.toLowerCase();
-    return concepts.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        c.summary.toLowerCase().includes(q)
-    );
-  }, [concepts, deferredQuery]);
-
-  const fresh = useMemo(() => filtered.filter((c) => freshIds[c.id]), [filtered, freshIds]);
-  const others = useMemo(() => filtered.filter((c) => !freshIds[c.id]), [filtered, freshIds]);
+  const fresh = useMemo(() => (concepts ?? []).filter((c) => freshIds[c.id]), [concepts, freshIds]);
+  const others = useMemo(() => (concepts ?? []).filter((c) => !freshIds[c.id]), [concepts, freshIds]);
 
   if (!concepts) {
     return <div className="empty-state">加载中...</div>;
   }
-
-  const linkCount = concepts.reduce((sum, c) => sum + c.related.length, 0);
 
   const renderCard = (c: (typeof concepts)[number]) => (
     <button
@@ -79,6 +113,9 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
     </button>
   );
 
+  const hasAnyConcepts = (totalConceptCount ?? 0) > 0;
+  const hasMatches = (totalMatches ?? concepts.length) > 0;
+
   return (
     <>
       <div className={`search-bar ${scrolled ? 'scrolled' : ''}`}>
@@ -100,11 +137,11 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
       </div>
       <div className="stats-row">
         <div className="stat">
-          <strong>{concepts.length}</strong> 概念
+          <strong>{totalConceptCount ?? concepts.length}</strong> 概念
         </div>
         <span className="dot-sep">·</span>
         <div className="stat">
-          <strong>{linkCount}</strong> 引用
+          <strong>{linkCount ?? 0}</strong> 引用
         </div>
         <span className="dot-sep">·</span>
         <div className="stat">
@@ -112,8 +149,8 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
-        concepts.length === 0 ? (
+      {!hasMatches ? (
+        !hasAnyConcepts ? (
           <div className="empty-state empty-state-spacious">
             <div className="es-icon">
               <Icon.Sparkle />
@@ -139,8 +176,15 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
             </>
           )}
           <div className="list-end-hint">
-            <span>{filtered.length} 个概念 · 点击 + 添加更多知识</span>
+            <span>
+              已显示 {concepts.length} / {totalMatches ?? concepts.length} 个概念 · 点击 + 添加更多知识
+            </span>
           </div>
+          {concepts.length < (totalMatches ?? 0) && (
+            <button className="modal-btn" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
+              加载更多
+            </button>
+          )}
         </>
       )}
     </>

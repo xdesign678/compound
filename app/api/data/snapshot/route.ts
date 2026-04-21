@@ -13,8 +13,9 @@ function parseSinceParam(value: string | null): number | null {
 
 /**
  * GET /api/data/snapshot
- * Returns either the full dataset or an incremental delta since `?since=...`.
- * The client merges it into IndexedDB so all browsers share the same view.
+ * Returns either the summary dataset or an incremental delta since `?since=...`.
+ * Full concept bodies / source raw content are fetched on demand by detail views
+ * and heavy workflows such as ask / categorize.
  */
 export async function GET(req: Request) {
   try {
@@ -23,8 +24,12 @@ export async function GET(req: Request) {
     const fetchedAt = Date.now();
     const range = { after: since ?? undefined, before: fetchedAt };
 
-    const sources = since ? repo.listSources(range) : repo.listSources({ before: fetchedAt });
-    const concepts = since ? repo.listConcepts(range) : repo.listConcepts({ before: fetchedAt });
+    const sources = since
+      ? repo.listSources({ ...range, summariesOnly: true })
+      : repo.listSources({ before: fetchedAt, summariesOnly: true });
+    const concepts = since
+      ? repo.listConcepts({ ...range, summariesOnly: true })
+      : repo.listConcepts({ before: fetchedAt, summariesOnly: true });
     const activity = since
       ? repo.listActivity(range)
       : repo.listActivity({ before: fetchedAt, limit: 1000 });

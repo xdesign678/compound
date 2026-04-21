@@ -1,6 +1,7 @@
 import { toNormalizedCategoryKeys } from './category-normalization';
 
 export type SourceType = 'link' | 'text' | 'file' | 'article' | 'book' | 'pdf' | 'gist';
+export type ContentStatus = 'partial' | 'full';
 
 export interface Source {
   id: string;
@@ -10,6 +11,7 @@ export interface Source {
   url?: string;
   rawContent: string;
   ingestedAt: number;
+  contentStatus?: ContentStatus;
   /**
    * 外部同步来源的唯一标识，用于去重与增量更新。
    * 约定格式：
@@ -34,6 +36,7 @@ export interface Concept {
   createdAt: number;
   updatedAt: number;
   version: number;
+  contentStatus?: ContentStatus;
   categories: CategoryTag[];
   categoryKeys: string[];
 }

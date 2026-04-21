@@ -52,10 +52,11 @@ export async function ingestSourceToServerDb(
   };
 
   // 2. Gather existing concepts for LLM context
-  const allConcepts = repo.listConcepts();
-  const existingCategories = normalizeCategoryKeys(
-    allConcepts.flatMap((concept) => concept.categoryKeys || [])
+  const candidateConcepts = repo.findConceptCandidates(
+    `${source.title}\n${source.rawContent.slice(0, 4000)}`,
+    320
   );
+  const existingCategories = normalizeCategoryKeys(repo.listCategoryKeys());
 
   // 3. Call LLM (no DB writes yet)
   const resp = await runIngestLLM({
@@ -66,7 +67,7 @@ export async function ingestSourceToServerDb(
       url: source.url,
       rawContent: source.rawContent,
     },
-    existingConcepts: allConcepts.map((c) => ({
+    existingConcepts: candidateConcepts.map((c) => ({
       id: c.id,
       title: c.title,
       summary: c.summary,
@@ -97,7 +98,13 @@ export async function ingestSourceToServerDb(
   });
 
   // 5. Compute updates to existing concepts
-  const conceptById = new Map(allConcepts.map((c) => [c.id, c]));
+  const referencedConceptIds = Array.from(
+    new Set([
+      ...resp.updatedConcepts.map((upd) => upd.id),
+      ...newConcepts.flatMap((concept) => concept.related),
+    ])
+  );
+  const conceptById = new Map(repo.getConceptsByIds(referencedConceptIds).map((c) => [c.id, c]));
   const updatedConceptIds: string[] = [];
   const updatedConceptDocs: Concept[] = [];
   for (const upd of resp.updatedConcepts) {
