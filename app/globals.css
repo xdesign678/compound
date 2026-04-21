@@ -566,8 +566,8 @@ button {
 /* Concept detail */
 .concept-detail {
   padding: 24px 20px 108px;
-  width: 100%;
   max-width: none;
+  box-sizing: border-box;
 }
 .detail-kicker-row {
   display: flex;
@@ -2381,7 +2381,6 @@ button {
   }
 
   .desktop-detail-scroll > .concept-detail {
-    width: 100%;
     margin: 0 auto;
     padding-left: clamp(24px, 3vw, 40px);
     padding-right: clamp(24px, 3vw, 40px);
