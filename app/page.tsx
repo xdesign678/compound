@@ -27,6 +27,7 @@ const ConceptDetail = dynamic(() => import('@/components/views/ConceptDetail').t
 const SourceDetail = dynamic(() => import('@/components/views/SourceDetail').then(m => ({ default: m.SourceDetail })), { ssr: false });
 
 const DESKTOP_MEDIA_QUERY = `(min-width: ${DESKTOP_LAYOUT_MIN_WIDTH}px)`;
+const LIBRARY_DETAIL_TRANSITION_MS = 320;
 
 export default function Page() {
   const tab = useAppStore((s) => s.tab);
@@ -40,6 +41,9 @@ export default function Page() {
   // Only render dexie-driven content after client mount to avoid SSR/CSR mismatch
   const [mounted, setMounted] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [libraryOverlayDetail, setLibraryOverlayDetail] = useState<typeof detail>(null);
+  const [libraryOverlayVisible, setLibraryOverlayVisible] = useState(false);
+  const libraryOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     setMounted(true);
     hydrateHomeStyle();
@@ -124,6 +128,41 @@ export default function Page() {
     ? `${conceptCount ?? 0} 个概念 · ${sourceCount ?? 0} 份资料 · ${linkCount ?? 0} 条引用`
     : '正在同步本地知识库';
 
+  useEffect(() => {
+    return () => {
+      if (libraryOverlayTimerRef.current) {
+        clearTimeout(libraryOverlayTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (libraryOverlayTimerRef.current) {
+      clearTimeout(libraryOverlayTimerRef.current);
+      libraryOverlayTimerRef.current = null;
+    }
+
+    if (!isDesktop || !inLibraryMode) {
+      setLibraryOverlayVisible(false);
+      setLibraryOverlayDetail(null);
+      return;
+    }
+
+    if (detail) {
+      setLibraryOverlayDetail(detail);
+      requestAnimationFrame(() => setLibraryOverlayVisible(true));
+      return;
+    }
+
+    if (libraryOverlayDetail) {
+      setLibraryOverlayVisible(false);
+      libraryOverlayTimerRef.current = setTimeout(() => {
+        setLibraryOverlayDetail(null);
+        libraryOverlayTimerRef.current = null;
+      }, LIBRARY_DETAIL_TRANSITION_MS);
+    }
+  }, [detail, inLibraryMode, isDesktop, libraryOverlayDetail]);
+
   const bootShell = (
     <div className="app-shell">
       <main className="app-main">
@@ -138,9 +177,9 @@ export default function Page() {
     </div>
   );
 
-  function renderDetail() {
-    if (!detail) return null;
-    return detail.type === 'concept' ? <ConceptDetail id={detail.id} /> : <SourceDetail id={detail.id} />;
+  function renderDetail(target = detail) {
+    if (!target) return null;
+    return target.type === 'concept' ? <ConceptDetail id={target.id} /> : <SourceDetail id={target.id} />;
   }
 
   function renderPrimaryView(scrollRootSelector?: string) {
@@ -259,12 +298,22 @@ export default function Page() {
         </div>
 
         {/* Library mode: detail as modal overlay */}
-        {homeStyle === 'library' && detail && (
-          <div className="library-detail-overlay" onClick={back}>
-            <div className="library-detail-modal" onClick={(e) => e.stopPropagation()}>
+        {homeStyle === 'library' && libraryOverlayDetail && (
+          <div
+            className={`library-detail-overlay${libraryOverlayVisible ? ' is-open' : ''}`}
+            aria-hidden={!libraryOverlayVisible}
+            onClick={back}
+          >
+            <div
+              className="library-detail-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="概念详情"
+              onClick={(e) => e.stopPropagation()}
+            >
               <button className="library-detail-modal-close" onClick={back} aria-label="关闭">✕</button>
               <div className="library-detail-modal-scroll">
-                {renderDetail()}
+                {renderDetail(libraryOverlayDetail)}
               </div>
             </div>
           </div>
