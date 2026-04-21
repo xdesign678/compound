@@ -36,6 +36,7 @@ Thumbs.db
 next-env.d.ts
 
 # MCP / AI tooling local cache
+.codex/
 .serena/
 .verdent/
 
