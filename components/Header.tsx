@@ -34,6 +34,15 @@ export function Header(props: HeaderProps) {
   const openSettings = useAppStore((s) => s.openSettings);
   const openObsidianImport = useAppStore((s) => s.openObsidianImport);
   const openGithubSync = useAppStore((s) => s.openGithubSync);
+  const searchCollapsed = useAppStore((s) => s.searchCollapsed);
+  const triggerSearchFocus = useAppStore((s) => s.triggerSearchFocus);
+
+  const showSearchIcon = !detail && tab === 'wiki' && searchCollapsed;
+  const handleExpandSearch = () => {
+    const main = document.querySelector('.app-main') as HTMLElement | null;
+    if (main) main.scrollTo({ top: 0, behavior: 'smooth' });
+    triggerSearchFocus();
+  };
 
   if (detail) {
     return (
@@ -60,6 +69,16 @@ export function Header(props: HeaderProps) {
         <div className="header-subtitle">{meta.s(props)}</div>
       </div>
       <div className="header-actions">
+        <button
+          type="button"
+          className={`icon-btn header-search-btn${showSearchIcon ? ' is-visible' : ''}`}
+          onClick={handleExpandSearch}
+          aria-label="展开搜索"
+          aria-hidden={!showSearchIcon}
+          tabIndex={showSearchIcon ? 0 : -1}
+        >
+          <Icon.Search />
+        </button>
         <button
           className="icon-btn"
           onClick={openGithubSync}

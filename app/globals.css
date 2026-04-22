@@ -323,6 +323,44 @@ button {
   display: none;
 }
 
+/* Tab bar center add button (mobile only) */
+.tab-add {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--text-tertiary);
+  position: relative;
+  align-self: stretch;
+}
+.tab-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--bg-button);
+  color: var(--text-on-button);
+  box-shadow: 0 4px 10px rgba(20, 20, 19, 0.18);
+  transition: transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+.tab-add-btn svg {
+  width: 20px;
+  height: 20px;
+}
+.tab-add:active .tab-add-btn {
+  transform: scale(0.92);
+}
+
+/* Hide floating FAB on mobile (we use the center tab-add instead) */
+@media (max-width: 1023px) {
+  .fab:not(.desktop-fab) {
+    display: none !important;
+  }
+}
+
 /* FAB */
 .fab {
   position: absolute;
@@ -359,12 +397,85 @@ button {
   transition:
     border-color var(--motion-duration-fast) var(--motion-ease-standard),
     background var(--motion-duration-fast) var(--motion-ease-standard);
+  transform-origin: top right;
 }
 .dark .search-bar {
   background: var(--bg-primary);
 }
 .search-bar.scrolled {
   border-color: var(--border-section);
+}
+
+/* Search bar slot: sticky wrapper used on mobile to drive a smooth
+   collapse via `grid-template-rows: 1fr -> 0fr`. This avoids per-frame
+   layout thrash caused by max-height/padding transitions. */
+.search-bar-slot {
+  display: grid;
+  grid-template-rows: 1fr;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg-primary);
+  will-change: grid-template-rows;
+  transition: grid-template-rows 320ms var(--motion-ease-emphasized);
+}
+
+.search-bar-slot > .search-bar {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  top: auto;
+  z-index: auto;
+}
+
+@media (max-width: 1023px) {
+  .search-bar-slot {
+    contain: layout paint;
+  }
+  .search-bar-slot.is-collapsed {
+    grid-template-rows: 0fr;
+  }
+  .search-bar-slot > .search-bar {
+    will-change: transform, opacity;
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+    transition:
+      transform 260ms var(--motion-ease-emphasized),
+      opacity 180ms var(--motion-ease-standard);
+  }
+  .search-bar-slot.is-collapsed > .search-bar {
+    transform: translate3d(0, -6px, 0);
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+/* Header search-collapsed icon button: tucks right next to the GitHub icon.
+   Collapsed state has width 0 and a negative margin that cancels the flex gap,
+   so the icons don't shift when it hides. */
+.header-search-btn {
+  order: 0;
+  flex: 0 0 auto;
+  width: 0 !important;
+  padding: 0 !important;
+  margin-right: -4px !important;
+  opacity: 0;
+  transform: translate3d(10px, 0, 0) scale(0.9);
+  pointer-events: none;
+  overflow: hidden;
+  will-change: width, transform, opacity;
+  transition:
+    width 240ms var(--motion-ease-emphasized),
+    margin 240ms var(--motion-ease-emphasized),
+    opacity 160ms var(--motion-ease-standard) 40ms,
+    transform 240ms var(--motion-ease-emphasized);
+}
+.header-search-btn.is-visible {
+  width: 36px !important;
+  margin-right: 0 !important;
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  pointer-events: auto;
 }
 .search-label {
   font-family: var(--font-sans);
@@ -3278,72 +3389,168 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 }
 
 @media (max-width: 767px) {
-  /* ── 输入栏容器 ── */
-  .ask-input-bar {
-    padding: 8px 12px calc(12px + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid var(--border-section);
-    background: var(--bg-primary);
-    /* 防止内部内容水平溢出 */
-    overflow: hidden;
+  /* 整体：让 app 紧贴可视高度，随键盘上移 */
+  .app-shell {
+    bottom: var(--ask-kb-offset, 0px);
   }
 
-  /* ── 输入内层：宽度约束 ── */
+  /* 消息区：收紧左右内边距，底部留出输入条高度的缓冲 */
+  .ask-messages {
+    padding: 12px 14px 14px;
+  }
+
+  .ask-stream {
+    min-height: unset;
+  }
+
+  /* 消息间距 */
+  .msg {
+    margin-bottom: 14px;
+  }
+
+  /* 用户气泡：更贴近 Claude 风格，略小圆角、收紧字号 */
+  .msg-user {
+    max-width: 88%;
+    padding: 10px 14px;
+    font-size: 15px;
+    line-height: 1.55;
+    border-radius: 16px 16px 4px 16px;
+  }
+
+  /* AI 回答区域（全局已把卡片设为透明）：压缩字号与行距 */
+  .prose-answer,
+  .msg-ai-body {
+    font-size: 15.5px !important;
+    line-height: 1.62 !important;
+  }
+
+  .msg-ai-label {
+    margin-bottom: 6px;
+    font-size: 10.5px;
+  }
+
+  .msg-sources {
+    margin-top: 10px;
+    padding: 10px 12px;
+  }
+
+  .save-as-page {
+    margin-top: 10px;
+    padding: 7px 10px;
+    font-size: 11.5px;
+  }
+
+  /* 空态：整体上移，不要太空旷 */
+  .ask-empty {
+    padding: 28px 16px 12px;
+  }
+
+  .ask-empty .big-icon {
+    width: 52px;
+    height: 52px;
+    margin-bottom: 16px;
+    border-radius: 16px;
+  }
+
+  .ask-empty .big-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .ask-empty h3 {
+    font-size: 20px;
+    margin-bottom: 8px;
+  }
+
+  .ask-empty p {
+    font-size: 14.5px;
+    line-height: 1.65;
+    margin-bottom: 18px;
+  }
+
+  .suggested-questions {
+    gap: 8px;
+  }
+
+  .suggested-q {
+    padding: 11px 13px;
+    font-size: 14px;
+    line-height: 1.5;
+    border-radius: 10px;
+  }
+
+  /* 工具条（新对话按钮） */
+  .ask-toolbar {
+    padding: 8px 14px 0;
+  }
+
+  /* 输入条：贴底，含安全区，紧贴键盘，去掉顶部细线 */
+  .ask-input-bar {
+    padding: 6px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    border-top: none;
+    background: var(--bg-primary);
+    box-sizing: border-box;
+  }
+
   .ask-input-inner {
     width: 100%;
-    margin: 0;
+    max-width: 100%;
     box-sizing: border-box;
   }
 
-  /* ── 卡片：12px 圆角，紧凑内边距 ── */
+  /* 卡片：12px 圆角，单行工具栏；修正 content-box 导致的右侧溢出 */
   .ask-composer-card {
-    padding: 12px 12px 10px;
-    border-radius: 12px;
-    box-shadow: var(--shadow-sm);
-    width: 100%;
+    padding: 10px 12px 8px;
+    border-radius: 16px;
+    box-shadow: none;
     box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
   }
 
-  /* ── textarea：16px 防 iOS 自动放大 ── */
+  /* textarea：16px 防 iOS 放大，小一点的起始高度 */
   .ask-textarea,
   .ask-composer-card .ask-textarea {
     font-size: 16px !important;
-    min-height: 26px;
+    min-height: 24px;
+    max-height: 140px;
     line-height: 1.5;
-    padding: 0 2px;
+    padding: 2px 2px 0;
   }
 
-  /* ── 工具栏：横排，垂直居中，不换行 ── */
+  /* 工具栏：横排居中，缩小间距 */
   .ask-composer-toolbar {
-    margin-top: 8px;
-    gap: 0;
+    margin-top: 6px;
+    gap: 6px;
     align-items: center;
-    min-width: 0;
   }
 
-  /* 左侧按钮组：不溢出 */
   .ask-composer-actions {
-    gap: 4px;
+    gap: 6px;
     flex-wrap: nowrap;
-    flex: 1;
     min-width: 0;
-    overflow: hidden;
+    flex: 1;
   }
 
-  /* 工具按钮 */
   .ask-tool-btn {
-    padding: 7px 9px;
-    font-size: 11.5px;
+    padding: 6px 10px;
+    font-size: 12px;
     gap: 4px;
-    border-radius: 7.5px !important;
-    flex-shrink: 0;
+    border-radius: 999px !important;
+    height: 30px;
+    min-width: 0;
     white-space: nowrap;
   }
 
-  /* 模型按钮：最大宽度 + 文字截断 */
+  .ask-tool-btn-leading {
+    font-size: 13px;
+  }
+
+  /* 模型按钮：截断过长名 */
   .ask-model-btn {
-    max-width: 110px;
-    min-width: 0;
+    max-width: min(100%, 160px);
     overflow: hidden;
+    flex-shrink: 1;
   }
 
   .ask-model-btn > span {
@@ -3351,74 +3558,94 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
     text-overflow: ellipsis;
     white-space: nowrap;
     display: block;
-    max-width: 100%;
   }
 
-  /* 隐藏桌面键盘提示 */
+  /* 隐藏桌面专属键盘提示 */
   .ask-composer-hint {
     display: none;
   }
 
-  /* 发送区 */
   .ask-composer-submit {
     flex-shrink: 0;
-    margin-left: 8px;
+    margin-left: auto;
   }
 
-  /* 发送按钮：40x40px，符合 44px touch target（含卡片内边距补偿） */
+  /* 发送按钮：圆形，贴近聊天应用 */
   .ask-send-btn,
   .ask-composer-card .ask-send-btn {
-    width: 38px !important;
-    height: 38px !important;
-    border-radius: 8px !important;
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 999px !important;
   }
 
   .ask-send-btn svg {
-    width: 16px;
-    height: 16px;
+    width: 15px;
+    height: 15px;
   }
 
-  /* ─────────────────────────────────────────────
-     浮层：作为卡片上方的 Panel，紧贴卡片顶部弹出
-  ───────────────────────────────────────────── */
+  /* mention chip */
+  .ask-mentions-row {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .ask-mention-chip {
+    padding: 4px 8px;
+    font-size: 11.5px;
+    border-radius: 999px !important;
+    gap: 6px;
+  }
+
+  .ask-mention-chip-title {
+    max-width: 140px;
+  }
+
+  /* 浮层：手机端改为底部弹出面板 */
   .ask-flyout {
-    /* 脱离卡片右侧限制，占满卡片全宽 */
+    position: fixed;
     left: 0;
     right: 0;
-    /* 卡片上方 8px 处 */
-    bottom: calc(100% + 8px);
-    /* 移除桌面端的负值偏移 */
-    padding: 14px;
-    border-radius: 12px;
-    box-shadow: var(--shadow-lg);
-    /* 内容过多时可滚动 */
-    max-height: 52vh;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--ask-kb-offset, 0px));
+    top: auto;
+    width: 100%;
+    max-width: 100%;
+    max-height: 60vh;
+    padding: 14px 14px 18px;
+    border-radius: 16px 16px 0 0;
+    border: 1px solid var(--border-light);
+    border-bottom: none;
+    box-shadow: 0 -10px 24px rgba(20, 20, 19, 0.12);
     overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    z-index: 40;
+    animation: askSheetIn 180ms var(--motion-ease-standard);
   }
 
-  /* 引用浮层：不限宽 */
-  .ask-reference-flyout,
-  .ask-inline-flyout {
-    max-width: none;
-  }
-
-  /* 模型浮层：同样占满卡片宽 */
   .ask-model-flyout {
+    width: 100%;
     left: 0;
     right: 0;
-    width: auto;
   }
 
-  /* 浮层标题行：分隔控件 + 竖排 */
   .ask-flyout-header {
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
-    margin-bottom: 10px;
   }
 
-  /* 分段控件：撑满 */
+  .ask-flyout::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-default);
+    margin: -4px auto 10px;
+  }
+
+  .ask-flyout-search {
+    padding: 9px 11px;
+  }
+
   .ask-segmented {
     width: 100%;
     justify-content: stretch;
@@ -3426,42 +3653,22 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 
   .ask-segmented-btn {
     flex: 1;
-    text-align: center;
-    padding: 9px 8px;
-    font-size: 13px;
   }
 
-  /* 搜索框：16px 防 iOS 放大 */
-  .ask-flyout-search input {
-    font-size: 16px;
-  }
-  .ask-flyout-search {
-    padding: 10px 12px;
-  }
-
-  /* 列表项：44px 最小触控高度 */
   .ask-reference-item {
-    min-height: 44px;
-    padding: 10px 12px;
-    border-radius: 8px;
+    padding: 9px 10px;
+    border-radius: 12px !important;
   }
 
-  /* 模型选项：44px 触控高度 */
   .ask-model-option {
-    min-height: 44px;
     padding: 10px 12px;
-    border-radius: 8px !important;
+    border-radius: 12px !important;
   }
+}
 
-  /* mention chip 缩小 */
-  .ask-mention-chip {
-    padding: 5px 9px;
-    font-size: 11.5px;
-  }
-
-  .ask-mention-chip-title {
-    max-width: 130px;
-  }
+@keyframes askSheetIn {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
 }
 
 /* ========== Obsidian Import Modal ========== */
@@ -4548,163 +4755,97 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 }
 
 @media (max-width: 680px) {
-  /* --- search & lead 压缩 --- */
-  .search-label {
-    display: none;
-  }
-  .view-lead {
-    padding: 10px 16px 8px;
-  }
-  .view-lead-copy {
-    display: none;
-  }
-
-  /* --- filter stack 整体压缩 --- */
-  .library-filter-section-primary {
-    padding: 10px 16px 10px;
-  }
-  .library-filter-section-secondary {
-    padding: 8px 16px 10px;
-  }
   .library-filter-heading {
-    flex-direction: row;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
     gap: 8px;
-    margin-bottom: 8px;
-  }
-  .library-filter-heading-secondary {
-    margin-bottom: 6px;
-  }
-  .library-filter-hint {
-    display: none;
   }
 
-  /* --- 一级标签：卡片 → 横向 pill --- */
   .library-primary-controls {
     display: none;
   }
-  .library-primary-board {
-    gap: 8px;
-  }
+
   .library-primary-card {
-    flex-direction: row;
-    width: auto;
-    min-height: unset;
-    height: 36px;
-    padding: 0 12px;
-    gap: 6px;
-    border-radius: 20px;
-    flex-shrink: 0;
-  }
-  .library-primary-card-icon {
-    display: flex;
-    align-items: center;
-  }
-  .library-primary-card-icon svg {
-    width: 16px;
-    height: 16px;
-  }
-  .library-primary-card-title {
-    min-height: unset;
-    font-size: 13px;
-    line-height: 1;
-  }
-  .library-primary-card-count {
-    font-size: 12px;
-    line-height: 1;
+    width: 92px;
+    min-height: 92px;
+    padding: 12px 6px 10px;
   }
 
-  /* --- 二级标签：取消换行，单行横滑 --- */
-  .library-filter-row-secondary {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
+  .library-primary-card-title {
+    min-height: 28px;
+    font-size: 13px;
   }
-  .library-filter-row-secondary::-webkit-scrollbar {
-    display: none;
-  }
+
   .library-secondary-chip {
-    min-width: unset;
-    min-height: 34px;
+    min-width: 120px;
+    min-height: 40px;
     padding: 0 10px;
     font-size: 12px;
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
-  .library-secondary-more {
-    flex-shrink: 0;
-  }
-
-  /* --- 移动端卡片优化 --- */
-  .library-grid {
-    gap: 10px;
-    padding: 0 14px;
-  }
-
-  .library-grid .concept-card {
-    padding: 16px;
-    border-radius: 8px;
-  }
-
-  .library-grid .concept-card .title {
-    font-size: 15px;
-    font-weight: 600;
-    margin-bottom: 6px;
-    letter-spacing: -0.01em;
-  }
-
-  .library-grid .concept-card .summary {
-    font-size: 14px;
-    line-height: 1.6;
-    margin-bottom: 10px;
-    -webkit-line-clamp: 2;
-  }
-
-  .library-grid .concept-card .meta {
-    font-size: 11px;
-    gap: 6px;
-  }
-
-  .library-card-tags {
-    gap: 4px;
-    margin-top: 4px;
-    margin-bottom: 2px;
-  }
-
-  .library-card-tag {
-    padding: 2px 7px;
-    font-size: 10.5px;
-    border-radius: 4px;
-  }
-
-  .library-filter-status {
-    padding: 4px 16px 8px;
-    font-size: 11px;
   }
 }
 
 .library-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 0;
-  padding: 0;
+  gap: 10px;
+  padding: 0 16px;
+}
+
+.library-grid .concept-card {
+  border-radius: 14px;
+  border: 1px solid var(--border-light);
+  padding: 16px;
+  background: var(--bg-card);
+  box-shadow: none;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+.library-grid .concept-card .title {
+  font-size: 15.5px;
+  font-weight: 650;
+  margin-bottom: 6px;
+}
+
+.library-grid .concept-card .summary {
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  -webkit-line-clamp: 2;
 }
 
 .library-card-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 6px;
+  gap: 6px;
+  margin: 0 0 12px;
 }
 
 .library-card-tag {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
   background: var(--bg-muted);
+  border: 1px solid rgba(0, 0, 0, 0.05);
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.library-grid .concept-card .meta {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  gap: 6px;
+}
+
+.library-grid .concept-card .meta .badge-link {
   color: var(--text-secondary);
 }
 

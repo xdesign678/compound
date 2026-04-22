@@ -88,6 +88,9 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   const detail = useAppStore((s) => s.detail);
   const showToast = useAppStore((s) => s.showToast);
   const hideToast = useAppStore((s) => s.hideToast);
+  const setSearchCollapsed = useAppStore((s) => s.setSearchCollapsed);
+  const searchFocusNonce = useAppStore((s) => s.searchFocusNonce);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const concepts = useLiveQuery(
     async () => getDb().concepts.orderBy('updatedAt').reverse().toArray(),
@@ -107,11 +110,24 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   useEffect(() => {
     const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
     if (!main) return;
-    const onScroll = () => setScrolled(main.scrollTop > 4);
+    const onScroll = () => {
+      const y = main.scrollTop;
+      setScrolled(y > 4);
+      setSearchCollapsed(y > 40);
+    };
     onScroll();
-    main.addEventListener('scroll', onScroll);
-    return () => main.removeEventListener('scroll', onScroll);
-  }, [scrollRootSelector]);
+    main.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      main.removeEventListener('scroll', onScroll);
+      setSearchCollapsed(false);
+    };
+  }, [scrollRootSelector, setSearchCollapsed]);
+
+  useEffect(() => {
+    if (searchFocusNonce === 0) return;
+    const id = window.setTimeout(() => searchInputRef.current?.focus(), 240);
+    return () => window.clearTimeout(id);
+  }, [searchFocusNonce]);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
@@ -237,17 +253,20 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
 
   return (
     <>
-      <div className={`search-bar ${scrolled ? 'scrolled' : ''}`}>
-        <div className="search-label">检索概念、摘要与引用</div>
-        <div className="search-wrap">
-          <Icon.Search />
-          <input
-            className="search-input"
-            placeholder="搜索概念、资料、引用..."
-            aria-label="搜索概念"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+      <div className={`search-bar-slot${scrolled ? ' is-collapsed' : ''}`}>
+        <div className={`search-bar ${scrolled ? 'scrolled' : ''}`}>
+          <div className="search-label">检索概念、摘要与引用</div>
+          <div className="search-wrap">
+            <Icon.Search />
+            <input
+              ref={searchInputRef}
+              className="search-input"
+              placeholder="搜索概念、资料、引用..."
+              aria-label="搜索概念"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 

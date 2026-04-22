@@ -46,6 +46,8 @@ interface AppState {
   lintRunning: boolean;
   lintBanner: LintBannerState | null;
   homeStyle: HomeStyle;
+  searchCollapsed: boolean;
+  searchFocusNonce: number;
 
   setTab: (t: TabId) => void;
   openConcept: (id: string) => void;
@@ -72,6 +74,8 @@ interface AppState {
   hydrateLastLintAt: () => void;
   setHomeStyle: (s: HomeStyle) => void;
   hydrateHomeStyle: () => void;
+  setSearchCollapsed: (v: boolean) => void;
+  triggerSearchFocus: () => void;
 }
 
 function readStoredLintTimestamp() {
@@ -105,6 +109,8 @@ export const useAppStore = create<AppState>((set) => ({
   lintRunning: false,
   lintBanner: null,
   homeStyle: 'feed' as HomeStyle,
+  searchCollapsed: false,
+  searchFocusNonce: 0,
 
   setTab: (t) => set({ tab: t, detail: null }),
   openConcept: (id) => set({ detail: { type: 'concept', id } }),
@@ -145,4 +151,6 @@ export const useAppStore = create<AppState>((set) => ({
     set({ homeStyle: s });
   },
   hydrateHomeStyle: () => set({ homeStyle: readStoredHomeStyle() }),
+  setSearchCollapsed: (v) => set((s) => (s.searchCollapsed === v ? s : { searchCollapsed: v })),
+  triggerSearchFocus: () => set((s) => ({ searchFocusNonce: s.searchFocusNonce + 1 })),
 }));
