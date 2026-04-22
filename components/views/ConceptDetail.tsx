@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { ensureConceptHydrated } from '@/lib/cloud-sync';
+import { hasConceptBodyContent } from '@/lib/content-status';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
@@ -14,6 +15,9 @@ export function ConceptDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
   const openSource = useAppStore((s) => s.openSource);
   const freshIds = useAppStore((s) => s.freshConceptIds);
+  const [hydrating, setHydrating] = useState(false);
+  const [hydrateError, setHydrateError] = useState<string | null>(null);
+  const [hydrateAttempt, setHydrateAttempt] = useState(0);
 
   const concept = useLiveQuery(async () => getDb().concepts.get(id), [id]);
   const sources = useLiveQuery(async () => {
@@ -26,12 +30,37 @@ export function ConceptDetail({ id }: { id: string }) {
     const items = await Promise.all(concept.related.map((cid) => getDb().concepts.get(cid)));
     return items.filter(Boolean);
   }, [concept?.related.join(',')]);
+  const hasFullBody = hasConceptBodyContent(concept);
+
+  const hydrateBody = useCallback(async () => {
+    setHydrateError(null);
+    setHydrating(true);
+    try {
+      const hydrated = await ensureConceptHydrated(id);
+      if (!hasConceptBodyContent(hydrated)) {
+        setHydrateError('正文暂时还没同步下来，请稍后再试。');
+      }
+    } catch (err) {
+      console.warn('[concept-detail] hydrate failed:', err);
+      setHydrateError('正文拉取失败，请重试。');
+    } finally {
+      setHydrating(false);
+    }
+  }, [id]);
 
   useEffect(() => {
-    if (!concept || concept.contentStatus === 'full') return;
-    void ensureConceptHydrated(id).catch((err) => {
-      console.warn('[concept-detail] hydrate failed:', err);
-    });
+    setHydrateError(null);
+    setHydrating(false);
+  }, [id]);
+
+  useEffect(() => {
+    if (!concept || hasFullBody) return;
+    void hydrateBody();
+  }, [concept, hasFullBody, hydrateAttempt, hydrateBody]);
+
+  useEffect(() => {
+    if (!concept || concept.contentStatus === 'full' || !concept.body.trim()) return;
+    void getDb().concepts.update(id, { contentStatus: 'full' });
   }, [concept, id]);
 
   if (!concept) return <div className="empty-state">未找到概念</div>;
@@ -58,15 +87,28 @@ export function ConceptDetail({ id }: { id: string }) {
         <span>v{concept.version}</span>
       </div>
 
-      {concept.contentStatus === 'full' ? (
+      {hasFullBody ? (
         <div className="concept-body-shell">
           <Prose
             markdown={formatConceptBodyForDisplay(concept.body)}
             className="concept-body-prose"
           />
         </div>
+      ) : hydrateError ? (
+        <div className="empty-state empty-state-compact">
+          <p>{hydrateError}</p>
+          <button
+            className="modal-btn primary empty-state-action"
+            type="button"
+            onClick={() => setHydrateAttempt((count) => count + 1)}
+          >
+            重新加载正文
+          </button>
+        </div>
       ) : (
-        <div className="empty-state empty-state-compact">正文加载中...</div>
+        <div className="empty-state empty-state-compact">
+          {hydrating ? '正文加载中...' : '正在准备正文...'}
+        </div>
       )}
 
       {sources && sources.length > 0 && (

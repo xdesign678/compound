@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import { normalizeCategoryState } from './category-normalization';
+import { inferContentStatusFromText } from './content-status';
 import type { Source, Concept, ActivityLog, AskMessage } from './types';
 
 export class CompoundDB extends Dexie {
@@ -63,6 +64,21 @@ export class CompoundDB extends Dexie {
       concepts: 'id, updatedAt, createdAt, *sources, *related, *categoryKeys',
       activity: 'id, at, type, [type+at]',
       askHistory: 'id, at',
+    });
+    this.version(7).stores({
+      sources: 'id, ingestedAt, type, externalKey',
+      concepts: 'id, updatedAt, createdAt, *sources, *related, *categoryKeys',
+      activity: 'id, at, type, [type+at]',
+      askHistory: 'id, at',
+    }).upgrade(tx => {
+      return Promise.all([
+        tx.table('sources').toCollection().modify(source => {
+          source.contentStatus = inferContentStatusFromText(source.rawContent);
+        }),
+        tx.table('concepts').toCollection().modify(concept => {
+          concept.contentStatus = inferContentStatusFromText(concept.body);
+        }),
+      ]);
     });
   }
 }
