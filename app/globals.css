@@ -3278,9 +3278,13 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 }
 
 @media (max-width: 767px) {
+  .ask-input-bar {
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+
   .ask-composer-card {
-    padding: 16px 16px 14px;
-    border-radius: 18px;
+    padding: 14px 14px 12px;
+    border-radius: 16px;
   }
 
   .ask-flyout {
@@ -3296,23 +3300,28 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
     right: 12px;
   }
 
-  .ask-flyout-header,
-  .ask-composer-toolbar,
-  .ask-composer-submit {
+  .ask-flyout-header {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .ask-composer-submit {
-    gap: 10px;
+  .ask-composer-toolbar {
+    align-items: center;
   }
 
   .ask-composer-hint {
-    white-space: normal;
+    display: none;
   }
 
-  .ask-send-btn {
-    width: 100%;
+  .ask-model-btn {
+    max-width: min(100%, 160px);
+    overflow: hidden;
+  }
+
+  .ask-model-btn span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .ask-mention-chip-title {
