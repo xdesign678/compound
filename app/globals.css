@@ -4016,36 +4016,35 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 }
 
 .library-filter-section-primary {
-  padding: 14px;
-  border-radius: 24px;
+  padding: 14px 16px 16px;
+  border-radius: 22px;
   border: 1px solid rgba(95, 87, 78, 0.08);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 244, 238, 0.98) 100%);
+  background: rgba(255, 255, 255, 0.96);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.8),
-    0 14px 36px rgba(95, 87, 78, 0.06);
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 10px 28px rgba(95, 87, 78, 0.05);
 }
 
 .library-filter-section-secondary {
-  padding: 12px 14px;
+  padding: 14px 16px 16px;
   border-radius: 22px;
-  border: 1px solid rgba(217, 119, 87, 0.14);
+  border: 1px solid rgba(226, 146, 106, 0.18);
   background:
-    linear-gradient(180deg, rgba(217, 119, 87, 0.08) 0%, rgba(217, 119, 87, 0.03) 100%);
+    linear-gradient(180deg, rgba(255, 252, 248, 0.96) 0%, rgba(255, 247, 241, 0.92) 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.72),
-    0 12px 24px rgba(217, 119, 87, 0.08);
+    inset 0 1px 0 rgba(255, 255, 255, 0.74),
+    0 10px 24px rgba(217, 119, 87, 0.06);
 }
 
 .library-filter-heading {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
-.library-filter-heading > div:first-child {
+.library-filter-heading-main {
   display: grid;
   gap: 4px;
 }
@@ -4065,44 +4064,75 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   color: var(--text-tertiary);
 }
 
-.library-filter-overview {
-  display: grid;
-  gap: 2px;
-  justify-items: end;
-  text-align: right;
+.library-primary-controls {
+  display: inline-flex;
+  gap: 8px;
   flex-shrink: 0;
 }
 
-.library-filter-overview-label {
-  font-family: var(--font-sans);
-  font-size: 11px;
-  color: var(--text-tertiary);
+.library-primary-scroll-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(95, 87, 78, 0.08);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text-secondary);
+  box-shadow: 0 6px 14px rgba(95, 87, 78, 0.06);
+  transition:
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
-.library-filter-overview strong {
-  font-family: var(--font-sans);
-  font-size: 13px;
-  color: var(--text-primary);
+.library-primary-scroll-btn:disabled {
+  opacity: 0.38;
+  cursor: default;
+  transform: none;
+}
+
+.library-primary-scroll-btn:not(:disabled):hover {
+  color: var(--brand-clay);
+  border-color: rgba(226, 146, 106, 0.24);
+  transform: translateY(-1px);
+}
+
+.library-primary-rail {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.library-primary-rail::-webkit-scrollbar {
+  display: none;
 }
 
 .library-primary-board {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(164px, 1fr));
-  gap: 10px;
+  display: flex;
+  gap: 12px;
+  min-width: max-content;
+  padding: 2px 2px 4px;
 }
 
 .library-primary-card {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 12px;
-  min-height: 82px;
-  padding: 14px 15px;
-  border-radius: 18px;
-  border: 1px solid rgba(95, 87, 78, 0.08);
-  background: rgba(255, 255, 255, 0.78);
+  width: 128px;
+  min-height: 122px;
+  padding: 18px 12px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(95, 87, 78, 0.09);
+  background: rgba(255, 255, 255, 0.98);
   color: var(--text-primary);
-  text-align: left;
+  text-align: center;
   cursor: pointer;
+  outline: none;
   transition:
     border-color var(--motion-duration-fast) var(--motion-ease-standard),
     box-shadow var(--motion-duration-fast) var(--motion-ease-standard),

@@ -1,12 +1,15 @@
 'use client';
 
-import { useState, useMemo, useEffect, useDeferredValue, useCallback } from 'react';
+import { useState, useMemo, useEffect, useDeferredValue, useCallback, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { LucideIcon } from 'lucide-react';
 import {
   Binary,
   Bot,
   Brain,
+  ChevronLeft,
+  ChevronRight,
+  CircleDot,
   Compass,
   FolderKanban,
   Grid2x2,
@@ -98,6 +101,8 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   const [scrolled, setScrolled] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [primaryRailState, setPrimaryRailState] = useState({ canScrollLeft: false, canScrollRight: false });
+  const primaryRailRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
@@ -112,10 +117,38 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
     setVisibleCount(PAGE_SIZE);
   }, [deferredQuery, selectedPrimary, selectedSecondary]);
 
+  const syncPrimaryRailState = useCallback(() => {
+    const rail = primaryRailRef.current;
+    if (!rail) return;
+    setPrimaryRailState({
+      canScrollLeft: rail.scrollLeft > 8,
+      canScrollRight: rail.scrollLeft + rail.clientWidth < rail.scrollWidth - 8,
+    });
+  }, []);
+
+  const scrollPrimaryRail = useCallback((direction: -1 | 1) => {
+    const rail = primaryRailRef.current;
+    if (!rail) return;
+    rail.scrollBy({ left: direction * 320, behavior: 'smooth' });
+  }, []);
+
   const categoryTree = useMemo(() => {
     if (!concepts) return [];
     return buildCategoryTree(concepts);
   }, [concepts]);
+
+  useEffect(() => {
+    const rail = primaryRailRef.current;
+    if (!rail) return;
+    syncPrimaryRailState();
+    const handleResize = () => syncPrimaryRailState();
+    rail.addEventListener('scroll', syncPrimaryRailState, { passive: true });
+    window.addEventListener('resize', handleResize);
+    return () => {
+      rail.removeEventListener('scroll', syncPrimaryRailState);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [categoryTree.length, syncPrimaryRailState]);
 
   const uncategorizedCount = useMemo(() => {
     if (!concepts) return 0;
@@ -229,104 +262,109 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
       <div className="library-filter-stack">
         <section className="library-filter-section library-filter-section-primary" aria-label="一级分类">
           <div className="library-filter-heading">
-            <div>
+            <div className="library-filter-heading-main">
               <span className="library-filter-eyebrow">一级分类</span>
               <span className="library-filter-hint">先选领域，再看细分方向</span>
             </div>
-            <div className="library-filter-overview">
-              <span className="library-filter-overview-label">当前范围</span>
-              <strong>{selectedPrimary ?? '全部内容'}</strong>
+            <div className="library-primary-controls" aria-hidden={!primaryRailState.canScrollLeft && !primaryRailState.canScrollRight}>
+              <button
+                className="library-primary-scroll-btn"
+                type="button"
+                onClick={() => scrollPrimaryRail(-1)}
+                disabled={!primaryRailState.canScrollLeft}
+                aria-label="向左滚动分类"
+              >
+                <ChevronLeft size={16} strokeWidth={2} />
+              </button>
+              <button
+                className="library-primary-scroll-btn"
+                type="button"
+                onClick={() => scrollPrimaryRail(1)}
+                disabled={!primaryRailState.canScrollRight}
+                aria-label="向右滚动分类"
+              >
+                <ChevronRight size={16} strokeWidth={2} />
+              </button>
             </div>
           </div>
-          <div className="library-primary-board">
-            <button
-              className={`library-primary-card${selectedPrimary === null ? ' active' : ''}`}
-              aria-pressed={selectedPrimary === null}
-              onClick={() => { setSelectedPrimary(null); setSelectedSecondary(null); }}
-            >
-              <span className="library-primary-card-icon" aria-hidden="true">
-                <Grid2x2 size={18} strokeWidth={1.9} />
-              </span>
-              <span className="library-primary-card-content">
-                <span className="library-primary-card-topline">
-                  <span className="library-primary-card-title">全部</span>
-                  <span className="library-primary-card-count">{concepts.length}</span>
+          <div className="library-primary-rail" ref={primaryRailRef}>
+            <div className="library-primary-board">
+              <button
+                className={`library-primary-card${selectedPrimary === null ? ' active' : ''}`}
+                aria-pressed={selectedPrimary === null}
+                onClick={() => { setSelectedPrimary(null); setSelectedSecondary(null); }}
+              >
+                <span className="library-primary-card-icon" aria-hidden="true">
+                  <Grid2x2 size={28} strokeWidth={1.85} />
                 </span>
-                <span className="library-primary-card-meta">浏览全部分类内容</span>
-              </span>
-            </button>
-            {categoryTree.map((cat) => {
-              const PrimaryIcon = getPrimaryCategoryIcon(cat.primary);
-              return (
-                <button
-                  key={cat.primary}
-                  className={`library-primary-card${selectedPrimary === cat.primary ? ' active' : ''}`}
-                  aria-pressed={selectedPrimary === cat.primary}
-                  onClick={() => {
-                    if (selectedPrimary === cat.primary) {
-                      setSelectedPrimary(null);
-                      setSelectedSecondary(null);
-                    } else {
-                      setSelectedPrimary(cat.primary);
-                      setSelectedSecondary(null);
-                    }
-                  }}
-                >
-                  <span className="library-primary-card-icon" aria-hidden="true">
-                    <PrimaryIcon size={18} strokeWidth={1.9} />
-                  </span>
-                  <span className="library-primary-card-content">
-                    <span className="library-primary-card-topline">
-                      <span className="library-primary-card-title">{cat.primary}</span>
-                      <span className="library-primary-card-count">{cat.count}</span>
+                <span className="library-primary-card-title">全部</span>
+                <span className="library-primary-card-count">{concepts.length}</span>
+              </button>
+              {categoryTree.map((cat) => {
+                const PrimaryIcon = getPrimaryCategoryIcon(cat.primary);
+                return (
+                  <button
+                    key={cat.primary}
+                    className={`library-primary-card${selectedPrimary === cat.primary ? ' active' : ''}`}
+                    aria-pressed={selectedPrimary === cat.primary}
+                    onClick={() => {
+                      if (selectedPrimary === cat.primary) {
+                        setSelectedPrimary(null);
+                        setSelectedSecondary(null);
+                      } else {
+                        setSelectedPrimary(cat.primary);
+                        setSelectedSecondary(null);
+                      }
+                    }}
+                  >
+                    <span className="library-primary-card-icon" aria-hidden="true">
+                      <PrimaryIcon size={28} strokeWidth={1.85} />
                     </span>
-                    <span className="library-primary-card-meta">
-                      {cat.secondaries.length > 0 ? `${cat.secondaries.length} 个细分方向` : '暂未细分方向'}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
+                    <span className="library-primary-card-title">{cat.primary}</span>
+                    <span className="library-primary-card-count">{cat.count}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </section>
 
         {selectedPrimary && currentSecondaries.length > 0 && currentPrimaryNode && (
           <section className="library-filter-section library-filter-section-secondary" aria-label="二级标签">
-            <div className="library-filter-heading">
-              <div className="library-filter-heading-secondary-main">
+            <div className="library-filter-heading library-filter-heading-secondary">
+              <div className="library-filter-heading-main">
                 <span className="library-filter-eyebrow">二级标签</span>
-                <span className="library-filter-hint">{selectedPrimary} 下的细分方向</span>
-              </div>
-              <div className="library-secondary-summary">
-                <span className="library-secondary-summary-icon" aria-hidden="true">
-                  <CurrentPrimaryIcon size={16} strokeWidth={1.9} />
-                </span>
-                <span className="library-secondary-summary-body">
-                  <strong>{selectedPrimary}</strong>
-                  <span>{currentSecondaries.length} 个方向 · {currentPrimaryNode.count} 条</span>
+                <span className="library-filter-hint library-filter-hint-inline">
+                  （{selectedPrimary} · {currentPrimaryNode.count}）
                 </span>
               </div>
             </div>
             <div className="library-filter-row library-filter-row-secondary">
               <button
-                className={`library-capsule secondary${selectedSecondary === null ? ' active' : ''}`}
+                className={`library-secondary-chip${selectedSecondary === null ? ' active' : ''}`}
                 aria-pressed={selectedSecondary === null}
                 onClick={() => setSelectedSecondary(null)}
               >
-                全部方向
-                <span className="library-capsule-count">{currentPrimaryNode.count}</span>
+                <span className="library-secondary-chip-icon" aria-hidden="true">
+                  <CurrentPrimaryIcon size={14} strokeWidth={1.9} />
+                </span>
+                <span className="library-secondary-chip-label">全部方向</span>
+                <span className="library-secondary-chip-count">{currentPrimaryNode.count}</span>
               </button>
               {currentSecondaries.map((sec) => (
                 <button
                   key={sec.name}
-                  className={`library-capsule secondary${selectedSecondary === sec.name ? ' active' : ''}`}
+                  className={`library-secondary-chip${selectedSecondary === sec.name ? ' active' : ''}`}
                   aria-pressed={selectedSecondary === sec.name}
                   onClick={() => {
                     setSelectedSecondary(selectedSecondary === sec.name ? null : sec.name);
                   }}
                 >
-                  {sec.name}
-                  <span className="library-capsule-count">{sec.count}</span>
+                  <span className="library-secondary-chip-icon" aria-hidden="true">
+                    <CircleDot size={14} strokeWidth={1.9} />
+                  </span>
+                  <span className="library-secondary-chip-label">{sec.name}</span>
+                  <span className="library-secondary-chip-count">{sec.count}</span>
                 </button>
               ))}
             </div>
