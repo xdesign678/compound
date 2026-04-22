@@ -3278,20 +3278,93 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 }
 
 @media (max-width: 767px) {
+  /* 容器：收紧内边距，保留刘海/home bar 安全区 */
   .ask-input-bar {
-    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border-section);
+    background: var(--bg-primary);
   }
 
+  /* 卡片：Claude chat input 规范 —— 12px 圆角，紧凑内边距 */
   .ask-composer-card {
-    padding: 14px 14px 12px;
-    border-radius: 16px;
+    padding: 12px 14px 10px;
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
   }
 
+  /* textarea：16px 防 iOS 自动放大，减小最小高度 */
+  .ask-textarea,
+  .ask-composer-card .ask-textarea {
+    font-size: 16px !important;
+    min-height: 28px;
+    line-height: 1.55;
+    padding: 0 2px;
+  }
+
+  /* 工具栏：横排保持不变，对齐垂直居中，缩小间距 */
+  .ask-composer-toolbar {
+    margin-top: 8px;
+    gap: 6px;
+    align-items: center;
+  }
+
+  /* 左侧工具按钮：缩小 padding 和字号 */
+  .ask-composer-actions {
+    gap: 5px;
+    flex-wrap: nowrap;
+  }
+
+  .ask-tool-btn {
+    padding: 6px 10px;
+    font-size: 11.5px;
+    gap: 4px;
+    border-radius: 7.5px !important;
+  }
+
+  /* 模型按钮：截断过长模型名 */
+  .ask-model-btn {
+    max-width: min(100%, 120px);
+    overflow: hidden;
+  }
+
+  .ask-model-btn > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+
+  /* 隐藏桌面专属键盘提示 */
+  .ask-composer-hint {
+    display: none;
+  }
+
+  /* 发送区：紧靠右侧，不换行 */
+  .ask-composer-submit {
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  /* 发送按钮：44px touch target（Claude 规范） */
+  .ask-send-btn,
+  .ask-composer-card .ask-send-btn {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 8px !important;
+  }
+
+  .ask-send-btn svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  /* 浮层：收紧到屏幕边缘 */
   .ask-flyout {
     left: 12px;
     right: 12px;
     bottom: calc(100% - 10px);
     padding: 12px;
+    border-radius: 10px;
   }
 
   .ask-model-flyout {
@@ -3300,32 +3373,21 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
     right: 12px;
   }
 
+  /* 浮层标题行：手机可以竖排 */
   .ask-flyout-header {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .ask-composer-toolbar {
-    align-items: center;
-  }
-
-  .ask-composer-hint {
-    display: none;
-  }
-
-  .ask-model-btn {
-    max-width: min(100%, 160px);
-    overflow: hidden;
-  }
-
-  .ask-model-btn span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
+  /* mention chip 截断 */
   .ask-mention-chip-title {
-    max-width: 160px;
+    max-width: 140px;
+  }
+
+  /* mention chip 缩小 */
+  .ask-mention-chip {
+    padding: 5px 9px;
+    font-size: 11.5px;
   }
 }
 
