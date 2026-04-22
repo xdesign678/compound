@@ -6,7 +6,6 @@ import { getDb } from '@/lib/db';
 import { ensureSourceHydrated } from '@/lib/cloud-sync';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime, renderMarkdown } from '@/lib/format';
-import { Prose } from '../Prose';
 
 function normalizeText(text: string) {
   return text.replace(/\u00a0/g, ' ');
@@ -143,20 +142,10 @@ function htmlToMarkdown(html: string): string {
     .trim();
 }
 
-function placeCaretAtEnd(element: HTMLElement) {
-  const selection = window.getSelection();
-  if (!selection) return;
-  const range = document.createRange();
-  range.selectNodeContents(element);
-  range.collapse(false);
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
-
 export function SourceDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
   const editorRef = useRef<HTMLDivElement>(null);
-  const [isEditing, setIsEditing] = useState(false);
+  const renderedContentRef = useRef<string | null>(null);
   const [draftContent, setDraftContent] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -181,23 +170,24 @@ export function SourceDetail({ id }: { id: string }) {
   }, [id, source]);
 
   useEffect(() => {
-    setIsEditing(false);
     setDraftContent('');
     setIsDirty(false);
     setSaveStatus('idle');
+    renderedContentRef.current = null;
   }, [id]);
 
   useEffect(() => {
-    if (!source || !hasFullContent || isEditing || isDirty) return;
+    if (!source || !hasFullContent || isDirty) return;
     setDraftContent(source.rawContent);
-  }, [hasFullContent, isDirty, isEditing, source]);
+  }, [hasFullContent, isDirty, source]);
 
   useEffect(() => {
-    if (!isEditing || !editorRef.current || !hasFullContent) return;
-    editorRef.current.innerHTML = renderMarkdown(draftContent);
-    editorRef.current.focus();
-    placeCaretAtEnd(editorRef.current);
-  }, [hasFullContent, id, isEditing]);
+    if (!editorRef.current || !source || !hasFullContent || isDirty) return;
+    const nextMarkdown = source.rawContent;
+    if (renderedContentRef.current === nextMarkdown) return;
+    editorRef.current.innerHTML = renderMarkdown(nextMarkdown);
+    renderedContentRef.current = nextMarkdown;
+  }, [hasFullContent, isDirty, source]);
 
   useEffect(() => {
     if (saveStatus !== 'saved') return;
@@ -210,6 +200,7 @@ export function SourceDetail({ id }: { id: string }) {
     const nextMarkdown = htmlToMarkdown(html);
     setDraftContent(nextMarkdown);
     setIsDirty(nextMarkdown !== (source?.rawContent ?? ''));
+    renderedContentRef.current = nextMarkdown;
     setSaveStatus((current) => (current === 'idle' ? current : 'idle'));
   }, [source?.rawContent]);
 
@@ -223,40 +214,44 @@ export function SourceDetail({ id }: { id: string }) {
     [syncDraftFromEditor]
   );
 
-  const handleStartEditing = useCallback(() => {
-    if (!source) return;
-    setDraftContent(source.rawContent);
+  const handleResetDraft = useCallback(() => {
+    const originalContent = source?.rawContent ?? '';
+    if (editorRef.current) {
+      editorRef.current.innerHTML = renderMarkdown(originalContent);
+    }
+    renderedContentRef.current = originalContent;
+    setDraftContent(originalContent);
     setIsDirty(false);
     setSaveStatus('idle');
-    setIsEditing(true);
-  }, [source]);
-
-  const handleCancelEditing = useCallback(() => {
-    setDraftContent(source?.rawContent ?? '');
-    setIsDirty(false);
-    setSaveStatus('idle');
-    setIsEditing(false);
   }, [source?.rawContent]);
 
   const canEdit = hasFullContent;
-  const canSave = isEditing && isDirty && draftContent.trim().length > 0;
+  const canSave = canEdit && isDirty && saveStatus !== 'saving';
 
   const handleSave = useCallback(async () => {
-    if (!canSave) return;
+    if (!canEdit || !isDirty || saveStatus === 'saving') return;
     setSaveStatus('saving');
     try {
       await getDb().sources.update(id, { rawContent: draftContent });
+      renderedContentRef.current = draftContent;
       setIsDirty(false);
       setSaveStatus('saved');
-      setIsEditing(false);
     } catch (err) {
       console.warn('[source-detail] save failed:', err);
       setSaveStatus('error');
     }
-  }, [canSave, draftContent, id]);
+  }, [canEdit, draftContent, id, isDirty, saveStatus]);
 
   useEffect(() => {
-    if (!isEditing) return;
+    if (!canEdit || !isDirty || saveStatus === 'saving') return;
+    const timer = window.setTimeout(() => {
+      void handleSave();
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [canEdit, handleSave, isDirty, saveStatus]);
+
+  useEffect(() => {
+    if (!canEdit) return;
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
@@ -265,15 +260,13 @@ export function SourceDetail({ id }: { id: string }) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleSave, isEditing]);
+  }, [canEdit, handleSave]);
 
   if (!source) return <div className="empty-state">未找到资料</div>;
 
   const generatedCount = generated?.length ?? 0;
   const generatedItems = generated ?? [];
-  const displayMarkdown = isEditing || isDirty || saveStatus === 'saved'
-    ? draftContent
-    : source.rawContent;
+  const displayMarkdown = isDirty ? draftContent : source.rawContent;
 
   return (
     <article className="concept-detail source-detail-page">
@@ -326,23 +319,15 @@ export function SourceDetail({ id }: { id: string }) {
       <div className="source-detail-main">
         <div className="source-detail-toolbar">
           <div className="source-detail-toolbar-actions">
-            {!isEditing ? (
-              <button
-                className="modal-btn source-detail-toggle-btn"
-                onClick={handleStartEditing}
-                disabled={!canEdit}
-                type="button"
-              >
-                编辑正文
-              </button>
-            ) : (
+            <span className="source-detail-inline-hint">正文可直接编辑</span>
+            {isDirty && (
               <>
                 <button
                   className="modal-btn source-detail-toggle-btn"
-                  onClick={handleCancelEditing}
+                  onClick={handleResetDraft}
                   type="button"
                 >
-                  取消
+                  还原
                 </button>
                 <button
                   className="modal-btn primary source-detail-save-btn"
@@ -350,7 +335,7 @@ export function SourceDetail({ id }: { id: string }) {
                   disabled={!canSave}
                   type="button"
                 >
-                  保存
+                  立即保存
                 </button>
               </>
             )}
@@ -368,7 +353,7 @@ export function SourceDetail({ id }: { id: string }) {
           </div>
         </div>
 
-        {isEditing && (
+        {hasFullContent && (
           <>
             <div className="source-detail-format-toolbar" aria-label="正文格式工具">
               <button
@@ -433,28 +418,28 @@ export function SourceDetail({ id }: { id: string }) {
               </button>
             </div>
             <p className="source-detail-editor-tip">
-              现在这块正文就是编辑区，看到什么就会保存成什么；支持 `Cmd/Ctrl + S`。
+              现在这块正文就是编辑区，会按阅读样子直接修改；停一下会自动保存，也支持 `Cmd/Ctrl + S`。
             </p>
           </>
         )}
 
         {!hasFullContent ? (
           <div className="empty-state empty-state-compact">原文加载中...</div>
-        ) : isEditing ? (
+        ) : (
           <div className="source-detail-prose-shell source-detail-rich-shell">
             <div
               ref={editorRef}
               className="prose source-detail-prose note-editor-content source-detail-rich-editor"
-              contentEditable
+              contentEditable={canEdit}
               suppressContentEditableWarning
-              data-placeholder="开始整理这份资料..."
+              data-placeholder="直接在这里整理这份资料..."
               onInput={syncDraftFromEditor}
+              onBlur={() => {
+                if (!isDirty) return;
+                void handleSave();
+              }}
               aria-label="资料正文所见即所得编辑器"
             />
-          </div>
-        ) : (
-          <div className="source-detail-prose-shell">
-            <Prose markdown={displayMarkdown} className="prose-raw source-detail-prose" />
           </div>
         )}
       </div>
