@@ -1,0 +1,36 @@
+<svg width="1400" height="860" viewBox="0 0 1400 860" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1400" height="860" fill="#F7F3EB"/>
+  <rect x="44" y="40" width="1312" height="780" rx="32" fill="#FCFAF5" stroke="#DCCFC1"/>
+  <rect x="84" y="80" width="78" height="36" rx="18" fill="#E1EDF6"/>
+  <text x="123" y="104" text-anchor="middle" fill="#33627E" font-family="Inter, PingFang SC, sans-serif" font-size="20" font-weight="700">C</text>
+  <text x="184" y="105" fill="#171614" font-family="Inter, PingFang SC, sans-serif" font-size="32" font-weight="700">双态切换型</text>
+  <text x="84" y="144" fill="#6B645A" font-family="Inter, PingFang SC, sans-serif" font-size="20">阅读态干净，进入编辑后再切成强工具栏界面。</text>
+
+  <rect x="84" y="190" width="820" height="242" rx="24" fill="#FAF7F0" stroke="#E6DBCF"/>
+  <text x="118" y="232" fill="#7A7369" font-family="Inter, PingFang SC, sans-serif" font-size="18" font-weight="700">阅读态</text>
+  <text x="118" y="300" fill="#171614" font-family="Inter, PingFang SC, sans-serif" font-size="42" font-weight="700">之字形图像</text>
+  <text x="118" y="338" fill="#7A7369" font-family="Inter, PingFang SC, sans-serif" font-size="18">昨天 · 4 个相关概念 · 原链接</text>
+  <rect x="118" y="374" width="540" height="48" rx="16" fill="#F3EBDD" stroke="#E0D3C3"/>
+  <text x="146" y="406" fill="#6A6155" font-family="Inter, PingFang SC, sans-serif" font-size="17">概念 chips / 摘要 / 来源提示压成同一条信息带</text>
+  <rect x="700" y="360" width="132" height="42" rx="21" fill="#171614"/>
+  <text x="766" y="387" text-anchor="middle" fill="#FAF9F5" font-family="Inter, PingFang SC, sans-serif" font-size="15">进入编辑</text>
+
+  <path d="M494 452 L494 514" stroke="#A9A094" stroke-width="2" stroke-dasharray="8 8"/>
+  <path d="M476 492 L494 512 L512 492" stroke="#A9A094" stroke-width="2" fill="none"/>
+
+  <rect x="84" y="540" width="820" height="210" rx="24" fill="#FAF7F0" stroke="#E6DBCF"/>
+  <rect x="84" y="540" width="820" height="60" rx="24" fill="#171614"/>
+  <text x="118" y="579" fill="#FAF9F5" font-family="Inter, PingFang SC, sans-serif" font-size="18" font-weight="700">编辑态工具栏</text>
+  <text x="416" y="579" fill="#D8CEC4" font-family="Inter, PingFang SC, sans-serif" font-size="17">正文  小标题  加粗  斜体  列表  引用</text>
+  <rect x="118" y="638" width="300" height="18" rx="9" fill="#DCCFC1"/>
+  <rect x="118" y="676" width="490" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="118" y="704" width="462" height="16" rx="8" fill="#E9DED1"/>
+
+  <text x="956" y="296" fill="#171614" font-family="Inter, PingFang SC, sans-serif" font-size="24" font-weight="700">判断</text>
+  <text x="956" y="340" fill="#4A433A" font-family="Inter, PingFang SC, sans-serif" font-size="19">状态最清楚，学习成本最低。</text>
+  <text x="956" y="374" fill="#4A433A" font-family="Inter, PingFang SC, sans-serif" font-size="19">用户知道自己此刻是在“读”还是“改”。</text>
+  <text x="956" y="450" fill="#171614" font-family="Inter, PingFang SC, sans-serif" font-size="24" font-weight="700">代价</text>
+  <text x="956" y="494" fill="#4A433A" font-family="Inter, PingFang SC, sans-serif" font-size="19">切态会多一步。</text>
+  <text x="956" y="528" fill="#4A433A" font-family="Inter, PingFang SC, sans-serif" font-size="19">不如 A、B 那么连续自然。</text>
+  <text x="84" y="790" fill="#3B332A" font-family="Inter, PingFang SC, sans-serif" font-size="22" font-weight="700">适合：编辑频繁，而且希望界面状态非常明确。</text>
+</svg>

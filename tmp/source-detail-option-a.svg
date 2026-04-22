@@ -1,0 +1,40 @@
+<svg width="1400" height="860" viewBox="0 0 1400 860" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1400" height="860" fill="#F7F3EB"/>
+  <rect x="44" y="40" width="1312" height="780" rx="32" fill="#FCFAF5" stroke="#DCCFC1"/>
+  <rect x="84" y="80" width="78" height="36" rx="18" fill="#E6F1E7"/>
+  <text x="123" y="104" text-anchor="middle" fill="#2D5A39" font-family="Inter, PingFang SC, sans-serif" font-size="20" font-weight="700">A</text>
+  <text x="184" y="105" fill="#171614" font-family="Inter, PingFang SC, sans-serif" font-size="32" font-weight="700">阅读优先型</text>
+  <text x="84" y="144" fill="#6B645A" font-family="Inter, PingFang SC, sans-serif" font-size="20">正文先像文章，工具弱化到选中文字后再出现。</text>
+
+  <rect x="84" y="190" width="820" height="560" rx="24" fill="#FAF7F0" stroke="#E6DBCF"/>
+  <rect x="118" y="224" width="88" height="28" rx="14" fill="#F3E5D7"/>
+  <text x="162" y="243" text-anchor="middle" fill="#C36B3E" font-family="Inter, PingFang SC, sans-serif" font-size="14" font-weight="700">资料档案</text>
+  <text x="118" y="314" fill="#171614" font-family="Inter, PingFang SC, sans-serif" font-size="42" font-weight="700">之字形图像</text>
+  <text x="118" y="352" fill="#7A7369" font-family="Inter, PingFang SC, sans-serif" font-size="18">昨天 · 4 个相关概念 · 原链接</text>
+  <rect x="118" y="388" width="300" height="10" rx="5" fill="#E9DED1"/>
+  <rect x="118" y="414" width="210" height="10" rx="5" fill="#E9DED1"/>
+  <line x1="118" y1="458" x2="590" y2="458" stroke="#E7DCCF"/>
+  <rect x="118" y="500" width="244" height="18" rx="9" fill="#DCCFC1"/>
+  <rect x="118" y="538" width="500" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="118" y="566" width="470" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="118" y="594" width="486" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="324" y="620" width="188" height="48" rx="24" fill="#171614"/>
+  <text x="418" y="650" text-anchor="middle" fill="#FAF9F5" font-family="Inter, PingFang SC, sans-serif" font-size="16">选中文字后浮出工具</text>
+
+  <rect x="616" y="300" width="236" height="196" rx="20" fill="#F5EFE5" stroke="#E3D6C7"/>
+  <text x="644" y="344" fill="#7A7369" font-family="Inter, PingFang SC, sans-serif" font-size="20" font-weight="700">右侧信息栏</text>
+  <rect x="644" y="372" width="136" height="36" rx="18" fill="#FFFDFC" stroke="#D9CCBD"/>
+  <text x="712" y="395" text-anchor="middle" fill="#5B5349" font-family="Inter, PingFang SC, sans-serif" font-size="15">来源信息</text>
+  <rect x="644" y="420" width="136" height="36" rx="18" fill="#FFFDFC" stroke="#D9CCBD"/>
+  <text x="712" y="443" text-anchor="middle" fill="#5B5349" font-family="Inter, PingFang SC, sans-serif" font-size="15">相关概念</text>
+  <rect x="644" y="468" width="136" height="36" rx="18" fill="#FFFDFC" stroke="#D9CCBD"/>
+  <text x="712" y="491" text-anchor="middle" fill="#5B5349" font-family="Inter, PingFang SC, sans-serif" font-size="15">引用跳转</text>
+
+  <text x="956" y="296" fill="#171614" font-family="Inter, PingFang SC, sans-serif" font-size="24" font-weight="700">判断</text>
+  <text x="956" y="340" fill="#4A433A" font-family="Inter, PingFang SC, sans-serif" font-size="19">最像成熟阅读产品。</text>
+  <text x="956" y="374" fill="#4A433A" font-family="Inter, PingFang SC, sans-serif" font-size="19">页面最干净，正文呼吸感最好。</text>
+  <text x="956" y="450" fill="#171614" font-family="Inter, PingFang SC, sans-serif" font-size="24" font-weight="700">代价</text>
+  <text x="956" y="494" fill="#4A433A" font-family="Inter, PingFang SC, sans-serif" font-size="19">编辑入口更隐形。</text>
+  <text x="956" y="528" fill="#4A433A" font-family="Inter, PingFang SC, sans-serif" font-size="19">适合“读多写少”的资料页。</text>
+  <text x="84" y="790" fill="#3B332A" font-family="Inter, PingFang SC, sans-serif" font-size="22" font-weight="700">适合：阅读明显多于编辑，想让正文更像真正文章页。</text>
+</svg>

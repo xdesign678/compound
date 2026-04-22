@@ -166,6 +166,16 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
     return categoryTree.find((t) => t.primary === selectedPrimary) ?? null;
   }, [categoryTree, selectedPrimary]);
 
+  const [showAllSecondaries, setShowAllSecondaries] = useState(false);
+  const SECONDARY_INITIAL_COUNT = 8;
+
+  const visibleSecondaries = useMemo(() => {
+    if (showAllSecondaries) return currentSecondaries;
+    return currentSecondaries.slice(0, SECONDARY_INITIAL_COUNT);
+  }, [currentSecondaries, showAllSecondaries]);
+
+  const hasMoreSecondaries = currentSecondaries.length > SECONDARY_INITIAL_COUNT;
+
   const filtered = useMemo(() => {
     if (!concepts) return [];
     let result = concepts;
@@ -333,9 +343,8 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
           <section className="library-filter-section library-filter-section-secondary" aria-label="二级标签">
             <div className="library-filter-heading library-filter-heading-secondary">
               <div className="library-filter-heading-main">
-                <span className="library-filter-eyebrow">二级标签</span>
-                <span className="library-filter-hint library-filter-hint-inline">
-                  （{selectedPrimary} · {currentPrimaryNode.count}）
+                <span className="library-filter-eyebrow">
+                  二级标签（{selectedPrimary} · {currentPrimaryNode.count}）
                 </span>
               </div>
             </div>
@@ -345,13 +354,16 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                 aria-pressed={selectedSecondary === null}
                 onClick={() => setSelectedSecondary(null)}
               >
-                <span className="library-secondary-chip-icon" aria-hidden="true">
-                  <CurrentPrimaryIcon size={14} strokeWidth={1.9} />
+                <span className="library-secondary-chip-inner">
+                  <span className="library-secondary-chip-icon" aria-hidden="true">
+                    <CurrentPrimaryIcon size={14} strokeWidth={1.9} />
+                  </span>
+                  <span className="library-secondary-chip-label">全部方向</span>
+                  <span className="library-secondary-chip-count">{currentPrimaryNode.count}</span>
                 </span>
-                <span className="library-secondary-chip-label">全部方向</span>
-                <span className="library-secondary-chip-count">{currentPrimaryNode.count}</span>
+                <ChevronRight size={14} strokeWidth={2} className="library-secondary-chip-arrow" aria-hidden="true" />
               </button>
-              {currentSecondaries.map((sec) => (
+              {visibleSecondaries.map((sec) => (
                 <button
                   key={sec.name}
                   className={`library-secondary-chip${selectedSecondary === sec.name ? ' active' : ''}`}
@@ -360,13 +372,34 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                     setSelectedSecondary(selectedSecondary === sec.name ? null : sec.name);
                   }}
                 >
-                  <span className="library-secondary-chip-icon" aria-hidden="true">
-                    <CircleDot size={14} strokeWidth={1.9} />
+                  <span className="library-secondary-chip-inner">
+                    <span className="library-secondary-chip-icon" aria-hidden="true">
+                      <CircleDot size={14} strokeWidth={1.9} />
+                    </span>
+                    <span className="library-secondary-chip-label">{sec.name}</span>
+                    <span className="library-secondary-chip-count">{sec.count}</span>
                   </span>
-                  <span className="library-secondary-chip-label">{sec.name}</span>
-                  <span className="library-secondary-chip-count">{sec.count}</span>
+                  <ChevronRight size={14} strokeWidth={2} className="library-secondary-chip-arrow" aria-hidden="true" />
                 </button>
               ))}
+              {hasMoreSecondaries && (
+                <button
+                  className="library-secondary-chip library-secondary-more"
+                  onClick={() => setShowAllSecondaries((v) => !v)}
+                >
+                  <span className="library-secondary-chip-inner">
+                    <span className="library-secondary-chip-label">
+                      {showAllSecondaries ? '收起标签' : '更多标签'}
+                    </span>
+                  </span>
+                  <ChevronRight
+                    size={14}
+                    strokeWidth={2}
+                    className={`library-secondary-chip-arrow${showAllSecondaries ? ' is-open' : ''}`}
+                    aria-hidden="true"
+                  />
+                </button>
+              )}
             </div>
           </section>
         )}

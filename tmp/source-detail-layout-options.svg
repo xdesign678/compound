@@ -1,0 +1,120 @@
+<svg width="1560" height="2600" viewBox="0 0 1560 2600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1560" height="2600" fill="#F7F3EB"/>
+  <text x="72" y="96" fill="#171614" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="42" font-weight="700">资料正文页改版方向</text>
+  <text x="72" y="138" fill="#6B645A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="22">共同结论：把“页面信息”和“正文编辑”拆开，别让格式按钮堵在正文入口。</text>
+
+  <rect x="60" y="190" width="1440" height="730" rx="30" fill="#FCFAF5" stroke="#DCCFC1"/>
+  <rect x="98" y="228" width="78" height="36" rx="18" fill="#E6F1E7"/>
+  <text x="137" y="252" text-anchor="middle" fill="#2D5A39" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="20" font-weight="700">A</text>
+  <text x="198" y="253" fill="#171614" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="30" font-weight="700">阅读优先型</text>
+  <text x="98" y="292" fill="#6B645A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="19">参考 Notion / Outline：默认先让正文像文章，编辑工具不挡在入口。</text>
+
+  <rect x="98" y="334" width="892" height="520" rx="24" fill="#FAF7F0" stroke="#E6DBCF"/>
+  <rect x="128" y="366" width="88" height="28" rx="14" fill="#F3E5D7"/>
+  <text x="172" y="385" text-anchor="middle" fill="#C36B3E" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="14" font-weight="700">资料档案</text>
+  <text x="128" y="450" fill="#171614" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="38" font-weight="700">之字形图像</text>
+  <text x="128" y="486" fill="#7A7369" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">昨天 · 4 个相关概念 · 原链接</text>
+  <rect x="128" y="520" width="280" height="10" rx="5" fill="#E9DED1"/>
+  <rect x="128" y="546" width="198" height="10" rx="5" fill="#E9DED1"/>
+  <line x1="128" y1="592" x2="600" y2="592" stroke="#E7DCCF"/>
+  <rect x="128" y="628" width="220" height="18" rx="9" fill="#DCCFC1"/>
+  <rect x="128" y="664" width="486" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="128" y="692" width="454" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="128" y="720" width="472" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="128" y="774" width="206" height="18" rx="9" fill="#DCCFC1"/>
+  <rect x="128" y="810" width="498" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="128" y="838" width="446" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="676" y="420" width="250" height="192" rx="20" fill="#F5EFE5" stroke="#E3D6C7"/>
+  <text x="704" y="462" fill="#7A7369" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18" font-weight="700">右侧信息栏</text>
+  <rect x="704" y="488" width="138" height="34" rx="17" fill="#FFFDFC" stroke="#D9CCBD"/>
+  <text x="773" y="510" text-anchor="middle" fill="#5B5349" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="15">来源信息</text>
+  <rect x="704" y="534" width="138" height="34" rx="17" fill="#FFFDFC" stroke="#D9CCBD"/>
+  <text x="773" y="556" text-anchor="middle" fill="#5B5349" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="15">相关概念</text>
+  <rect x="704" y="580" width="138" height="34" rx="17" fill="#FFFDFC" stroke="#D9CCBD"/>
+  <text x="773" y="602" text-anchor="middle" fill="#5B5349" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="15">引用跳转</text>
+  <rect x="342" y="744" width="184" height="48" rx="24" fill="#171614"/>
+  <text x="434" y="774" text-anchor="middle" fill="#FAF9F5" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="16">选中文字后浮出工具</text>
+  <text x="1060" y="430" fill="#171614" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="22" font-weight="700">判断</text>
+  <text x="1060" y="472" fill="#4A433A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">最像成熟阅读产品。</text>
+  <text x="1060" y="506" fill="#4A433A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">页面最干净，正文呼吸感最好。</text>
+  <text x="1060" y="568" fill="#171614" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="22" font-weight="700">代价</text>
+  <text x="1060" y="610" fill="#4A433A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">编辑入口更隐形。</text>
+  <text x="1060" y="644" fill="#4A433A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">适合“读多写少”的资料页。</text>
+  <text x="98" y="888" fill="#3B332A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="20" font-weight="700">适合：阅读明显多于编辑，想让正文像真正文章页。</text>
+
+  <rect x="60" y="954" width="1440" height="730" rx="30" fill="#FCFAF5" stroke="#DCCFC1"/>
+  <rect x="98" y="992" width="78" height="36" rx="18" fill="#F6E4D4"/>
+  <text x="137" y="1016" text-anchor="middle" fill="#A95C2F" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="20" font-weight="700">B</text>
+  <text x="198" y="1017" fill="#171614" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="30" font-weight="700">双栏工作台型</text>
+  <text x="98" y="1056" fill="#6B645A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="19">参考 Notion Layout / GitBook：把来源、概念、操作收进固定侧栏。</text>
+
+  <rect x="98" y="1098" width="892" height="520" rx="24" fill="#FAF7F0" stroke="#E6DBCF"/>
+  <text x="128" y="1178" fill="#171614" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="38" font-weight="700">之字形图像</text>
+  <text x="128" y="1214" fill="#7A7369" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">昨天 · 4 个相关概念</text>
+  <rect x="128" y="1248" width="420" height="52" rx="16" fill="#F1EBDD" stroke="#E0D3C3"/>
+  <text x="156" y="1281" fill="#6A6155" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">一句导语放这里，不再单独占一大块。</text>
+  <rect x="128" y="1332" width="436" height="46" rx="16" fill="#EEE7D8" stroke="#DDD0BE"/>
+  <text x="156" y="1362" fill="#5B5349" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="17">正文  小标题  加粗  斜体  列表  引用</text>
+  <rect x="128" y="1424" width="338" height="18" rx="9" fill="#DCCFC1"/>
+  <rect x="128" y="1460" width="502" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="128" y="1488" width="464" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="128" y="1516" width="488" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="702" y="1136" width="232" height="432" rx="20" fill="#F5EFE5" stroke="#E3D6C7"/>
+  <text x="728" y="1180" fill="#7A7369" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18" font-weight="700">侧栏</text>
+  <rect x="728" y="1210" width="118" height="88" rx="18" fill="#FFFDFC" stroke="#D9CCBD"/>
+  <text x="787" y="1246" text-anchor="middle" fill="#5B5349" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="15">来源</text>
+  <text x="787" y="1272" text-anchor="middle" fill="#5B5349" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="15">字数</text>
+  <rect x="728" y="1320" width="118" height="148" rx="18" fill="#FFFDFC" stroke="#D9CCBD"/>
+  <text x="787" y="1356" text-anchor="middle" fill="#5B5349" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="15">概念</text>
+  <circle cx="748" cy="1394" r="4" fill="#C36B3E"/>
+  <rect x="762" y="1388" width="56" height="10" rx="5" fill="#DCCFC1"/>
+  <circle cx="748" cy="1424" r="4" fill="#C36B3E"/>
+  <rect x="762" y="1418" width="56" height="10" rx="5" fill="#DCCFC1"/>
+  <circle cx="748" cy="1454" r="4" fill="#C36B3E"/>
+  <rect x="762" y="1448" width="56" height="10" rx="5" fill="#DCCFC1"/>
+  <rect x="728" y="1490" width="118" height="78" rx="18" fill="#FFFDFC" stroke="#D9CCBD"/>
+  <text x="787" y="1524" text-anchor="middle" fill="#5B5349" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="15">操作</text>
+  <rect x="744" y="1538" width="86" height="24" rx="12" fill="#171614"/>
+  <text x="787" y="1554" text-anchor="middle" fill="#FAF9F5" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="13">保存</text>
+  <text x="1060" y="1190" fill="#171614" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="22" font-weight="700">判断</text>
+  <text x="1060" y="1232" fill="#4A433A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">最稳，也最容易落地。</text>
+  <text x="1060" y="1266" fill="#4A433A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">图2 那排按钮有了归属，不再突兀。</text>
+  <text x="1060" y="1328" fill="#171614" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="22" font-weight="700">代价</text>
+  <text x="1060" y="1370" fill="#4A433A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">界面会更像工具，不如 A 那么纯阅读。</text>
+  <text x="1060" y="1404" fill="#4A433A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">但对你这个资料库场景最平衡。</text>
+  <text x="98" y="1652" fill="#3B332A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="20" font-weight="700">适合：既要读正文，也经常整理概念、来源、保存操作。</text>
+
+  <rect x="60" y="1718" width="1440" height="760" rx="30" fill="#FCFAF5" stroke="#DCCFC1"/>
+  <rect x="98" y="1756" width="78" height="36" rx="18" fill="#E1EDF6"/>
+  <text x="137" y="1780" text-anchor="middle" fill="#33627E" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="20" font-weight="700">C</text>
+  <text x="198" y="1781" fill="#171614" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="30" font-weight="700">双态切换型</text>
+  <text x="98" y="1820" fill="#6B645A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="19">参考 Confluence：阅读态干净，进入编辑后再切成强操作界面。</text>
+
+  <rect x="98" y="1862" width="892" height="258" rx="24" fill="#FAF7F0" stroke="#E6DBCF"/>
+  <text x="128" y="1904" fill="#7A7369" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18" font-weight="700">阅读态</text>
+  <text x="128" y="1970" fill="#171614" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="38" font-weight="700">之字形图像</text>
+  <text x="128" y="2006" fill="#7A7369" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">昨天 · 4 个相关概念 · 原链接</text>
+  <rect x="128" y="2038" width="532" height="46" rx="16" fill="#F3EBDD" stroke="#E0D3C3"/>
+  <text x="154" y="2068" fill="#6A6155" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="17">概念 chips / 摘要 / 来源提示压成同一条信息带</text>
+  <rect x="732" y="2020" width="130" height="40" rx="20" fill="#171614"/>
+  <text x="797" y="2046" text-anchor="middle" fill="#FAF9F5" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="15">进入编辑</text>
+  <path d="M546 2140 L546 2204" stroke="#A9A094" stroke-width="2" stroke-dasharray="8 8"/>
+  <path d="M528 2182 L546 2202 L564 2182" stroke="#A9A094" stroke-width="2" fill="none"/>
+  <rect x="98" y="2232" width="892" height="188" rx="24" fill="#FAF7F0" stroke="#E6DBCF"/>
+  <rect x="98" y="2232" width="892" height="58" rx="24" fill="#171614"/>
+  <text x="128" y="2270" fill="#FAF9F5" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18" font-weight="700">编辑态工具栏</text>
+  <text x="474" y="2270" fill="#D8CEC4" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="16">正文  小标题  加粗  斜体  列表  引用</text>
+  <rect x="128" y="2318" width="276" height="18" rx="9" fill="#DCCFC1"/>
+  <rect x="128" y="2352" width="486" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="128" y="2380" width="458" height="16" rx="8" fill="#E9DED1"/>
+  <text x="1060" y="1940" fill="#171614" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="22" font-weight="700">判断</text>
+  <text x="1060" y="1982" fill="#4A433A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">状态最清楚，学习成本最低。</text>
+  <text x="1060" y="2016" fill="#4A433A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">用户会明确知道自己此刻在“读”还是“改”。</text>
+  <text x="1060" y="2078" fill="#171614" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="22" font-weight="700">代价</text>
+  <text x="1060" y="2120" fill="#4A433A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">切态会多一步。</text>
+  <text x="1060" y="2154" fill="#4A433A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="18">不如 A、B 那么连续自然。</text>
+  <text x="98" y="2450" fill="#3B332A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="20" font-weight="700">适合：编辑行为频繁，而且你希望界面状态非常明确。</text>
+
+  <text x="72" y="2538" fill="#171614" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="24" font-weight="700">建议结论</text>
+  <text x="72" y="2578" fill="#6B645A" font-family="Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif" font-size="22">如果你要我直接往下做，我建议先选 B。它最像成熟知识库产品，也最能解决你说的“图2 很怪”。</text>
+</svg>

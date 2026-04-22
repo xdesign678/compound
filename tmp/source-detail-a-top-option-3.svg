@@ -1,0 +1,37 @@
+<svg width="1400" height="920" viewBox="0 0 1400 920" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1400" height="920" fill="#F7F3EB"/>
+  <rect x="42" y="38" width="1316" height="844" rx="32" fill="#FCFAF5" stroke="#DCCFC1"/>
+  <rect x="84" y="78" width="92" height="38" rx="19" fill="#E6F1E7"/>
+  <text x="130" y="104" text-anchor="middle" fill="#2D5A39" font-family="Inter, PingFang SC, sans-serif" font-size="20" font-weight="700">A3</text>
+  <text x="196" y="105" fill="#171614" font-family="Inter, PingFang SC, sans-serif" font-size="32" font-weight="700">顶部两层资料模块</text>
+  <text x="84" y="146" fill="#6B645A" font-family="Inter, PingFang SC, sans-serif" font-size="20">信息更清楚。第一层讲来源，第二层讲概念关系和动作。</text>
+
+  <rect x="84" y="204" width="88" height="28" rx="14" fill="#F3E5D7"/>
+  <text x="128" y="223" text-anchor="middle" fill="#C36B3E" font-family="Inter, PingFang SC, sans-serif" font-size="14" font-weight="700">资料档案</text>
+  <text x="84" y="298" fill="#171614" font-family="Inter, PingFang SC, sans-serif" font-size="46" font-weight="700">之字形图像</text>
+  <text x="84" y="338" fill="#7A7369" font-family="Inter, PingFang SC, sans-serif" font-size="18">昨天 · 4 个相关概念</text>
+
+  <rect x="84" y="380" width="1232" height="72" rx="22" fill="#F6F0E5" stroke="#E2D5C7"/>
+  <text x="118" y="424" fill="#4F473D" font-family="Inter, PingFang SC, sans-serif" font-size="19">来源：Nielsen Norman Group　·　字数：5,480　·　一句导语放在这一层</text>
+  <rect x="84" y="466" width="1232" height="88" rx="22" fill="#FBF8F2" stroke="#E2D5C7"/>
+  <rect x="116" y="494" width="172" height="32" rx="16" fill="#FFFDFC" stroke="#D8CCBD"/>
+  <text x="202" y="515" text-anchor="middle" fill="#5C544A" font-family="Inter, PingFang SC, sans-serif" font-size="15">障碍效应</text>
+  <rect x="300" y="494" width="172" height="32" rx="16" fill="#FFFDFC" stroke="#D8CCBD"/>
+  <text x="386" y="515" text-anchor="middle" fill="#5C544A" font-family="Inter, PingFang SC, sans-serif" font-size="15">滚动误导</text>
+  <rect x="484" y="494" width="172" height="32" rx="16" fill="#FFFDFC" stroke="#D8CCBD"/>
+  <text x="570" y="515" text-anchor="middle" fill="#5C544A" font-family="Inter, PingFang SC, sans-serif" font-size="15">信息优先律</text>
+  <rect x="668" y="494" width="172" height="32" rx="16" fill="#FFFDFC" stroke="#D8CCBD"/>
+  <text x="754" y="515" text-anchor="middle" fill="#5C544A" font-family="Inter, PingFang SC, sans-serif" font-size="15">结构化注意力</text>
+  <rect x="1116" y="494" width="168" height="32" rx="16" fill="#171614"/>
+  <text x="1200" y="515" text-anchor="middle" fill="#FAF9F5" font-family="Inter, PingFang SC, sans-serif" font-size="15">查看原链接</text>
+
+  <line x1="84" y1="600" x2="1316" y2="600" stroke="#E7DCCF"/>
+  <rect x="84" y="628" width="246" height="18" rx="9" fill="#DCCFC1"/>
+  <rect x="84" y="668" width="920" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="84" y="698" width="862" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="84" y="728" width="896" height="16" rx="8" fill="#E9DED1"/>
+  <rect x="362" y="748" width="188" height="48" rx="24" fill="#171614"/>
+  <text x="456" y="778" text-anchor="middle" fill="#FAF9F5" font-family="Inter, PingFang SC, sans-serif" font-size="16">选中文字后浮出工具</text>
+  <rect x="84" y="812" width="266" height="18" rx="9" fill="#DCCFC1"/>
+  <rect x="84" y="852" width="938" height="16" rx="8" fill="#E9DED1"/>
+</svg>
