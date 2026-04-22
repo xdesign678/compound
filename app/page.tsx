@@ -244,24 +244,21 @@ export default function Page() {
 
             <div className="desktop-sidebar-footer">
               <button
-                className="desktop-sidebar-btn"
+                className="desktop-sidebar-btn icon-only"
                 onClick={openGithubSync}
                 aria-label="从 GitHub 同步"
               >
                 <Icon.Github />
-                <span>从 GitHub 同步</span>
               </button>
               <button
-                className="desktop-sidebar-btn"
+                className="desktop-sidebar-btn icon-only"
                 onClick={openObsidianImport}
                 aria-label="从 Obsidian 批量导入"
               >
                 <Icon.Ingest />
-                <span>导入本地 Obsidian</span>
               </button>
-              <button className="desktop-sidebar-btn" onClick={openSettings} aria-label="打开设置">
+              <button className="desktop-sidebar-btn icon-only" onClick={openSettings} aria-label="打开设置">
                 <Icon.Settings />
-                <span>设置与工具</span>
               </button>
             </div>
           </aside>
