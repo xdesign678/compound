@@ -15,6 +15,7 @@
 
 import { getDb } from './db';
 import { mergeRemoteConcept, mergeRemoteSource } from './snapshot-merge';
+import { getAdminAuthHeaders } from './admin-auth-client';
 import type { Source, Concept, ActivityLog, AskMessage } from './types';
 
 interface SnapshotResponse {
@@ -69,7 +70,10 @@ async function fetchConceptDetails(ids: string[]): Promise<Concept[]> {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
   if (uniqueIds.length === 0) return [];
   const search = new URLSearchParams({ ids: uniqueIds.join(',') });
-  const res = await fetch(`/api/data/concepts?${search.toString()}`, { cache: 'no-store' });
+  const res = await fetch(`/api/data/concepts?${search.toString()}`, {
+    cache: 'no-store',
+    headers: getAdminAuthHeaders(),
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`concept detail failed (${res.status}): ${text.slice(0, 200)}`);
@@ -81,7 +85,10 @@ async function fetchSourceDetails(ids: string[]): Promise<Source[]> {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
   if (uniqueIds.length === 0) return [];
   const search = new URLSearchParams({ ids: uniqueIds.join(',') });
-  const res = await fetch(`/api/data/sources?${search.toString()}`, { cache: 'no-store' });
+  const res = await fetch(`/api/data/sources?${search.toString()}`, {
+    cache: 'no-store',
+    headers: getAdminAuthHeaders(),
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`source detail failed (${res.status}): ${text.slice(0, 200)}`);
@@ -91,7 +98,10 @@ async function fetchSourceDetails(ids: string[]): Promise<Source[]> {
 
 export async function pullSnapshotFromCloud(): Promise<PullResult> {
   const since = getLastPullAt();
-  const res = await fetch(buildSnapshotRequestPath(since), { cache: 'no-store' });
+  const res = await fetch(buildSnapshotRequestPath(since), {
+    cache: 'no-store',
+    headers: getAdminAuthHeaders(),
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`snapshot failed (${res.status}): ${text.slice(0, 200)}`);
@@ -233,9 +243,22 @@ export async function ensureSourcesHydrated(ids: string[]): Promise<Source[]> {
   if (uniqueIds.length === 0) return [];
 
   const existing = await db.sources.bulkGet(uniqueIds);
+  const readySources = existing
+    .filter((source): source is Source => Boolean(source?.rawContent.trim()))
+    .filter((source) => source.contentStatus !== 'full');
+
+  if (readySources.length > 0) {
+    await db.sources.bulkPut(
+      readySources.map((source) => ({
+        ...source,
+        contentStatus: 'full' as const,
+      }))
+    );
+  }
+
   const missingIds = uniqueIds.filter((id, index) => {
     const source = existing[index];
-    return !source || source.contentStatus !== 'full' || !source.rawContent.trim();
+    return !source || !source.rawContent.trim();
   });
 
   if (missingIds.length > 0) {

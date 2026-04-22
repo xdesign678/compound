@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { listMarkdownFiles, getGithubConfig } from '@/lib/github-sync';
+import { requireAdmin } from '@/lib/server-auth';
+import { syncRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -9,7 +11,10 @@ export const maxDuration = 30;
  * Returns every Markdown file (path + sha + size) in the configured GitHub repo.
  * The client uses this list to diff against its local Sources and decide what to ingest.
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = requireAdmin(req) || syncRateLimit(req);
+  if (denied) return denied;
+
   try {
     const cfg = getGithubConfig();
     const files = await listMarkdownFiles(cfg);

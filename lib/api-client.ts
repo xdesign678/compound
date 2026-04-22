@@ -3,6 +3,7 @@ import { getDb } from './db';
 import { ensureConceptsHydrated } from './cloud-sync';
 import { normalizeCategoryKeys, normalizeCategoryState } from './category-normalization';
 import { getLlmConfig } from './llm-config';
+import { getAdminAuthHeaders } from './admin-auth-client';
 import type {
   Source,
   Concept,
@@ -76,7 +77,10 @@ async function addBidirectionalLinks(db: ReturnType<typeof getDb>, sourceId: str
 
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
   const llmConfig = getLlmConfig();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...getAdminAuthHeaders(),
+  };
   // Send via headers (fast path)
   if (llmConfig.apiKey) headers['X-User-Api-Key'] = llmConfig.apiKey;
   if (llmConfig.apiUrl) headers['X-User-Api-Url'] = llmConfig.apiUrl;

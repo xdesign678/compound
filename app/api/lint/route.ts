@@ -1,12 +1,21 @@
 import { NextResponse } from 'next/server';
 import { chat, parseJSON } from '@/lib/gateway';
 import { LINT_SYSTEM_PROMPT } from '@/lib/prompts';
+import { requireAdmin } from '@/lib/server-auth';
+import { llmRateLimit } from '@/lib/rate-limit';
+import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
 import type { LintRequest, LintResponse } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+const MAX_BODY_BYTES = 512_000;
+const MAX_CONCEPTS = 500;
+
 export async function POST(req: Request) {
+  const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
+  if (denied) return denied;
+
   try {
     const body = (await req.json()) as LintRequest;
     if (!Array.isArray(body?.concepts)) {
@@ -15,15 +24,11 @@ export async function POST(req: Request) {
     if (body.concepts.length === 0) {
       return NextResponse.json({ findings: [] });
     }
-    if (body.concepts.length > 500) {
+    if (body.concepts.length > MAX_CONCEPTS) {
       return NextResponse.json({ error: 'Too many concepts' }, { status: 400 });
     }
 
-    // Read LLM config from request headers (preferred) or fall back to body
-    const apiKey = req.headers.get('x-user-api-key') || undefined;
-    const apiUrl = req.headers.get('x-user-api-url') || undefined;
-    const model = req.headers.get('x-user-model') || undefined;
-    const llmConfig = (apiKey || apiUrl || model) ? { apiKey, apiUrl, model } : body.llmConfig;
+    const llmConfig = readLlmConfigOverride(req, body);
 
     const listing = body.concepts
       .map((c) =>

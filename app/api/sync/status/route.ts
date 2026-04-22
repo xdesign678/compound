@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSyncJobStatus } from '@/lib/github-sync-runner';
+import { requireAdmin } from '@/lib/server-auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 10;
@@ -9,6 +10,9 @@ export const maxDuration = 10;
  * Returns the latest status for a sync job (polled by the client every 1-2s).
  */
 export async function GET(req: Request) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
   try {
     const url = new URL(req.url);
     const jobId = url.searchParams.get('jobId')?.trim();

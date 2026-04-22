@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { repo } from '@/lib/server-db';
+import { requireAdmin } from '@/lib/server-auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -18,6 +19,9 @@ function parseSinceParam(value: string | null): number | null {
  * and heavy workflows such as ask / categorize.
  */
 export async function GET(req: Request) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
   try {
     const url = new URL(req.url);
     const since = parseSinceParam(url.searchParams.get('since'));

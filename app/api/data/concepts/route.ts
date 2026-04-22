@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { repo } from '@/lib/server-db';
+import { requireAdmin } from '@/lib/server-auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -21,6 +22,9 @@ function parseIdsParam(value: string | null): string[] {
  * Returns full concept documents for on-demand hydration.
  */
 export async function GET(req: Request) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
   try {
     const url = new URL(req.url);
     const ids = parseIdsParam(url.searchParams.get('ids'));

@@ -1,56 +1,58 @@
 import { NextResponse } from 'next/server';
 import { chat, parseJSON } from '@/lib/gateway';
 import { QUERY_SYSTEM_PROMPT } from '@/lib/prompts';
+import { requireAdmin } from '@/lib/server-auth';
+import { llmRateLimit } from '@/lib/rate-limit';
+import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
 import type { QueryRequest, QueryResponse } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+const MAX_BODY_BYTES = 512_000;
+const MAX_CONCEPTS = 500;
+const MAX_QUESTION_CHARS = 2_000;
+const MAX_HISTORY_MESSAGES = 6;
+
 export async function POST(req: Request) {
+  const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
+  if (denied) return denied;
+
   try {
     const body = (await req.json()) as QueryRequest;
-    if (!body?.question?.trim()) {
+    const question = body?.question?.trim();
+    if (!question) {
       return NextResponse.json({ error: 'question is required' }, { status: 400 });
+    }
+    if (question.length > MAX_QUESTION_CHARS) {
+      return NextResponse.json({ error: 'question is too long' }, { status: 400 });
     }
     if (!Array.isArray(body.concepts)) {
       return NextResponse.json({ error: 'concepts must be an array' }, { status: 400 });
     }
-
-    // Read LLM config from request headers (preferred) or fall back to body
-    const apiKey = req.headers.get('x-user-api-key') || undefined;
-    const apiUrl = req.headers.get('x-user-api-url') || undefined;
-    const model = req.headers.get('x-user-model') || undefined;
-    const llmConfig = (apiKey || apiUrl || model) ? { apiKey, apiUrl, model } : body.llmConfig;
-
-    if (body.concepts.length > 500) {
+    if (body.concepts.length > MAX_CONCEPTS) {
       return NextResponse.json({ error: 'Too many concepts' }, { status: 400 });
     }
 
+    const llmConfig = readLlmConfigOverride(req, body);
+
     const wikiDump = body.concepts
       .map((c) => {
-        const body = (c.body || '').slice(0, 1000);
-        return `## [${c.id}] ${c.title}\n_${c.summary}_\n\n${body}`;
+        const conceptBody = (c.body || '').slice(0, 1000);
+        return `## [${c.id}] ${c.title}\n_${c.summary}_\n\n${conceptBody}`;
       })
       .join('\n\n---\n\n');
 
     const history = body.conversationHistory
       ? body.conversationHistory
-          .slice(-6)
-          .map((m) => `${m.role === 'user' ? '用户' : 'Wiki'}: ${m.text}`)
+          .slice(-MAX_HISTORY_MESSAGES)
+          .map((m) => `${m.role === 'user' ? '用户' : 'Wiki'}: ${m.text.slice(0, 2000)}`)
           .join('\n')
       : '';
 
-    const userPrompt = `# 用户的 Wiki 全文
-
-${wikiDump || '(Wiki 为空)'}
-
----
-
-${history ? `# 最近对话\n\n${history}\n\n---\n\n` : ''}# 当前问题
-
-${body.question}
-
-按 system prompt 定义的 JSON schema 输出,只输出 JSON。`;
+    const userPrompt = `# 用户的 Wiki 全文\n\n${wikiDump || '(Wiki 为空)'}\n\n---\n\n${
+      history ? `# 最近对话\n\n${history}\n\n---\n\n` : ''
+    }# 当前问题\n\n${question}\n\n按 system prompt 定义的 JSON schema 输出,只输出 JSON。`;
 
     const raw = await chat({
       messages: [

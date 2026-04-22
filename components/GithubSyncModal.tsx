@@ -5,6 +5,7 @@ import { useAppStore } from '@/lib/store';
 import { Icon } from './Icons';
 import { pullSnapshotFromCloud } from '@/lib/cloud-sync';
 import { getPollFailurePlan } from '@/lib/github-sync-poll';
+import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
 import {
   buildSyncStageItems,
   getCurrentFileDisplay,
@@ -82,6 +83,7 @@ export function GithubSyncModal() {
     try {
       const res = await fetch(`/api/sync/status?jobId=${encodeURIComponent(jobId)}`, {
         cache: 'no-store',
+        headers: getAdminAuthHeaders(),
       });
       if (!res.ok) {
         const text = await res.text().catch(() => '');
@@ -135,7 +137,10 @@ export function GithubSyncModal() {
     setError(null);
     setPollIssue(null);
     try {
-      const res = await fetch('/api/sync/github/run', { method: 'POST' });
+      const res = await fetch('/api/sync/github/run', {
+        method: 'POST',
+        headers: getAdminAuthHeaders(),
+      });
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new Error(`启动失败 (${res.status}): ${text.slice(0, 200)}`);

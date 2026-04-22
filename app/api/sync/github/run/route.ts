@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { startGithubSync } from '@/lib/github-sync-runner';
+import { requireAdmin } from '@/lib/server-auth';
+import { syncRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 // Background loop stays alive beyond this — we respond immediately.
@@ -10,7 +12,10 @@ export const maxDuration = 30;
  * Starts a server-side GitHub → SQLite sync job and returns the job id.
  * The actual work runs in the background; client polls `/api/sync/status`.
  */
-export async function POST() {
+export async function POST(req: Request) {
+  const denied = requireAdmin(req) || syncRateLimit(req);
+  if (denied) return denied;
+
   try {
     const { jobId, existing } = startGithubSync();
     return NextResponse.json({ jobId, existing: !!existing });

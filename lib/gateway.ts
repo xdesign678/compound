@@ -22,22 +22,28 @@ function validateApiUrl(url: string): void {
     throw new Error('Invalid API URL: must be a public HTTPS endpoint');
   }
 
-  const hostname = parsed.hostname.toLowerCase();
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
 
   // Block cloud metadata endpoints
   if (hostname === 'metadata.google.internal' || hostname === '169.254.169.254') {
     throw new Error('Invalid API URL: must be a public HTTPS endpoint');
   }
 
-  // Block localhost hostnames
-  if (hostname === 'localhost' || hostname === '::1' || hostname === '[::1]') {
+  // Block localhost and IPv6 loopback/private-ish hostnames that can be used for SSRF.
+  if (
+    hostname === 'localhost' ||
+    hostname === '::1' ||
+    hostname === '0.0.0.0' ||
+    hostname.startsWith('fc') ||
+    hostname.startsWith('fd') ||
+    hostname.startsWith('fe80:')
+  ) {
     throw new Error('Invalid API URL: must be a public HTTPS endpoint');
   }
 
   // Block private IP ranges
   const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (ipv4Match) {
-    const [, a, b] = ipv4Match.map(Number);
     const octets = ipv4Match.slice(1).map(Number);
     const [o1, o2] = octets;
     if (
@@ -92,15 +98,37 @@ export interface ChatOptions {
 export async function chat(opts: ChatOptions): Promise<string> {
   // Strip quotes/whitespace that some hosting panels add to env vars
   const clean = (s?: string) => s?.replace(/^["'\s]+|["'\s]+$/g, '') || '';
-  const apiKey = clean(opts.llmConfig?.apiKey) || clean(process.env.LLM_API_KEY) || clean(process.env.AI_GATEWAY_API_KEY);
+  const userApiKey = clean(opts.llmConfig?.apiKey);
+  const userApiUrl = clean(opts.llmConfig?.apiUrl);
+  const serverApiKey =
+    clean(process.env.LLM_API_KEY) || clean(process.env.AI_GATEWAY_API_KEY);
+
+  let apiKey: string;
+  let gatewayUrl: string;
+
+  if (userApiUrl) {
+    if (!userApiKey) {
+      throw new Error('Custom API URL requires a user-provided API key');
+    }
+    if (process.env.COMPOUND_ALLOW_CUSTOM_LLM_API_URL === 'false') {
+      throw new Error('Custom API URL is disabled on this deployment');
+    }
+    apiKey = userApiKey;
+    gatewayUrl = userApiUrl;
+  } else if (userApiKey) {
+    // If the user provided their own key but no explicit URL, default to OpenRouter.
+    // Don't inherit the server-side URL (which may point to a private gateway).
+    apiKey = userApiKey;
+    gatewayUrl = OPENROUTER_URL;
+  } else {
+    apiKey = serverApiKey;
+    gatewayUrl = getGatewayUrl();
+  }
+
   if (!apiKey) {
     throw new Error('LLM_API_KEY (or AI_GATEWAY_API_KEY) not set');
   }
 
-  // If the user provided their own key but no explicit URL, default to OpenRouter.
-  // Don't inherit the server-side URL (which may point to a private gateway).
-  const gatewayUrl = opts.llmConfig?.apiUrl
-    || (opts.llmConfig?.apiKey ? OPENROUTER_URL : getGatewayUrl());
   const model = opts.llmConfig?.model || opts.model || getDefaultModel();
 
   // Reasoning models (MiniMax M2.x, OpenAI o1, DeepSeek-R1, Claude thinking) burn

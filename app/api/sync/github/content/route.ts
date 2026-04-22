@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import { fetchMarkdownContent, getGithubConfig } from '@/lib/github-sync';
+import { requireAdmin } from '@/lib/server-auth';
+import { syncRateLimit } from '@/lib/rate-limit';
+import { enforceContentLength } from '@/lib/request-guards';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
+
+const MAX_BODY_BYTES = 8_192;
 
 /**
  * POST /api/sync/github/content
@@ -13,14 +18,18 @@ export const maxDuration = 30;
  * do not have to be URL-encoded by the client.
  */
 export async function POST(req: Request) {
+  const denied = requireAdmin(req) || syncRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
+  if (denied) return denied;
+
   try {
     const body = (await req.json()) as { path?: string };
     const path = body?.path?.trim();
     if (!path) {
       return NextResponse.json({ error: 'path is required' }, { status: 400 });
     }
-    // Basic sanity checks — paths must be repo-relative, no traversal, no leading slash.
-    if (path.includes('..') || path.startsWith('/') || path.length > 1024) {
+
+    // Paths must be repo-relative Markdown files; no traversal or leading slash.
+    if (path.includes('..') || path.startsWith('/') || path.length > 1024 || !/\.md$/i.test(path)) {
       return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
     }
 

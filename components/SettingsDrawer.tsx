@@ -7,6 +7,7 @@ import { lintWiki } from '@/lib/api-client';
 import { getDb } from '@/lib/db';
 import { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } from '@/lib/seed';
 import { getLlmConfig, saveLlmConfig, PRESET_MODELS } from '@/lib/llm-config';
+import { clearAdminToken, getAdminToken, saveAdminToken } from '@/lib/admin-auth-client';
 import type { LintResponse, LlmConfig } from '@/lib/types';
 
 // Centralised inline-style constants for SettingsDrawer
@@ -85,6 +86,8 @@ export function SettingsDrawer() {
 
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
   const [llmSaved, setLlmSaved] = useState(false);
+  const [adminToken, setAdminToken] = useState('');
+  const [adminSaved, setAdminSaved] = useState(false);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const safeTimeout = useCallback((fn: () => void, ms: number) => {
@@ -95,6 +98,7 @@ export function SettingsDrawer() {
 
   useEffect(() => {
     setLlmConfig(getLlmConfig());
+    setAdminToken(getAdminToken());
     return () => { timersRef.current.forEach(clearTimeout); };
   }, []);
 
@@ -102,6 +106,19 @@ export function SettingsDrawer() {
     saveLlmConfig(llmConfig);
     setLlmSaved(true);
     safeTimeout(() => setLlmSaved(false), 2000);
+  }
+
+  function saveAdmin() {
+    saveAdminToken(adminToken);
+    setAdminSaved(true);
+    safeTimeout(() => setAdminSaved(false), 2000);
+  }
+
+  function clearAdmin() {
+    clearAdminToken();
+    setAdminToken('');
+    setAdminSaved(true);
+    safeTimeout(() => setAdminSaved(false), 2000);
   }
 
   async function handleLint() {
@@ -211,6 +228,35 @@ export function SettingsDrawer() {
             <button className="modal-btn primary" onClick={saveLlm} style={S.saveBtnMargin}>
               {llmSaved ? '已保存 ✓' : '保存配置'}
             </button>
+          </div>
+        </div>
+
+        <div className="settings-section" style={S.llmSection}>
+          <div style={S.llmTitle}>访问保护</div>
+          <div className="desc" style={S.llmDesc}>
+            如果服务端配置了 COMPOUND_ADMIN_TOKEN / ADMIN_TOKEN，这里保存同一个访问密钥后，前端请求会自动带上鉴权头。
+          </div>
+
+          <div style={S.fieldCol}>
+            <label style={S.labelCol}>
+              <span style={S.labelText}>Admin Token</span>
+              <input
+                type="password"
+                placeholder="与服务端 ADMIN_TOKEN 保持一致"
+                value={adminToken}
+                onChange={(e) => setAdminToken(e.target.value)}
+                style={S.input}
+              />
+            </label>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="modal-btn primary" onClick={saveAdmin} style={S.saveBtnMargin}>
+                {adminSaved ? '已保存 ✓' : '保存访问密钥'}
+              </button>
+              <button className="modal-btn" onClick={clearAdmin} style={S.saveBtnMargin}>
+                清除
+              </button>
+            </div>
           </div>
         </div>
 
