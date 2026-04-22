@@ -1,13 +1,14 @@
 'use client';
 
 import { useMemo, useCallback, useEffect, useState } from 'react';
+import { nanoid } from 'nanoid';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
-import { lintWiki } from '@/lib/api-client';
+import { failLintActivity, lintWiki, startLintActivity } from '@/lib/api-client';
 import { formatRelativeTime } from '@/lib/format';
 import { Icon } from '../Icons';
-import type { Concept } from '@/lib/types';
+import type { ActivityLog, Concept } from '@/lib/types';
 
 interface Finding {
   type: 'orphan' | 'stale' | 'thin' | 'contradiction' | 'missing-link' | 'duplicate';
@@ -59,9 +60,8 @@ export function HealthView() {
   const lintRunning = useAppStore((s) => s.lintRunning);
   const setLintResult = useAppStore((s) => s.setLintResult);
   const setLintRunning = useAppStore((s) => s.setLintRunning);
+  const setLintBanner = useAppStore((s) => s.setLintBanner);
   const hydrateLastLintAt = useAppStore((s) => s.hydrateLastLintAt);
-  const showToast = useAppStore((s) => s.showToast);
-  const hideToast = useAppStore((s) => s.hideToast);
 
   const [localFindings, setLocalFindings] = useState<Finding[]>([]);
   const [conceptTitleMap, setConceptTitleMap] = useState<Map<string, string>>(new Map());
@@ -100,23 +100,53 @@ export function HealthView() {
   const runLint = useCallback(async () => {
     if (lintRunning) return;
     setLintRunning(true);
-    showToast('正在运行健康检查...', true);
+    setLintBanner({
+      tone: 'running',
+      title: '正在运行深度检查',
+      details: '先读取本地概念，再检查缺链、矛盾和重复问题',
+    });
+    let activityId: string | null = null;
     try {
-      const [concepts, result] = await Promise.all([
-        getDb().concepts.toArray(),
-        lintWiki(),
-      ]);
+      activityId = await startLintActivity();
+      const concepts = await getDb().concepts.toArray();
+      setLintBanner({
+        tone: 'running',
+        title: '正在分析概念关系',
+        details: `已载入 ${concepts.length} 个概念，正在检查结构问题和潜在冲突`,
+      });
+      const result = await lintWiki(activityId);
+      setLintBanner({
+        tone: 'running',
+        title: '正在整理检查结果',
+        details: '本地结构扫描和 AI 检查结果正在合并',
+      });
       setConceptTitleMap(new Map(concepts.map((concept) => [concept.id, concept.title])));
       setLocalFindings(buildLocalFindings(concepts));
       setLocalScanAt(Date.now());
       setLintResult(result.findings);
-      hideToast();
     } catch (err) {
       setLintRunning(false);
-      showToast('健康检查失败: ' + (err instanceof Error ? err.message : '未知错误'));
-      setTimeout(hideToast, 3000);
+      const message = err instanceof Error ? err.message : '未知错误';
+      if (activityId) {
+        await failLintActivity(activityId, message);
+      } else {
+        const fallbackActivity: ActivityLog = {
+          id: 'a-' + nanoid(8),
+          type: 'lint',
+          title: '健康检查失败',
+          details: `检查未完成 · ${message.slice(0, 140)}`,
+          status: 'error',
+          at: Date.now(),
+        };
+        await getDb().activity.put(fallbackActivity);
+      }
+      setLintBanner({
+        tone: 'error',
+        title: '深度检查失败',
+        details: message,
+      });
     }
-  }, [hideToast, lintRunning, setLintResult, setLintRunning, showToast]);
+  }, [lintRunning, setLintBanner, setLintResult, setLintRunning]);
 
   const findingIcon = (type: Finding['type']) => {
     switch (type) {

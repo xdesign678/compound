@@ -6,6 +6,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { formatRelativeTime, groupActivityByDate } from '@/lib/format';
 import { useAppStore, type ActivityFilterType } from '@/lib/store';
+import type { ActivityLog } from '@/lib/types';
 import { Icon } from '../Icons';
 
 const FILTERS: { key: ActivityFilterType; label: string }[] = [
@@ -34,9 +35,15 @@ export function ActivityLogView() {
     [filter]
   );
 
-  const iconFor = (type: string) => {
-    if (type === 'ingest') return <Icon.Ingest />;
-    if (type === 'query') return <Icon.Query />;
+  const iconFor = (item: ActivityLog) => {
+    if (item.type === 'lint' && item.status === 'running') {
+      return <span className="lint-spinner activity-spinner" />;
+    }
+    if (item.type === 'lint' && item.status === 'error') {
+      return <Icon.Contradiction />;
+    }
+    if (item.type === 'ingest') return <Icon.Ingest />;
+    if (item.type === 'query') return <Icon.Query />;
     return <Icon.Lint />;
   };
 
@@ -68,8 +75,11 @@ export function ActivityLogView() {
             <div key={g.label}>
               <div className="activity-date-header">{g.label}</div>
               {g.items.map((it) => (
-                <div key={it.id} className={`activity-item type-${it.type}`}>
-                  <div className="a-icon">{iconFor(it.type)}</div>
+                <div
+                  key={it.id}
+                  className={`activity-item type-${it.type}${it.status ? ` status-${it.status}` : ''}`}
+                >
+                  <div className="a-icon">{iconFor(it)}</div>
                   <div className="a-body">
                     <div
                       className="a-title"

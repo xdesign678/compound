@@ -1495,6 +1495,14 @@ button {
   background: var(--bg-muted);
   color: var(--text-secondary);
 }
+.activity-item.status-running .a-icon {
+  background: var(--brand-clay-soft);
+  color: var(--brand-clay);
+}
+.activity-item.status-error .a-icon {
+  background: rgba(204, 68, 68, 0.12);
+  color: #c44;
+}
 .activity-item .a-body {
   flex: 1;
   min-width: 0;
@@ -1521,6 +1529,12 @@ button {
   font-family: var(--font-sans);
   font-size: 11px;
   color: var(--text-tertiary);
+}
+.activity-spinner {
+  width: 14px;
+  height: 14px;
+  border-color: currentColor;
+  border-right-color: transparent;
 }
 
 .activity-date-header {
@@ -1565,6 +1579,62 @@ button {
 .activity-subtabs .subtab.active {
   background: var(--bg-button);
   color: var(--text-on-button);
+}
+
+.activity-inline-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 6px 20px 10px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+}
+.activity-inline-status.tone-running {
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--brand-clay-soft));
+}
+.activity-inline-status.tone-error {
+  background: color-mix(in srgb, var(--bg-card) 90%, rgba(204, 68, 68, 0.12));
+  border-color: rgba(204, 68, 68, 0.18);
+}
+.activity-inline-status-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+.activity-inline-status.tone-running .activity-inline-status-icon {
+  background: var(--brand-clay-soft);
+  color: var(--brand-clay);
+}
+.activity-inline-status.tone-error .activity-inline-status-icon {
+  background: rgba(204, 68, 68, 0.12);
+  color: #c44;
+}
+.activity-inline-status-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.activity-inline-status-body {
+  min-width: 0;
+}
+.activity-inline-status-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+.activity-inline-status-details {
+  margin-top: 3px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: 1.45;
 }
 
 /* Activity log filter bar */

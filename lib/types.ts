@@ -48,6 +48,7 @@ export interface ActivityLog {
   type: ActivityType;
   title: string;
   details: string;
+  status?: 'running' | 'success' | 'error';
   relatedSourceIds?: string[];
   relatedConceptIds?: string[];
   at: number;

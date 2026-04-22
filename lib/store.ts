@@ -16,6 +16,12 @@ interface ToastState {
   loading: boolean;
 }
 
+interface LintBannerState {
+  tone: 'running' | 'error';
+  title: string;
+  details: string;
+}
+
 export interface LintFinding {
   type: 'contradiction' | 'orphan' | 'missing-link' | 'duplicate';
   message: string;
@@ -38,6 +44,7 @@ interface AppState {
   lintFindings: LintFinding[];
   lastLintAt: number | null;
   lintRunning: boolean;
+  lintBanner: LintBannerState | null;
   homeStyle: HomeStyle;
 
   setTab: (t: TabId) => void;
@@ -61,6 +68,7 @@ interface AppState {
   setActivityFilter: (f: ActivityFilterType) => void;
   setLintResult: (findings: LintFinding[]) => void;
   setLintRunning: (v: boolean) => void;
+  setLintBanner: (banner: LintBannerState | null) => void;
   hydrateLastLintAt: () => void;
   setHomeStyle: (s: HomeStyle) => void;
   hydrateHomeStyle: () => void;
@@ -95,6 +103,7 @@ export const useAppStore = create<AppState>((set) => ({
   lintFindings: [],
   lastLintAt: null,
   lintRunning: false,
+  lintBanner: null,
   homeStyle: 'feed' as HomeStyle,
 
   setTab: (t) => set({ tab: t, detail: null }),
@@ -126,9 +135,10 @@ export const useAppStore = create<AppState>((set) => ({
   setLintResult: (findings) => {
     const now = Date.now();
     localStorage.setItem('compound_last_lint', String(now));
-    set({ lintFindings: findings, lastLintAt: now, lintRunning: false });
+    set({ lintFindings: findings, lastLintAt: now, lintRunning: false, lintBanner: null });
   },
   setLintRunning: (v) => set({ lintRunning: v }),
+  setLintBanner: (banner) => set({ lintBanner: banner }),
   hydrateLastLintAt: () => set({ lastLintAt: readStoredLintTimestamp() }),
   setHomeStyle: (s) => {
     localStorage.setItem('compound_home_style', s);

@@ -102,6 +102,39 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+function buildLintActivity(id: string, status: NonNullable<ActivityLog['status']>, details: string): ActivityLog {
+  const titleMap: Record<NonNullable<ActivityLog['status']>, string> = {
+    running: '深度检查进行中',
+    success: '健康检查完成',
+    error: '健康检查失败',
+  };
+
+  return {
+    id,
+    type: 'lint',
+    title: titleMap[status],
+    details,
+    status,
+    at: Date.now(),
+  };
+}
+
+export async function startLintActivity(): Promise<string> {
+  const db = getDb();
+  const activityId = 'a-' + nanoid(8);
+  await db.activity.put(
+    buildLintActivity(activityId, 'running', '正在扫描概念结构、关联关系和潜在重复问题')
+  );
+  return activityId;
+}
+
+export async function failLintActivity(activityId: string, message: string): Promise<void> {
+  const db = getDb();
+  await db.activity.put(
+    buildLintActivity(activityId, 'error', `检查未完成 · ${message.slice(0, 140)}`)
+  );
+}
+
 /** Read all unique categoryKeys from Dexie for prompt injection. */
 export async function getExistingCategories(): Promise<string[]> {
   const db = getDb();
@@ -333,7 +366,7 @@ export async function archiveAnswerAsConcept(
   return id;
 }
 
-export async function lintWiki(): Promise<LintResponse> {
+export async function lintWiki(activityId?: string): Promise<LintResponse> {
   const db = getDb();
   const concepts = await db.concepts.toArray();
   const req: LintRequest = {
@@ -346,17 +379,13 @@ export async function lintWiki(): Promise<LintResponse> {
   };
   const resp = await postJSON<LintResponse>('/api/lint', req);
 
-  const activity: ActivityLog = {
-    id: 'a-' + nanoid(8),
-    type: 'lint',
-    title: '健康检查完成',
-    details:
-      resp.findings.length === 0
-        ? '未发现问题 · Wiki 结构健康'
-        : `发现 ${resp.findings.length} 处问题需要关注`,
-    at: Date.now(),
-  };
-  await db.activity.put(activity);
+  const successDetails =
+    resp.findings.length === 0
+      ? '未发现问题 · Wiki 结构健康'
+      : `发现 ${resp.findings.length} 处问题需要关注`;
+  await db.activity.put(
+    buildLintActivity(activityId ?? ('a-' + nanoid(8)), 'success', successDetails)
+  );
 
   return resp;
 }
