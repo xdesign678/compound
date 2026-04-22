@@ -632,6 +632,15 @@ button {
   line-height: 1.82;
   color: var(--text-body);
 }
+.concept-body-shell {
+  max-width: 880px;
+}
+.concept-body-prose {
+  text-wrap: pretty;
+}
+.concept-body-prose > *:last-child {
+  margin-bottom: 0;
+}
 .prose p {
   margin: 0 0 18px;
 }

@@ -6,6 +6,7 @@ import { getDb } from '@/lib/db';
 import { ensureConceptHydrated } from '@/lib/cloud-sync';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
+import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
 import { SourceTypeIcon } from '../Icons';
 import { Prose } from '../Prose';
 
@@ -58,7 +59,12 @@ export function ConceptDetail({ id }: { id: string }) {
       </div>
 
       {concept.contentStatus === 'full' ? (
-        <Prose markdown={concept.body} />
+        <div className="concept-body-shell">
+          <Prose
+            markdown={formatConceptBodyForDisplay(concept.body)}
+            className="concept-body-prose"
+          />
+        </div>
       ) : (
         <div className="empty-state empty-state-compact">正文加载中...</div>
       )}
