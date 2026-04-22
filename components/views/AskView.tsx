@@ -1,14 +1,47 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { nanoid } from 'nanoid';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { askWiki, archiveAnswerAsConcept } from '@/lib/api-client';
-import { Icon } from '../Icons';
+import { getLlmConfig, PRESET_MODELS, saveLlmConfig } from '@/lib/llm-config';
+import { Icon, SourceTypeIcon } from '../Icons';
 import { Prose } from '../Prose';
-import type { AskMessage } from '@/lib/types';
+import type { AskMessage, LlmConfig, Source, SourceType } from '@/lib/types';
+
+type MentionKind = 'concept' | 'source';
+
+type MentionItem = {
+  id: string;
+  kind: MentionKind;
+  title: string;
+  subtitle: string;
+  type?: SourceType;
+};
+
+type InlineMention = {
+  start: number;
+  end: number;
+  query: string;
+};
+
+type ModelOption = {
+  label: string;
+  value: string;
+  helper?: string;
+};
+
+const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
+  link: '链接',
+  text: '文本',
+  file: '文件',
+  article: '文章',
+  book: '书籍',
+  pdf: 'PDF',
+  gist: '代码片段',
+};
 
 export function AskView() {
   const openConcept = useAppStore((s) => s.openConcept);
@@ -16,8 +49,19 @@ export function AskView() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [archiving, setArchiving] = useState<string | null>(null);
+  const [selectedMentions, setSelectedMentions] = useState<MentionItem[]>([]);
+  const [referencePickerOpen, setReferencePickerOpen] = useState(false);
+  const [referenceMode, setReferenceMode] = useState<MentionKind>('concept');
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [pickerResults, setPickerResults] = useState<MentionItem[]>([]);
+  const [inlineResults, setInlineResults] = useState<MentionItem[]>([]);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
+  const [caretPosition, setCaretPosition] = useState(0);
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  const pickerSearchRef = useRef<HTMLInputElement>(null);
 
   const history = useLiveQuery(
     async () => getDb().askHistory.orderBy('at').toArray(),
@@ -27,23 +71,133 @@ export function AskView() {
   const conceptCount = useLiveQuery(async () => getDb().concepts.count(), []);
 
   useEffect(() => {
+    setLlmConfig(getLlmConfig());
+  }, []);
+
+  useEffect(() => {
     if (messagesRef.current) {
       messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
     }
   }, [history?.length, loading]);
 
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!composerRef.current?.contains(event.target as Node)) {
+        setReferencePickerOpen(false);
+        setModelMenuOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setReferencePickerOpen(false);
+        setModelMenuOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!referencePickerOpen) return;
+    const id = window.setTimeout(() => pickerSearchRef.current?.focus(), 20);
+    return () => window.clearTimeout(id);
+  }, [referencePickerOpen, referenceMode]);
+
   function autoResize() {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+    el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
   }
+
+  const inlineMention = useMemo(
+    () => detectInlineMention(input, caretPosition),
+    [input, caretPosition]
+  );
+
+  const modelOptions = useMemo<ModelOption[]>(() => {
+    const customModel = llmConfig.model?.trim();
+    const options: ModelOption[] = [{
+      label: '服务端默认',
+      value: '',
+      helper: '跟随当前服务端配置',
+    }, ...PRESET_MODELS.map((item) => ({
+      label: item.label,
+      value: item.value,
+      helper: item.value,
+    }))];
+
+    if (customModel && !options.some((item) => item.value === customModel)) {
+      options.splice(1, 0, {
+        label: `当前配置 · ${compactModelName(customModel)}`,
+        value: customModel,
+        helper: customModel,
+      });
+    }
+
+    return options;
+  }, [llmConfig.model]);
+
+  const currentModelLabel = useMemo(() => {
+    const current = llmConfig.model?.trim();
+    if (!current) return '服务端默认';
+    return modelOptions.find((item) => item.value === current)?.label ?? compactModelName(current);
+  }, [llmConfig.model, modelOptions]);
+
+  const showInlinePanel = !!inlineMention && !referencePickerOpen && !modelMenuOpen;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (!referencePickerOpen) {
+        setPickerResults([]);
+        return;
+      }
+      const result = await lookupMentions(referenceMode, pickerSearch, selectedMentions);
+      if (!cancelled) setPickerResults(result);
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [pickerSearch, referenceMode, referencePickerOpen, selectedMentions]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (!inlineMention) {
+        setInlineResults([]);
+        return;
+      }
+      const [concepts, sources] = await Promise.all([
+        lookupMentions('concept', inlineMention.query, selectedMentions, 4),
+        lookupMentions('source', inlineMention.query, selectedMentions, 4),
+      ]);
+      if (!cancelled) {
+        setInlineResults([...concepts, ...sources]);
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [inlineMention, selectedMentions]);
 
   async function handleSend(overrideText?: string) {
     const text = (overrideText ?? input).trim();
-    if (!text || loading) return;
+    const finalText = buildAskText(selectedMentions, text);
+    if (!text || loading || !finalText) return;
 
-    // Capture history snapshot before writing the new user message to avoid double-counting
     const recentHistory = (history || [])
       .slice(-6)
       .map((m) => ({ role: m.role, text: m.text }));
@@ -53,16 +207,20 @@ export function AskView() {
     const userMsg: AskMessage = {
       id: 'm-' + nanoid(8),
       role: 'user',
-      text,
+      text: finalText,
       at: now,
     };
     await db.askHistory.put(userMsg);
     setInput('');
+    setSelectedMentions([]);
+    setPickerSearch('');
+    setReferencePickerOpen(false);
+    setModelMenuOpen(false);
     autoResize();
     setLoading(true);
 
     try {
-      const resp = await askWiki(text, [...recentHistory, { role: 'user', text }]);
+      const resp = await askWiki(finalText, [...recentHistory, { role: 'user', text: finalText }]);
 
       const aiMsg: AskMessage = {
         id: 'm-' + nanoid(8),
@@ -84,6 +242,7 @@ export function AskView() {
       });
     } finally {
       setLoading(false);
+      requestAnimationFrame(() => textareaRef.current?.focus());
     }
   }
 
@@ -104,6 +263,54 @@ export function AskView() {
     }
   }
 
+  function updateInput(next: string, nextCaret?: number) {
+    setInput(next);
+    const caret = typeof nextCaret === 'number' ? nextCaret : next.length;
+    setCaretPosition(caret);
+    requestAnimationFrame(() => {
+      if (textareaRef.current) {
+        textareaRef.current.selectionStart = caret;
+        textareaRef.current.selectionEnd = caret;
+      }
+      autoResize();
+    });
+  }
+
+  function handleSelectMention(item: MentionItem, source: 'picker' | 'inline') {
+    setSelectedMentions((prev) => {
+      if (prev.some((existing) => existing.id === item.id && existing.kind === item.kind)) return prev;
+      return [...prev, item];
+    });
+
+    if (source === 'inline' && inlineMention) {
+      const nextInput = `${input.slice(0, inlineMention.start)}${input.slice(inlineMention.end)}`.replace(/\s{2,}/g, ' ');
+      updateInput(nextInput, inlineMention.start);
+    }
+
+    setPickerSearch('');
+    setReferencePickerOpen(false);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }
+
+  function removeMention(target: MentionItem) {
+    setSelectedMentions((prev) => prev.filter((item) => !(item.id === target.id && item.kind === target.kind)));
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }
+
+  function toggleReferencePicker() {
+    setModelMenuOpen(false);
+    setReferencePickerOpen((prev) => !prev);
+    setReferenceMode('concept');
+    setPickerSearch('');
+  }
+
+  function selectModel(model: string) {
+    const nextConfig = { ...llmConfig, model: model || undefined };
+    saveLlmConfig(nextConfig);
+    setLlmConfig(nextConfig);
+    setModelMenuOpen(false);
+  }
+
   const [conceptTitles, setConceptTitles] = useState<string[]>([]);
   useEffect(() => {
     getDb()
@@ -114,14 +321,14 @@ export function AskView() {
       .toArray()
       .then((concepts) => {
         const shuffled = concepts.sort(() => Math.random() - 0.5);
-        setConceptTitles(shuffled.slice(0, 3).map(c => c.title));
+        setConceptTitles(shuffled.slice(0, 3).map((c) => c.title));
       });
   }, []);
 
   const suggestions = useMemo(() => {
     if ((conceptCount ?? 0) === 0) return [];
-    if (conceptTitles && conceptTitles.length > 0) {
-      return conceptTitles.map(t => `${t}是什么？`);
+    if (conceptTitles.length > 0) {
+      return conceptTitles.map((title) => `${title}是什么？`);
     }
     return ['这个知识库里有什么内容？', '最近添加了哪些资料？', '请总结一下主要概念'];
   }, [conceptCount, conceptTitles]);
@@ -221,27 +428,227 @@ export function AskView() {
       </div>
       <div className="ask-input-bar">
         <div className="ask-input-inner">
-          <textarea
-            ref={textareaRef}
-            className="ask-textarea"
-            placeholder="问点什么..."
-            rows={1}
-            value={input}
-            onChange={(e) => { setInput(e.target.value); autoResize(); }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            disabled={loading}
-          />
-          <button className="ask-send-btn" onClick={() => handleSend()} disabled={!input.trim() || loading}>
-            <Icon.Send />
-          </button>
+          <div className="ask-composer-card" ref={composerRef}>
+            {selectedMentions.length > 0 && (
+              <div className="ask-mentions-row">
+                {selectedMentions.map((item) => (
+                  <button
+                    key={`${item.kind}-${item.id}`}
+                    className={`ask-mention-chip ${item.kind === 'source' ? 'is-source' : ''}`}
+                    onClick={() => removeMention(item)}
+                    title="移除引用"
+                  >
+                    <span className="ask-mention-chip-kind">{item.kind === 'concept' ? '@概念' : '@文件'}</span>
+                    <span className="ask-mention-chip-title">{item.title}</span>
+                    <span className="ask-mention-chip-close">×</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {referencePickerOpen && (
+              <div className="ask-flyout ask-reference-flyout">
+                <div className="ask-flyout-header">
+                  <div className="ask-flyout-title">添加引用</div>
+                  <div className="ask-segmented">
+                    <button
+                      className={`ask-segmented-btn${referenceMode === 'concept' ? ' active' : ''}`}
+                      onClick={() => setReferenceMode('concept')}
+                    >
+                      引用概念
+                    </button>
+                    <button
+                      className={`ask-segmented-btn${referenceMode === 'source' ? ' active' : ''}`}
+                      onClick={() => setReferenceMode('source')}
+                    >
+                      引用文件
+                    </button>
+                  </div>
+                </div>
+                <div className="ask-flyout-search">
+                  <Icon.Search />
+                  <input
+                    ref={pickerSearchRef}
+                    value={pickerSearch}
+                    onChange={(e) => setPickerSearch(e.target.value)}
+                    placeholder={referenceMode === 'concept' ? '搜索概念页...' : '搜索资料或文件...'}
+                  />
+                </div>
+                <MentionResults
+                  items={pickerResults}
+                  emptyLabel={referenceMode === 'concept' ? '没有找到匹配的概念页' : '没有找到匹配的资料'}
+                  onSelect={(item) => handleSelectMention(item, 'picker')}
+                />
+              </div>
+            )}
+
+            {modelMenuOpen && (
+              <div className="ask-flyout ask-model-flyout">
+                <div className="ask-flyout-title">切换模型</div>
+                <div className="ask-model-list">
+                  {modelOptions.map((item) => {
+                    const active = llmConfig.model === item.value;
+                    return (
+                      <button
+                        key={item.value}
+                        className={`ask-model-option${active ? ' active' : ''}`}
+                        onClick={() => selectModel(item.value)}
+                      >
+                        <span className="ask-model-option-copy">
+                          <span className="ask-model-option-label">{item.label}</span>
+                          {item.helper && <span className="ask-model-option-helper">{item.helper}</span>}
+                        </span>
+                        <span className="ask-model-option-check">{active ? '✓' : ''}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {showInlinePanel && (
+              <div className="ask-flyout ask-inline-flyout">
+                <div className="ask-inline-tip">输入 `@` 可以直接搜索概念或文件</div>
+                <MentionResults
+                  items={inlineResults}
+                  emptyLabel="没有找到可引用内容"
+                  onSelect={(item) => handleSelectMention(item, 'inline')}
+                />
+              </div>
+            )}
+
+            <textarea
+              ref={textareaRef}
+              className="ask-textarea"
+              placeholder="问点什么..."
+              rows={1}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setCaretPosition(e.target.selectionStart);
+                autoResize();
+              }}
+              onClick={(e) => setCaretPosition((e.target as HTMLTextAreaElement).selectionStart)}
+              onKeyUp={(e) => setCaretPosition((e.target as HTMLTextAreaElement).selectionStart)}
+              onSelect={(e) => setCaretPosition((e.target as HTMLTextAreaElement).selectionStart)}
+              onKeyDown={(e) => {
+                const preferredMention = showInlinePanel ? inlineResults[0] : null;
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (preferredMention) {
+                    handleSelectMention(preferredMention, 'inline');
+                    return;
+                  }
+                  handleSend();
+                  return;
+                }
+
+                if (e.key === 'Backspace' && input.length === 0 && selectedMentions.length > 0) {
+                  e.preventDefault();
+                  setSelectedMentions((prev) => prev.slice(0, -1));
+                  return;
+                }
+
+                if (e.key === 'Escape') {
+                  setReferencePickerOpen(false);
+                  setModelMenuOpen(false);
+                }
+              }}
+              disabled={loading}
+            />
+
+            <div className="ask-composer-toolbar">
+              <div className="ask-composer-actions">
+                <button
+                  className={`ask-tool-btn${referencePickerOpen ? ' active' : ''}`}
+                  onClick={toggleReferencePicker}
+                  type="button"
+                >
+                  <span className="ask-tool-btn-leading">@</span>
+                  <span>功能</span>
+                </button>
+                <button
+                  className={`ask-tool-btn ask-model-btn${modelMenuOpen ? ' active' : ''}`}
+                  onClick={() => {
+                    setReferencePickerOpen(false);
+                    setModelMenuOpen((prev) => !prev);
+                  }}
+                  type="button"
+                >
+                  <span>模型 · {currentModelLabel}</span>
+                </button>
+              </div>
+
+              <div className="ask-composer-submit">
+                <div className="ask-composer-hint">Enter 发送 / Shift+Enter 换行</div>
+                <button className="ask-send-btn" onClick={() => handleSend()} disabled={!input.trim() || loading}>
+                  <Icon.Send />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function MentionResults({
+  items,
+  emptyLabel,
+  onSelect,
+}: {
+  items: MentionItem[];
+  emptyLabel: string;
+  onSelect: (item: MentionItem) => void;
+}) {
+  if (items.length === 0) {
+    return <div className="ask-flyout-empty">{emptyLabel}</div>;
+  }
+
+  const conceptItems = items.filter((item) => item.kind === 'concept');
+  const sourceItems = items.filter((item) => item.kind === 'source');
+
+  return (
+    <div className="ask-reference-list">
+      {conceptItems.length > 0 && (
+        <div className="ask-reference-group">
+          <div className="ask-reference-group-label">概念页</div>
+          {conceptItems.map((item) => (
+            <MentionRow key={`${item.kind}-${item.id}`} item={item} onSelect={onSelect} />
+          ))}
+        </div>
+      )}
+
+      {sourceItems.length > 0 && (
+        <div className="ask-reference-group">
+          <div className="ask-reference-group-label">资料文件</div>
+          {sourceItems.map((item) => (
+            <MentionRow key={`${item.kind}-${item.id}`} item={item} onSelect={onSelect} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MentionRow({
+  item,
+  onSelect,
+}: {
+  item: MentionItem;
+  onSelect: (item: MentionItem) => void;
+}) {
+  return (
+    <button className="ask-reference-item" onClick={() => onSelect(item)}>
+      <span className="ask-reference-item-icon">
+        {item.kind === 'concept' ? <Icon.Wiki /> : <SourceTypeIcon type={item.type ?? 'file'} />}
+      </span>
+      <span className="ask-reference-item-copy">
+        <span className="ask-reference-item-title">{item.title}</span>
+        <span className="ask-reference-item-subtitle">{item.subtitle}</span>
+      </span>
+    </button>
   );
 }
 
@@ -262,4 +669,110 @@ function CitedList({ ids, onClick }: { ids: string[]; onClick: (id: string) => v
       ))}
     </>
   );
+}
+
+async function lookupMentions(
+  kind: MentionKind,
+  rawQuery: string,
+  selected: MentionItem[],
+  limit = 6
+): Promise<MentionItem[]> {
+  const db = getDb();
+  const excluded = new Set(selected.filter((item) => item.kind === kind).map((item) => item.id));
+  const query = normalizeText(rawQuery);
+
+  if (kind === 'concept') {
+    let concepts = query
+      ? await db.concepts
+          .toCollection()
+          .filter((concept) => matchesText([concept.title, concept.summary], query))
+          .limit(limit * 3)
+          .toArray()
+      : await db.concepts.orderBy('updatedAt').reverse().limit(limit * 2).toArray();
+
+    concepts = concepts
+      .filter((concept) => !excluded.has(concept.id))
+      .sort((a, b) => scoreMatch([b.title, b.summary], query) - scoreMatch([a.title, a.summary], query))
+      .slice(0, limit);
+
+    return concepts.map((concept) => ({
+      id: concept.id,
+      kind: 'concept',
+      title: concept.title,
+      subtitle: concept.summary || '概念页',
+    }));
+  }
+
+  let sources = query
+    ? await db.sources
+        .toCollection()
+        .filter((source) => matchesText([source.title, source.author, source.url], query))
+        .limit(limit * 3)
+        .toArray()
+    : await db.sources.orderBy('ingestedAt').reverse().limit(limit * 2).toArray();
+
+  sources = sources
+    .filter((source) => !excluded.has(source.id))
+    .sort((a, b) => scoreMatch([b.title, b.author, b.url], query) - scoreMatch([a.title, a.author, a.url], query))
+    .slice(0, limit);
+
+  return sources.map((source) => ({
+    id: source.id,
+    kind: 'source',
+    title: source.title,
+    subtitle: describeSource(source),
+    type: source.type,
+  }));
+}
+
+function detectInlineMention(text: string, caret: number): InlineMention | null {
+  const beforeCaret = text.slice(0, caret);
+  const match = beforeCaret.match(/(?:^|\s)@([^\s@]*)$/);
+  if (!match) return null;
+  const query = match[1] ?? '';
+  return {
+    start: caret - query.length - 1,
+    end: caret,
+    query,
+  };
+}
+
+function buildAskText(mentions: MentionItem[], text: string): string {
+  const mentionText = mentions.map((item) => `@${item.title}`).join(' ');
+  return [mentionText, text].filter(Boolean).join('\n').trim();
+}
+
+function normalizeText(value: string | undefined): string {
+  return (value || '').trim().toLowerCase();
+}
+
+function matchesText(parts: Array<string | undefined>, query: string): boolean {
+  if (!query) return true;
+  return parts.some((part) => normalizeText(part).includes(query));
+}
+
+function scoreMatch(parts: Array<string | undefined>, query: string): number {
+  if (!query) return 0;
+  const haystack = parts.map((part) => normalizeText(part)).join(' ');
+  if (haystack.startsWith(query)) return 5;
+  if (haystack.includes(query)) return 3;
+  return 0;
+}
+
+function compactModelName(model: string): string {
+  const preset = PRESET_MODELS.find((item) => item.value === model);
+  if (preset) return preset.label;
+  const last = model.split('/').pop() || model;
+  return last.replace(/-/g, ' ');
+}
+
+function describeSource(source: Source): string {
+  const base = SOURCE_TYPE_LABELS[source.type] || '资料';
+  if (source.author) return `${base} · ${source.author}`;
+  if (source.url) return `${base} · ${stripProtocol(source.url)}`;
+  return `${base} · 已收录资料`;
+}
+
+function stripProtocol(url: string): string {
+  return url.replace(/^https?:\/\//, '').replace(/\/$/, '');
 }
