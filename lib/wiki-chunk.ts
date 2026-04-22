@@ -1,0 +1,171 @@
+import { createHash } from 'node:crypto';
+
+export interface SourceChunkDraft {
+  chunkIndex: number;
+  heading: string;
+  headingPath: string[];
+  content: string;
+  tokenCount: number;
+  contentHash: string;
+}
+
+export interface ChunkOptions {
+  maxTokens?: number;
+  overlapTokens?: number;
+  minChunkChars?: number;
+}
+
+const DEFAULT_MAX_TOKENS = 1200;
+const DEFAULT_OVERLAP_TOKENS = 120;
+const DEFAULT_MIN_CHUNK_CHARS = 240;
+
+export function sha256Text(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+export function estimateTokens(text: string): number {
+  if (!text) return 0;
+  const cjk = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+  const ascii = text.length - cjk;
+  return Math.max(1, Math.ceil(cjk * 0.65 + ascii / 4));
+}
+
+function normalizeContent(input: string): string {
+  return input
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[\t ]+\n/g, '\n')
+    .replace(/\n{4,}/g, '\n\n\n')
+    .trim();
+}
+
+function splitLargeSection(content: string, maxTokens: number): string[] {
+  if (estimateTokens(content) <= maxTokens) return [content];
+
+  const paragraphs = content
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length <= 1) {
+    const roughChars = Math.max(800, Math.floor(maxTokens * 2.5));
+    const parts: string[] = [];
+    for (let i = 0; i < content.length; i += roughChars) {
+      parts.push(content.slice(i, i + roughChars).trim());
+    }
+    return parts.filter(Boolean);
+  }
+
+  const chunks: string[] = [];
+  let current = '';
+  for (const paragraph of paragraphs) {
+    const next = current ? `${current}\n\n${paragraph}` : paragraph;
+    if (estimateTokens(next) > maxTokens && current) {
+      chunks.push(current.trim());
+      current = paragraph;
+    } else {
+      current = next;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}
+
+function makeOverlap(previous: string, overlapTokens: number): string {
+  if (!previous || overlapTokens <= 0) return '';
+  const paragraphs = previous.split(/\n{2,}/).filter(Boolean);
+  const kept: string[] = [];
+  let total = 0;
+  for (let i = paragraphs.length - 1; i >= 0; i--) {
+    const paragraph = paragraphs[i];
+    total += estimateTokens(paragraph);
+    kept.unshift(paragraph);
+    if (total >= overlapTokens) break;
+  }
+  return kept.join('\n\n').trim();
+}
+
+export function splitMarkdownIntoChunks(
+  rawContent: string,
+  options: ChunkOptions = {}
+): SourceChunkDraft[] {
+  const content = normalizeContent(rawContent);
+  if (!content) return [];
+
+  const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
+  const overlapTokens = options.overlapTokens ?? DEFAULT_OVERLAP_TOKENS;
+  const minChunkChars = options.minChunkChars ?? DEFAULT_MIN_CHUNK_CHARS;
+
+  const sections: Array<{ heading: string; headingPath: string[]; content: string }> = [];
+  const headingStack: Array<{ level: number; title: string }> = [];
+  let currentHeading = '未命名片段';
+  let currentPath: string[] = [];
+  let buffer: string[] = [];
+
+  const flush = () => {
+    const sectionContent = buffer.join('\n').trim();
+    if (!sectionContent) {
+      buffer = [];
+      return;
+    }
+    if (sectionContent.length >= minChunkChars || sections.length === 0) {
+      sections.push({
+        heading: currentHeading,
+        headingPath: currentPath.length > 0 ? currentPath : [currentHeading],
+        content: sectionContent || content.slice(0, minChunkChars),
+      });
+    } else if (sectionContent && sections.length > 0) {
+      const last = sections[sections.length - 1];
+      last.content = `${last.content}\n\n${sectionContent}`.trim();
+    }
+    buffer = [];
+  };
+
+  for (const line of content.split('\n')) {
+    const match = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
+    if (match) {
+      flush();
+      const level = match[1].length;
+      const title = match[2].trim();
+      while (headingStack.length && headingStack[headingStack.length - 1]?.level >= level) {
+        headingStack.pop();
+      }
+      headingStack.push({ level, title });
+      currentHeading = title;
+      currentPath = headingStack.map((item) => item.title);
+      buffer.push(line);
+    } else {
+      buffer.push(line);
+    }
+  }
+  flush();
+
+  const chunks: SourceChunkDraft[] = [];
+  let previousPart = '';
+
+  for (const section of sections) {
+    const parts = splitLargeSection(section.content, maxTokens);
+    for (const part of parts) {
+      const overlap = chunks.length > 0 ? makeOverlap(previousPart, overlapTokens) : '';
+      const body = overlap ? `${overlap}\n\n${part}` : part;
+      const headingPrefix = section.headingPath.join(' / ');
+      const chunkContent = headingPrefix ? `路径：${headingPrefix}\n\n${body}` : body;
+      chunks.push({
+        chunkIndex: chunks.length,
+        heading: section.heading,
+        headingPath: section.headingPath,
+        content: chunkContent,
+        tokenCount: estimateTokens(chunkContent),
+        contentHash: sha256Text(chunkContent),
+      });
+      previousPart = part;
+    }
+  }
+
+  return chunks;
+}
+
+export function summarizeChunkForPrompt(chunk: SourceChunkDraft, maxChars = 900): string {
+  const suffix = chunk.content.length > maxChars ? '…' : '';
+  return `## Chunk ${chunk.chunkIndex + 1}: ${chunk.heading}\n${chunk.content.slice(0, maxChars)}${suffix}`;
+}

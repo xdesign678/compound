@@ -528,6 +528,37 @@ export const repo = {
     return row ? rowToConcept(row) : null;
   },
 
+  replaceSourceIdInConcepts(oldSourceId: string, newSourceId: string, updatedAt = Date.now()): number {
+    if (!oldSourceId || !newSourceId || oldSourceId === newSourceId) return 0;
+
+    const rows = getServerDb()
+      .prepare(`SELECT * FROM concepts WHERE sources LIKE ?`)
+      .all(`%\"${oldSourceId}\"%`) as ConceptRow[];
+
+    let changed = 0;
+    for (const row of rows) {
+      const concept = rowToConcept(row);
+      if (!concept.sources.includes(oldSourceId)) continue;
+      const nextSources = Array.from(
+        new Set(concept.sources.map((sourceId) => (sourceId === oldSourceId ? newSourceId : sourceId)))
+      );
+      if (
+        nextSources.length === concept.sources.length &&
+        nextSources.every((sourceId, index) => sourceId === concept.sources[index])
+      ) {
+        continue;
+      }
+      this.upsertConcept({
+        ...concept,
+        sources: nextSources,
+        updatedAt,
+      });
+      changed += 1;
+    }
+
+    return changed;
+  },
+
   listCategoryKeys(): string[] {
     const rows = getServerDb()
       .prepare(`SELECT category_keys FROM concepts`)

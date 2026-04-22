@@ -237,6 +237,7 @@ async function runGithubSyncLoop(jobId: string): Promise<void> {
         type: 'file',
         rawContent: remoteFile.content,
         externalKey: remoteFile.externalKey,
+        replaceSourceId: item.existingSourceId,
       });
 
       const row = repo.getSyncJob(jobId);
@@ -247,7 +248,9 @@ async function runGithubSyncLoop(jobId: string): Promise<void> {
           at: Date.now(),
           path: item.path,
           status: 'success',
-          message: `新增概念 ${result.newConceptIds.length} · 更新 ${result.updatedConceptIds.length}`,
+          message: result.compiler
+            ? `新增概念 ${result.newConceptIds.length} · 更新 ${result.updatedConceptIds.length} · 分块 ${result.compiler.chunks} · 证据 ${result.compiler.evidence}`
+            : `新增概念 ${result.newConceptIds.length} · 更新 ${result.updatedConceptIds.length}`,
         }),
       });
       console.log(

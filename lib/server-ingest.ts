@@ -11,6 +11,8 @@ import { nanoid } from 'nanoid';
 import { repo, getServerDb } from './server-db';
 import { normalizeCategoryKeys, normalizeCategoryState } from './category-normalization';
 import { runIngestLLM } from './ingest-core';
+import { compileWikiArtifactsAfterIngest } from './wiki-compiler';
+import { wikiRepo } from './wiki-db';
 import type {
   Source,
   Concept,
@@ -25,6 +27,7 @@ export interface ServerIngestInput {
   url?: string;
   rawContent: string;
   externalKey?: string;
+  replaceSourceId?: string;
 }
 
 export interface ServerIngestResult {
@@ -32,12 +35,23 @@ export interface ServerIngestResult {
   newConceptIds: string[];
   updatedConceptIds: string[];
   activityId: string;
+  compiler?: {
+    chunks: number;
+    evidence: number;
+    conceptsIndexed: number;
+    versions: number;
+  };
 }
 
 export async function ingestSourceToServerDb(
   input: ServerIngestInput
 ): Promise<ServerIngestResult> {
   const now = Date.now();
+  const exactExisting = input.externalKey ? repo.getSourceByExternalKey(input.externalKey) : null;
+  const sourceIdToReplace =
+    input.replaceSourceId && input.replaceSourceId.trim()
+      ? input.replaceSourceId.trim()
+      : exactExisting?.id;
 
   // 1. Build Source
   const source: Source = {
@@ -147,15 +161,10 @@ export async function ingestSourceToServerDb(
     at: now,
   };
 
+  let compilerResult: ServerIngestResult['compiler'];
+
   // 8. Write everything in a single transaction (better-sqlite3 is synchronous)
   const trx = getServerDb().transaction(() => {
-    // Remove any existing source that shares the same externalKey (GitHub "update" case)
-    if (source.externalKey) {
-      const existing = repo.getSourceByExternalKey(source.externalKey);
-      if (existing && existing.id !== source.id) {
-        repo.deleteSource(existing.id);
-      }
-    }
     repo.insertSource(source);
 
     for (const next of updatedConceptDocs) {
@@ -170,6 +179,22 @@ export async function ingestSourceToServerDb(
       repo.upsertConcept({ ...c, related: upd.related, updatedAt: now });
     }
 
+    if (sourceIdToReplace && sourceIdToReplace !== source.id) {
+      repo.replaceSourceIdInConcepts(sourceIdToReplace, source.id, now);
+      wikiRepo.deleteSourceArtifacts(sourceIdToReplace);
+      repo.deleteSource(sourceIdToReplace);
+    }
+
+    compilerResult = compileWikiArtifactsAfterIngest({
+      source,
+      createdConcepts: newConcepts,
+      updatedConcepts: updatedConceptDocs.map((next) => {
+        const previous = conceptById.get(next.id);
+        return previous ? { previous, next } : null;
+      }).filter((pair): pair is { previous: Concept; next: Concept } => Boolean(pair)),
+      activitySummary: resp.activitySummary,
+    });
+
     repo.insertActivity(activity);
   });
   trx();
@@ -179,6 +204,7 @@ export async function ingestSourceToServerDb(
     newConceptIds,
     updatedConceptIds,
     activityId: activity.id,
+    compiler: compilerResult,
   };
 }
 
