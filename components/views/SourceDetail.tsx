@@ -282,39 +282,49 @@ export function SourceDetail({ id }: { id: string }) {
         <span>{generatedCount} 个相关概念</span>
       </div>
 
-      <div className="source-detail-summary">
-        <p className="detail-note">
-          头部只放来源和概念关系，正文区域直接按阅读样子展示；进入编辑后，也还是在这块正文里原位修改。
+      <div className="source-detail-top-card">
+        <div className="source-detail-top-card-kicker">顶部资料卡</div>
+        <p className="source-detail-top-card-summary">
+          这篇资料主要讨论：{source.title} 的核心观点与延伸概念。来源、概念关系和引用跳转都收在这里，正文从下方自然开始。
         </p>
 
-        {source.url && (
-          <a
-            href={source.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="source-detail-link"
-          >
-            查看原链接
-          </a>
-        )}
-      </div>
+        <div className="source-detail-top-card-row">
+          {source.author && (
+            <div className="source-detail-pill source-detail-pill-muted">
+              来源：{source.author}
+            </div>
+          )}
 
-      {generatedCount > 0 && (
-        <div className="source-detail-head-section">
-          <h3>相关概念</h3>
-          <div className="related-grid source-detail-related-grid">
+          <div className="source-detail-pill source-detail-pill-muted">
+            字数：{displayMarkdown.length.toLocaleString()}
+          </div>
+
+          {source.url && (
+            <a
+              href={source.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="source-detail-link"
+            >
+              查看原链接
+            </a>
+          )}
+        </div>
+
+        {generatedCount > 0 && (
+          <div className="source-detail-top-card-concepts">
             {generatedItems.map((concept) => (
               <button
                 key={concept.id}
-                className="related-chip"
+                className="related-chip source-detail-top-card-chip"
                 onClick={() => openConcept(concept.id)}
               >
                 {concept.title}
               </button>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="source-detail-main">
         <div className="source-detail-toolbar">
@@ -342,7 +352,6 @@ export function SourceDetail({ id }: { id: string }) {
           </div>
 
           <div className="source-detail-toolbar-meta">
-            <span>{displayMarkdown.length.toLocaleString()} 字符</span>
             {saveStatus !== 'idle' && (
               <span className={`source-detail-save-status ${saveStatus}`}>
                 {saveStatus === 'saving' && '保存中...'}
