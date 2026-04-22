@@ -4635,6 +4635,53 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   .library-secondary-more {
     flex-shrink: 0;
   }
+
+  /* --- 移动端卡片优化 --- */
+  .library-grid {
+    gap: 10px;
+    padding: 0 14px;
+  }
+
+  .library-grid .concept-card {
+    padding: 16px;
+    border-radius: 8px;
+  }
+
+  .library-grid .concept-card .title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    letter-spacing: -0.01em;
+  }
+
+  .library-grid .concept-card .summary {
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 10px;
+    -webkit-line-clamp: 2;
+  }
+
+  .library-grid .concept-card .meta {
+    font-size: 11px;
+    gap: 6px;
+  }
+
+  .library-card-tags {
+    gap: 4px;
+    margin-top: 4px;
+    margin-bottom: 2px;
+  }
+
+  .library-card-tag {
+    padding: 2px 7px;
+    font-size: 10.5px;
+    border-radius: 4px;
+  }
+
+  .library-filter-status {
+    padding: 4px 16px 8px;
+    font-size: 11px;
+  }
 }
 
 .library-grid {
@@ -4658,7 +4705,7 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   background: var(--bg-muted);
   font-family: var(--font-sans);
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 /* Desktop: multi-column grid */
