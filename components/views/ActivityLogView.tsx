@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Dexie from 'dexie';
 import DOMPurify from 'dompurify';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -16,24 +17,48 @@ const FILTERS: { key: ActivityFilterType; label: string }[] = [
   { key: 'lint', label: '检查' },
 ];
 
+const PAGE_SIZE = 100;
+
 export function ActivityLogView() {
   const filter = useAppStore((s) => s.activityFilter);
   const setFilter = useAppStore((s) => s.setActivityFilter);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const items = useLiveQuery(
     async () => {
       const db = getDb();
       if (filter === 'all') {
-        return db.activity.orderBy('at').reverse().toArray();
+        return db.activity.orderBy('at').reverse().limit(visibleCount).toArray();
       }
       return db.activity
         .where('[type+at]')
         .between([filter, Dexie.minKey], [filter, Dexie.maxKey])
         .reverse()
+        .limit(visibleCount)
         .toArray();
+    },
+    [filter, visibleCount]
+  );
+
+  const totalCount = useLiveQuery(
+    async () => {
+      const db = getDb();
+      if (filter === 'all') {
+        return db.activity.count();
+      }
+      return db.activity
+        .where('[type+at]')
+        .between([filter, Dexie.minKey], [filter, Dexie.maxKey])
+        .count();
     },
     [filter]
   );
+
+  // Reset pagination when filter changes
+  const handleSetFilter = (f: ActivityFilterType) => {
+    setVisibleCount(PAGE_SIZE);
+    setFilter(f);
+  };
 
   const iconFor = (item: ActivityLog) => {
     if (item.type === 'lint' && item.status === 'running') {
@@ -54,7 +79,7 @@ export function ActivityLogView() {
           <button
             key={f.key}
             className={`filter-chip${filter === f.key ? ' active' : ''}`}
-            onClick={() => setFilter(f.key)}
+            onClick={() => handleSetFilter(f.key)}
           >
             {f.label}
           </button>
@@ -98,6 +123,14 @@ export function ActivityLogView() {
               ))}
             </div>
           ))}
+          {items.length < (totalCount ?? 0) && (
+            <button
+              className="modal-btn"
+              onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+            >
+              加载更多（已显示 {items.length} / {totalCount ?? items.length}）
+            </button>
+          )}
         </div>
       )}
     </div>

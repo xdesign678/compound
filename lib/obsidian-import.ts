@@ -194,6 +194,7 @@ export async function runImportQueue({ files, onUpdate, shouldStop }: RunQueueOp
         type: 'file',
         author: running.author,
         rawContent: fullText,
+        externalKey: `obsidian:${running.path}|${running.size}`,
       });
       saveManifestEntry(running.fingerprint, {
         sourceId: result.sourceId,

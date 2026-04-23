@@ -18,6 +18,7 @@ export function ConceptDetail({ id }: { id: string }) {
   const [hydrating, setHydrating] = useState(false);
   const [hydrateError, setHydrateError] = useState<string | null>(null);
   const [hydrateAttempt, setHydrateAttempt] = useState(0);
+  const [retrying, setRetrying] = useState(false);
 
   const concept = useLiveQuery(async () => getDb().concepts.get(id), [id]);
   const sources = useLiveQuery(async () => {
@@ -45,12 +46,14 @@ export function ConceptDetail({ id }: { id: string }) {
       setHydrateError('正文拉取失败，请重试。');
     } finally {
       setHydrating(false);
+      setRetrying(false);
     }
   }, [id]);
 
   useEffect(() => {
     setHydrateError(null);
     setHydrating(false);
+    setRetrying(false);
   }, [id]);
 
   useEffect(() => {
@@ -95,19 +98,31 @@ export function ConceptDetail({ id }: { id: string }) {
           />
         </div>
       ) : hydrateError ? (
-        <div className="empty-state empty-state-compact">
-          <p>{hydrateError}</p>
+        <div className="empty-state empty-state-compact concept-hydrate-error">
+          <div className="concept-hydrate-error-icon" aria-hidden="true">⚠</div>
+          <p className="concept-hydrate-error-msg">{hydrateError}</p>
           <button
             className="modal-btn primary empty-state-action"
             type="button"
-            onClick={() => setHydrateAttempt((count) => count + 1)}
+            disabled={retrying}
+            onClick={() => {
+              setRetrying(true);
+              setHydrateAttempt((count) => count + 1);
+              // retrying state will be cleared when hydrateBody resolves
+              // use a small guard: clear after 10s max in case of silent failure
+              setTimeout(() => setRetrying(false), 10000);
+            }}
           >
-            重新加载正文
+            {retrying ? '加载中...' : '重新加载正文'}
           </button>
         </div>
       ) : (
-        <div className="empty-state empty-state-compact">
-          {hydrating ? '正文加载中...' : '正在准备正文...'}
+        <div className="concept-body-skeleton">
+          <div className="concept-skeleton-line concept-skeleton-line-lg" />
+          <div className="concept-skeleton-line concept-skeleton-line-md" />
+          <div className="concept-skeleton-line concept-skeleton-line-sm" />
+          <div className="concept-skeleton-line concept-skeleton-line-lg" />
+          <div className="concept-skeleton-line concept-skeleton-line-md" />
         </div>
       )}
 

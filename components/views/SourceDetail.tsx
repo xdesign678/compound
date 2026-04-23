@@ -283,17 +283,18 @@ export function SourceDetail({ id }: { id: string }) {
       </div>
 
       <div className="source-detail-top-card">
-        <div className="source-detail-top-card-kicker">顶部资料卡</div>
-        <p className="source-detail-top-card-summary">
-          这篇资料主要讨论：{source.title} 的核心观点与延伸概念。来源、概念关系和引用跳转都收在这里，正文从下方自然开始。
-        </p>
+        <div className="source-detail-top-card-kicker">资料概览</div>
 
         <div className="source-detail-top-card-row">
           {source.author && (
             <div className="source-detail-pill source-detail-pill-muted">
-              来源：{source.author}
+              作者：{source.author}
             </div>
           )}
+
+          <div className="source-detail-pill source-detail-pill-muted">
+            关联概念：{generatedCount} 个
+          </div>
 
           <div className="source-detail-pill source-detail-pill-muted">
             字数：{displayMarkdown.length.toLocaleString()}

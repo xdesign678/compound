@@ -46,9 +46,11 @@ const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
 export function AskView() {
   const openConcept = useAppStore((s) => s.openConcept);
   const clearAskHistory = useAppStore((s) => s.clearAskHistory);
+  const showToast = useAppStore((s) => s.showToast);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [archiving, setArchiving] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [selectedMentions, setSelectedMentions] = useState<MentionItem[]>([]);
   const [referencePickerOpen, setReferencePickerOpen] = useState(false);
   const [referenceMode, setReferenceMode] = useState<MentionKind>('concept');
@@ -257,7 +259,7 @@ export function AskView() {
       await db.askHistory.update(msg.id, { savedAsConceptId: newId });
     } catch (err) {
       console.error(err);
-      alert('归档失败，请重试');
+      showToast('归档失败，请重试', false, true);
     } finally {
       setArchiving(null);
     }
@@ -338,12 +340,31 @@ export function AskView() {
       {history && history.length > 0 && (
         <div className="ask-toolbar">
           <div className="ask-toolbar-inner">
-            <button
-              className="ask-reset-btn"
-              onClick={() => { if (window.confirm('确认清空所有对话记录？')) clearAskHistory(); }}
-            >
-              新对话
-            </button>
+            {confirmClear ? (
+              <>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)', marginRight: 8 }}>确认清空所有对话？</span>
+                <button
+                  className="ask-reset-btn"
+                  onClick={() => { clearAskHistory(); setConfirmClear(false); }}
+                  style={{ background: 'var(--brand-clay)', color: '#fff', marginRight: 4 }}
+                >
+                  清空
+                </button>
+                <button
+                  className="ask-reset-btn"
+                  onClick={() => setConfirmClear(false)}
+                >
+                  取消
+                </button>
+              </>
+            ) : (
+              <button
+                className="ask-reset-btn"
+                onClick={() => setConfirmClear(true)}
+              >
+                新对话
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -520,7 +541,7 @@ export function AskView() {
             <textarea
               ref={textareaRef}
               className="ask-textarea"
-              placeholder="问点什么..."
+              placeholder="问点什么... 输入 @ 引用概念或资料"
               rows={1}
               value={input}
               onChange={(e) => {
@@ -565,7 +586,7 @@ export function AskView() {
                   type="button"
                 >
                   <span className="ask-tool-btn-leading">@</span>
-                  <span>功能</span>
+                  <span>引用概念</span>
                 </button>
                 <button
                   className={`ask-tool-btn ask-model-btn${modelMenuOpen ? ' active' : ''}`}

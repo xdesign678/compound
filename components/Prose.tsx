@@ -24,8 +24,8 @@ export function Prose({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const handler = (e: Event) => {
-      const target = e.target as HTMLElement;
+
+    const activate = (target: HTMLElement) => {
       const conceptEl = target.closest('[data-concept-id]') as HTMLElement | null;
       if (conceptEl) {
         const id = conceptEl.dataset.conceptId;
@@ -39,8 +39,31 @@ export function Prose({
         if (id) openConcept(id);
       }
     };
-    el.addEventListener('click', handler);
-    return () => el.removeEventListener('click', handler);
+
+    const clickHandler = (e: Event) => activate(e.target as HTMLElement);
+
+    const keydownHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        const target = e.target as HTMLElement;
+        if (target.closest('[data-concept-id]') || target.closest('[data-citation-index]')) {
+          e.preventDefault();
+          activate(target);
+        }
+      }
+    };
+
+    el.addEventListener('click', clickHandler);
+    el.addEventListener('keydown', keydownHandler);
+
+    el.querySelectorAll<HTMLElement>('[data-concept-id], [data-citation-index]').forEach((node) => {
+      node.setAttribute('role', 'link');
+      node.setAttribute('tabindex', '0');
+    });
+
+    return () => {
+      el.removeEventListener('click', clickHandler);
+      el.removeEventListener('keydown', keydownHandler);
+    };
   }, [openConcept, citedConceptIds]);
 
   return (

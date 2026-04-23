@@ -27,6 +27,7 @@ export function IngestModal() {
   const [submitting, setSubmitting] = useState(false);
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmClose, setConfirmClose] = useState(false);
 
   const safeTimeout = useCallback((fn: () => void, ms: number) => {
     const id = setTimeout(fn, ms);
@@ -75,6 +76,7 @@ export function IngestModal() {
     setSubmitting(false);
     setNoteEditorOpen(false);
     setError(null);
+    setConfirmClose(false);
   }
 
   async function handleNoteEditorDone(noteTitle: string, noteContent: string) {
@@ -97,7 +99,7 @@ export function IngestModal() {
       reset();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      showToast(`摄入失败: ${msg.slice(0, 80)}`, false);
+      showToast(`摄入失败: ${msg}`, false, true);
       safeTimeout(() => hideToast(), 4500);
       setSubmitting(false);
     }
@@ -105,6 +107,16 @@ export function IngestModal() {
 
   function handleClose() {
     if (submitting) return;
+    // If on link step with any content filled, require confirmation
+    if (step === 'link' && (title.trim() || author.trim() || url.trim() || content.trim())) {
+      setConfirmClose(true);
+      return;
+    }
+    reset();
+    close();
+  }
+
+  function handleConfirmClose() {
     reset();
     close();
   }
@@ -185,52 +197,62 @@ export function IngestModal() {
         {step === 'link' && (
           <>
             <h3>添加链接资料</h3>
-            <p className="modal-desc">
-              当前版本需要你把目标页面的正文一起贴进来(浏览器无法跨域抓取)。AI 会基于正文编译。
-            </p>
-            <div className="form-field">
-              <label htmlFor="link-title">标题</label>
-              <input id="link-title" className="form-input" placeholder="例如: LLM Wiki by Karpathy" value={title} onChange={(e) => setTitle(e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label htmlFor="link-author">作者(可选)</label>
-              <input id="link-author" className="form-input" value={author} onChange={(e) => setAuthor(e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label htmlFor="link-url">链接 URL</label>
-              <input id="link-url" className="form-input" placeholder="https://..." value={url} onChange={(e) => setUrl(e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label htmlFor="link-content">正文(粘贴原文)</label>
-              <textarea
-                id="link-content"
-                className="form-textarea"
-                rows={8}
-                placeholder="把页面正文粘贴到这里..."
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-              />
-            </div>
-            {error && (
-              <div style={{
-                padding: '8px 12px',
-                background: '#fee2e2',
-                color: '#991b1b',
-                borderRadius: 6,
-                fontSize: 13,
-                marginTop: 8
-              }}>
-                {error}
+            {confirmClose ? (
+              <div className="ingest-confirm-close">
+                <p className="modal-desc">已填写的内容将丢失，确认关闭？</p>
+                <button className="modal-btn primary" onClick={handleConfirmClose}>确认</button>
+                <button className="modal-btn" onClick={() => setConfirmClose(false)}>继续编辑</button>
               </div>
+            ) : (
+              <>
+                <p className="modal-desc">
+                  当前版本需要你把目标页面的正文一起贴进来(浏览器无法跨域抓取)。AI 会基于正文编译。
+                </p>
+                <div className="form-field">
+                  <label htmlFor="link-title">标题</label>
+                  <input id="link-title" className="form-input" placeholder="例如: LLM Wiki by Karpathy" value={title} onChange={(e) => setTitle(e.target.value)} />
+                </div>
+                <div className="form-field">
+                  <label htmlFor="link-author">作者(可选)</label>
+                  <input id="link-author" className="form-input" value={author} onChange={(e) => setAuthor(e.target.value)} />
+                </div>
+                <div className="form-field">
+                  <label htmlFor="link-url">链接 URL</label>
+                  <input id="link-url" className="form-input" placeholder="https://..." value={url} onChange={(e) => setUrl(e.target.value)} />
+                </div>
+                <div className="form-field">
+                  <label htmlFor="link-content">正文(粘贴原文)</label>
+                  <textarea
+                    id="link-content"
+                    className="form-textarea"
+                    rows={8}
+                    placeholder="把页面正文粘贴到这里..."
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                  />
+                </div>
+                {error && (
+                  <div style={{
+                    padding: '8px 12px',
+                    background: '#fee2e2',
+                    color: '#991b1b',
+                    borderRadius: 6,
+                    fontSize: 13,
+                    marginTop: 8
+                  }}>
+                    {error}
+                  </div>
+                )}
+                <button
+                  className="modal-btn primary"
+                  disabled={!title.trim() || !content.trim() || submitting}
+                  onClick={() => handleSubmit('link')}
+                >
+                  {submitting ? '编译中...' : '送入 AI 编译'}
+                </button>
+                <button className="modal-btn" disabled={submitting} onClick={() => setStep('choose')}>返回</button>
+              </>
             )}
-            <button
-              className="modal-btn primary"
-              disabled={!title.trim() || !content.trim() || submitting}
-              onClick={() => handleSubmit('link')}
-            >
-              {submitting ? '编译中...' : '送入 AI 编译'}
-            </button>
-            <button className="modal-btn" onClick={() => setStep('choose')}>返回</button>
           </>
         )}
       </div>

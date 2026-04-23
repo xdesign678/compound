@@ -14,6 +14,7 @@ interface ToastState {
   visible: boolean;
   text: string;
   loading: boolean;
+  isError?: boolean;
 }
 
 interface LintBannerState {
@@ -61,7 +62,7 @@ interface AppState {
   closeObsidianImport: () => void;
   openGithubSync: () => void;
   closeGithubSync: () => void;
-  showToast: (text: string, loading?: boolean) => void;
+  showToast: (text: string, loading?: boolean, isError?: boolean) => void;
   hideToast: () => void;
   markFresh: (ids: string[]) => void;
   clearFresh: () => void;
@@ -105,10 +106,10 @@ export const useAppStore = create<AppState>((set) => ({
   activitySubTab: 'health',
   activityFilter: 'all',
   lintFindings: [],
-  lastLintAt: null,
+  lastLintAt: readStoredLintTimestamp(),
   lintRunning: false,
   lintBanner: null,
-  homeStyle: 'feed' as HomeStyle,
+  homeStyle: readStoredHomeStyle(),
   searchCollapsed: false,
   searchFocusNonce: 0,
 
@@ -124,7 +125,7 @@ export const useAppStore = create<AppState>((set) => ({
   closeObsidianImport: () => set({ obsidianImportOpen: false }),
   openGithubSync: () => set({ githubSyncOpen: true }),
   closeGithubSync: () => set({ githubSyncOpen: false }),
-  showToast: (text, loading = false) => set({ toast: { visible: true, text, loading } }),
+  showToast: (text, loading = false, isError = false) => set({ toast: { visible: true, text, loading, isError } }),
   hideToast: () => set((s) => ({ toast: { ...s.toast, visible: false } })),
   markFresh: (ids: string[]) => set((s) => {
     const next = { ...s.freshConceptIds };

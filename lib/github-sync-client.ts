@@ -170,11 +170,6 @@ export async function runGithubSyncQueue({
     try {
       const remote = await fetchRemoteFileContent(f.path);
 
-      // 更新场景：先删除旧 Source（但保留已有 Concept，新 source 将继续挂到相关概念上）
-      if (f.action === 'update' && f.existingSourceId) {
-        await db.sources.delete(f.existingSourceId);
-      }
-
       const result = await ingestSource({
         title: deriveTitle(remote.path, remote.content),
         type: 'file',
@@ -182,6 +177,11 @@ export async function runGithubSyncQueue({
         rawContent: remote.content,
         externalKey: remote.externalKey,
       });
+
+      // 更新场景：ingest 成功拿到新 sourceId 后再删旧 Source，避免中途中断导致数据丢失
+      if (f.action === 'update' && f.existingSourceId) {
+        await db.sources.delete(f.existingSourceId);
+      }
 
       onUpdate(
         {

@@ -171,7 +171,10 @@ export function HealthView() {
   };
 
   const findingAction = (finding: Finding) => {
-    if (['orphan', 'stale', 'thin'].includes(finding.type)) {
+    if (finding.type === 'orphan' || finding.type === 'stale') {
+      return { label: '查看概念', action: () => finding.conceptIds[0] && openConcept(finding.conceptIds[0]) };
+    }
+    if (finding.type === 'thin') {
       return { label: '补充资料', action: () => openModal() };
     }
     return { label: '查看详情', action: () => finding.conceptIds[0] && openConcept(finding.conceptIds[0]) };

@@ -89,6 +89,7 @@ export function SettingsDrawer() {
   const [adminToken, setAdminToken] = useState('');
   const [adminSaved, setAdminSaved] = useState(false);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   const safeTimeout = useCallback((fn: () => void, ms: number) => {
     const id = setTimeout(fn, ms);
@@ -101,6 +102,38 @@ export function SettingsDrawer() {
     setAdminToken(getAdminToken());
     return () => { timersRef.current.forEach(clearTimeout); };
   }, []);
+
+  useEffect(() => {
+    const el = modalRef.current;
+    if (!el || !isOpen) return;
+    const focusable = el.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    first?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        close();
+        return;
+      }
+      if (e.key === 'Tab') {
+        const current = el.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        const f = current[0];
+        const l = current[current.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === f) { e.preventDefault(); l?.focus(); }
+        } else {
+          if (document.activeElement === l) { e.preventDefault(); f?.focus(); }
+        }
+      }
+    };
+    el.addEventListener('keydown', handleKeyDown);
+    return () => el.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, confirming, close]);
 
   function saveLlm() {
     saveLlmConfig(llmConfig);
@@ -132,8 +165,7 @@ export function SettingsDrawer() {
       safeTimeout(() => hideToast(), 3000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      showToast(`体检失败: ${msg.slice(0, 80)}`, false);
-      safeTimeout(() => hideToast(), 4000);
+      showToast(`体检失败: ${msg}`, false, true);
     } finally {
       setLintLoading(false);
     }
@@ -166,9 +198,9 @@ export function SettingsDrawer() {
 
   return (
     <div className={`modal-overlay ${isOpen ? 'visible' : ''}`} onClick={close}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label="设置" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" ref={modalRef} role="dialog" aria-modal="true" aria-labelledby="settings-drawer-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-handle" />
-        <h3>设置 · 工具</h3>
+        <h3 id="settings-drawer-title">设置 · 工具</h3>
 
         {/* LLM 配置 */}
         <div className="settings-section" style={S.llmSection}>
@@ -338,7 +370,7 @@ export function SettingsDrawer() {
               <button className="modal-btn" style={S.seedBtn} onClick={() => setConfirming('seed')}>
                 载入示例 Wiki
               </button>
-              <button className="modal-btn" style={S.seedBtn} onClick={() => setConfirming('clear')}>
+              <button className="modal-btn danger" style={S.seedBtn} onClick={() => setConfirming('clear')}>
                 清空所有数据
               </button>
               <button className="modal-btn" onClick={close}>关闭</button>

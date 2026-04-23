@@ -25,6 +25,8 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
     return (
       <button
         key={t.id}
+        role="tab"
+        aria-selected={isActive}
         aria-current={isActive ? 'page' : undefined}
         className={`tab-item${isActive ? ' active' : ''}${isSidebar ? ' sidebar' : ''}`}
         onClick={() => setTab(t.id)}
@@ -37,7 +39,7 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
 
   if (isSidebar) {
     return (
-      <nav className="tabbar tabbar-sidebar" aria-label="主导航">
+      <nav className="tabbar tabbar-sidebar" aria-label="主导航" role="tablist">
         {TABS.map(renderTab)}
       </nav>
     );
@@ -46,7 +48,7 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
   const [first, second, ...rest] = TABS;
 
   return (
-    <nav className="tabbar" aria-label="主导航">
+    <nav className="tabbar" aria-label="主导航" role="tablist">
       {renderTab(first)}
       {renderTab(second)}
       <button

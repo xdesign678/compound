@@ -90,14 +90,28 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   const payload = hasConfig
     ? { ...(body as object), llmConfig }
     : body;
-  const res = await fetch(path, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new Error('网络连接失败');
+  }
   if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error('请求过于频繁，请稍后重试');
+    }
+    if (res.status === 401 || res.status === 403) {
+      throw new Error('认证失败，请检查配置');
+    }
+    if (res.status >= 500) {
+      throw new Error('服务暂时不可用，请稍后重试');
+    }
     const text = await res.text().catch(() => '');
-    throw new Error(`${path} failed (${res.status}): ${text.slice(0, 200)}`);
+    throw new Error(text.slice(0, 200) || `请求失败 (${res.status})`);
   }
   return (await res.json()) as T;
 }
@@ -243,22 +257,6 @@ export async function ingestSource(input: {
     updatedConceptIds.push(c.id);
   }
 
-  // Pre-fetch concepts that need bidirectional link updates (bulk read)
-  const biDirRelIds = Array.from(new Set(newConcepts.flatMap((nc) => nc.related)));
-  const biDirFetched = await db.concepts.bulkGet(biDirRelIds);
-  const biDirMap = new Map<string, Concept>();
-  biDirRelIds.forEach((rid, i) => { if (biDirFetched[i]) biDirMap.set(rid, biDirFetched[i]!); });
-
-  const biDirUpdates: Array<{ id: string; related: string[] }> = [];
-  for (const nc of newConcepts) {
-    for (const relId of nc.related) {
-      const c = biDirMap.get(relId);
-      if (c && !c.related.includes(nc.id)) {
-        biDirUpdates.push({ id: relId, related: [...c.related, nc.id] });
-      }
-    }
-  }
-
   // Build activity log record
   const activity: ActivityLog = {
     id: 'a-' + nanoid(8),
@@ -269,6 +267,9 @@ export async function ingestSource(input: {
     relatedConceptIds: [...newConceptIds, ...updatedConceptIds],
     at: now,
   };
+
+  // Ids of concepts that need bidirectional link updates
+  const biDirRelIds = Array.from(new Set(newConcepts.flatMap((nc) => nc.related)));
 
   // 6-8. All writes wrapped in a single Dexie transaction
   await db.transaction('rw', [db.sources, db.concepts, db.activity], async () => {
@@ -285,9 +286,21 @@ export async function ingestSource(input: {
       await db.concepts.bulkPut(newConcepts);
     }
 
-    // Bidirectional linking: update related lists on existing concepts
-    for (const { id, related } of biDirUpdates) {
-      await db.concepts.update(id, { related, updatedAt: now });
+    // Bidirectional linking: read and write inside the same transaction to avoid concurrency races
+    if (biDirRelIds.length > 0) {
+      const biDirFetched = await db.concepts.bulkGet(biDirRelIds);
+      const biDirMap = new Map<string, Concept>();
+      biDirRelIds.forEach((rid, i) => { if (biDirFetched[i]) biDirMap.set(rid, biDirFetched[i]!); });
+      for (const nc of newConcepts) {
+        for (const relId of nc.related) {
+          const c = biDirMap.get(relId);
+          if (c && !c.related.includes(nc.id)) {
+            const updated = [...c.related, nc.id];
+            await db.concepts.update(relId, { related: updated, updatedAt: now });
+            biDirMap.set(relId, { ...c, related: updated });
+          }
+        }
+      }
     }
 
     // Activity log
@@ -396,17 +409,19 @@ export async function lintWiki(activityId?: string): Promise<LintResponse> {
  * Returns the total number of concepts processed.
  */
 export async function categorizeConcepts(
-  onProgress?: (done: number, total: number) => void
-): Promise<number> {
+  onProgress?: (done: number, total: number, failed: number, errors: string[]) => void
+): Promise<{ total: number; failed: number; errors: string[] }> {
   const db = getDb();
   const all = await db.concepts.toArray();
   const uncategorized = all.filter((c) => !c.categories || c.categories.length === 0);
 
-  if (uncategorized.length === 0) return 0;
+  if (uncategorized.length === 0) return { total: 0, failed: 0, errors: [] };
 
   const existingCategories = await getExistingCategories();
   const BATCH_SIZE = 10;
   let done = 0;
+  let failed = 0;
+  const errors: string[] = [];
 
   for (let i = 0; i < uncategorized.length; i += BATCH_SIZE) {
     const batch = uncategorized.slice(i, i + BATCH_SIZE);
@@ -447,16 +462,17 @@ export async function categorizeConcepts(
           if (!existingCategories.includes(key)) existingCategories.push(key);
         }
       }
-    } catch {
-      // If one batch fails, skip it and continue with the next
-      // done count still advances; caller receives total attempted
+    } catch (e) {
+      failed += batch.length;
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(msg.slice(0, 200));
     }
 
     done += batch.length;
-    onProgress?.(done, uncategorized.length);
+    onProgress?.(done, uncategorized.length, failed, errors);
   }
 
-  return uncategorized.length;
+  return { total: uncategorized.length, failed, errors };
 }
 
 function escapeHTML(s: string): string {

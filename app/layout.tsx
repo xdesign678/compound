@@ -74,7 +74,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
       className={`${inter.variable} ${geistMono.variable} ${lora.variable} ${notoSerifSC.variable}`}
     >
-      <head />
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `
+  try {
+    var theme = localStorage.getItem('compound_theme');
+    if (theme === 'dark' || (!theme && matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+  } catch(e) {}
+` }} />
+      </head>
       <body>
         {children}
         <ViewportObserver />

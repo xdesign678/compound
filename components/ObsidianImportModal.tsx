@@ -54,6 +54,9 @@ export function ObsidianImportModal() {
 
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [manifestSize, setManifestSize] = useState(0);
+  const [inlineError, setInlineError] = useState<string | null>(null);
+  const [confirmingClose, setConfirmingClose] = useState(false);
+  const [confirmingClearManifest, setConfirmingClearManifest] = useState(false);
   const stopRef = useRef(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,17 +74,27 @@ export function ObsidianImportModal() {
     setFilesMap({});
     setFileIds([]);
     setLoadingFiles(false);
+    setInlineError(null);
+    setConfirmingClose(false);
+    setConfirmingClearManifest(false);
     stopRef.current = false;
   }, []);
 
   const handleClose = useCallback(() => {
     if (stage === 'running') {
-      if (!confirm('导入正在进行，确定关闭吗？未完成的文件会停止处理（下次可以断点续传）。')) return;
-      stopRef.current = true;
+      setConfirmingClose(true);
+      return;
     }
     reset();
     close();
   }, [stage, close, reset]);
+
+  const confirmClose = useCallback(() => {
+    stopRef.current = true;
+    setConfirmingClose(false);
+    reset();
+    close();
+  }, [close, reset]);
 
   const handlePickFolder = () => dirInputRef.current?.click();
   const handlePickFiles = () => fileInputRef.current?.click();
@@ -89,10 +102,11 @@ export function ObsidianImportModal() {
   const handleFilesSelected = async (list: FileList | null) => {
     if (!list || list.length === 0) return;
     setLoadingFiles(true);
+    setInlineError(null);
     try {
       const filtered = filterObsidianFiles(list);
       if (filtered.length === 0) {
-        alert('没找到 .md 文件（已自动过滤 .obsidian 和 .trash 目录）');
+        setInlineError('没找到 .md 文件（已自动过滤 .obsidian 和 .trash 目录）');
         setLoadingFiles(false);
         return;
       }
@@ -107,7 +121,7 @@ export function ObsidianImportModal() {
       setFileIds(newIds);
       setStage('selected');
     } catch (e) {
-      alert('读取文件失败：' + (e instanceof Error ? e.message : String(e)));
+      setInlineError('读取文件失败：' + (e instanceof Error ? e.message : String(e)));
     } finally {
       setLoadingFiles(false);
     }
@@ -212,12 +226,13 @@ export function ObsidianImportModal() {
   };
 
   const handleClearManifest = () => {
-    if (!confirm(`确定清除所有导入记录吗？已导入的资料本身不会被删除，\n但下次再选同样的文件会被当作新文件重复导入。\n\n当前记录数：${manifestSize}`)) {
-      return;
-    }
+    setConfirmingClearManifest(true);
+  };
+
+  const confirmClearManifest = () => {
     clearManifest();
     setManifestSize(0);
-    // 把列表里的 duplicate 重置为 pending
+    setConfirmingClearManifest(false);
     setFilesMap((prev) => {
       const next = { ...prev };
       for (const id in next) {
@@ -284,30 +299,52 @@ export function ObsidianImportModal() {
               </p>
             )}
 
-            <div
-              style={{
-                display: 'flex',
-                gap: 8,
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginTop: 12,
-              }}
-            >
-              {manifestSize > 0 ? (
-                <button
-                  className="modal-btn"
-                  onClick={handleClearManifest}
-                  style={{ flex: 1, fontSize: 13, color: 'var(--ink-soft)' }}
-                >
-                  清除 {manifestSize} 条导入记录
+            {inlineError && (
+              <p className="modal-desc" style={{ color: 'var(--brand-clay)', marginTop: 8 }}>
+                {inlineError}
+              </p>
+            )}
+
+            {confirmingClearManifest ? (
+              <div style={{ marginTop: 12 }}>
+                <p className="modal-desc" style={{ marginBottom: 8 }}>
+                  确定清除 {manifestSize} 条导入记录吗？已导入的资料本身不会被删除，但下次再选同样的文件会被当作新文件重复导入。
+                </p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="modal-btn primary" onClick={confirmClearManifest} style={{ background: 'var(--brand-clay)', flex: 1 }}>
+                    确认清除
+                  </button>
+                  <button className="modal-btn" onClick={() => setConfirmingClearManifest(false)} style={{ flex: 1 }}>
+                    取消
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginTop: 12,
+                }}
+              >
+                {manifestSize > 0 ? (
+                  <button
+                    className="modal-btn"
+                    onClick={handleClearManifest}
+                    style={{ flex: 1, fontSize: 13, color: 'var(--ink-soft)' }}
+                  >
+                    清除 {manifestSize} 条导入记录
+                  </button>
+                ) : (
+                  <span />
+                )}
+                <button className="modal-btn" onClick={handleClose} style={{ flex: 1 }}>
+                  关闭
                 </button>
-              ) : (
-                <span />
-              )}
-              <button className="modal-btn" onClick={handleClose} style={{ flex: 1 }}>
-                关闭
-              </button>
-            </div>
+              </div>
+            )}
           </>
         )}
 
@@ -406,36 +443,57 @@ export function ObsidianImportModal() {
 
             {/* 底部操作按钮 */}
             <div className="obsidian-import-actions">
-              {stage === 'selected' && (
+              {confirmingClose ? (
                 <>
-                  <button className="modal-btn" onClick={reset}>
-                    返回
+                  <p className="modal-desc" style={{ width: '100%', marginBottom: 8, color: 'var(--brand-clay)' }}>
+                    导入正在进行，确定关闭吗？未完成的文件会停止处理（下次可以断点续传）。
+                  </p>
+                  <button className="modal-btn primary" onClick={confirmClose} style={{ background: 'var(--brand-clay)' }}>
+                    确认关闭
                   </button>
-                  <button
-                    className="modal-btn primary"
-                    onClick={startImport}
-                    disabled={counts.selected === 0}
-                  >
-                    开始导入（{counts.selected} 篇）
+                  <button className="modal-btn" onClick={() => setConfirmingClose(false)}>
+                    继续导入
                   </button>
                 </>
-              )}
-
-              {stage === 'running' && (
-                <button className="modal-btn" onClick={stopImport}>
-                  请求停止
-                </button>
-              )}
-
-              {stage === 'done' && (
+              ) : (
                 <>
-                  <button className="modal-btn" onClick={handleClose}>
-                    完成
-                  </button>
-                  {counts.pending > 0 && (
-                    <button className="modal-btn primary" onClick={startImport}>
-                      继续导入剩余 {counts.pending} 篇
-                    </button>
+                  {stage === 'selected' && (
+                    <>
+                      <button className="modal-btn" onClick={reset}>
+                        返回
+                      </button>
+                      <button
+                        className="modal-btn primary"
+                        onClick={startImport}
+                        disabled={counts.selected === 0}
+                      >
+                        开始导入（{counts.selected} 篇）
+                      </button>
+                    </>
+                  )}
+
+                  {stage === 'running' && (
+                    <>
+                      <button className="modal-btn" onClick={stopImport}>
+                        请求停止
+                      </button>
+                      <button className="modal-btn" onClick={handleClose}>
+                        关闭
+                      </button>
+                    </>
+                  )}
+
+                  {stage === 'done' && (
+                    <>
+                      <button className="modal-btn" onClick={handleClose}>
+                        完成
+                      </button>
+                      {counts.pending > 0 && (
+                        <button className="modal-btn primary" onClick={startImport}>
+                          继续导入剩余 {counts.pending} 篇
+                        </button>
+                      )}
+                    </>
                   )}
                 </>
               )}

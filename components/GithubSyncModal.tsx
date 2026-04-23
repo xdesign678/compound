@@ -184,6 +184,7 @@ export function GithubSyncModal() {
               onClick={close}
               disabled={!canClose}
               aria-label="关闭"
+              title={!canClose ? '同步任务启动中，请稍候…' : undefined}
             >
               ×
             </button>
@@ -264,7 +265,7 @@ export function GithubSyncModal() {
                     <h3>需要先处理这个问题</h3>
                   </div>
                 </div>
-                <pre>{error}</pre>
+                <ErrorDetail error={error} />
                 <p className="gh-sync-hint">
                   常见原因：<code>GITHUB_TOKEN</code>、<code>GITHUB_REPO</code> 未配置，或
                   <code>LLM_API_KEY</code> 在 Zeabur 环境变量里缺失。
@@ -382,7 +383,7 @@ function IdleView({ onStart, error }: { onStart: () => void; error: string | nul
               <h3>服务端还没成功建立任务</h3>
             </div>
           </div>
-          <pre>{error}</pre>
+          <ErrorDetail error={error} />
           <p className="gh-sync-hint">
             请在 Zeabur 控制台确认环境变量 <code>GITHUB_REPO</code>、<code>GITHUB_TOKEN</code>、
             <code>GITHUB_BRANCH</code>、<code>LLM_API_KEY</code> 均已设置，并已挂载 Volume 到
@@ -433,6 +434,34 @@ function StartingView({
         <div className="gh-sync-skeleton gh-sync-skeleton-lg" />
         <div className="gh-sync-skeleton gh-sync-skeleton-sm" />
       </section>
+    </div>
+  );
+}
+
+function ErrorDetail({ error }: { error: string }) {
+  const [expanded, setExpanded] = useState(false);
+  // Attempt to extract a user-friendly summary from the error string
+  // Take first line or up to 120 chars as the main message
+  const lines = error.split('\n');
+  const mainMessage = lines[0]?.slice(0, 200) ?? error;
+  const hasDetails = error.length > mainMessage.length || lines.length > 1;
+
+  return (
+    <div className="gh-sync-error-detail">
+      <p className="gh-sync-error-main">{mainMessage}</p>
+      {hasDetails && (
+        <div className="gh-sync-error-collapse">
+          <button
+            className="gh-sync-error-toggle"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? '收起详情' : '查看详情'}
+          </button>
+          {expanded && (
+            <pre className="gh-sync-error-pre">{error}</pre>
+          )}
+        </div>
+      )}
     </div>
   );
 }

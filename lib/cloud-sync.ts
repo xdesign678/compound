@@ -112,14 +112,14 @@ export async function pullSnapshotFromCloud(): Promise<PullResult> {
   const applied = { sources: 0, concepts: 0, activity: 0, ask: 0 };
   const skipped = { sources: 0, concepts: 0, activity: 0, ask: 0 };
 
-  // --- sources: overwrite if server's ingestedAt is newer or equal.
+  // --- sources: overwrite only if server's ingestedAt is strictly newer.
   if (snap.sources.length > 0) {
     const existing = await db.sources.bulkGet(snap.sources.map((s) => s.id));
     const toPut: Source[] = [];
     for (let i = 0; i < snap.sources.length; i++) {
       const remote = snap.sources[i];
       const local = existing[i];
-      if (!local || remote.ingestedAt >= local.ingestedAt) {
+      if (!local || remote.ingestedAt > local.ingestedAt) {
         toPut.push(mergeRemoteSource(local, remote));
       } else {
         skipped.sources++;
@@ -131,14 +131,14 @@ export async function pullSnapshotFromCloud(): Promise<PullResult> {
     }
   }
 
-  // --- concepts: overwrite if server's updatedAt is newer or equal.
+  // --- concepts: overwrite only if server's updatedAt is strictly newer.
   if (snap.concepts.length > 0) {
     const existing = await db.concepts.bulkGet(snap.concepts.map((c) => c.id));
     const toPut: Concept[] = [];
     for (let i = 0; i < snap.concepts.length; i++) {
       const remote = snap.concepts[i];
       const local = existing[i];
-      if (!local || remote.updatedAt >= local.updatedAt) {
+      if (!local || remote.updatedAt > local.updatedAt) {
         toPut.push(mergeRemoteConcept(local, remote));
       } else {
         skipped.concepts++;
@@ -157,7 +157,7 @@ export async function pullSnapshotFromCloud(): Promise<PullResult> {
     for (let i = 0; i < snap.activity.length; i++) {
       const remote = snap.activity[i];
       const local = existing[i];
-      if (!local || remote.at >= local.at) {
+      if (!local || remote.at > local.at) {
         toPut.push(remote);
       } else {
         skipped.activity++;
@@ -176,7 +176,7 @@ export async function pullSnapshotFromCloud(): Promise<PullResult> {
     for (let i = 0; i < snap.ask.length; i++) {
       const remote = snap.ask[i];
       const local = existing[i];
-      if (!local || remote.at >= local.at) {
+      if (!local || remote.at > local.at) {
         toPut.push(remote);
       } else {
         skipped.ask++;

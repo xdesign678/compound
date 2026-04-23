@@ -426,6 +426,30 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
 
       <div className="library-filter-status">{filterLabel}</div>
 
+      {selectedPrimary && deferredQuery.trim() && (
+        <div className="filter-indicator">
+          <span className="filter-indicator-text">
+            在 <strong>{selectedSecondary ? `${selectedPrimary} › ${selectedSecondary}` : selectedPrimary}</strong> 中搜索 &ldquo;{deferredQuery.trim()}&rdquo;
+          </span>
+          <div className="filter-indicator-actions">
+            <button
+              className="filter-indicator-clear"
+              onClick={() => setQuery('')}
+              type="button"
+            >
+              清除搜索词
+            </button>
+            <button
+              className="filter-indicator-clear"
+              onClick={() => { setSelectedPrimary(null); setSelectedSecondary(null); }}
+              type="button"
+            >
+              取消分类
+            </button>
+          </div>
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         concepts.length === 0 ? (
           <div className="empty-state empty-state-spacious">

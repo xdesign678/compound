@@ -169,7 +169,16 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
             <p>点击右下角 <strong>+</strong> 添加第一份资料,AI 会把它编译成你的第一批概念页。</p>
           </div>
         ) : (
-          <div className="empty-state">没有匹配的概念</div>
+          <div className="empty-state">
+            <p>没有匹配的概念</p>
+            <button
+              className="modal-btn"
+              onClick={() => setQuery('')}
+              type="button"
+            >
+              清空搜索
+            </button>
+          </div>
         )
       ) : (
         <>
