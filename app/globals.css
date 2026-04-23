@@ -74,6 +74,27 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+::selection {
+  background: rgba(217, 119, 87, 0.22);
+  color: var(--text-primary);
+}
+
+/* Prevent iOS Safari from zooming when focusing inputs on mobile. */
+@media (max-width: 767px) {
+  input:not([type]),
+  input[type='text'],
+  input[type='search'],
+  input[type='email'],
+  input[type='url'],
+  input[type='tel'],
+  input[type='number'],
+  input[type='password'],
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 html,
 body {
   height: 100%;
@@ -139,6 +160,16 @@ button {
 }
 .header-copy {
   min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.header-copy > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.header-actions {
+  flex-shrink: 0;
 }
 .header-kicker {
   font-family: var(--font-sans);
@@ -259,7 +290,7 @@ button {
   background: rgba(217, 119, 87, 0.08);
 }
 .tab-item:active {
-  transform: scale(0.9);
+  transform: scale(0.96);
 }
 .tab-item svg {
   width: 22px;
@@ -343,7 +374,9 @@ button {
   border-radius: 999px;
   background: var(--bg-button);
   color: var(--text-on-button);
-  box-shadow: 0 4px 10px rgba(20, 20, 19, 0.18);
+  box-shadow:
+    0 0 0 3px var(--bg-primary),
+    0 4px 10px rgba(20, 20, 19, 0.18);
   transition: transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .tab-add-btn svg {
@@ -351,7 +384,7 @@ button {
   height: 20px;
 }
 .tab-add:active .tab-add-btn {
-  transform: scale(0.92);
+  transform: scale(0.96);
 }
 
 /* Hide floating FAB on mobile (we use the center tab-add instead) */
@@ -379,7 +412,7 @@ button {
   transition: transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .fab:active {
-  transform: scale(0.94);
+  transform: scale(0.96);
 }
 .fab svg {
   width: 22px;
@@ -541,10 +574,21 @@ button {
   color: var(--text-secondary);
   max-width: 30rem;
 }
+@media (max-width: 640px) {
+  .view-lead {
+    padding: 14px 16px 12px;
+  }
+  .view-lead-copy {
+    font-size: 14.5px;
+    line-height: 1.6;
+  }
+}
 
 .stats-row {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+  row-gap: 4px;
   padding: 0 20px 18px;
   font-family: var(--font-sans);
   font-size: 12px;
@@ -712,12 +756,13 @@ button {
 }
 .concept-detail h1 {
   font-family: var(--font-sans);
-  font-size: clamp(1.9rem, 1.65rem + 0.9vw, 2.4rem);
+  font-size: clamp(1.55rem, 1.2rem + 1.6vw, 2.4rem);
   font-weight: 700;
-  line-height: 1.08;
+  line-height: 1.2;
   letter-spacing: -0.02em;
   color: var(--text-primary);
   margin: 0 0 14px;
+  overflow-wrap: anywhere;
 }
 .detail-intro {
   margin: 0 0 22px;
@@ -742,6 +787,25 @@ button {
   font-size: 17px;
   line-height: 1.82;
   color: var(--text-body);
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+.prose img,
+.prose video,
+.prose iframe {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+.prose pre {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 .concept-body-shell {
   max-width: 880px;
@@ -877,7 +941,7 @@ button {
 
 .related-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   gap: 10px;
 }
 .related-chip {
@@ -897,6 +961,9 @@ button {
   gap: 6px;
   text-align: left;
   border: 1px solid var(--border-light);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .related-chip:active {
   background: var(--bg-hover);
@@ -1254,6 +1321,12 @@ button {
   color: var(--text-primary);
   margin-bottom: 4px;
   line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 .source-card .s-meta {
   font-family: var(--font-sans);
@@ -1274,6 +1347,14 @@ button {
 
 .view-padding {
   padding: 10px 20px 100px;
+}
+@media (max-width: 640px) {
+  .view-padding {
+    padding: 8px 14px 88px;
+  }
+  .concept-detail {
+    padding: 20px 16px 88px;
+  }
 }
 
 /* Ask view */
@@ -1308,6 +1389,7 @@ button {
   flex: 1;
   overflow-y: auto;
   padding: 18px 20px 20px;
+  scroll-padding-bottom: 24px;
 }
 .ask-stream {
   min-height: 100%;
@@ -1895,6 +1977,7 @@ button {
 /* Activity */
 .activity-list {
   padding: 8px 20px 100px;
+  scroll-margin-top: 64px;
 }
 .activity-item {
   display: flex;
@@ -2105,9 +2188,14 @@ button {
 }
 .health-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 8px;
   margin-bottom: 20px;
+}
+@media (max-width: 520px) {
+  .health-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .stat-card {
   background: var(--bg-card);
@@ -2339,6 +2427,8 @@ button {
 .modal-overlay {
   position: absolute;
   inset: 0;
+  /* Lift above the soft keyboard so bottom sheet + its buttons stay visible */
+  bottom: var(--ask-kb-offset, 0px);
   background: rgba(20, 20, 19, 0.35);
   z-index: 50;
   display: flex;
@@ -2363,6 +2453,7 @@ button {
     transform var(--motion-duration-slow) var(--motion-ease-emphasized),
     opacity var(--motion-duration-base) var(--motion-ease-standard);
   max-height: 90%;
+  max-height: 90dvh;
   overflow-y: auto;
 }
 .modal-overlay.visible .modal {
@@ -2370,11 +2461,11 @@ button {
   opacity: 1;
 }
 .modal-handle {
-  width: 36px;
-  height: 4px;
-  background: var(--border-default);
+  width: 40px;
+  height: 5px;
+  background: rgba(0, 0, 0, 0.18);
   border-radius: 100px;
-  margin: 4px auto 18px;
+  margin: 8px auto 18px;
 }
 .modal h3 {
   font-family: var(--font-sans);

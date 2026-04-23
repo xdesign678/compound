@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter, JetBrains_Mono, Lora, Noto_Serif_SC } from 'next/font/google';
 import './globals.css';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
+import { ViewportObserver } from '@/components/ViewportObserver';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -76,6 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head />
       <body>
         {children}
+        <ViewportObserver />
         <ServiceWorkerRegister />
       </body>
     </html>

@@ -74,27 +74,6 @@ export function AskView() {
     setLlmConfig(getLlmConfig());
   }, []);
 
-  // Keep the composer visible above the mobile virtual keyboard.
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.visualViewport) return;
-    const vv = window.visualViewport;
-    const root = document.documentElement;
-    const update = () => {
-      const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      root.style.setProperty('--ask-kb-offset', `${offset}px`);
-      root.classList.toggle('ask-kb-open', offset > 0);
-    };
-    update();
-    vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
-    return () => {
-      vv.removeEventListener('resize', update);
-      vv.removeEventListener('scroll', update);
-      root.style.removeProperty('--ask-kb-offset');
-      root.classList.remove('ask-kb-open');
-    };
-  }, []);
-
   useEffect(() => {
     if (messagesRef.current) {
       messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
