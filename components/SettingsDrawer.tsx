@@ -94,7 +94,6 @@ export function SettingsDrawer() {
 
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
   const [customModels, setCustomModels] = useState<string[]>([]);
-  const [llmExpanded, setLlmExpanded] = useState(false);
   const [llmAdvancedExpanded, setLlmAdvancedExpanded] = useState(false);
   const [llmSaved, setLlmSaved] = useState(false);
   const [adminToken, setAdminToken] = useState('');
@@ -231,37 +230,12 @@ export function SettingsDrawer() {
             <div>
               <div className="settings-card-title">LLM 配置</div>
               <div className="settings-card-desc">
-                默认使用 Zeabur 服务端配置；需要临时覆盖当前浏览器时再展开。
+                默认使用 Zeabur 服务端配置；可临时覆盖当前浏览器的模型。
               </div>
             </div>
-            <button
-              className="settings-card-toggle"
-              type="button"
-              aria-expanded={llmExpanded}
-              onClick={() => setLlmExpanded((value) => !value)}
-            >
-              {llmExpanded ? '收起' : '展开'}
-            </button>
           </div>
 
-          {!llmExpanded && (
-            <div className="settings-collapsed-note">
-              正在使用服务端默认模型配置。
-            </div>
-          )}
-
-          {llmExpanded && (
           <div className="settings-fields">
-            <label className="settings-field">
-              <span>API Key</span>
-              <input
-                type="password"
-                placeholder="sk-... 或 OpenRouter key"
-                value={llmConfig.apiKey || ''}
-                onChange={(e) => setLlmConfig((c) => ({ ...c, apiKey: e.target.value }))}
-              />
-            </label>
-
             <label className="settings-field">
               <span>模型</span>
               <input
@@ -298,22 +272,34 @@ export function SettingsDrawer() {
 
               {!llmAdvancedExpanded && (
                 <div className="settings-inline-note">
-                  API URL 默认跟随服务端配置。
+                  API Key 与 API URL 默认跟随服务端配置。
                 </div>
               )}
 
               {llmAdvancedExpanded && (
-                <label className="settings-field">
-                  <span>
-                    API URL <em>可选</em>
-                  </span>
-                  <input
-                    type="text"
-                    placeholder="https://openrouter.ai/api/v1/chat/completions"
-                    value={llmConfig.apiUrl || ''}
-                    onChange={(e) => setLlmConfig((c) => ({ ...c, apiUrl: e.target.value }))}
-                  />
-                </label>
+                <>
+                  <label className="settings-field">
+                    <span>API Key</span>
+                    <input
+                      type="password"
+                      placeholder="sk-... 或 OpenRouter key"
+                      value={llmConfig.apiKey || ''}
+                      onChange={(e) => setLlmConfig((c) => ({ ...c, apiKey: e.target.value }))}
+                    />
+                  </label>
+
+                  <label className="settings-field">
+                    <span>
+                      API URL <em>可选</em>
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="https://openrouter.ai/api/v1/chat/completions"
+                      value={llmConfig.apiUrl || ''}
+                      onChange={(e) => setLlmConfig((c) => ({ ...c, apiUrl: e.target.value }))}
+                    />
+                  </label>
+                </>
               )}
             </div>
 
@@ -321,7 +307,6 @@ export function SettingsDrawer() {
               {llmSaved ? '已保存 ✓' : '保存配置'}
             </button>
           </div>
-          )}
         </div>
 
         <div className="settings-section settings-card" style={S.llmSection}>
