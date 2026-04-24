@@ -94,6 +94,7 @@ export function SettingsDrawer() {
 
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
   const [customModels, setCustomModels] = useState<string[]>([]);
+  const [llmExpanded, setLlmExpanded] = useState(false);
   const [llmSaved, setLlmSaved] = useState(false);
   const [adminToken, setAdminToken] = useState('');
   const [adminSaved, setAdminSaved] = useState(false);
@@ -229,11 +230,26 @@ export function SettingsDrawer() {
             <div>
               <div className="settings-card-title">LLM 配置</div>
               <div className="settings-card-desc">
-                留空则使用服务端默认配置，填写后只覆盖当前浏览器。
+                默认使用 Zeabur 服务端配置；需要临时覆盖当前浏览器时再展开。
               </div>
             </div>
+            <button
+              className="settings-card-toggle"
+              type="button"
+              aria-expanded={llmExpanded}
+              onClick={() => setLlmExpanded((value) => !value)}
+            >
+              {llmExpanded ? '收起' : '展开'}
+            </button>
           </div>
 
+          {!llmExpanded && (
+            <div className="settings-collapsed-note">
+              正在使用服务端默认模型配置。
+            </div>
+          )}
+
+          {llmExpanded && (
           <div className="settings-fields">
             <label className="settings-field">
               <span>API Key</span>
@@ -284,6 +300,7 @@ export function SettingsDrawer() {
               {llmSaved ? '已保存 ✓' : '保存配置'}
             </button>
           </div>
+          )}
         </div>
 
         <div className="settings-section settings-card" style={S.llmSection}>
