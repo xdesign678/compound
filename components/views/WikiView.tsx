@@ -145,10 +145,6 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
           </div>
         </div>
       </div>
-      <div className="view-lead">
-        <div className="view-lead-kicker">知识 Wiki</div>
-        <p className="view-lead-copy">由资料逐步编译出的概念网络，适合回看、串联和继续提问。</p>
-      </div>
       <div className="stats-row">
         <div className="stat">
           <strong>{totalConceptCount ?? concepts.length}</strong> 概念
