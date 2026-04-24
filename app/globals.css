@@ -1753,9 +1753,11 @@ button {
 }
 
 .ask-input-bar {
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-  border-top: 1px solid var(--border-section);
-  background: var(--bg-primary);
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid rgba(20, 20, 19, 0.04);
+  background:
+    linear-gradient(180deg, rgba(250, 249, 245, 0), var(--bg-primary) 22%),
+    var(--bg-primary);
   flex-shrink: 0;
 }
 .ask-input-inner {
@@ -1764,11 +1766,29 @@ button {
 .ask-composer-card {
   position: relative;
   width: 100%;
+  background: color-mix(in srgb, var(--bg-card) 90%, var(--bg-primary));
+  border: 1px solid rgba(20, 20, 19, 0.09);
+  border-radius: 8px;
+  padding: 16px 16px 12px;
+  box-shadow:
+    0 1px 0 rgba(20, 20, 18, 0.03),
+    0 10px 28px rgba(20, 20, 18, 0.07);
+  transition:
+    border-color 180ms var(--motion-ease-standard),
+    background 180ms var(--motion-ease-standard),
+    box-shadow 180ms var(--motion-ease-standard),
+    transform 180ms var(--motion-ease-standard);
+}
+.ask-composer-card:focus-within,
+.ask-composer-card.is-engaged {
+  border-color: rgba(201, 100, 66, 0.28);
   background: var(--bg-card);
-  border: 1px solid var(--border-light);
-  border-radius: 18px;
-  padding: 18px 18px 14px;
-  box-shadow: var(--shadow-md);
+  box-shadow:
+    0 0 0 3px rgba(201, 100, 66, 0.08),
+    0 12px 32px rgba(20, 20, 18, 0.08);
+}
+.ask-composer-card.has-input {
+  border-color: rgba(20, 20, 19, 0.14);
 }
 .ask-mentions-row {
   display: flex;
@@ -1780,13 +1800,25 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 11px;
+  padding: 7px 10px;
   border-radius: 7.5px;
   border: 1px solid rgba(166, 120, 94, 0.24);
-  background: rgba(250, 243, 238, 0.95);
+  background: rgba(250, 243, 238, 0.82);
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 12px;
+  transition:
+    background 160ms var(--motion-ease-standard),
+    border-color 160ms var(--motion-ease-standard),
+    transform 160ms var(--motion-ease-standard);
+}
+.ask-mention-chip:hover,
+.ask-mention-chip:focus-visible {
+  background: rgba(250, 237, 228, 0.95);
+  border-color: rgba(201, 100, 66, 0.34);
+}
+.ask-mention-chip:active {
+  transform: translateY(1px);
 }
 .ask-mention-chip.is-source {
   background: var(--bg-muted);
@@ -1815,8 +1847,8 @@ button {
   z-index: 6;
   background: var(--bg-card);
   border: 1px solid var(--border-light);
-  border-radius: 12px;
-  box-shadow: var(--shadow-lg);
+  border-radius: 8px;
+  box-shadow: 0 18px 42px rgba(20, 20, 18, 0.14);
   padding: 14px;
   backdrop-filter: blur(14px);
 }
@@ -1861,6 +1893,13 @@ button {
   font-family: var(--font-sans);
   font-size: 12px;
   color: var(--text-secondary);
+  transition:
+    background 160ms var(--motion-ease-standard),
+    color 160ms var(--motion-ease-standard),
+    box-shadow 160ms var(--motion-ease-standard);
+}
+.ask-segmented-btn:hover {
+  color: var(--text-primary);
 }
 .ask-segmented-btn.active {
   background: var(--bg-card);
@@ -1915,10 +1954,22 @@ button {
   align-items: center;
   gap: 12px;
   padding: 11px 12px;
-  border-radius: 14px;
+  border-radius: 8px;
   background: var(--bg-card);
   border: 1px solid var(--border-light);
   text-align: left;
+  transition:
+    background 160ms var(--motion-ease-standard),
+    border-color 160ms var(--motion-ease-standard),
+    transform 160ms var(--motion-ease-standard);
+}
+.ask-reference-item:hover,
+.ask-reference-item:focus-visible {
+  background: var(--bg-hover);
+  border-color: rgba(20, 20, 19, 0.14);
+}
+.ask-reference-item:active {
+  transform: translateY(1px);
 }
 .ask-reference-item-icon {
   width: 30px;
@@ -1973,14 +2024,26 @@ button {
   justify-content: space-between;
   gap: 12px;
   padding: 12px;
-  border-radius: 14px;
+  border-radius: 8px;
   border: 1px solid var(--border-light);
   background: var(--bg-card);
   text-align: left;
+  transition:
+    background 160ms var(--motion-ease-standard),
+    border-color 160ms var(--motion-ease-standard),
+    transform 160ms var(--motion-ease-standard);
+}
+.ask-model-option:hover,
+.ask-model-option:focus-visible {
+  background: var(--bg-hover);
+  border-color: rgba(20, 20, 19, 0.14);
+}
+.ask-model-option:active {
+  transform: translateY(1px);
 }
 .ask-model-option.active {
   border-color: rgba(166, 120, 94, 0.32);
-  background: var(--bg-hover);
+  background: rgba(250, 243, 238, 0.78);
 }
 .ask-model-option-copy {
   min-width: 0;
@@ -2010,18 +2073,18 @@ button {
   background: transparent;
   border: none;
   border-radius: 0;
-  padding: 6px 2px 0;
+  padding: 4px 2px 0;
   font-size: 17px;
   font-family: var(--font-reading);
   color: var(--text-primary);
   outline: none;
   resize: none;
   max-height: 180px;
-  min-height: 84px;
+  min-height: 78px;
   line-height: var(--leading-body);
 }
 .ask-textarea::placeholder {
-  color: rgba(94, 93, 89, 0.78);
+  color: rgba(94, 93, 89, 0.62);
 }
 .ask-composer-toolbar {
   margin-top: 12px;
@@ -2040,18 +2103,35 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 9px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border-light);
-  background: var(--bg-muted);
+  min-height: 34px;
+  padding: 8px 11px;
+  border-radius: 7.5px;
+  border: 1px solid rgba(20, 20, 19, 0.08);
+  background: color-mix(in srgb, var(--bg-muted) 82%, var(--bg-card));
   color: var(--text-secondary);
   font-family: var(--font-sans);
   font-size: 12px;
+  font-weight: 560;
+  transition:
+    background 160ms var(--motion-ease-standard),
+    border-color 160ms var(--motion-ease-standard),
+    color 160ms var(--motion-ease-standard),
+    transform 160ms var(--motion-ease-standard);
+}
+.ask-tool-btn:hover,
+.ask-tool-btn:focus-visible {
+  background: var(--bg-hover);
+  border-color: rgba(20, 20, 19, 0.14);
+  color: var(--text-primary);
+}
+.ask-tool-btn:active {
+  transform: translateY(1px);
 }
 .ask-tool-btn.active {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  border-color: rgba(166, 120, 94, 0.28);
+  background: rgba(250, 243, 238, 0.95);
+  color: var(--brand-clay);
+  border-color: rgba(201, 100, 66, 0.32);
+  box-shadow: 0 0 0 2px rgba(201, 100, 66, 0.08);
 }
 .ask-tool-btn-leading {
   color: var(--brand-clay);
@@ -2069,24 +2149,40 @@ button {
 .ask-composer-hint {
   font-family: var(--font-sans);
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   white-space: nowrap;
 }
 .ask-send-btn {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
   background: var(--bg-button);
   color: var(--text-on-button);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity var(--motion-duration-fast) var(--motion-ease-standard);
+  transition:
+    opacity 160ms var(--motion-ease-standard),
+    background 160ms var(--motion-ease-standard),
+    transform 160ms var(--motion-ease-standard),
+    box-shadow 160ms var(--motion-ease-standard);
   flex-shrink: 0;
+  box-shadow: 0 8px 18px rgba(20, 20, 18, 0.14);
+}
+.ask-send-btn:not(:disabled):hover,
+.ask-send-btn:not(:disabled):focus-visible {
+  background: var(--bg-button-hover);
+  box-shadow: 0 10px 22px rgba(20, 20, 18, 0.18);
+}
+.ask-send-btn:not(:disabled):active {
+  transform: translateY(1px) scale(0.98);
 }
 .ask-send-btn:disabled {
-  opacity: 0.3;
+  opacity: 0.38;
   cursor: default;
+  background: var(--bg-muted);
+  color: var(--text-tertiary);
+  box-shadow: none;
 }
 .ask-send-btn svg {
   width: 19px;
@@ -4000,7 +4096,7 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 .ask-composer-card .ask-tool-btn,
 .ask-composer-card .ask-model-option,
 .ask-composer-card .ask-reference-item {
-  border-radius: 14px !important;
+  border-radius: 8px !important;
 }
 
 .ask-composer-card .ask-mention-chip,
@@ -4009,7 +4105,7 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 }
 
 .ask-composer-card .ask-send-btn {
-  border-radius: 14px !important;
+  border-radius: 8px !important;
 }
 
 .msg-ai-body {
@@ -4116,9 +4212,11 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 
   /* 输入条：贴底，含安全区，紧贴键盘，去掉顶部细线 */
   .ask-input-bar {
-    padding: 6px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 12px calc(10px + env(safe-area-inset-bottom, 0px));
     border-top: none;
-    background: var(--bg-primary);
+    background:
+      linear-gradient(180deg, rgba(250, 249, 245, 0), var(--bg-primary) 28%),
+      var(--bg-primary);
     box-sizing: border-box;
   }
 
@@ -4128,11 +4226,10 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
     box-sizing: border-box;
   }
 
-  /* 卡片：12px 圆角，单行工具栏；修正 content-box 导致的右侧溢出 */
   .ask-composer-card {
-    padding: 10px 12px 8px;
-    border-radius: 16px;
-    box-shadow: none;
+    padding: 11px 12px 9px;
+    border-radius: 8px;
+    box-shadow: 0 8px 22px rgba(20, 20, 18, 0.07);
     box-sizing: border-box;
     width: 100%;
     max-width: 100%;
@@ -4163,10 +4260,10 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   }
 
   .ask-tool-btn {
-    padding: 6px 10px;
+    padding: 6px 9px;
     font-size: 12px;
     gap: 4px;
-    border-radius: 999px !important;
+    border-radius: 7.5px !important;
     height: 30px;
     min-width: 0;
     white-space: nowrap;
@@ -4200,12 +4297,11 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
     margin-left: auto;
   }
 
-  /* 发送按钮：圆形，贴近聊天应用 */
   .ask-send-btn,
   .ask-composer-card .ask-send-btn {
-    width: 34px !important;
-    height: 34px !important;
-    border-radius: 999px !important;
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 8px !important;
   }
 
   .ask-send-btn svg {
@@ -4222,7 +4318,7 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   .ask-mention-chip {
     padding: 4px 8px;
     font-size: 11.5px;
-    border-radius: 999px !important;
+    border-radius: 7.5px !important;
     gap: 6px;
   }
 
@@ -4241,7 +4337,7 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
     max-width: 100%;
     max-height: 60vh;
     padding: 14px 14px 18px;
-    border-radius: 16px 16px 0 0;
+    border-radius: 12px 12px 0 0;
     border: 1px solid var(--border-light);
     border-bottom: none;
     box-shadow: 0 -10px 24px rgba(20, 20, 19, 0.12);
@@ -4287,12 +4383,12 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 
   .ask-reference-item {
     padding: 9px 10px;
-    border-radius: 12px !important;
+    border-radius: 8px !important;
   }
 
   .ask-model-option {
     padding: 10px 12px;
-    border-radius: 12px !important;
+    border-radius: 8px !important;
   }
 }
 

@@ -482,7 +482,10 @@ export function AskView() {
       </div>
       <div className="ask-input-bar">
         <div className="ask-input-inner">
-          <div className="ask-composer-card" ref={composerRef}>
+          <div
+            className={`ask-composer-card${referencePickerOpen || modelMenuOpen || showInlinePanel ? ' is-engaged' : ''}${input.trim() ? ' has-input' : ''}`}
+            ref={composerRef}
+          >
             {selectedMentions.length > 0 && (
               <div className="ask-mentions-row">
                 {selectedMentions.map((item) => (
@@ -635,7 +638,13 @@ export function AskView() {
 
               <div className="ask-composer-submit">
                 <div className="ask-composer-hint">Enter 发送 / Shift+Enter 换行</div>
-                <button className="ask-send-btn" onClick={() => handleSend()} disabled={!input.trim() || loading}>
+                <button
+                  className="ask-send-btn"
+                  onClick={() => handleSend()}
+                  disabled={!input.trim() || loading}
+                  aria-label="发送问题"
+                  title="发送问题"
+                >
                   <Icon.Send />
                 </button>
               </div>
