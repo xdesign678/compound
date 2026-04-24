@@ -21,6 +21,7 @@ import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { categorizeConcepts } from '@/lib/api-client';
+import { formatCategorizeCompletionMessage } from '@/lib/categorize-status';
 import { Icon } from '../Icons';
 import type { Concept, CategoryTag } from '@/lib/types';
 
@@ -226,10 +227,10 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
     setCategorizing(true);
     showToast('正在归类...', true);
     try {
-      const count = await categorizeConcepts((done, total) => {
+      const result = await categorizeConcepts((done, total) => {
         showToast(`正在归类... (${done}/${total})`, true);
       });
-      showToast(`归类完成，处理了 ${count} 条`, false);
+      showToast(formatCategorizeCompletionMessage(result), false, result.failed > 0);
       setTimeout(() => hideToast(), 3000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

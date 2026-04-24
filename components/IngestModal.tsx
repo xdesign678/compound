@@ -36,7 +36,8 @@ export function IngestModal() {
   }, []);
 
   useEffect(() => {
-    return () => { timersRef.current.forEach(clearTimeout); };
+    const timers = timersRef.current;
+    return () => { timers.forEach(clearTimeout); };
   }, []);
 
   useEffect(() => {

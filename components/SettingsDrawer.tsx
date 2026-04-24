@@ -98,9 +98,10 @@ export function SettingsDrawer() {
   }, []);
 
   useEffect(() => {
+    const timers = timersRef.current;
     setLlmConfig(getLlmConfig());
     setAdminToken(getAdminToken());
-    return () => { timersRef.current.forEach(clearTimeout); };
+    return () => { timers.forEach(clearTimeout); };
   }, []);
 
   useEffect(() => {

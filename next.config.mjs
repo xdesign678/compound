@@ -1,3 +1,7 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.env.NODE_ENV !== 'production';
 
 // Comma-separated list in env takes precedence. Fall back to safe defaults for
@@ -31,6 +35,7 @@ const csp = [
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  outputFileTracingRoot: __dirname,
   // better-sqlite3 is a native module — keep it external so webpack doesn't try to bundle it.
   serverExternalPackages: ['better-sqlite3'],
   experimental: {

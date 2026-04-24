@@ -18,6 +18,7 @@ import type {
   Concept,
   ActivityLog,
   SourceType,
+  LlmConfig,
 } from './types';
 
 export interface ServerIngestInput {
@@ -28,6 +29,7 @@ export interface ServerIngestInput {
   rawContent: string;
   externalKey?: string;
   replaceSourceId?: string;
+  llmConfig?: LlmConfig;
 }
 
 export interface ServerIngestResult {
@@ -35,6 +37,9 @@ export interface ServerIngestResult {
   newConceptIds: string[];
   updatedConceptIds: string[];
   activityId: string;
+  source: Source;
+  concepts: Concept[];
+  activity: ActivityLog;
   compiler?: {
     chunks: number;
     evidence: number;
@@ -87,7 +92,7 @@ export async function ingestSourceToServerDb(
       summary: c.summary,
     })),
     existingCategories,
-    // llmConfig omitted → falls through to server env (LLM_API_KEY etc.)
+    llmConfig: input.llmConfig,
   });
 
   // 4. Compose new concepts
@@ -140,12 +145,19 @@ export async function ingestSourceToServerDb(
   }
 
   // 6. Bidirectional links for new concepts (relatedConceptIds points to existing)
+  const nextConceptById = new Map(conceptById);
+  for (const next of updatedConceptDocs) {
+    nextConceptById.set(next.id, next);
+  }
+
   const biDirUpdates: Array<{ id: string; related: string[] }> = [];
   for (const nc of newConcepts) {
     for (const relId of nc.related) {
-      const c = conceptById.get(relId);
+      const c = nextConceptById.get(relId);
       if (c && !c.related.includes(nc.id)) {
-        biDirUpdates.push({ id: relId, related: [...c.related, nc.id] });
+        const related = [...c.related, nc.id];
+        biDirUpdates.push({ id: relId, related });
+        nextConceptById.set(relId, { ...c, related, updatedAt: now });
       }
     }
   }
@@ -174,7 +186,7 @@ export async function ingestSourceToServerDb(
       repo.upsertConcept(nc);
     }
     for (const upd of biDirUpdates) {
-      const c = conceptById.get(upd.id);
+      const c = nextConceptById.get(upd.id);
       if (!c) continue;
       repo.upsertConcept({ ...c, related: upd.related, updatedAt: now });
     }
@@ -199,11 +211,22 @@ export async function ingestSourceToServerDb(
   });
   trx();
 
+  const affectedConceptIds = Array.from(
+    new Set([
+      ...newConceptIds,
+      ...updatedConceptIds,
+      ...biDirUpdates.map((update) => update.id),
+    ])
+  );
+
   return {
     sourceId: source.id,
     newConceptIds,
     updatedConceptIds,
     activityId: activity.id,
+    source: repo.getSource(source.id) ?? source,
+    concepts: repo.getConceptsByIds(affectedConceptIds),
+    activity,
     compiler: compilerResult,
   };
 }

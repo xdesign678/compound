@@ -6,7 +6,7 @@
     "dev": "NODE_ENV=development next dev -p 8080 -H 0.0.0.0",
     "build": "next build",
     "start": "next start -p ${PORT:-3000} -H 0.0.0.0",
-    "lint": "next lint",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit --pretty false",
     "test": "node scripts/run-node-tests.mjs",
     "check": "npm run typecheck && npm run test && npm run build"
@@ -21,7 +21,7 @@
     "lucide-react": "^1.8.0",
     "marked": "15.0.4",
     "nanoid": "5.0.9",
-    "next": "15.0.3",
+    "next": "^15.5.15",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "sharp": "^0.34.5",
@@ -32,6 +32,8 @@
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "autoprefixer": "10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^15.5.15",
     "postcss": "8.4.49",
     "tailwindcss": "3.4.15",
     "typescript": "5.6.3"

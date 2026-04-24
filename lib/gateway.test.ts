@@ -66,6 +66,7 @@ test('uses the user key for custom api urls instead of the server key', { concur
       LLM_API_KEY: 'server-key',
       AI_GATEWAY_API_KEY: undefined,
       COMPOUND_ALLOW_CUSTOM_LLM_API_URL: undefined,
+      COMPOUND_SKIP_DNS_GUARD: 'true',
     },
     async () => {
       const mockFetch: typeof fetch = async (_input, init) => {

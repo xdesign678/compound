@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runIngestLLM } from '@/lib/ingest-core';
+import { ingestSourceToServerDb } from '@/lib/server-ingest';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
@@ -32,28 +32,26 @@ export async function POST(req: Request) {
         { status: 413 }
       );
     }
-    if (!Array.isArray(body.existingConcepts)) {
+    if (body.existingConcepts !== undefined && !Array.isArray(body.existingConcepts)) {
       return NextResponse.json({ error: 'existingConcepts must be an array' }, { status: 400 });
     }
-    if (body.existingConcepts.length > MAX_EXISTING_CONCEPTS) {
+    if ((body.existingConcepts || []).length > MAX_EXISTING_CONCEPTS) {
       return NextResponse.json({ error: 'Too many existing concepts' }, { status: 400 });
     }
 
     const llmConfig = readLlmConfigOverride(req, body);
 
-    // Extract existing categories with runtime validation
-    const existingCategories = Array.isArray(body.existingCategories)
-      ? body.existingCategories.filter((c): c is string => typeof c === 'string').slice(0, 100)
-      : [];
-
-    const parsed = await runIngestLLM({
-      source: body.source,
-      existingConcepts: body.existingConcepts,
-      existingCategories,
+    const result = await ingestSourceToServerDb({
+      title: body.source.title,
+      type: body.source.type,
+      author: body.source.author,
+      url: body.source.url,
+      rawContent: body.source.rawContent,
+      externalKey: body.source.externalKey,
       llmConfig,
     });
 
-    return NextResponse.json(parsed);
+    return NextResponse.json(result);
   } catch (err) {
     console.error('[ingest] error:', err instanceof Error ? err.message : String(err));
     return NextResponse.json(

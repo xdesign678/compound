@@ -78,8 +78,9 @@ export interface IngestRequest {
     author?: string;
     url?: string;
     rawContent: string;
+    externalKey?: string;
   };
-  existingConcepts: Array<{ id: string; title: string; summary: string }>;
+  existingConcepts?: Array<{ id: string; title: string; summary: string }>;
   existingCategories?: string[];
   llmConfig?: LlmConfig;
 }
@@ -99,6 +100,22 @@ export interface IngestResponse {
     addRelatedIds?: string[];
   }>;
   activitySummary: string;
+}
+
+export interface PersistedIngestResponse {
+  sourceId: string;
+  newConceptIds: string[];
+  updatedConceptIds: string[];
+  activityId: string;
+  source: Source;
+  concepts: Concept[];
+  activity: ActivityLog;
+  compiler?: {
+    chunks: number;
+    evidence: number;
+    conceptsIndexed: number;
+    versions: number;
+  };
 }
 
 export interface QueryRequest {

@@ -9,7 +9,7 @@ import type {
   Concept,
   ActivityLog,
   IngestRequest,
-  IngestResponse,
+  PersistedIngestResponse,
   QueryRequest,
   QueryResponse,
   LintRequest,
@@ -184,11 +184,7 @@ export async function ingestSource(input: {
     externalKey: input.externalKey,
   };
 
-  // 2. Gather existing concepts
-  const existing = await findClientConceptCandidates(
-    `${source.title}\n${source.rawContent.slice(0, 4000)}`,
-    CLIENT_CANDIDATE_LIMIT
-  );
+  // 2. Let the server run the canonical ingest pipeline and persist the rows.
   const req: IngestRequest = {
     source: {
       title: source.title,
@@ -196,118 +192,29 @@ export async function ingestSource(input: {
       author: source.author,
       url: source.url,
       rawContent: source.rawContent,
+      externalKey: source.externalKey,
     },
-    existingConcepts: existing.map((c) => ({ id: c.id, title: c.title, summary: c.summary })),
   };
-
-  // Inject existing categories for LLM reference (derived from already-fetched existing concepts)
-  const existingCategories = normalizeCategoryKeys(
-    existing.flatMap((c) => c.categoryKeys || [])
-  ).sort();
-  const reqWithCategories = { ...req, existingCategories };
 
   // 3. Call API
-  const resp = await postJSON<IngestResponse>('/api/ingest', reqWithCategories);
+  const resp = await postJSON<PersistedIngestResponse>('/api/ingest', req);
 
-  // 4. Build new concepts list (pure computation, no DB writes yet)
-  const newConceptIds: string[] = [];
-  const newConcepts: Concept[] = resp.newConcepts.map((nc) => {
-    const id = 'c-' + nanoid(8);
-    newConceptIds.push(id);
-    const { categories, categoryKeys } = normalizeCategoryState({ categories: nc.categories || [] });
-    return {
-      id,
-      title: nc.title.trim(),
-      summary: nc.summary.trim(),
-      body: nc.body,
-      sources: [source.id],
-      related: nc.relatedConceptIds || [],
-      createdAt: now,
-      updatedAt: now,
-      version: 1,
-      contentStatus: 'full',
-      categories,
-      categoryKeys,
-    };
-  });
-
-  // 5. Pre-fetch existing concepts to update (bulk read before transaction)
-  const updatedConceptIds: string[] = [];
-  const updatedConceptDocs: Concept[] = [];
-  const updIds = resp.updatedConcepts.map((u) => u.id);
-  const updFetched = await db.concepts.bulkGet(updIds);
-  for (let i = 0; i < resp.updatedConcepts.length; i++) {
-    const upd = resp.updatedConcepts[i];
-    const c = updFetched[i];
-    if (!c) continue;
-    const sources = c.sources.includes(source.id) ? c.sources : [...c.sources, source.id];
-    const related = new Set(c.related);
-    (upd.addRelatedIds || []).forEach((r) => related.add(r));
-    const next: Concept = {
-      ...c,
-      body: upd.newBody || c.body,
-      summary: upd.newSummary || c.summary,
-      sources,
-      related: Array.from(related),
-      updatedAt: now,
-      version: c.version + 1,
-      contentStatus: 'full',
-    };
-    updatedConceptDocs.push(next);
-    updatedConceptIds.push(c.id);
-  }
-
-  // Build activity log record
-  const activity: ActivityLog = {
-    id: 'a-' + nanoid(8),
-    type: 'ingest',
-    title: `摄入 <em>${escapeHTML(source.title)}</em>`,
-    details: resp.activitySummary,
-    relatedSourceIds: [source.id],
-    relatedConceptIds: [...newConceptIds, ...updatedConceptIds],
-    at: now,
-  };
-
-  // Ids of concepts that need bidirectional link updates
-  const biDirRelIds = Array.from(new Set(newConcepts.flatMap((nc) => nc.related)));
-
-  // 6-8. All writes wrapped in a single Dexie transaction
+  // 4. Mirror the server-persisted rows into IndexedDB so the current browser
+  // immediately shows the same IDs and content as other devices.
   await db.transaction('rw', [db.sources, db.concepts, db.activity], async () => {
-    // Save source
-    await db.sources.put(source);
-
-    // Apply updates to existing concepts
-    for (const next of updatedConceptDocs) {
-      await db.concepts.put(next);
+    await db.sources.put({ ...resp.source, contentStatus: 'full' });
+    if (resp.concepts.length > 0) {
+      await db.concepts.bulkPut(resp.concepts.map((concept) => ({ ...concept, contentStatus: 'full' as const })));
     }
-
-    // Bulk add new concepts
-    if (newConcepts.length > 0) {
-      await db.concepts.bulkPut(newConcepts);
-    }
-
-    // Bidirectional linking: read and write inside the same transaction to avoid concurrency races
-    if (biDirRelIds.length > 0) {
-      const biDirFetched = await db.concepts.bulkGet(biDirRelIds);
-      const biDirMap = new Map<string, Concept>();
-      biDirRelIds.forEach((rid, i) => { if (biDirFetched[i]) biDirMap.set(rid, biDirFetched[i]!); });
-      for (const nc of newConcepts) {
-        for (const relId of nc.related) {
-          const c = biDirMap.get(relId);
-          if (c && !c.related.includes(nc.id)) {
-            const updated = [...c.related, nc.id];
-            await db.concepts.update(relId, { related: updated, updatedAt: now });
-            biDirMap.set(relId, { ...c, related: updated });
-          }
-        }
-      }
-    }
-
-    // Activity log
-    await db.activity.put(activity);
+    await db.activity.put(resp.activity);
   });
 
-  return { sourceId: source.id, newConceptIds, updatedConceptIds, activityId: activity.id };
+  return {
+    sourceId: resp.sourceId,
+    newConceptIds: resp.newConceptIds,
+    updatedConceptIds: resp.updatedConceptIds,
+    activityId: resp.activityId,
+  };
 }
 
 export async function askWiki(
