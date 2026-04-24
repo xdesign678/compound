@@ -88,9 +88,9 @@ function readStoredLintTimestamp() {
 }
 
 function readStoredHomeStyle(): HomeStyle {
-  if (typeof window === 'undefined') return 'feed';
+  if (typeof window === 'undefined') return 'library';
   const raw = localStorage.getItem('compound_home_style');
-  return raw === 'library' ? 'library' : 'feed';
+  return raw === 'feed' ? 'feed' : 'library';
 }
 
 export const useAppStore = create<AppState>((set) => ({
