@@ -3221,6 +3221,9 @@ button {
   border-radius: 8px;
   background: var(--bg-muted);
 }
+.settings-segmented-three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
 .settings-segmented button {
   min-height: 34px;
   border: none;

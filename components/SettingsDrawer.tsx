@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useAppStore, type HomeStyle } from '@/lib/store';
+import { useAppStore, type ColorMode } from '@/lib/store';
 import { lintWiki } from '@/lib/api-client';
 import { getDb } from '@/lib/db';
 import { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } from '@/lib/seed';
@@ -87,6 +87,9 @@ export function SettingsDrawer() {
   const clearFresh = useAppStore((s) => s.clearFresh);
   const homeStyle = useAppStore((s) => s.homeStyle);
   const setHomeStyle = useAppStore((s) => s.setHomeStyle);
+  const colorMode = useAppStore((s) => s.colorMode);
+  const setColorMode = useAppStore((s) => s.setColorMode);
+  const hydrateColorMode = useAppStore((s) => s.hydrateColorMode);
 
   const [lintResult, setLintResult] = useState<LintResponse | null>(null);
   const [lintLoading, setLintLoading] = useState(false);
@@ -111,9 +114,10 @@ export function SettingsDrawer() {
     const timers = timersRef.current;
     setLlmConfig(getLlmConfig());
     setAdminToken(getAdminToken());
+    hydrateColorMode();
     void fetchCustomModels().then(setCustomModels).catch(() => setCustomModels([]));
     return () => { timers.forEach(clearTimeout); };
-  }, []);
+  }, [hydrateColorMode]);
 
   useEffect(() => {
     const el = modalRef.current;
@@ -400,6 +404,24 @@ export function SettingsDrawer() {
             >
               知识库
             </button>
+            </div>
+          </div>
+
+          <div className="settings-tool-row settings-tool-row-flat">
+            <div>
+              <div className="settings-tool-title">颜色模式</div>
+              <div className="settings-card-desc">默认浅色，也可以切到深色或跟随系统</div>
+            </div>
+            <div className="settings-segmented settings-segmented-three">
+              {(['light', 'dark', 'system'] as ColorMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  className={colorMode === mode ? 'active' : ''}
+                  onClick={() => setColorMode(mode)}
+                >
+                  {mode === 'light' ? '浅色' : mode === 'dark' ? '深色' : '系统'}
+                </button>
+              ))}
             </div>
           </div>
         </div>

@@ -4,6 +4,7 @@ export type TabId = 'wiki' | 'sources' | 'ask' | 'activity';
 export type ActivitySubTab = 'health' | 'log';
 export type ActivityFilterType = 'all' | 'ingest' | 'query' | 'lint';
 export type HomeStyle = 'feed' | 'library';
+export type ColorMode = 'light' | 'dark' | 'system';
 
 interface DetailState {
   type: 'concept' | 'source';
@@ -47,6 +48,7 @@ interface AppState {
   lintRunning: boolean;
   lintBanner: LintBannerState | null;
   homeStyle: HomeStyle;
+  colorMode: ColorMode;
   searchCollapsed: boolean;
   searchFocusNonce: number;
 
@@ -75,6 +77,8 @@ interface AppState {
   hydrateLastLintAt: () => void;
   setHomeStyle: (s: HomeStyle) => void;
   hydrateHomeStyle: () => void;
+  setColorMode: (mode: ColorMode) => void;
+  hydrateColorMode: () => void;
   setSearchCollapsed: (v: boolean) => void;
   triggerSearchFocus: () => void;
 }
@@ -91,6 +95,18 @@ function readStoredHomeStyle(): HomeStyle {
   if (typeof window === 'undefined') return 'library';
   const raw = localStorage.getItem('compound_home_style');
   return raw === 'feed' ? 'feed' : 'library';
+}
+
+function readStoredColorMode(): ColorMode {
+  if (typeof window === 'undefined') return 'light';
+  const raw = localStorage.getItem('compound_theme');
+  return raw === 'dark' || raw === 'system' ? raw : 'light';
+}
+
+function applyColorMode(mode: ColorMode) {
+  if (typeof window === 'undefined') return;
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.classList.toggle('dark', mode === 'dark' || (mode === 'system' && prefersDark));
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -110,6 +126,7 @@ export const useAppStore = create<AppState>((set) => ({
   lintRunning: false,
   lintBanner: null,
   homeStyle: readStoredHomeStyle(),
+  colorMode: 'light',
   searchCollapsed: false,
   searchFocusNonce: 0,
 
@@ -152,6 +169,16 @@ export const useAppStore = create<AppState>((set) => ({
     set({ homeStyle: s });
   },
   hydrateHomeStyle: () => set({ homeStyle: readStoredHomeStyle() }),
+  setColorMode: (mode) => {
+    localStorage.setItem('compound_theme', mode);
+    applyColorMode(mode);
+    set({ colorMode: mode });
+  },
+  hydrateColorMode: () => {
+    const mode = readStoredColorMode();
+    applyColorMode(mode);
+    set({ colorMode: mode });
+  },
   setSearchCollapsed: (v) => set((s) => (s.searchCollapsed === v ? s : { searchCollapsed: v })),
   triggerSearchFocus: () => set((s) => ({ searchFocusNonce: s.searchFocusNonce + 1 })),
 }));
