@@ -1,11 +1,21 @@
 'use client';
 
-import { useMemo, useCallback, useEffect, useState } from 'react';
+import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { nanoid } from 'nanoid';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
-import { failLintActivity, lintWiki, startLintActivity } from '@/lib/api-client';
+import {
+  failLintActivity,
+  getRepairStatus,
+  lintWiki,
+  pruneDeletedConcepts,
+  startLintActivity,
+  startRepair,
+  type RepairFindingPayload,
+  type RepairStatusResponse,
+} from '@/lib/api-client';
+import { pullSnapshotFromCloud } from '@/lib/cloud-sync';
 import { formatRelativeTime } from '@/lib/format';
 import { Icon } from '../Icons';
 import type { ActivityLog, Concept } from '@/lib/types';
@@ -16,8 +26,34 @@ interface Finding {
   conceptIds: string[];
 }
 
+type RepairFindingType = RepairFindingPayload['type'];
+const FIXABLE_TYPES: RepairFindingType[] = ['duplicate', 'missing-link', 'orphan', 'contradiction'];
+
 const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 const THIN_THRESHOLD = 200;
+const REPAIR_RUN_STORAGE_KEY = 'compound_active_repair_run';
+const REPAIR_POLL_MS = 3000;
+
+function isFixable(type: Finding['type']): type is RepairFindingType {
+  return (FIXABLE_TYPES as string[]).includes(type);
+}
+
+function toRepairPayload(findings: Finding[]): RepairFindingPayload[] {
+  return findings
+    .filter((f): f is Finding & { type: RepairFindingType } => isFixable(f.type))
+    .map((f) => ({ type: f.type, message: f.message, conceptIds: f.conceptIds }));
+}
+
+function maybeNotify(title: string, body: string): void {
+  if (typeof window === 'undefined') return;
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  try {
+    new Notification(title, { body });
+  } catch {
+    // SW-only notifications — silently ignore.
+  }
+}
 
 function buildLocalFindings(concepts: Concept[]): Finding[] {
   const now = Date.now();
@@ -63,9 +99,15 @@ export function HealthView() {
   const setLintBanner = useAppStore((s) => s.setLintBanner);
   const hydrateLastLintAt = useAppStore((s) => s.hydrateLastLintAt);
 
+  const showToast = useAppStore((s) => s.showToast);
+
   const [localFindings, setLocalFindings] = useState<Finding[]>([]);
   const [conceptTitleMap, setConceptTitleMap] = useState<Map<string, string>>(new Map());
   const [localScanAt, setLocalScanAt] = useState<number | null>(null);
+  const [repairRun, setRepairRun] = useState<RepairStatusResponse | null>(null);
+  const [repairStarting, setRepairStarting] = useState(false);
+  const [repairError, setRepairError] = useState('');
+  const repairDoneRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     hydrateLastLintAt();
@@ -96,6 +138,143 @@ export function HealthView() {
   }, [allFindings, conceptCount]);
 
   const scoreColor = healthScore >= 80 ? 'good' : healthScore >= 50 ? 'warn' : 'bad';
+
+  const fixableCount = useMemo(
+    () => allFindings.filter((f) => isFixable(f.type)).length,
+    [allFindings]
+  );
+
+  const pollRepairRun = useCallback(
+    async (runId: string): Promise<RepairStatusResponse | null> => {
+      try {
+        const status = await getRepairStatus(runId);
+        setRepairRun(status);
+        return status;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setRepairError(message);
+        if (/run not found/i.test(message)) {
+          try {
+            localStorage.removeItem(REPAIR_RUN_STORAGE_KEY);
+          } catch {
+            // ignore
+          }
+          setRepairRun(null);
+        }
+        return null;
+      }
+    },
+    []
+  );
+
+  const onRepairFinished = useCallback(
+    async (status: RepairStatusResponse) => {
+      if (repairDoneRef.current.has(status.id)) return;
+      repairDoneRef.current.add(status.id);
+      try {
+        localStorage.removeItem(REPAIR_RUN_STORAGE_KEY);
+      } catch {
+        // ignore
+      }
+      try {
+        await pruneDeletedConcepts(status.summary.deletedConceptIds || []);
+        await pullSnapshotFromCloud();
+      } catch (err) {
+        console.warn('[repair] post-repair sync failed:', err);
+      }
+      const s = status.summary;
+      const toastText = `一键修复完成：合并 ${s.merged}、建链 ${s.linked}、孤岛补 ${s.orphanFixed}、冲突入审 ${s.conflictQueued}`;
+      showToast(toastText, false, status.status === 'failed');
+      maybeNotify('Compound 一键修复完成', toastText);
+      // Refresh the lint findings so fixed items disappear and remaining ones re-render.
+      setLintResult([]);
+    },
+    [setLintResult, showToast]
+  );
+
+  // Poll active repair run (also resumes after page refresh).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const storedId = (() => {
+      try {
+        return localStorage.getItem(REPAIR_RUN_STORAGE_KEY);
+      } catch {
+        return null;
+      }
+    })();
+    const activeId = repairRun?.id ?? storedId;
+    if (!activeId) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const tick = async () => {
+      if (cancelled) return;
+      const status = await pollRepairRun(activeId);
+      if (cancelled || !status) return;
+      if (status.status === 'running') {
+        timer = setTimeout(tick, REPAIR_POLL_MS);
+      } else {
+        await onRepairFinished(status);
+      }
+    };
+    void tick();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [repairRun?.id, pollRepairRun, onRepairFinished]);
+
+  const triggerRepair = useCallback(
+    async (findingsToFix: Finding[]) => {
+      if (repairStarting) return;
+      const payload = toRepairPayload(findingsToFix);
+      if (payload.length === 0) return;
+      setRepairStarting(true);
+      setRepairError('');
+      try {
+        const res = await startRepair(payload);
+        if (!res.runId) {
+          showToast('没有可自动修复的条目', false, false);
+          return;
+        }
+        try {
+          localStorage.setItem(REPAIR_RUN_STORAGE_KEY, res.runId);
+        } catch {
+          // ignore
+        }
+        setRepairRun({
+          id: res.runId,
+          status: 'running',
+          total: res.total,
+          done: 0,
+          failed: 0,
+          startedAt: Date.now(),
+          finishedAt: null,
+          summary: {
+            merged: 0,
+            linked: 0,
+            orphanFixed: 0,
+            conflictQueued: 0,
+            deletedConceptIds: [],
+            touchedConceptIds: [],
+            aiFallbacks: 0,
+          },
+        });
+        if (res.dropped > 0) {
+          showToast(`已启动修复 · ${res.dropped} 条超出单次上限,下次再跑`, false, false);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setRepairError(message);
+        showToast(`启动修复失败：${message}`, false, true);
+      } finally {
+        setRepairStarting(false);
+      }
+    },
+    [repairStarting, showToast]
+  );
 
   const runLint = useCallback(async () => {
     if (lintRunning) return;
@@ -211,6 +390,31 @@ export function HealthView() {
           <span className="finding-count">{allFindings.length}</span>
         </div>
 
+        {repairRun && repairRun.status === 'running' ? (
+          <div className="repair-banner">
+            <div className="repair-banner-head">
+              <span className="lint-spinner" />
+              <span>
+                一键修复中 {repairRun.done + repairRun.failed} / {repairRun.total}
+              </span>
+            </div>
+            <div className="repair-progress">
+              <div
+                className="repair-progress-bar"
+                style={{
+                  width: `${repairRun.total === 0 ? 0 : Math.round(((repairRun.done + repairRun.failed) / repairRun.total) * 100)}%`,
+                }}
+              />
+            </div>
+            <div className="repair-banner-sub">
+              合并 {repairRun.summary.merged} · 建链 {repairRun.summary.linked} · 孤岛补{' '}
+              {repairRun.summary.orphanFixed} · 冲突入审 {repairRun.summary.conflictQueued}
+              {repairRun.failed > 0 ? ` · 失败 ${repairRun.failed}` : ''}
+            </div>
+          </div>
+        ) : null}
+        {repairError ? <div className="ops-alert">{repairError}</div> : null}
+
         {allFindings.length === 0 ? (
           <div className="health-empty">
             <Icon.Lint />
@@ -224,15 +428,28 @@ export function HealthView() {
           <div className="finding-list">
             {allFindings.map((finding, index) => {
               const act = findingAction(finding);
+              const fixable = isFixable(finding.type);
+              const fixing = Boolean(repairRun && repairRun.status === 'running');
               return (
                 <div key={`${finding.type}-${index}`} className={`finding-item type-${finding.type}`}>
                   <div className="finding-icon">{findingIcon(finding.type)}</div>
                   <div className="finding-body">
                     <div className="finding-top-row">
                       <span className="finding-badge">{findingLabel(finding.type)}</span>
-                      <button className="finding-action-btn" onClick={act.action}>
-                        {act.label}
-                      </button>
+                      <div className="finding-top-actions">
+                        {fixable ? (
+                          <button
+                            className="finding-action-btn primary"
+                            disabled={fixing || repairStarting}
+                            onClick={() => void triggerRepair([finding])}
+                          >
+                            修复
+                          </button>
+                        ) : null}
+                        <button className="finding-action-btn" onClick={act.action}>
+                          {act.label}
+                        </button>
+                      </div>
                     </div>
                     <div className="finding-msg">{finding.message}</div>
                     <div className="finding-chips">
@@ -258,13 +475,24 @@ export function HealthView() {
         <button
           className="lint-btn"
           onClick={runLint}
-          disabled={lintRunning}
+          disabled={lintRunning || Boolean(repairRun && repairRun.status === 'running')}
         >
           {lintRunning ? (
             <><span className="lint-spinner" /> 检查中...</>
           ) : (
             <><Icon.Sparkle /> 运行深度检查</>
           )}
+        </button>
+        <button
+          className="lint-btn secondary"
+          onClick={() => void triggerRepair(allFindings)}
+          disabled={
+            fixableCount === 0 ||
+            repairStarting ||
+            Boolean(repairRun && repairRun.status === 'running')
+          }
+        >
+          一键修复{fixableCount > 0 ? ` (${fixableCount})` : ''}
         </button>
         {(lastLintAt || localScanAt) && (
           <div className="lint-time">

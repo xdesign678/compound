@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "NODE_ENV=development next dev --turbopack -p 8080 -H 0.0.0.0",
     "build": "next build",
+    "build:measure": "node scripts/measure-build.mjs",
     "start": "next start -p ${PORT:-3000} -H 0.0.0.0",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit --pretty false",

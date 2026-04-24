@@ -142,6 +142,14 @@ function htmlToMarkdown(html: string): string {
     .trim();
 }
 
+function formatSourceHost(url: string): string {
+  try {
+    return new URL(url).host.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
 export function SourceDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -149,6 +157,7 @@ export function SourceDetail({ id }: { id: string }) {
   const [draftContent, setDraftContent] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [isEditorFocused, setIsEditorFocused] = useState(false);
 
   const source = useLiveQuery(async () => getDb().sources.get(id), [id]);
   const generated = useLiveQuery(
@@ -267,199 +276,180 @@ export function SourceDetail({ id }: { id: string }) {
   const generatedCount = generated?.length ?? 0;
   const generatedItems = generated ?? [];
   const displayMarkdown = isDirty ? draftContent : source.rawContent;
+  const wordCount = displayMarkdown.length;
+  const readingMinutes = wordCount > 0 ? Math.max(1, Math.round(wordCount / 400)) : 0;
+  const sourceHost = source.url ? formatSourceHost(source.url) : null;
+  const showToolbarActions = isDirty || saveStatus !== 'idle';
+  const barVisible = hasFullContent && (isEditorFocused || showToolbarActions);
+
+  const handleFormat = (command: string, value?: string) => (event: React.MouseEvent) => {
+    event.preventDefault();
+    applyRichCommand(command, value);
+  };
 
   return (
     <article className="concept-detail source-detail-page">
-      <div className="detail-kicker-row">
-        <div className="detail-kicker">资料档案</div>
-        {!hasFullContent && <div className="detail-status">加载中</div>}
-      </div>
-      <h1>{source.title}</h1>
-      <div className="detail-meta">
-        {source.author && <><span>{source.author}</span><span>·</span></>}
-        <span>{formatRelativeTime(source.ingestedAt)}</span>
-        <span>·</span>
-        <span>{generatedCount} 个相关概念</span>
-      </div>
-
-      <div className="source-detail-top-card">
-        <div className="source-detail-top-card-kicker">资料概览</div>
-
-        <div className="source-detail-top-card-row">
-          {source.author && (
-            <div className="source-detail-pill source-detail-pill-muted">
-              作者：{source.author}
-            </div>
-          )}
-
-          <div className="source-detail-pill source-detail-pill-muted">
-            关联概念：{generatedCount} 个
-          </div>
-
-          <div className="source-detail-pill source-detail-pill-muted">
-            字数：{displayMarkdown.length.toLocaleString()}
-          </div>
-
-          {source.url && (
+      <header className="source-hero">
+        <div className="source-hero-kicker-row">
+          <span className="detail-kicker">资料档案</span>
+          {!hasFullContent && <span className="detail-status">加载中</span>}
+        </div>
+        <h1>{source.title}</h1>
+        <div className="source-hero-meta">
+          {source.author && <span>{source.author}</span>}
+          <span>{formatRelativeTime(source.ingestedAt)}</span>
+          {wordCount > 0 && <span>{wordCount.toLocaleString()} 字</span>}
+          {readingMinutes > 0 && <span>约 {readingMinutes} 分钟</span>}
+        </div>
+        {source.url && (
+          <div className="source-hero-actions">
             <a
               href={source.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="source-detail-link"
+              className="source-hero-link"
             >
-              查看原链接
+              访问原文
+              <span aria-hidden="true" className="source-hero-link-arrow">↗</span>
             </a>
-          )}
-        </div>
-
-        {generatedCount > 0 && (
-          <div className="source-detail-top-card-concepts">
-            {generatedItems.map((concept) => (
-              <button
-                key={concept.id}
-                className="related-chip source-detail-top-card-chip"
-                onClick={() => openConcept(concept.id)}
-              >
-                {concept.title}
-              </button>
-            ))}
           </div>
         )}
-      </div>
+      </header>
 
-      <div className="source-detail-main">
-        <div className="source-detail-toolbar">
-          <div className="source-detail-toolbar-actions">
-            <span className="source-detail-inline-hint">正文可直接编辑</span>
-            {isDirty && (
-              <>
-                <button
-                  className="modal-btn source-detail-toggle-btn"
-                  onClick={handleResetDraft}
-                  type="button"
-                >
-                  还原
-                </button>
-                <button
-                  className="modal-btn primary source-detail-save-btn"
-                  onClick={handleSave}
-                  disabled={!canSave}
-                  type="button"
-                >
-                  立即保存
-                </button>
-              </>
-            )}
-          </div>
-
-          <div className="source-detail-toolbar-meta">
-            {saveStatus !== 'idle' && (
-              <span className={`source-detail-save-status ${saveStatus}`}>
-                {saveStatus === 'saving' && '保存中...'}
-                {saveStatus === 'saved' && '已保存'}
-                {saveStatus === 'error' && '保存失败'}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {hasFullContent && (
-          <>
-            <div className="source-detail-format-toolbar" aria-label="正文格式工具">
-              <button
-                type="button"
-                className="source-detail-format-btn"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  applyRichCommand('formatBlock', '<p>');
-                }}
-              >
+      <div className="source-layout">
+        <section className="source-layout-main">
+          <div
+            className="source-editor-bar"
+            data-visible={barVisible ? 'true' : 'false'}
+            aria-label="正文格式工具"
+          >
+            <div className="source-editor-bar-format">
+              <button type="button" className="source-editor-bar-btn" onMouseDown={handleFormat('formatBlock', '<p>')}>
                 正文
               </button>
-              <button
-                type="button"
-                className="source-detail-format-btn"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  applyRichCommand('formatBlock', '<h2>');
-                }}
-              >
-                小标题
+              <button type="button" className="source-editor-bar-btn" onMouseDown={handleFormat('formatBlock', '<h2>')}>
+                标题
               </button>
-              <button
-                type="button"
-                className="source-detail-format-btn"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  applyRichCommand('bold');
-                }}
-              >
-                加粗
+              <button type="button" className="source-editor-bar-btn source-editor-bar-btn-bold" onMouseDown={handleFormat('bold')}>
+                B
               </button>
-              <button
-                type="button"
-                className="source-detail-format-btn"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  applyRichCommand('italic');
-                }}
-              >
-                斜体
+              <button type="button" className="source-editor-bar-btn source-editor-bar-btn-italic" onMouseDown={handleFormat('italic')}>
+                I
               </button>
-              <button
-                type="button"
-                className="source-detail-format-btn"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  applyRichCommand('insertUnorderedList');
-                }}
-              >
+              <button type="button" className="source-editor-bar-btn" onMouseDown={handleFormat('insertUnorderedList')}>
                 列表
               </button>
-              <button
-                type="button"
-                className="source-detail-format-btn"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  applyRichCommand('formatBlock', '<blockquote>');
-                }}
-              >
+              <button type="button" className="source-editor-bar-btn" onMouseDown={handleFormat('formatBlock', '<blockquote>')}>
                 引用
               </button>
             </div>
-            <p className="source-detail-editor-tip">
-              现在这块正文就是编辑区，会按阅读样子直接修改；停一下会自动保存，也支持 `Cmd/Ctrl + S`。
-            </p>
-          </>
-        )}
-
-        {!hasFullContent ? (
-          <div className="empty-state empty-state-compact">原文加载中...</div>
-        ) : (
-          <div className="source-detail-prose-shell source-detail-rich-shell">
-            <div
-              ref={editorRef}
-              className="prose source-detail-prose note-editor-content source-detail-rich-editor"
-              contentEditable={canEdit}
-              suppressContentEditableWarning
-              data-placeholder="直接在这里整理这份资料..."
-              onInput={syncDraftFromEditor}
-              onBlur={() => {
-                if (!isDirty) return;
-                void handleSave();
-              }}
-              aria-label="资料正文所见即所得编辑器"
-            />
+            <div className="source-editor-bar-status">
+              {isDirty && (
+                <>
+                  <button
+                    className="source-editor-bar-action"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={handleResetDraft}
+                    type="button"
+                  >
+                    还原
+                  </button>
+                  <button
+                    className="source-editor-bar-action primary"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={handleSave}
+                    disabled={!canSave}
+                    type="button"
+                  >
+                    保存
+                  </button>
+                </>
+              )}
+              {saveStatus !== 'idle' && (
+                <span className={`source-editor-bar-indicator ${saveStatus}`}>
+                  <span className="source-editor-bar-dot" aria-hidden="true" />
+                  {saveStatus === 'saving' && '保存中'}
+                  {saveStatus === 'saved' && '已保存'}
+                  {saveStatus === 'error' && '保存失败'}
+                </span>
+              )}
+            </div>
           </div>
-        )}
-      </div>
 
-      <div className="detail-section">
-        <h3>摄入记录</h3>
-        <div className="edit-log-item">
-          <span className="time">{formatRelativeTime(source.ingestedAt)}</span>
-          <span>资料摄入完成，生成 {generatedCount} 个相关概念</span>
-        </div>
+          {!hasFullContent ? (
+            <div className="empty-state empty-state-compact">原文加载中...</div>
+          ) : (
+            <div className="source-editor-shell">
+              <div
+                ref={editorRef}
+                className="prose source-editor-content note-editor-content"
+                contentEditable={canEdit}
+                suppressContentEditableWarning
+                data-placeholder="直接在这里整理这份资料…"
+                onInput={syncDraftFromEditor}
+                onFocus={() => setIsEditorFocused(true)}
+                onBlur={() => {
+                  setIsEditorFocused(false);
+                  if (!isDirty) return;
+                  void handleSave();
+                }}
+                aria-label="资料正文所见即所得编辑器"
+              />
+            </div>
+          )}
+        </section>
+
+        <aside className="source-layout-aside">
+          {generatedCount > 0 && (
+            <section className="source-aside-section">
+              <div className="source-aside-title">
+                关联概念
+                <span className="source-aside-count">{generatedCount}</span>
+              </div>
+              <div className="source-aside-chips">
+                {generatedItems.map((concept) => (
+                  <button
+                    key={concept.id}
+                    className="related-chip source-aside-chip"
+                    onClick={() => openConcept(concept.id)}
+                    type="button"
+                  >
+                    {concept.title}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="source-aside-section">
+            <div className="source-aside-title">摄入记录</div>
+            <ul className="source-aside-log">
+              <li>
+                <span className="source-aside-log-time">
+                  {formatRelativeTime(source.ingestedAt)}
+                </span>
+                <span className="source-aside-log-text">
+                  资料摄入完成，生成 {generatedCount} 个相关概念
+                </span>
+              </li>
+            </ul>
+          </section>
+
+          {source.url && sourceHost && (
+            <section className="source-aside-section">
+              <div className="source-aside-title">资料来源</div>
+              <a
+                href={source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="source-aside-link"
+              >
+                <span className="source-aside-link-host">{sourceHost}</span>
+                <span aria-hidden="true" className="source-aside-link-arrow">↗</span>
+              </a>
+            </section>
+          )}
+        </aside>
       </div>
     </article>
   );
