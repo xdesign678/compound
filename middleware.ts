@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+const AUTH_COOKIE_NAME = 'compound_admin_token';
+const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
+
 function clean(value: string | undefined): string {
   return value?.replace(/^["'\s]+|["'\s]+$/g, '') ?? '';
 }
@@ -37,7 +40,23 @@ function getProvidedToken(req: NextRequest): string {
   if (auth.startsWith('Bearer ')) return auth.slice('Bearer '.length).trim();
   if (auth.startsWith('Basic ')) return decodeBasicToken(auth.slice('Basic '.length));
 
-  return req.cookies.get('compound_admin_token')?.value.trim() ?? '';
+  return req.cookies.get(AUTH_COOKIE_NAME)?.value.trim() ?? '';
+}
+
+function withAuthCookie(req: NextRequest, res: NextResponse, token: string): NextResponse {
+  const existing = req.cookies.get(AUTH_COOKIE_NAME)?.value.trim() ?? '';
+  if (existing === token) return res;
+
+  res.cookies.set({
+    name: AUTH_COOKIE_NAME,
+    value: token,
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: req.nextUrl.protocol === 'https:',
+    path: '/',
+    maxAge: AUTH_COOKIE_MAX_AGE,
+  });
+  return res;
 }
 
 export function middleware(req: NextRequest) {
@@ -53,7 +72,7 @@ export function middleware(req: NextRequest) {
   }
 
   if (safeEqual(getProvidedToken(req), token)) {
-    return NextResponse.next();
+    return withAuthCookie(req, NextResponse.next(), token);
   }
 
   if (req.nextUrl.pathname.startsWith('/api/')) {
