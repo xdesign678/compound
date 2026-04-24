@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { nanoid } from 'nanoid';
 import { getDb } from '@/lib/db';
@@ -61,6 +62,8 @@ export function AskView() {
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
   const [customModels, setCustomModels] = useState<string[]>([]);
   const [caretPosition, setCaretPosition] = useState(0);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
@@ -86,10 +89,12 @@ export function AskView() {
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
-      if (!composerRef.current?.contains(event.target as Node)) {
-        setReferencePickerOpen(false);
-        setModelMenuOpen(false);
-      }
+      const target = event.target as Node;
+      if (composerRef.current?.contains(target)) return;
+      const el = target as HTMLElement;
+      if (el && typeof el.closest === 'function' && el.closest('.ask-flyout')) return;
+      setReferencePickerOpen(false);
+      setModelMenuOpen(false);
     }
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -503,7 +508,7 @@ export function AskView() {
               </div>
             )}
 
-            {referencePickerOpen && (
+            {referencePickerOpen && mounted && createPortal(
               <>
                 <div
                   className="ask-flyout-backdrop"
@@ -543,10 +548,11 @@ export function AskView() {
                     onSelect={(item) => handleSelectMention(item, 'picker')}
                   />
                 </div>
-              </>
+              </>,
+              document.body
             )}
 
-            {modelMenuOpen && (
+            {modelMenuOpen && mounted && createPortal(
               <>
                 <div
                   className="ask-flyout-backdrop"
@@ -574,7 +580,8 @@ export function AskView() {
                     })}
                   </div>
                 </div>
-              </>
+              </>,
+              document.body
             )}
 
             {showInlinePanel && (
