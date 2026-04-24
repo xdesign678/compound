@@ -9,7 +9,13 @@
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit --pretty false",
     "test": "node scripts/run-node-tests.mjs",
-    "check": "npm run typecheck && npm run test && npm run build"
+    "check": "npm run typecheck && npm run test && npm run build",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix --max-warnings=0"
+    ]
   },
   "dependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -34,6 +40,8 @@
     "autoprefixer": "10.4.20",
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.5.15",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2",
     "postcss": "8.4.49",
     "tailwindcss": "3.4.15",
     "typescript": "5.6.3"
