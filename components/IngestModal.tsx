@@ -176,7 +176,7 @@ export function IngestModal() {
                   <div className="opt-sub">带上文章/帖子的正文</div>
                 </div>
               </button>
-              <button className="ingest-option" onClick={() => { close(); setNoteEditorOpen(true); }}>
+              <button className="ingest-option" onClick={() => setNoteEditorOpen(true)}>
                 <div className="opt-icon"><Icon.Text /></div>
                 <div>
                   <div className="opt-title">新建笔记</div>
