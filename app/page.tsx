@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
@@ -250,6 +251,13 @@ export default function Page() {
               >
                 <Icon.Github />
               </button>
+              <Link
+                className="desktop-sidebar-btn icon-only"
+                href="/sync"
+                aria-label="同步控制台"
+              >
+                <Icon.Activity />
+              </Link>
               <button
                 className="desktop-sidebar-btn icon-only"
                 onClick={openObsidianImport}

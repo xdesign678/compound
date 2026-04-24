@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
 import { formatQueryContextForPrompt, wikiRepo } from '@/lib/wiki-db';
+import { hybridSearchWikiContext } from '@/lib/embedding';
 import type { Concept, QueryRequest, QueryResponse } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -44,6 +45,27 @@ function mergeConcepts(primary: Concept[], secondary: Concept[]): Concept[] {
   return Array.from(concepts.values());
 }
 
+async function getServerContext(question: string) {
+  const options = {
+    conceptLimit: Number(process.env.COMPOUND_QUERY_CONTEXT_CONCEPT_LIMIT || 24),
+    chunkLimit: Number(process.env.COMPOUND_QUERY_CONTEXT_CHUNK_LIMIT || 12),
+  };
+
+  if (process.env.COMPOUND_DISABLE_HYBRID_SEARCH === 'true') {
+    return wikiRepo.searchWikiContext(question, options);
+  }
+
+  try {
+    return await hybridSearchWikiContext(question, options);
+  } catch (err) {
+    console.warn(
+      '[query] hybrid search failed, falling back to FTS:',
+      err instanceof Error ? err.message : String(err)
+    );
+    return wikiRepo.searchWikiContext(question, options);
+  }
+}
+
 export async function POST(req: Request) {
   const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
@@ -66,10 +88,7 @@ export async function POST(req: Request) {
 
     const llmConfig = readLlmConfigOverride(req, body);
 
-    const serverContext = wikiRepo.searchWikiContext(question, {
-      conceptLimit: Number(process.env.COMPOUND_QUERY_CONTEXT_CONCEPT_LIMIT || 24),
-      chunkLimit: Number(process.env.COMPOUND_QUERY_CONTEXT_CHUNK_LIMIT || 12),
-    });
+    const serverContext = await getServerContext(question);
     const requestConcepts = (body.concepts || []).map(conceptFromRequest);
     const concepts = mergeConcepts(requestConcepts, serverContext.concepts).slice(0, MAX_CONCEPTS);
     const wikiDump =
@@ -98,6 +117,7 @@ export async function POST(req: Request) {
       temperature: 0.35,
       maxTokens: 2200,
       llmConfig,
+      task: 'query',
     });
 
     const parsed = parseJSON<QueryResponse>(raw);

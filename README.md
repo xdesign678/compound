@@ -57,6 +57,15 @@ Required for GitHub/Obsidian server sync:
 - `GITHUB_TOKEN`: fine-grained PAT with Repository → Contents: Read-only.
 - `GITHUB_BRANCH`: defaults to `main`.
 
+Optional sync/analysis controls:
+
+- `GITHUB_WEBHOOK_SECRET`: verifies `/api/sync/github/webhook` push events.
+- `CRON_SECRET`: allows scheduled full rescan through `/api/sync/cron/rescan`.
+- `COMPOUND_GITHUB_DELETE_MODE`: `soft` by default; set `hard` to remove local records when remote files disappear.
+- `COMPOUND_EMBEDDING_PROVIDER`: `local` by default; set `remote` only when an embedding endpoint is configured.
+- `COMPOUND_EMBEDDING_API_KEY`, `COMPOUND_EMBEDDING_API_URL`, `COMPOUND_EMBEDDING_MODEL`: optional remote embedding settings.
+- `COMPOUND_DISABLE_HYBRID_SEARCH=true`: disables embedding-assisted retrieval and uses FTS only.
+
 ## Docker
 
 ```bash
@@ -73,6 +82,8 @@ docker run --rm -p 3000:3000 \
 ## Deployment notes
 
 - GitHub sync uses a long-running Node process and a SQLite-backed job table. Prefer container deployment over serverless.
+- `/sync` shows run-level progress, file-level status, analysis worker state, retry/cancel controls, and index coverage.
+- `/review` shows low-confidence or large-change review items before they are accepted by a human.
 - The service writes SQLite data under `DATA_DIR`.
 - The browser also keeps an IndexedDB cache for fast local reads.
 - User-supplied custom LLM endpoints must use the user’s own API key. The server-owned key is never sent to a user-supplied URL.

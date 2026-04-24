@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useAppStore } from '@/lib/store';
 import { Icon } from './Icons';
 
@@ -87,6 +88,9 @@ export function Header(props: HeaderProps) {
         >
           <Icon.Github />
         </button>
+        <Link className="icon-btn" href="/sync" aria-label="同步控制台" title="同步控制台">
+          <Icon.Activity />
+        </Link>
         <button
           className="icon-btn"
           onClick={openObsidianImport}
