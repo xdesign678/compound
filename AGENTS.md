@@ -1,7 +1,9 @@
 # 仓库协作约定
 
-- 默认不要新建分支。未得到用户明确要求时，直接在当前分支上修改。
-- 只有在改动范围很大，或当前工作区状态复杂、直接修改可能误伤现有内容时，才先说明原因，再建议新建分支。
+- **以后所有修改一律直接在 `main` 分支上进行，不要新建分支，也不要走 PR 流程。**
+- 开始工作前先确认当前分支是 `main`（`git rev-parse --abbrev-ref HEAD` 应返回 `main`）；若不在 `main`，先 `git checkout main` 再修改。
+- 完成改动后直接 `git commit` 并 `git push origin main`，不要创建功能分支或 PR。
+- 仅在用户明确要求时，才可以新建分支或开 PR。
 
 ## Build performance tracking
 
