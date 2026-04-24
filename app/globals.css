@@ -4658,6 +4658,77 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   }
 }
 
+/* 平板/非桌面端（<1024px）同样走底部 sheet + 遮罩 */
+@media (max-width: 1023px) {
+  .ask-flyout-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 55;
+    animation: askBackdropIn 180ms var(--motion-ease-standard);
+  }
+
+  .ask-flyout {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: var(--ask-kb-offset, 0px);
+    top: auto;
+    width: 100%;
+    max-width: 100%;
+    max-height: 75dvh;
+    padding: 14px 14px calc(18px + env(safe-area-inset-bottom, 0px));
+    border-radius: 16px 16px 0 0;
+    border: 1px solid var(--border-light);
+    border-bottom: none;
+    box-shadow: 0 -10px 32px rgba(20, 20, 19, 0.18);
+    overflow-y: auto;
+    z-index: 60;
+    animation: askSheetIn 220ms var(--motion-ease-emphasized);
+  }
+
+  .ask-flyout.ask-inline-flyout {
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px) + var(--ask-kb-offset, 0px));
+    max-height: 60vh;
+    padding: 14px 14px;
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -10px 24px rgba(20, 20, 19, 0.12);
+    z-index: 40;
+  }
+
+  .ask-model-flyout {
+    width: 100%;
+    left: 0;
+    right: 0;
+  }
+
+  .ask-flyout-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .ask-flyout::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-default);
+    margin: -4px auto 10px;
+  }
+
+  .ask-segmented {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .ask-segmented-btn {
+    flex: 1;
+  }
+}
+
 @keyframes askSheetIn {
   from { transform: translateY(16px); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
