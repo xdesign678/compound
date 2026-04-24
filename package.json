@@ -5,12 +5,19 @@
   "scripts": {
     "dev": "NODE_ENV=development next dev --turbopack -p 8080 -H 0.0.0.0",
     "build": "next build",
+    "build:measure": "node scripts/measure-build.mjs",
     "start": "next start -p ${PORT:-3000} -H 0.0.0.0",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit --pretty false",
     "test": "node scripts/run-node-tests.mjs",
     "check": "npm run typecheck && npm run test && npm run build",
-    "danger": "danger ci"
+    "danger": "danger ci",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix --max-warnings=0"
+    ]
   },
   "dependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -36,6 +43,8 @@
     "danger": "^12.3.3",
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.5.15",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2",
     "postcss": "8.4.49",
     "tailwindcss": "3.4.15",
     "typescript": "5.6.3"

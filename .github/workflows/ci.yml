@@ -14,7 +14,30 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+
+      # Cache Next.js build output per the official recommendation:
+      # https://nextjs.org/docs/pages/guides/ci-build-caching#github-actions
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.[jt]s', '**/*.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+            ${{ runner.os }}-nextjs-
+
       - run: npm run typecheck
       - run: npm run test
-      - run: npm run build
+
+      - name: Build (with performance tracking)
+        run: npm run build:measure
+
+      - name: Upload build metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-metrics
+          path: tmp/build-metrics.json
+          if-no-files-found: warn
+
       - run: docker build -t compound .

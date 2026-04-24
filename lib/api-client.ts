@@ -286,6 +286,65 @@ export async function archiveAnswerAsConcept(
   return id;
 }
 
+export interface RepairFindingPayload {
+  type: 'duplicate' | 'missing-link' | 'orphan' | 'contradiction';
+  message: string;
+  conceptIds: string[];
+}
+
+export interface RepairStartResponse {
+  runId: string | null;
+  total: number;
+  dropped: number;
+  ok: boolean;
+}
+
+export interface RepairStatusSummary {
+  merged: number;
+  linked: number;
+  orphanFixed: number;
+  conflictQueued: number;
+  deletedConceptIds: string[];
+  touchedConceptIds: string[];
+  aiFallbacks: number;
+  activityId?: string;
+}
+
+export interface RepairStatusResponse {
+  id: string;
+  status: 'running' | 'done' | 'failed' | 'cancelled';
+  total: number;
+  done: number;
+  failed: number;
+  startedAt: number;
+  finishedAt: number | null;
+  summary: RepairStatusSummary;
+}
+
+export async function startRepair(findings: RepairFindingPayload[]): Promise<RepairStartResponse> {
+  return postJSON<RepairStartResponse>('/api/repair/run', { findings });
+}
+
+export async function getRepairStatus(runId: string): Promise<RepairStatusResponse> {
+  const res = await fetch(`/api/repair/status?runId=${encodeURIComponent(runId)}`, {
+    headers: getAdminAuthHeaders(),
+    cache: 'no-store',
+  });
+  if (res.status === 404) throw new Error('run not found');
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 200) || `状态查询失败 (${res.status})`);
+  }
+  return (await res.json()) as RepairStatusResponse;
+}
+
+/** Remove Dexie rows for concepts the server-side merge deleted. */
+export async function pruneDeletedConcepts(ids: string[]): Promise<void> {
+  if (!ids || ids.length === 0) return;
+  const db = getDb();
+  await db.concepts.bulkDelete(ids);
+}
+
 export async function lintWiki(activityId?: string): Promise<LintResponse> {
   const db = getDb();
   const concepts = await db.concepts.toArray();
