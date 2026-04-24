@@ -9,6 +9,7 @@ import { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } from '@/lib/seed';
 import { getLlmConfig, saveLlmConfig, PRESET_MODELS } from '@/lib/llm-config';
 import { clearAdminToken, getAdminToken, saveAdminToken } from '@/lib/admin-auth-client';
 import type { LintResponse, LlmConfig } from '@/lib/types';
+import { Icon } from './Icons';
 
 // Centralised inline-style constants for SettingsDrawer
 const S = {
@@ -107,12 +108,7 @@ export function SettingsDrawer() {
   useEffect(() => {
     const el = modalRef.current;
     if (!el || !isOpen) return;
-    const focusable = el.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    first?.focus();
+    el.focus({ preventScroll: true });
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -199,105 +195,128 @@ export function SettingsDrawer() {
 
   return (
     <div className={`modal-overlay ${isOpen ? 'visible' : ''}`} onClick={close}>
-      <div className="modal" ref={modalRef} role="dialog" aria-modal="true" aria-labelledby="settings-drawer-title" onClick={(e) => e.stopPropagation()}>
+      <div className="modal settings-modal" ref={modalRef} role="dialog" aria-modal="true" aria-labelledby="settings-drawer-title" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="modal-handle" />
-        <h3 id="settings-drawer-title">设置 · 工具</h3>
+        <div className="settings-hero">
+          <div>
+            <div className="settings-kicker">Compound 设置</div>
+            <h3 id="settings-drawer-title">设置 · 工具</h3>
+            <p>管理模型、访问密钥和 Wiki 维护工具。</p>
+          </div>
+          <button className="settings-close-btn" onClick={close} aria-label="关闭设置">
+            关闭
+          </button>
+        </div>
 
         {/* LLM 配置 */}
-        <div className="settings-section" style={S.llmSection}>
-          <div style={S.llmTitle}>LLM 配置</div>
-          <div className="desc" style={S.llmDesc}>
-            填写后将覆盖服务器端默认配置。留空则使用服务端环境变量。
+        <div className="settings-section settings-card" style={S.llmSection}>
+          <div className="settings-card-head">
+            <div className="settings-card-icon"><Icon.Sparkle /></div>
+            <div>
+              <div className="settings-card-title">LLM 配置</div>
+              <div className="settings-card-desc">
+                留空则使用服务端默认配置，填写后只覆盖当前浏览器。
+              </div>
+            </div>
           </div>
 
-          <div style={S.fieldCol}>
-            <label style={S.labelCol}>
-              <span style={S.labelText}>API Key</span>
+          <div className="settings-fields">
+            <label className="settings-field">
+              <span>API Key</span>
               <input
                 type="password"
                 placeholder="sk-... 或 OpenRouter key"
                 value={llmConfig.apiKey || ''}
                 onChange={(e) => setLlmConfig((c) => ({ ...c, apiKey: e.target.value }))}
-                style={S.input}
               />
             </label>
 
-            <label style={S.labelCol}>
-              <span style={S.labelText}>模型</span>
+            <label className="settings-field">
+              <span>模型</span>
               <input
                 type="text"
                 placeholder="anthropic/claude-sonnet-4.6"
                 value={llmConfig.model || ''}
                 onChange={(e) => setLlmConfig((c) => ({ ...c, model: e.target.value }))}
-                style={S.input}
               />
             </label>
 
-            <div style={S.presetRow}>
+            <div className="settings-preset-row">
               {PRESET_MODELS.map((p) => (
                 <button
                   key={p.value}
+                  className={`settings-preset${llmConfig.model === p.value ? ' active' : ''}`}
                   onClick={() => setLlmConfig((c) => ({ ...c, model: p.value }))}
-                  style={S.presetBtn(llmConfig.model === p.value)}
                 >
                   {p.label}
                 </button>
               ))}
             </div>
 
-            <label style={S.labelCol}>
-              <span style={S.labelText}>
-                API URL <span style={{ fontWeight: 400 }}>(可选，默认 OpenRouter)</span>
+            <label className="settings-field">
+              <span>
+                API URL <em>可选</em>
               </span>
               <input
                 type="text"
                 placeholder="https://openrouter.ai/api/v1/chat/completions"
                 value={llmConfig.apiUrl || ''}
                 onChange={(e) => setLlmConfig((c) => ({ ...c, apiUrl: e.target.value }))}
-                style={S.input}
               />
             </label>
 
-            <button className="modal-btn primary" onClick={saveLlm} style={S.saveBtnMargin}>
+            <button className="modal-btn primary settings-primary-action" onClick={saveLlm}>
               {llmSaved ? '已保存 ✓' : '保存配置'}
             </button>
           </div>
         </div>
 
-        <div className="settings-section" style={S.llmSection}>
-          <div style={S.llmTitle}>访问保护</div>
-          <div className="desc" style={S.llmDesc}>
-            如果服务端配置了 COMPOUND_ADMIN_TOKEN / ADMIN_TOKEN，这里保存同一个访问密钥后，前端请求会自动带上鉴权头。
+        <div className="settings-section settings-card" style={S.llmSection}>
+          <div className="settings-card-head">
+            <div className="settings-card-icon"><Icon.Settings /></div>
+            <div>
+              <div className="settings-card-title">访问保护</div>
+              <div className="settings-card-desc">
+                服务端开启 ADMIN_TOKEN 后，在这里保存同一个密钥。
+              </div>
+            </div>
           </div>
 
-          <div style={S.fieldCol}>
-            <label style={S.labelCol}>
-              <span style={S.labelText}>Admin Token</span>
+          <div className="settings-fields">
+            <label className="settings-field">
+              <span>Admin Token</span>
               <input
                 type="password"
                 placeholder="与服务端 ADMIN_TOKEN 保持一致"
                 value={adminToken}
                 onChange={(e) => setAdminToken(e.target.value)}
-                style={S.input}
               />
             </label>
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="modal-btn primary" onClick={saveAdmin} style={S.saveBtnMargin}>
+            <div className="settings-action-row">
+              <button className="modal-btn primary" onClick={saveAdmin}>
                 {adminSaved ? '已保存 ✓' : '保存访问密钥'}
               </button>
-              <button className="modal-btn" onClick={clearAdmin} style={S.saveBtnMargin}>
+              <button className="modal-btn settings-secondary-action" onClick={clearAdmin}>
                 清除
               </button>
             </div>
           </div>
         </div>
 
-        <div className="settings-section" style={S.lintSection}>
-          <div className="settings-row" style={S.lintRow}>
+        <div className="settings-section settings-card" style={S.lintSection}>
+          <div className="settings-card-head">
+            <div className="settings-card-icon"><Icon.Lint /></div>
             <div>
-              <div style={S.lintRowTitle}>Lint · Wiki 体检</div>
-              <div className="desc">让 AI 找出矛盾、孤立页、缺失链接</div>
+              <div className="settings-card-title">Wiki 维护</div>
+              <div className="settings-card-desc">体检结构问题，调整首页展示方式。</div>
+            </div>
+          </div>
+
+          <div className="settings-tool-row">
+            <div>
+              <div className="settings-tool-title">Lint · Wiki 体检</div>
+              <div className="settings-card-desc">找出矛盾、孤立页和缺失链接</div>
             </div>
             <button className="modal-btn primary" onClick={handleLint} disabled={lintLoading}>
               {lintLoading ? '体检中...' : '运行 Lint'}
@@ -325,34 +344,37 @@ export function SettingsDrawer() {
               )}
             </div>
           )}
-        </div>
-
-        {/* 首页样式 */}
-        <div className="settings-section" style={{ padding: 0, marginBottom: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>首页样式</div>
-          <div className="desc" style={{ marginBottom: 12 }}>
-            Wiki 首页展示形式：动态流或分类知识库。
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="settings-tool-row settings-tool-row-flat">
+            <div>
+              <div className="settings-tool-title">首页样式</div>
+              <div className="settings-card-desc">选择动态流或分类知识库</div>
+            </div>
+            <div className="settings-segmented">
             <button
-              style={S.presetBtn(homeStyle === 'feed')}
+              className={homeStyle === 'feed' ? 'active' : ''}
               onClick={() => setHomeStyle('feed')}
             >
               动态流
             </button>
             <button
-              style={S.presetBtn(homeStyle === 'library')}
+              className={homeStyle === 'library' ? 'active' : ''}
               onClick={() => setHomeStyle('library')}
             >
               知识库
             </button>
+            </div>
           </div>
         </div>
 
-        <div className={`settings-section settings-data-section${confirming === 'clear' ? ' is-confirming-danger' : ''}`} style={S.dataSection}>
-          <div className="settings-data-title">数据管理</div>
-          <div className="desc settings-data-desc">
-            示例数据可以随时载入；清空数据会删除本机资料、概念和问答记录。
+        <div className={`settings-section settings-card settings-data-section${confirming === 'clear' ? ' is-confirming-danger' : ''}`} style={S.dataSection}>
+          <div className="settings-card-head">
+            <div className="settings-card-icon"><Icon.Trash /></div>
+            <div>
+              <div className="settings-card-title">数据管理</div>
+              <div className="settings-card-desc">
+                示例数据可随时载入；清空会删除本机资料、概念和问答记录。
+              </div>
+            </div>
           </div>
           {confirming === 'seed' ? (
             <>
@@ -372,13 +394,12 @@ export function SettingsDrawer() {
             </>
           ) : (
             <>
-              <button className="modal-btn" style={S.seedBtn} onClick={() => setConfirming('seed')}>
+              <button className="modal-btn settings-secondary-action" style={S.seedBtn} onClick={() => setConfirming('seed')}>
                 载入示例 Wiki
               </button>
               <button className="modal-btn danger" style={S.seedBtn} onClick={() => setConfirming('clear')}>
                 清空所有数据
               </button>
-              <button className="modal-btn" onClick={close}>关闭</button>
             </>
           )}
         </div>
