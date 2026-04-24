@@ -4378,6 +4378,11 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
     bottom: var(--ask-kb-offset, 0px);
   }
 
+  /* 去掉 scroll container 底部 16px，避免 composer 与 tabbar 之间出现空白 */
+  .app-main {
+    padding-bottom: 0;
+  }
+
   /* 消息区：收紧左右内边距，底部留出输入条高度的缓冲 */
   .ask-messages {
     padding: 12px 14px 14px;
