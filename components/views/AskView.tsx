@@ -504,63 +504,77 @@ export function AskView() {
             )}
 
             {referencePickerOpen && (
-              <div className="ask-flyout ask-reference-flyout">
-                <div className="ask-flyout-header">
-                  <div className="ask-flyout-title">添加引用</div>
-                  <div className="ask-segmented">
-                    <button
-                      className={`ask-segmented-btn${referenceMode === 'concept' ? ' active' : ''}`}
-                      onClick={() => setReferenceMode('concept')}
-                    >
-                      引用概念
-                    </button>
-                    <button
-                      className={`ask-segmented-btn${referenceMode === 'source' ? ' active' : ''}`}
-                      onClick={() => setReferenceMode('source')}
-                    >
-                      引用文件
-                    </button>
+              <>
+                <div
+                  className="ask-flyout-backdrop"
+                  onClick={() => setReferencePickerOpen(false)}
+                  aria-hidden="true"
+                />
+                <div className="ask-flyout ask-reference-flyout">
+                  <div className="ask-flyout-header">
+                    <div className="ask-flyout-title">添加引用</div>
+                    <div className="ask-segmented">
+                      <button
+                        className={`ask-segmented-btn${referenceMode === 'concept' ? ' active' : ''}`}
+                        onClick={() => setReferenceMode('concept')}
+                      >
+                        引用概念
+                      </button>
+                      <button
+                        className={`ask-segmented-btn${referenceMode === 'source' ? ' active' : ''}`}
+                        onClick={() => setReferenceMode('source')}
+                      >
+                        引用文件
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="ask-flyout-search">
-                  <Icon.Search />
-                  <input
-                    ref={pickerSearchRef}
-                    value={pickerSearch}
-                    onChange={(e) => setPickerSearch(e.target.value)}
-                    placeholder={referenceMode === 'concept' ? '搜索概念页...' : '搜索资料或文件...'}
+                  <div className="ask-flyout-search">
+                    <Icon.Search />
+                    <input
+                      ref={pickerSearchRef}
+                      value={pickerSearch}
+                      onChange={(e) => setPickerSearch(e.target.value)}
+                      placeholder={referenceMode === 'concept' ? '搜索概念页...' : '搜索资料或文件...'}
+                    />
+                  </div>
+                  <MentionResults
+                    items={pickerResults}
+                    emptyLabel={referenceMode === 'concept' ? '没有找到匹配的概念页' : '没有找到匹配的资料'}
+                    onSelect={(item) => handleSelectMention(item, 'picker')}
                   />
                 </div>
-                <MentionResults
-                  items={pickerResults}
-                  emptyLabel={referenceMode === 'concept' ? '没有找到匹配的概念页' : '没有找到匹配的资料'}
-                  onSelect={(item) => handleSelectMention(item, 'picker')}
-                />
-              </div>
+              </>
             )}
 
             {modelMenuOpen && (
-              <div className="ask-flyout ask-model-flyout">
-                <div className="ask-flyout-title">切换模型</div>
-                <div className="ask-model-list">
-                  {modelOptions.map((item) => {
-                    const active = llmConfig.model === item.value;
-                    return (
-                      <button
-                        key={item.value}
-                        className={`ask-model-option${active ? ' active' : ''}`}
-                        onClick={() => selectModel(item.value)}
-                      >
-                        <span className="ask-model-option-copy">
-                          <span className="ask-model-option-label">{item.label}</span>
-                          {item.helper && <span className="ask-model-option-helper">{item.helper}</span>}
-                        </span>
-                        <span className="ask-model-option-check">{active ? '✓' : ''}</span>
-                      </button>
-                    );
-                  })}
+              <>
+                <div
+                  className="ask-flyout-backdrop"
+                  onClick={() => setModelMenuOpen(false)}
+                  aria-hidden="true"
+                />
+                <div className="ask-flyout ask-model-flyout">
+                  <div className="ask-flyout-title">切换模型</div>
+                  <div className="ask-model-list">
+                    {modelOptions.map((item) => {
+                      const active = llmConfig.model === item.value;
+                      return (
+                        <button
+                          key={item.value}
+                          className={`ask-model-option${active ? ' active' : ''}`}
+                          onClick={() => selectModel(item.value)}
+                        >
+                          <span className="ask-model-option-copy">
+                            <span className="ask-model-option-label">{item.label}</span>
+                            {item.helper && <span className="ask-model-option-helper">{item.helper}</span>}
+                          </span>
+                          <span className="ask-model-option-check">{active ? '✓' : ''}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              </>
             )}
 
             {showInlinePanel && (

@@ -1852,13 +1852,16 @@ button {
   padding: 14px;
   backdrop-filter: blur(14px);
 }
+.ask-flyout-backdrop {
+  display: none;
+}
 .ask-reference-flyout,
 .ask-inline-flyout {
   max-width: 560px;
 }
 .ask-model-flyout {
-  left: auto;
-  right: 18px;
+  left: 18px;
+  right: auto;
   width: min(360px, calc(100% - 36px));
 }
 .ask-flyout-header {
@@ -4329,24 +4332,44 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
     max-width: 140px;
   }
 
-  /* 浮层：手机端改为底部弹出面板 */
+  /* 浮层遮罩：手机端点击空白处关闭，并覆盖 tab bar */
+  .ask-flyout-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 55;
+    animation: askBackdropIn 180ms var(--motion-ease-standard);
+  }
+
+  /* 浮层：手机端改为底部弹出面板，盖住 composer 与 tab bar */
   .ask-flyout {
     position: fixed;
     left: 0;
     right: 0;
-    bottom: calc(72px + env(safe-area-inset-bottom, 0px) + var(--ask-kb-offset, 0px));
+    bottom: var(--ask-kb-offset, 0px);
     top: auto;
     width: 100%;
     max-width: 100%;
+    max-height: 75dvh;
+    padding: 14px 14px calc(18px + env(safe-area-inset-bottom, 0px));
+    border-radius: 16px 16px 0 0;
+    border: 1px solid var(--border-light);
+    border-bottom: none;
+    box-shadow: 0 -10px 32px rgba(20, 20, 19, 0.18);
+    overflow-y: auto;
+    z-index: 60;
+    animation: askSheetIn 220ms var(--motion-ease-emphasized);
+  }
+
+  /* 输入法唤起时吸附到 composer 上方 */
+  .ask-flyout.ask-inline-flyout {
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px) + var(--ask-kb-offset, 0px));
     max-height: 60vh;
     padding: 14px 14px;
     border-radius: 12px 12px 0 0;
-    border: 1px solid var(--border-light);
-    border-bottom: none;
     box-shadow: 0 -10px 24px rgba(20, 20, 19, 0.12);
-    overflow-y: auto;
     z-index: 40;
-    animation: askSheetIn 180ms var(--motion-ease-standard);
   }
 
   .ask-model-flyout {
@@ -4398,6 +4421,11 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 @keyframes askSheetIn {
   from { transform: translateY(16px); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes askBackdropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* ========== Obsidian Import Modal ========== */
