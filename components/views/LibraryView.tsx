@@ -9,7 +9,6 @@ import {
   Brain,
   ChevronLeft,
   ChevronRight,
-  CircleDot,
   Compass,
   FolderKanban,
   Grid2x2,
@@ -250,7 +249,6 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
       ? `${selectedPrimary} > ${selectedSecondary} · ${filtered.length} 条`
       : `${selectedPrimary} · ${filtered.length} 条`
     : `共 ${filtered.length} 条`;
-  const CurrentPrimaryIcon = getPrimaryCategoryIcon(selectedPrimary);
 
   return (
     <>
@@ -375,9 +373,6 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                 onClick={() => setSelectedSecondary(null)}
               >
                 <span className="library-secondary-chip-inner">
-                  <span className="library-secondary-chip-icon" aria-hidden="true">
-                    <CurrentPrimaryIcon size={14} strokeWidth={1.9} />
-                  </span>
                   <span className="library-secondary-chip-label">全部方向</span>
                   <span className="library-secondary-chip-count">{currentPrimaryNode.count}</span>
                 </span>
@@ -393,9 +388,6 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                   }}
                 >
                   <span className="library-secondary-chip-inner">
-                    <span className="library-secondary-chip-icon" aria-hidden="true">
-                      <CircleDot size={14} strokeWidth={1.9} />
-                    </span>
                     <span className="library-secondary-chip-label">{sec.name}</span>
                     <span className="library-secondary-chip-count">{sec.count}</span>
                   </span>
