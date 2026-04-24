@@ -603,6 +603,57 @@ export const repo = {
     }).categoryKeys;
   },
 
+  /**
+   * Delete a concept row and best-effort clean associated auxiliary tables.
+   * Tables created lazily by `wiki-db.ts` (concept_fts/concept_evidence/…) may
+   * not exist yet in a cold database, so we swallow "no such table" errors.
+   */
+  deleteConcept(id: string): void {
+    if (!id) return;
+    const db = getServerDb();
+    const safeExec = (sql: string, params: unknown[] = []) => {
+      try {
+        db.prepare(sql).run(...params);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!/no such table/i.test(msg)) throw err;
+      }
+    };
+    db.prepare(`DELETE FROM concepts WHERE id = ?`).run(id);
+    safeExec(`DELETE FROM concept_fts WHERE concept_id = ?`, [id]);
+    safeExec(`DELETE FROM concept_evidence WHERE concept_id = ?`, [id]);
+    safeExec(`DELETE FROM concept_relations WHERE source_concept_id = ? OR target_concept_id = ?`, [id, id]);
+    safeExec(`DELETE FROM concept_versions WHERE concept_id = ?`, [id]);
+  },
+
+  /**
+   * In every concept's `related` array, replace occurrences of `oldId` with
+   * `newId` (or remove entirely when `newId` is null) and self-filter to avoid
+   * a concept pointing to itself. Returns the number of rows modified.
+   */
+  replaceRelatedId(oldId: string, newId: string | null, updatedAt = Date.now()): number {
+    if (!oldId) return 0;
+    const rows = getServerDb()
+      .prepare(`SELECT * FROM concepts WHERE related LIKE ?`)
+      .all(`%\"${oldId}\"%`) as ConceptRow[];
+    let changed = 0;
+    for (const row of rows) {
+      const concept = rowToConcept(row);
+      if (!concept.related.includes(oldId)) continue;
+      const mapped = concept.related
+        .map((id) => (id === oldId ? newId : id))
+        .filter((id): id is string => Boolean(id) && id !== concept.id);
+      const nextRelated = Array.from(new Set(mapped));
+      const unchanged =
+        nextRelated.length === concept.related.length &&
+        nextRelated.every((value, index) => value === concept.related[index]);
+      if (unchanged) continue;
+      repo.upsertConcept({ ...concept, related: nextRelated, updatedAt });
+      changed += 1;
+    }
+    return changed;
+  },
+
   findConceptCandidates(searchText: string, limit: number = 240): Concept[] {
     const normalizedLimit = Math.max(1, Math.trunc(limit));
     const keywords = Array.from(

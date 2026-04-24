@@ -2649,6 +2649,64 @@ button {
   font-size: var(--text-2xs);
   color: var(--text-tertiary);
 }
+.lint-btn.secondary {
+  color: var(--brand-clay);
+  background: var(--brand-clay-soft);
+}
+.lint-btn.secondary:hover:not(:disabled) {
+  background: rgba(217, 119, 87, 0.2);
+}
+.finding-top-actions {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.finding-action-btn.primary {
+  background: var(--bg-button);
+  color: var(--text-on-button);
+}
+.finding-action-btn.primary:hover {
+  background: var(--bg-button-hover);
+}
+
+/* Repair progress banner */
+.repair-banner {
+  margin: 4px 0 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--brand-clay-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.repair-banner-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm);
+  color: var(--text-body);
+  font-weight: 500;
+}
+.repair-banner-head .lint-spinner {
+  border-color: rgba(217, 119, 87, 0.3);
+  border-top-color: var(--brand-clay);
+}
+.repair-progress {
+  width: 100%;
+  height: 6px;
+  background: rgba(217, 119, 87, 0.18);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.repair-progress-bar {
+  height: 100%;
+  background: var(--brand-clay);
+  transition: width var(--motion-duration-base) var(--motion-ease-standard);
+}
+.repair-banner-sub {
+  font-size: var(--text-2xs);
+  color: var(--text-secondary);
+}
 
 /* Modal */
 .modal-overlay {
