@@ -6362,18 +6362,82 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   }
 }
 
-@media (max-width: 640px) {
-  .ops-stat-grid,
-  .ops-grid-3,
-  .ops-metric-grid {
+@media (max-width: 720px) {
+  .ops-page {
+    padding: 12px;
+  }
+
+  .ops-page h1 {
+    font-size: 20px;
+  }
+
+  .ops-topbar {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    gap: 12px;
+  }
+
+  .ops-topbar p {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .ops-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .ops-btn {
+    width: 100%;
+    min-width: 0;
+    padding: 0 10px;
+  }
+
+  .ops-grid-3 {
     grid-template-columns: 1fr;
+  }
+
+  .ops-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-stat {
+    padding: 12px;
+  }
+
+  .ops-stat strong {
+    font-size: 20px;
+  }
+
+  .ops-panel {
+    padding: 14px;
   }
 
   .ops-panel-head {
     flex-direction: column;
+    gap: 8px;
   }
 
-  .ops-btn {
-    flex: 1 1 auto;
+  .ops-time {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .ops-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-event-path,
+  .ops-metric strong {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 420px) {
+  .ops-actions {
+    grid-template-columns: 1fr;
   }
 }
