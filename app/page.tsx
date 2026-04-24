@@ -13,6 +13,7 @@ import { Header } from '@/components/Header';
 import { TabBar } from '@/components/TabBar';
 import { Toast } from '@/components/Toast';
 import { SwipeBack } from '@/components/SwipeBack';
+import { PullToRefresh } from '@/components/PullToRefresh';
 import { Icon } from '@/components/Icons';
 
 const IngestModal = dynamic(() => import('@/components/IngestModal').then(m => ({ default: m.IngestModal })), { ssr: false });
@@ -328,6 +329,7 @@ export default function Page() {
     <div className="app-shell">
       <Toast />
       <SwipeBack />
+      <PullToRefresh onRefresh={() => window.location.reload()} />
       <Header conceptCount={conceptCount ?? 0} sourceCount={sourceCount ?? 0} />
 
       <main className="app-main">

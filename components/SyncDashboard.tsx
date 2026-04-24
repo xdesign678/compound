@@ -313,7 +313,8 @@ export default function SyncDashboard() {
 
       <section className="ops-panel">
         <h2>文件明细</h2>
-        <div className="ops-table-wrap">
+        {/* Desktop table */}
+        <div className="ops-table-wrap ops-table-desktop">
           <table className="ops-table">
             <thead>
               <tr>
@@ -347,6 +348,46 @@ export default function SyncDashboard() {
               ) : null}
             </tbody>
           </table>
+        </div>
+        {/* Mobile cards */}
+        <div className="ops-table-mobile">
+          {(dashboard?.activeItems ?? []).map((item) => (
+            <div className="ops-mobile-card" key={item.id}>
+              <div className="ops-mobile-card-header">
+                <span className="ops-mobile-card-path" title={item.path}>{item.path}</span>
+                <Badge value={item.status} />
+              </div>
+              <div className="ops-mobile-card-meta">
+                <span>{item.change_type}</span>
+                <span>·</span>
+                <span>{stageText[item.stage] || item.stage}</span>
+              </div>
+              <div className="ops-mobile-card-stats">
+                {item.chunks != null && (
+                  <span className="ops-mobile-stat">
+                    <em>分块</em> {item.chunks}
+                  </span>
+                )}
+                {(item.concepts_created ?? 0) + (item.concepts_updated ?? 0) > 0 && (
+                  <span className="ops-mobile-stat">
+                    <em>概念</em>{' '}
+                    {(item.concepts_created ?? 0) + (item.concepts_updated ?? 0)}
+                  </span>
+                )}
+                {item.evidence != null && (
+                  <span className="ops-mobile-stat">
+                    <em>证据</em> {item.evidence}
+                  </span>
+                )}
+              </div>
+              {item.error ? (
+                <div className="ops-mobile-card-error">{item.error}</div>
+              ) : null}
+            </div>
+          ))}
+          {(dashboard?.activeItems ?? []).length === 0 ? (
+            <p className="ops-empty">暂无文件任务。</p>
+          ) : null}
         </div>
       </section>
 

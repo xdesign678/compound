@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '@/lib/store';
+import { hapticLight, hapticSuccess } from '@/lib/haptic';
 
-const EDGE_WIDTH = 24;       // px from left edge to start
+const EDGE_WIDTH = 36;       // px from left edge to start (was 24)
 const MIN_DISTANCE = 60;     // px to trigger back
 const MAX_Y_DRIFT = 100;     // px vertical drift tolerance
 const INDICATOR_SIZE = 32;
@@ -44,6 +45,7 @@ export function SwipeBack() {
       const touch = e.touches[0];
       if (touch.clientX <= EDGE_WIDTH) {
         startRef.current = { x: touch.clientX, y: touch.clientY };
+        hapticLight();
       }
     };
 
@@ -67,6 +69,7 @@ export function SwipeBack() {
 
     const onTouchEnd = () => {
       if (progressRef.current >= 1) {
+        hapticSuccess();
         back();
       }
       startRef.current = null;
