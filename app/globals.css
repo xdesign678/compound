@@ -3046,6 +3046,36 @@ button {
   background: rgba(201, 100, 66, 0.12);
   color: var(--brand-clay);
 }
+.settings-advanced-block {
+  padding-top: 2px;
+}
+.settings-inline-toggle {
+  width: 100%;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.settings-inline-note {
+  margin-top: 6px;
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.settings-inline-toggle + .settings-field {
+  margin-top: 8px;
+}
 .settings-primary-action {
   margin-top: 2px;
 }

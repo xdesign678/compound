@@ -95,6 +95,7 @@ export function SettingsDrawer() {
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
   const [customModels, setCustomModels] = useState<string[]>([]);
   const [llmExpanded, setLlmExpanded] = useState(false);
+  const [llmAdvancedExpanded, setLlmAdvancedExpanded] = useState(false);
   const [llmSaved, setLlmSaved] = useState(false);
   const [adminToken, setAdminToken] = useState('');
   const [adminSaved, setAdminSaved] = useState(false);
@@ -284,17 +285,37 @@ export function SettingsDrawer() {
               ))}
             </div>
 
-            <label className="settings-field">
-              <span>
-                API URL <em>可选</em>
-              </span>
-              <input
-                type="text"
-                placeholder="https://openrouter.ai/api/v1/chat/completions"
-                value={llmConfig.apiUrl || ''}
-                onChange={(e) => setLlmConfig((c) => ({ ...c, apiUrl: e.target.value }))}
-              />
-            </label>
+            <div className="settings-advanced-block">
+              <button
+                className="settings-inline-toggle"
+                type="button"
+                aria-expanded={llmAdvancedExpanded}
+                onClick={() => setLlmAdvancedExpanded((value) => !value)}
+              >
+                <span>高级配置</span>
+                <span>{llmAdvancedExpanded ? '收起' : '展开'}</span>
+              </button>
+
+              {!llmAdvancedExpanded && (
+                <div className="settings-inline-note">
+                  API URL 默认跟随服务端配置。
+                </div>
+              )}
+
+              {llmAdvancedExpanded && (
+                <label className="settings-field">
+                  <span>
+                    API URL <em>可选</em>
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="https://openrouter.ai/api/v1/chat/completions"
+                    value={llmConfig.apiUrl || ''}
+                    onChange={(e) => setLlmConfig((c) => ({ ...c, apiUrl: e.target.value }))}
+                  />
+                </label>
+              )}
+            </div>
 
             <button className="modal-btn primary settings-primary-action" onClick={saveLlm}>
               {llmSaved ? '已保存 ✓' : '保存配置'}
