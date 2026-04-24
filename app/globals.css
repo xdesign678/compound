@@ -5431,7 +5431,6 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
 .library-secondary-chip:hover {
   border-color: rgba(226, 146, 106, 0.26);
   color: var(--text-primary);
-  transform: translateY(-1px);
 }
 
 .library-secondary-chip.active {
