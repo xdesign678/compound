@@ -145,16 +145,6 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
           </div>
         </div>
       </div>
-      <div className="stats-row">
-        <div className="stat">
-          <strong>{totalConceptCount ?? concepts.length}</strong> 概念
-        </div>
-        <span className="dot-sep">·</span>
-        <div className="stat">
-          <strong>{sourceCount ?? 0}</strong> 资料
-        </div>
-      </div>
-
       {!hasMatches ? (
         !hasAnyConcepts ? (
           <div className="empty-state empty-state-spacious">
