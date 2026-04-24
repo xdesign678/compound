@@ -349,7 +349,11 @@ export function SettingsDrawer() {
           </div>
         </div>
 
-        <div className="settings-section" style={S.dataSection}>
+        <div className={`settings-section settings-data-section${confirming === 'clear' ? ' is-confirming-danger' : ''}`} style={S.dataSection}>
+          <div className="settings-data-title">数据管理</div>
+          <div className="desc settings-data-desc">
+            示例数据可以随时载入；清空数据会删除本机资料、概念和问答记录。
+          </div>
           {confirming === 'seed' ? (
             <>
               <p className="modal-desc" style={S.confirmDesc}>

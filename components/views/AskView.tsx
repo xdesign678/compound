@@ -335,6 +335,11 @@ export function AskView() {
     return ['这个知识库里有什么内容？', '最近添加了哪些资料？', '请总结一下主要概念'];
   }, [conceptCount, conceptTitles]);
 
+  const lastAnswerFailed = useMemo(() => {
+    const lastAnswer = [...(history ?? [])].reverse().find((m) => m.role === 'ai');
+    return lastAnswer ? isAskFailureMessage(lastAnswer.text) : false;
+  }, [history]);
+
   return (
     <div className="ask-view">
       {history && history.length > 0 && (
@@ -393,6 +398,20 @@ export function AskView() {
             </div>
           ) : (
             <>
+              {lastAnswerFailed && (
+                <div className="ask-recovery-banner">
+                  <div>
+                    <div className="ask-recovery-title">上一次问答没有完成</div>
+                    <div className="ask-recovery-copy">通常是 API 配置或服务端暂时不可用。可以重新开始，也可以保留记录继续问。</div>
+                  </div>
+                  <button
+                    className="ask-reset-btn ask-recovery-action"
+                    onClick={() => { clearAskHistory(); setConfirmClear(false); }}
+                  >
+                    重新开始
+                  </button>
+                </div>
+              )}
               {history?.map((m, idx) => {
                 if (m.role === 'user') {
                   return (
@@ -403,18 +422,26 @@ export function AskView() {
                 }
                 const prev = history[idx - 1];
                 const userQ = prev?.role === 'user' ? prev.text : null;
+                const failedAnswer = isAskFailureMessage(m.text);
                 return (
                   <div key={m.id} className="msg msg-ai-row">
-                    <div className="msg-ai-card">
+                    <div className={`msg-ai-card${failedAnswer ? ' ask-failure-card' : ''}`}>
                       <div className="msg-ai-label">Wiki 答案</div>
-                      <Prose markdown={m.text} citedConceptIds={m.citedConcepts} className="prose-answer" />
-                      {m.citedConcepts && m.citedConcepts.length > 0 && (
+                      {failedAnswer ? (
+                        <div className="ask-failure-copy">
+                          <div className="ask-failure-title">问答暂时没成功</div>
+                          <p>通常是模型 API 或服务端配置暂时不可用。你可以检查设置里的模型配置，或者稍后重新提问。</p>
+                        </div>
+                      ) : (
+                        <Prose markdown={m.text} citedConceptIds={m.citedConcepts} className="prose-answer" />
+                      )}
+                      {!failedAnswer && m.citedConcepts && m.citedConcepts.length > 0 && (
                         <div className="msg-sources">
                           <div className="ms-label">基于概念页</div>
                           <CitedList ids={m.citedConcepts} onClick={openConcept} />
                         </div>
                       )}
-                      {m.citedConcepts && m.citedConcepts.length > 0 && (
+                      {!failedAnswer && m.citedConcepts && m.citedConcepts.length > 0 && (
                         m.savedAsConceptId ? (
                           <button className="save-as-page" disabled>
                             <Icon.Save />
@@ -612,6 +639,11 @@ export function AskView() {
       </div>
     </div>
   );
+}
+
+function isAskFailureMessage(text: string) {
+  const normalized = text.trim();
+  return normalized.includes('问答失败') || normalized.includes('/api/query failed');
 }
 
 function MentionResults({

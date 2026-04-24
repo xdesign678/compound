@@ -107,7 +107,16 @@ export function SourcesView() {
             </button>
           </div>
         ) : filteredSources.length === 0 ? (
-          <div className="empty-state">没有匹配的资料</div>
+          <div className="empty-state empty-state-compact search-empty-state">
+            <div className="es-icon">
+              <Icon.Search />
+            </div>
+            <h3>没有找到资料</h3>
+            <p>换个关键词试试，或清空搜索回到全部资料。</p>
+            <button className="modal-btn empty-state-action" onClick={() => setQuery('')}>
+              清空搜索
+            </button>
+          </div>
         ) : (
           <>
             {filteredSources.map((source) => (

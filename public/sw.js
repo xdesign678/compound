@@ -1,6 +1,7 @@
 // Compound PWA Service Worker
-const CACHE_NAME = 'compound-v7';
-const RUNTIME_CACHE = 'compound-runtime-v7';
+const CACHE_NAME = 'compound-v8';
+const RUNTIME_CACHE = 'compound-runtime-v8';
+const IS_LOCAL_DEV = ['localhost', '127.0.0.1', '0.0.0.0'].includes(location.hostname);
 
 // App shell files to precache
 const PRECACHE_URLS = [
@@ -11,26 +12,34 @@ const PRECACHE_URLS = [
 // Install: precache app shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_URLS);
-    }).then(() => self.skipWaiting())
+    (IS_LOCAL_DEV
+      ? Promise.resolve()
+      : caches.open(CACHE_NAME).then((cache) => {
+        return cache.addAll(PRECACHE_URLS);
+      })
+    ).then(() => self.skipWaiting())
   );
 });
 
 // Activate: clean old caches
 self.addEventListener('activate', (event) => {
-  const currentCaches = [CACHE_NAME, RUNTIME_CACHE];
+  const currentCaches = IS_LOCAL_DEV ? [] : [CACHE_NAME, RUNTIME_CACHE];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
-      return cacheNames.filter((name) => !currentCaches.includes(name));
+      return cacheNames.filter((name) => name.startsWith('compound-') && !currentCaches.includes(name));
     }).then((toDelete) => {
       return Promise.all(toDelete.map((name) => caches.delete(name)));
-    }).then(() => self.clients.claim())
+    }).then(() => {
+      if (IS_LOCAL_DEV) return self.registration.unregister();
+      return self.clients.claim();
+    })
   );
 });
 
 // Fetch: network-first for API calls, stale-while-revalidate for static assets
 self.addEventListener('fetch', (event) => {
+  if (IS_LOCAL_DEV) return;
+
   const { request } = event;
   const url = new URL(request.url);
 

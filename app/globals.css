@@ -746,7 +746,8 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  margin: 0 auto 16px;
+  max-width: 640px;
 }
 .detail-kicker,
 .detail-status {
@@ -762,8 +763,13 @@ button {
   text-transform: uppercase;
 }
 .detail-kicker {
-  background: rgba(217, 119, 87, 0.11);
-  color: var(--brand-clay);
+  background: transparent;
+  color: var(--text-tertiary);
+  padding: 0;
+  min-height: auto;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
 }
 .detail-status {
   background: var(--bg-muted);
@@ -779,26 +785,31 @@ button {
   line-height: 1.2;
   letter-spacing: -0.02em;
   color: var(--text-primary);
-  margin: 0 0 14px;
+  margin: 0 auto 16px;
+  max-width: 640px;
   overflow-wrap: anywhere;
 }
 .detail-intro {
-  margin: 0 0 22px;
+  margin: 0 auto 24px;
   font-family: var(--font-reading);
-  font-size: 16px;
+  font-size: 17px;
   line-height: var(--leading-body);
   color: var(--text-secondary);
+  max-width: 640px;
 }
 .concept-detail .detail-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   font-family: var(--font-sans);
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin-bottom: 28px;
-  padding-bottom: 18px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 48px;
+  padding-bottom: 24px;
   border-bottom: 1px solid var(--border-section);
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
 }
 .prose {
   font-family: var(--font-reading);
@@ -826,7 +837,8 @@ button {
   overflow-x: auto;
 }
 .concept-body-shell {
-  max-width: 880px;
+  max-width: 640px;
+  margin: 0 auto;
 }
 .concept-body-prose {
   text-wrap: pretty;
@@ -878,18 +890,18 @@ button {
 }
 .prose h2 {
   font-family: var(--font-sans);
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 38px 0 14px;
-  letter-spacing: -0.015em;
+  margin: 64px 0 32px;
+  letter-spacing: -0.01em;
 }
 .prose h3 {
   font-family: var(--font-sans);
   font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 28px 0 10px;
+  margin: 40px 0 16px;
 }
 .prose strong {
   color: var(--text-primary);
@@ -916,55 +928,65 @@ button {
   margin-bottom: 6px;
 }
 .prose blockquote {
-  border-left: 3px solid var(--brand-clay);
-  padding-left: 16px;
-  margin: 22px 0;
+  border-left: 3px solid rgba(0, 0, 0, 0.12);
+  padding-left: 20px;
+  margin: 24px 0;
   color: var(--text-secondary);
-  font-style: italic;
+  font-style: normal;
 }
 .prose a,
 .prose .inline-link {
-  color: var(--text-primary);
+  color: inherit;
   text-decoration: underline;
-  text-decoration-color: rgba(217, 119, 87, 0.5);
-  text-underline-offset: 3px;
+  text-decoration-color: rgba(20, 20, 19, 0.3);
+  text-underline-offset: 0.2em;
   cursor: pointer;
+  transition: text-decoration-color 0.15s ease;
+}
+.prose a:hover,
+.prose .inline-link:hover {
+  text-decoration-color: rgba(20, 20, 19, 0.6);
 }
 
 .detail-section {
-  margin-top: 38px;
-  padding-top: 22px;
-  border-top: 1px solid var(--border-section);
+  margin-top: 64px;
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
 }
 .detail-section h3 {
   font-family: var(--font-sans);
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-weight: 500;
-  margin: 0 0 12px;
+  margin: 0 0 16px;
 }
 
 .source-ref {
   display: flex;
   gap: 12px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--border-section);
+  padding: 12px;
+  margin: 0 -12px;
+  border-radius: 7.5px;
+  border: 1px solid transparent;
   cursor: pointer;
   text-align: left;
-  width: 100%;
+  width: calc(100% + 24px);
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
-.source-ref:last-child {
-  border-bottom: none;
+.source-ref:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-light);
 }
 .source-ref:active {
-  opacity: 0.7;
+  background: var(--bg-active);
 }
 .source-ref .src-icon {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: 7.5px;
   background: var(--bg-muted);
   display: flex;
   align-items: center;
@@ -1002,50 +1024,39 @@ button {
   gap: 10px;
 }
 .related-chip {
-  background: var(--bg-muted);
-  padding: 12px 13px;
-  border-radius: 8px;
+  background: transparent;
+  padding: 10px 14px;
+  border-radius: 7.5px;
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-primary);
   cursor: pointer;
-  transition:
-    background var(--motion-duration-fast) var(--motion-ease-standard),
-    transform var(--motion-duration-fast) var(--motion-ease-standard);
-  line-height: 1.3;
+  transition: background 0.15s ease, transform 0.15s ease;
+  line-height: 1.4;
   display: flex;
   align-items: center;
-  gap: 6px;
   text-align: left;
   border: 1px solid var(--border-light);
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-.related-chip:active {
+.related-chip:hover {
   background: var(--bg-hover);
+  transform: translateY(-1px);
 }
-@media (hover: hover) {
-  .related-chip:hover {
-    transform: translateY(-1px);
-  }
-}
-.related-chip::before {
-  content: '';
-  width: 4px;
-  height: 4px;
-  background: var(--brand-clay);
-  border-radius: 50%;
-  flex-shrink: 0;
+.related-chip:active {
+  background: var(--bg-active);
+  transform: translateY(0);
 }
 
 .edit-log-item {
   display: flex;
-  gap: 10px;
+  gap: 16px;
   align-items: baseline;
-  padding: 9px 0;
+  padding: 10px 0;
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border-section);
 }
@@ -1442,6 +1453,38 @@ button {
   color: var(--text-tertiary);
   padding: 4px 0;
 }
+.ask-recovery-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+.ask-recovery-title {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+.ask-recovery-copy {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.ask-recovery-action {
+  flex-shrink: 0;
+  padding: 7px 11px;
+  border: 1px solid var(--border-light);
+  border-radius: 7.5px;
+  color: var(--text-primary);
+  background: var(--bg-muted);
+}
 .ask-messages {
   flex: 1;
   overflow-y: auto;
@@ -1566,6 +1609,25 @@ button {
 }
 .msg-ai-card.loading {
   opacity: 0.72;
+}
+.ask-failure-card {
+  background: rgba(201, 100, 66, 0.04) !important;
+  border-color: rgba(201, 100, 66, 0.18) !important;
+}
+.ask-failure-copy {
+  font-family: var(--font-sans);
+  color: var(--text-secondary);
+}
+.ask-failure-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.ask-failure-copy p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
 }
 .msg-ai-label {
   font-family: var(--font-sans);
@@ -2574,6 +2636,11 @@ button {
 .ingest-option:active {
   background: var(--bg-hover);
 }
+.ingest-option:focus-visible {
+  outline: none;
+  border-color: var(--border-default);
+  box-shadow: 0 0 0 2px rgba(94, 93, 89, 0.14);
+}
 .ingest-option .opt-icon {
   width: 36px;
   height: 36px;
@@ -2783,9 +2850,35 @@ button {
   max-width: 200px;
   margin: 0 auto;
 }
+.search-empty-state {
+  border: 1px dashed var(--border-light);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 72%, transparent);
+}
 
 .settings-section {
   padding: 0 20px 40px;
+}
+.settings-data-section {
+  margin-top: 4px;
+  padding-top: 18px !important;
+  border-top: 1px solid var(--border-section);
+}
+.settings-data-section.is-confirming-danger {
+  padding: 14px !important;
+  border: 1px solid rgba(201, 100, 66, 0.34);
+  border-radius: 8px;
+  background: rgba(201, 100, 66, 0.06);
+}
+.settings-data-title {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.settings-data-desc {
+  margin-bottom: 12px;
 }
 .settings-row {
   display: flex;
