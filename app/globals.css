@@ -452,6 +452,7 @@ button {
   padding: 14px 20px 14px;
   z-index: 5;
   border-bottom: 1px solid transparent;
+  box-sizing: border-box;
   transition:
     border-color var(--motion-duration-fast) var(--motion-ease-standard),
     background var(--motion-duration-fast) var(--motion-ease-standard);
@@ -556,6 +557,7 @@ button {
   font-family: var(--font-sans);
   color: var(--text-primary);
   outline: none;
+  box-sizing: border-box;
   transition:
     background var(--motion-duration-fast) var(--motion-ease-standard),
     border-color var(--motion-duration-fast) var(--motion-ease-standard),
@@ -600,6 +602,9 @@ button {
   max-width: 30rem;
 }
 @media (max-width: 640px) {
+  .search-bar {
+    padding: 12px 16px 12px;
+  }
   .view-lead {
     padding: 14px 16px 12px;
   }
