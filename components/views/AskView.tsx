@@ -6,7 +6,7 @@ import { nanoid } from 'nanoid';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { askWiki, archiveAnswerAsConcept } from '@/lib/api-client';
-import { getLlmConfig, PRESET_MODELS, saveLlmConfig } from '@/lib/llm-config';
+import { fetchCustomModels, getLlmConfig, modelLabel, PRESET_MODELS, saveLlmConfig } from '@/lib/llm-config';
 import { Icon, SourceTypeIcon } from '../Icons';
 import { Prose } from '../Prose';
 import type { AskMessage, LlmConfig, Source, SourceType } from '@/lib/types';
@@ -59,6 +59,7 @@ export function AskView() {
   const [inlineResults, setInlineResults] = useState<MentionItem[]>([]);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
+  const [customModels, setCustomModels] = useState<string[]>([]);
   const [caretPosition, setCaretPosition] = useState(0);
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -74,6 +75,7 @@ export function AskView() {
 
   useEffect(() => {
     setLlmConfig(getLlmConfig());
+    void fetchCustomModels().then(setCustomModels).catch(() => setCustomModels([]));
   }, []);
 
   useEffect(() => {
@@ -133,6 +135,10 @@ export function AskView() {
       label: item.label,
       value: item.value,
       helper: item.value,
+    })), ...customModels.map((model) => ({
+      label: modelLabel(model),
+      value: model,
+      helper: model,
     }))];
 
     if (customModel && !options.some((item) => item.value === customModel)) {
@@ -144,7 +150,7 @@ export function AskView() {
     }
 
     return options;
-  }, [llmConfig.model]);
+  }, [customModels, llmConfig.model]);
 
   const currentModelLabel = useMemo(() => {
     const current = llmConfig.model?.trim();

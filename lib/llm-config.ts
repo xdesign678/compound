@@ -1,4 +1,5 @@
 import type { LlmConfig } from './types';
+import { getAdminAuthHeaders } from './admin-auth-client';
 
 const STORAGE_KEY = 'compound_llm_config';
 
@@ -22,4 +23,36 @@ export function getLlmConfig(): LlmConfig {
 export function saveLlmConfig(config: LlmConfig): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+}
+
+export async function fetchCustomModels(): Promise<string[]> {
+  const res = await fetch('/api/settings/models', {
+    headers: getAdminAuthHeaders(),
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { models?: unknown };
+  return Array.isArray(data.models) ? data.models.filter((item): item is string => typeof item === 'string') : [];
+}
+
+export async function rememberCustomModelOnServer(model: string): Promise<string[]> {
+  const trimmed = model.trim();
+  if (!trimmed || PRESET_MODELS.some((item) => item.value === trimmed)) return fetchCustomModels();
+
+  const res = await fetch('/api/settings/models', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAdminAuthHeaders(),
+    },
+    body: JSON.stringify({ model: trimmed }),
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { models?: unknown };
+  return Array.isArray(data.models) ? data.models.filter((item): item is string => typeof item === 'string') : [];
+}
+
+export function modelLabel(model: string): string {
+  const preset = PRESET_MODELS.find((item) => item.value === model);
+  if (preset) return preset.label;
+  return model.split('/').pop() || model;
 }

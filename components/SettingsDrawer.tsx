@@ -6,7 +6,14 @@ import { useAppStore, type HomeStyle } from '@/lib/store';
 import { lintWiki } from '@/lib/api-client';
 import { getDb } from '@/lib/db';
 import { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } from '@/lib/seed';
-import { getLlmConfig, saveLlmConfig, PRESET_MODELS } from '@/lib/llm-config';
+import {
+  fetchCustomModels,
+  getLlmConfig,
+  modelLabel,
+  PRESET_MODELS,
+  rememberCustomModelOnServer,
+  saveLlmConfig,
+} from '@/lib/llm-config';
 import { clearAdminToken, getAdminToken, saveAdminToken } from '@/lib/admin-auth-client';
 import type { LintResponse, LlmConfig } from '@/lib/types';
 import { Icon } from './Icons';
@@ -86,6 +93,7 @@ export function SettingsDrawer() {
   const [confirming, setConfirming] = useState<'seed' | 'clear' | null>(null);
 
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
+  const [customModels, setCustomModels] = useState<string[]>([]);
   const [llmSaved, setLlmSaved] = useState(false);
   const [adminToken, setAdminToken] = useState('');
   const [adminSaved, setAdminSaved] = useState(false);
@@ -102,6 +110,7 @@ export function SettingsDrawer() {
     const timers = timersRef.current;
     setLlmConfig(getLlmConfig());
     setAdminToken(getAdminToken());
+    void fetchCustomModels().then(setCustomModels).catch(() => setCustomModels([]));
     return () => { timers.forEach(clearTimeout); };
   }, []);
 
@@ -132,8 +141,13 @@ export function SettingsDrawer() {
     return () => el.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, confirming, close]);
 
-  function saveLlm() {
+  async function saveLlm() {
     saveLlmConfig(llmConfig);
+    const model = llmConfig.model?.trim();
+    if (model) {
+      const models = await rememberCustomModelOnServer(model).catch(() => customModels);
+      setCustomModels(models);
+    }
     setLlmSaved(true);
     safeTimeout(() => setLlmSaved(false), 2000);
   }
@@ -242,13 +256,14 @@ export function SettingsDrawer() {
             </label>
 
             <div className="settings-preset-row">
-              {PRESET_MODELS.map((p) => (
+              {[...PRESET_MODELS.map((item) => item.value), ...customModels].map((model) => (
                 <button
-                  key={p.value}
-                  className={`settings-preset${llmConfig.model === p.value ? ' active' : ''}`}
-                  onClick={() => setLlmConfig((c) => ({ ...c, model: p.value }))}
+                  key={model}
+                  className={`settings-preset${llmConfig.model === model ? ' active' : ''}`}
+                  title={model}
+                  onClick={() => setLlmConfig((c) => ({ ...c, model }))}
                 >
-                  {p.label}
+                  {modelLabel(model)}
                 </button>
               ))}
             </div>
