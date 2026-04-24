@@ -4463,9 +4463,9 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
     padding: 8px 14px 0;
   }
 
-  /* 输入条：贴底，含安全区，紧贴键盘，去掉顶部细线 */
+  /* 输入条：紧贴下方 tab bar；安全区由 tabbar 负责，这里只留一点缓冲 */
   .ask-input-bar {
-    padding: 8px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    padding: 6px 12px 4px;
     border-top: none;
     background:
       linear-gradient(180deg, rgba(250, 249, 245, 0), var(--bg-primary) 28%),
