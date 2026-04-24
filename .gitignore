@@ -49,3 +49,8 @@ docs/plans/
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Screenshots from ad-hoc playwright/manual QA (not meant to be tracked)
+playwright-screenshot*.png
+screenshot-*.png
+screenshots/

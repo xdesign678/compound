@@ -1,10 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+// Tests use spoofed x-forwarded-for headers to simulate distinct clients —
+// that only works when the rate limiter is told to trust the proxy chain.
+process.env.COMPOUND_TRUST_PROXY = 'true';
+
 import { rateLimit } from './rate-limit';
 
 function resetRateLimitStore() {
   globalThis.__compoundRateLimitStore = undefined;
+  globalThis.__compoundRateLimitGcAt = undefined;
 }
 
 test('blocks requests after the limit is exceeded', () => {

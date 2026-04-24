@@ -8,7 +8,7 @@ import { formatQueryContextForPrompt, wikiRepo } from '@/lib/wiki-db';
 import type { Concept, QueryRequest, QueryResponse } from '@/lib/types';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 90;
 
 const MAX_BODY_BYTES = 512_000;
 const MAX_CONCEPTS = 500;

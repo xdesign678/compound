@@ -6,7 +6,9 @@ import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guard
 import type { IngestRequest } from '@/lib/types';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+// LLM gateway uses a 55s signal timeout; give the route ~35s of headroom for
+// retries, JSON parse, DB writes, and network latency.
+export const maxDuration = 90;
 
 const MAX_BODY_BYTES = 512_000;
 const MAX_RAW_CONTENT_CHARS = 100_000;

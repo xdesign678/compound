@@ -142,6 +142,10 @@ function runMigrations(db: DB): void {
       finished_at INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_sync_jobs_started_at ON sync_jobs(started_at);
+    -- Hot path: getActiveSyncJob + recoverStaleSyncJobs both filter on status='running'.
+    CREATE INDEX IF NOT EXISTS idx_sync_jobs_status_started ON sync_jobs(status, started_at);
+    -- Activity chronology by type (for filtered dashboards).
+    CREATE INDEX IF NOT EXISTS idx_activity_type_at ON activity(type, at DESC);
 
     CREATE TABLE IF NOT EXISTS meta (
       key    TEXT PRIMARY KEY,
@@ -161,7 +165,32 @@ function runMigrations(db: DB): void {
     db.exec(`ALTER TABLE concepts ADD COLUMN category_keys TEXT NOT NULL DEFAULT '[]';`);
   }
 
+  const syncJobColumns = new Set(
+    (db.prepare(`PRAGMA table_info(sync_jobs)`).all() as Array<{ name: string }>).map((row) => row.name)
+  );
+  if (!syncJobColumns.has('heartbeat_at')) {
+    db.exec(`ALTER TABLE sync_jobs ADD COLUMN heartbeat_at INTEGER;`);
+  }
+
+  runCategoryNormalizationIfNeeded(db);
+}
+
+/**
+ * Schema revision identifies the normalization routine. Bump this string when
+ * `normalizeCategoryState` rules change and we need to re-run on every row.
+ */
+const CATEGORY_NORMALIZATION_REVISION = '2025-01-categories-v1';
+
+function runCategoryNormalizationIfNeeded(db: DB): void {
+  const row = db
+    .prepare(`SELECT value FROM meta WHERE key = ?`)
+    .get('concept_categories_revision') as { value: string } | undefined;
+  if (row?.value === CATEGORY_NORMALIZATION_REVISION) return;
+
   normalizeStoredConceptCategories(db);
+
+  db.prepare(`INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)`)
+    .run('concept_categories_revision', CATEGORY_NORMALIZATION_REVISION);
 }
 
 function normalizeStoredConceptCategories(db: DB): void {
@@ -175,20 +204,26 @@ function normalizeStoredConceptCategories(db: DB): void {
      WHERE id = @id`
   );
 
-  for (const row of rows) {
-    const parsedCategories = parseJsonArray<CategoryTag>(row.categories);
-    const parsedCategoryKeys = parseJsonArray<string>(row.category_keys);
-    const normalized = normalizeCategoryState({
-      categories: parsedCategories,
-      categoryKeys: parsedCategoryKeys,
-    });
-
-    update.run({
-      id: row.id,
-      categories: JSON.stringify(normalized.categories),
-      category_keys: JSON.stringify(normalized.categoryKeys),
-    });
-  }
+  const run = db.transaction(() => {
+    for (const row of rows) {
+      const parsedCategories = parseJsonArray<CategoryTag>(row.categories);
+      const parsedCategoryKeys = parseJsonArray<string>(row.category_keys);
+      const normalized = normalizeCategoryState({
+        categories: parsedCategories,
+        categoryKeys: parsedCategoryKeys,
+      });
+      const nextCategories = JSON.stringify(normalized.categories);
+      const nextCategoryKeys = JSON.stringify(normalized.categoryKeys);
+      // Skip rows that are already canonical to avoid pointless writes / WAL churn.
+      if (nextCategories === row.categories && nextCategoryKeys === row.category_keys) continue;
+      update.run({
+        id: row.id,
+        categories: nextCategories,
+        category_keys: nextCategoryKeys,
+      });
+    }
+  });
+  run();
 }
 
 // --------------------------------------------------------------------
@@ -548,7 +583,7 @@ export const repo = {
       ) {
         continue;
       }
-      this.upsertConcept({
+      repo.upsertConcept({
         ...concept,
         sources: nextSources,
         updatedAt,
@@ -581,7 +616,7 @@ export const repo = {
     ).slice(0, 12);
 
     if (keywords.length === 0) {
-      return this.listConcepts({ summariesOnly: true, limit: normalizedLimit });
+      return repo.listConcepts({ summariesOnly: true, limit: normalizedLimit });
     }
 
     const queryParts = keywords.map(
@@ -605,7 +640,7 @@ export const repo = {
     }
 
     const existingIds = new Set(matched.map((concept) => concept.id));
-    const fallback = this.listConcepts({
+    const fallback = repo.listConcepts({
       summariesOnly: true,
       limit: normalizedLimit * 2,
     }).filter((concept) => !existingIds.has(concept.id));
@@ -672,13 +707,16 @@ export const repo = {
    */
   recoverStaleSyncJobs(maxAgeMs: number = 10 * 60 * 1000): number {
     const cutoff = Date.now() - maxAgeMs;
+    // A job is "alive" if its heartbeat is fresh. Fall back to started_at for
+    // pre-migration rows. Long-running LLM pipelines that bump heartbeat_at
+    // every iteration survive this check even if total runtime exceeds 10min.
     const result = getServerDb()
       .prepare(
         `UPDATE sync_jobs
          SET status = 'failed',
              error = COALESCE(error, '服务重启导致任务中断（已自动回收）'),
              finished_at = ?
-         WHERE status = 'running' AND started_at < ?`
+         WHERE status = 'running' AND COALESCE(heartbeat_at, started_at) < ?`
       )
       .run(Date.now(), cutoff);
     return result.changes;
@@ -692,24 +730,33 @@ export const repo = {
   },
 
   insertSyncJob(j: SyncJobRow): void {
+    const row: SyncJobRow = { heartbeat_at: j.heartbeat_at ?? j.started_at, ...j };
     getServerDb()
       .prepare(
         `INSERT INTO sync_jobs
-          (id, kind, status, total, done, failed, current, log, error, started_at, finished_at)
-          VALUES (@id, @kind, @status, @total, @done, @failed, @current, @log, @error, @started_at, @finished_at)`
+          (id, kind, status, total, done, failed, current, log, error, started_at, finished_at, heartbeat_at)
+          VALUES (@id, @kind, @status, @total, @done, @failed, @current, @log, @error, @started_at, @finished_at, @heartbeat_at)`
       )
-      .run(j);
+      .run(row);
   },
 
   updateSyncJob(id: string, patch: Partial<SyncJobRow>): void {
-    const prev = this.getSyncJob(id);
+    const prev = repo.getSyncJob(id);
     if (!prev) return;
-    const next = { ...prev, ...patch };
+    // Any update implicitly bumps heartbeat_at for running jobs unless caller
+    // supplied an explicit value. Terminal status updates (done/failed) skip
+    // the auto-bump to keep the final row immutable for audits.
+    const autoHeartbeat =
+      patch.heartbeat_at === undefined && (patch.status ?? prev.status) === 'running'
+        ? Date.now()
+        : (patch.heartbeat_at ?? prev.heartbeat_at ?? prev.started_at);
+    const next: SyncJobRow = { ...prev, ...patch, heartbeat_at: autoHeartbeat };
     getServerDb()
       .prepare(
         `UPDATE sync_jobs SET
             status = @status, total = @total, done = @done, failed = @failed,
-            current = @current, log = @log, error = @error, finished_at = @finished_at
+            current = @current, log = @log, error = @error, finished_at = @finished_at,
+            heartbeat_at = @heartbeat_at
           WHERE id = @id`
       )
       .run(next);
@@ -728,4 +775,6 @@ export interface SyncJobRow {
   error: string | null;
   started_at: number;
   finished_at: number | null;
+  /** Timestamp of the most recent progress update — used for zombie detection. */
+  heartbeat_at?: number | null;
 }

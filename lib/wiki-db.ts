@@ -319,21 +319,24 @@ export const wikiRepo = {
       ? db.prepare(`INSERT INTO chunk_fts (chunk_id, source_id, heading, content) VALUES (?, ?, ?, ?)`)
       : null;
 
-    for (const row of rows) {
-      insert.run({
-        id: row.id,
-        source_id: row.sourceId,
-        chunk_index: row.chunkIndex,
-        heading: row.heading,
-        heading_path: json(row.headingPath),
-        content: row.content,
-        token_count: row.tokenCount,
-        content_hash: row.contentHash,
-        created_at: row.createdAt,
-        updated_at: row.updatedAt,
-      });
-      insertFts?.run(row.id, row.sourceId, row.heading, row.content);
-    }
+    const runBatch = db.transaction((batch: SourceChunk[]) => {
+      for (const row of batch) {
+        insert.run({
+          id: row.id,
+          source_id: row.sourceId,
+          chunk_index: row.chunkIndex,
+          heading: row.heading,
+          heading_path: json(row.headingPath),
+          content: row.content,
+          token_count: row.tokenCount,
+          content_hash: row.contentHash,
+          created_at: row.createdAt,
+          updated_at: row.updatedAt,
+        });
+        insertFts?.run(row.id, row.sourceId, row.heading, row.content);
+      }
+    });
+    runBatch(rows);
 
     return rows;
   },
@@ -365,14 +368,17 @@ export const wikiRepo = {
     ensureWikiCompilerSchema();
     const db = getServerDb();
 
-    db.prepare(`DELETE FROM source_chunks`).run();
-    db.prepare(`DELETE FROM concept_evidence`).run();
-    if (hasFts()) {
-      safeRunFts(() => {
-        db.prepare(`DELETE FROM concept_fts`).run();
-        db.prepare(`DELETE FROM chunk_fts`).run();
-      });
-    }
+    const wipe = db.transaction(() => {
+      db.prepare(`DELETE FROM source_chunks`).run();
+      db.prepare(`DELETE FROM concept_evidence`).run();
+      if (hasFts()) {
+        safeRunFts(() => {
+          db.prepare(`DELETE FROM concept_fts`).run();
+          db.prepare(`DELETE FROM chunk_fts`).run();
+        });
+      }
+    });
+    wipe();
 
     const concepts = repo.listConcepts({ summariesOnly: false });
     const sources = repo.listSources({ summariesOnly: false });
@@ -411,26 +417,30 @@ export const wikiRepo = {
   addEvidenceBatch(items: Array<Omit<ConceptEvidence, 'id' | 'createdAt'>>): void {
     ensureWikiCompilerSchema();
     if (items.length === 0) return;
-    const insert = getServerDb().prepare(`
+    const db = getServerDb();
+    const insert = db.prepare(`
       INSERT OR REPLACE INTO concept_evidence
         (id, concept_id, source_id, chunk_id, quote, claim, kind, confidence, created_at)
       VALUES
         (@id, @concept_id, @source_id, @chunk_id, @quote, @claim, @kind, @confidence, @created_at)
     `);
     const now = Date.now();
-    for (const item of items) {
-      insert.run({
-        id: `ev-${nanoid(10)}`,
-        concept_id: item.conceptId,
-        source_id: item.sourceId,
-        chunk_id: item.chunkId ?? null,
-        quote: item.quote ?? null,
-        claim: item.claim,
-        kind: item.kind,
-        confidence: item.confidence,
-        created_at: now,
-      });
-    }
+    const runBatch = db.transaction(() => {
+      for (const item of items) {
+        insert.run({
+          id: `ev-${nanoid(10)}`,
+          concept_id: item.conceptId,
+          source_id: item.sourceId,
+          chunk_id: item.chunkId ?? null,
+          quote: item.quote ?? null,
+          claim: item.claim,
+          kind: item.kind,
+          confidence: item.confidence,
+          created_at: now,
+        });
+      }
+    });
+    runBatch();
   },
 
   recordConceptVersion(input: {

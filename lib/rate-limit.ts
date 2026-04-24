@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import net from 'node:net';
 
 type Bucket = {
   resetAt: number;
@@ -10,6 +11,8 @@ type Store = Map<string, Bucket>;
 declare global {
   // eslint-disable-next-line no-var
   var __compoundRateLimitStore: Store | undefined;
+  // eslint-disable-next-line no-var
+  var __compoundRateLimitGcAt: number | undefined;
 }
 
 function getStore(): Store {
@@ -17,10 +20,42 @@ function getStore(): Store {
   return globalThis.__compoundRateLimitStore;
 }
 
+/** Max entries retained. When exceeded we sweep expired buckets aggressively. */
+const MAX_ENTRIES = 5_000;
+/** Minimum interval between background sweeps. */
+const GC_MIN_INTERVAL_MS = 30_000;
+
+function maybeGc(store: Store, now: number): void {
+  const lastGc = globalThis.__compoundRateLimitGcAt ?? 0;
+  if (store.size < MAX_ENTRIES && now - lastGc < GC_MIN_INTERVAL_MS) return;
+  globalThis.__compoundRateLimitGcAt = now;
+  for (const [key, bucket] of store) {
+    if (bucket.resetAt <= now) store.delete(key);
+  }
+  // Still oversized? Drop oldest-reset entries until under limit.
+  if (store.size > MAX_ENTRIES) {
+    const sorted = [...store.entries()].sort((a, b) => a[1].resetAt - b[1].resetAt);
+    const overflow = store.size - MAX_ENTRIES;
+    for (let i = 0; i < overflow; i++) store.delete(sorted[i][0]);
+  }
+}
+
+/**
+ * Only honor x-forwarded-for / x-real-ip when COMPOUND_TRUST_PROXY=true, so a
+ * raw-internet-facing deployment can't be bypassed with a spoofed header.
+ * Zeabur / Vercel / Cloudflare terminate TLS in front — set the flag there.
+ */
 function getClientKey(req: Request): string {
-  const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  const realIp = req.headers.get('x-real-ip')?.trim();
-  return forwarded || realIp || 'unknown';
+  const trustProxy = process.env.COMPOUND_TRUST_PROXY === 'true';
+  if (trustProxy) {
+    const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+    if (forwarded && net.isIP(forwarded)) return forwarded;
+    const realIp = req.headers.get('x-real-ip')?.trim();
+    if (realIp && net.isIP(realIp)) return realIp;
+  }
+  // Fall back to a per-deployment constant so the limiter still functions as
+  // a global throttle even without IP attribution.
+  return 'anon';
 }
 
 export function rateLimit(
@@ -32,6 +67,7 @@ export function rateLimit(
 
   const now = Date.now();
   const store = getStore();
+  maybeGc(store, now);
   const key = `${scope}:${getClientKey(req)}`;
   const current = store.get(key);
 

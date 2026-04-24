@@ -243,34 +243,28 @@ export async function ensureSourcesHydrated(ids: string[]): Promise<Source[]> {
   if (uniqueIds.length === 0) return [];
 
   const existing = await db.sources.bulkGet(uniqueIds);
-  const readySources = existing
-    .filter((source): source is Source => Boolean(source?.rawContent.trim()))
-    .filter((source) => source.contentStatus !== 'full');
 
-  if (readySources.length > 0) {
-    await db.sources.bulkPut(
-      readySources.map((source) => ({
-        ...source,
-        contentStatus: 'full' as const,
-      }))
-    );
+  // Single pass: classify each source into "ready but flag-stale", "missing",
+  // or "already full". We'll merge the writes into one bulkPut at the end.
+  const needsFlagUpdate: Source[] = [];
+  const missingIds: string[] = [];
+  for (let i = 0; i < uniqueIds.length; i += 1) {
+    const source = existing[i];
+    if (!source || !source.rawContent.trim()) {
+      missingIds.push(uniqueIds[i]);
+    } else if (source.contentStatus !== 'full') {
+      needsFlagUpdate.push(source);
+    }
   }
 
-  const missingIds = uniqueIds.filter((id, index) => {
-    const source = existing[index];
-    return !source || !source.rawContent.trim();
-  });
+  const fetched = missingIds.length > 0 ? await fetchSourceDetails(missingIds) : [];
 
-  if (missingIds.length > 0) {
-    const sources = await fetchSourceDetails(missingIds);
-    if (sources.length > 0) {
-      await db.sources.bulkPut(
-        sources.map((source) => ({
-          ...source,
-          contentStatus: 'full' as const,
-        }))
-      );
-    }
+  const toWrite: Source[] = [
+    ...needsFlagUpdate.map((source) => ({ ...source, contentStatus: 'full' as const })),
+    ...fetched.map((source) => ({ ...source, contentStatus: 'full' as const })),
+  ];
+  if (toWrite.length > 0) {
+    await db.sources.bulkPut(toWrite);
   }
 
   const hydrated = await db.sources.bulkGet(uniqueIds);

@@ -10,7 +10,61 @@
  * Legacy fallback: AI_GATEWAY_API_KEY / AI_GATEWAY_URL are also accepted.
  */
 
-function validateApiUrl(url: string): void {
+import { promises as dns } from 'node:dns';
+import net from 'node:net';
+import { recordModelRun } from './model-runs';
+
+const METADATA_HOSTS = new Set([
+  'metadata.google.internal',
+  'metadata',
+  'metadata.goog',
+]);
+
+/**
+ * IPv4 private / loopback / reserved ranges that must never be reached from the
+ * server-side LLM bridge.
+ */
+function isBlockedIPv4(ip: string): boolean {
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((p) => !Number.isFinite(p) || p < 0 || p > 255)) {
+    return true;
+  }
+  const [o1, o2] = parts;
+  return (
+    o1 === 0 ||                              // 0.0.0.0/8 — "this network"
+    o1 === 10 ||                             // 10.0.0.0/8 — private
+    o1 === 127 ||                            // 127.0.0.0/8 — loopback
+    (o1 === 100 && o2 >= 64 && o2 <= 127) || // 100.64.0.0/10 — CGN
+    (o1 === 169 && o2 === 254) ||            // 169.254.0.0/16 — link-local / metadata
+    (o1 === 172 && o2 >= 16 && o2 <= 31) ||  // 172.16.0.0/12 — private
+    (o1 === 192 && o2 === 0) ||              // 192.0.0.0/24 — IETF protocol
+    (o1 === 192 && o2 === 168) ||            // 192.168.0.0/16 — private
+    (o1 === 198 && (o2 === 18 || o2 === 19)) // 198.18.0.0/15 — benchmark
+  );
+}
+
+function isBlockedIPv6(ip: string): boolean {
+  const lower = ip.toLowerCase();
+  if (lower === '::' || lower === '::1') return true;
+  if (lower.startsWith('fe80:') || lower.startsWith('fe80%')) return true; // link-local
+  if (lower.startsWith('fc') || lower.startsWith('fd')) return true;        // fc00::/7 ULA
+  // IPv4-mapped IPv6 (::ffff:127.0.0.1) — decay to IPv4 check.
+  const mapped = lower.match(/^::ffff:([0-9a-f:.]+)$/);
+  if (mapped) {
+    const inner = mapped[1];
+    if (net.isIPv4(inner)) return isBlockedIPv4(inner);
+    return true;
+  }
+  return false;
+}
+
+function isBlockedIP(ip: string): boolean {
+  if (net.isIPv4(ip)) return isBlockedIPv4(ip);
+  if (net.isIPv6(ip)) return isBlockedIPv6(ip);
+  return true; // unknown format — reject
+}
+
+async function validateApiUrl(url: string): Promise<void> {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -22,38 +76,39 @@ function validateApiUrl(url: string): void {
     throw new Error('Invalid API URL: must be a public HTTPS endpoint');
   }
 
-  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-
-  // Block cloud metadata endpoints
-  if (hostname === 'metadata.google.internal' || hostname === '169.254.169.254') {
+  const rawHost = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (!rawHost) {
     throw new Error('Invalid API URL: must be a public HTTPS endpoint');
   }
 
-  // Block localhost and IPv6 loopback/private-ish hostnames that can be used for SSRF.
-  if (
-    hostname === 'localhost' ||
-    hostname === '::1' ||
-    hostname === '0.0.0.0' ||
-    hostname.startsWith('fc') ||
-    hostname.startsWith('fd') ||
-    hostname.startsWith('fe80:')
-  ) {
+  if (rawHost === 'localhost' || METADATA_HOSTS.has(rawHost)) {
     throw new Error('Invalid API URL: must be a public HTTPS endpoint');
   }
 
-  // Block private IP ranges
-  const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (ipv4Match) {
-    const octets = ipv4Match.slice(1).map(Number);
-    const [o1, o2] = octets;
-    if (
-      o1 === 127 ||                          // 127.x.x.x — loopback
-      o1 === 10 ||                           // 10.x.x.x — private
-      (o1 === 172 && o2 >= 16 && o2 <= 31) || // 172.16-31.x.x — private
-      (o1 === 192 && o2 === 168) ||          // 192.168.x.x — private
-      (o1 === 169 && o2 === 254)             // 169.254.x.x — link-local / cloud metadata
-    ) {
+  if (net.isIP(rawHost)) {
+    if (isBlockedIP(rawHost)) {
       throw new Error('Invalid API URL: must be a public HTTPS endpoint');
+    }
+    return;
+  }
+
+  // Resolve DNS and reject if ANY returned address sits in a blocked range.
+  // Prevents DNS-rebinding / wildcard DNS pointing at internal hosts.
+  // Controlled by COMPOUND_SKIP_DNS_GUARD=true for rare cases (never use in prod).
+  if (process.env.COMPOUND_SKIP_DNS_GUARD === 'true') return;
+
+  let records: Array<{ address: string; family: number }>;
+  try {
+    records = await dns.lookup(rawHost, { all: true, verbatim: true });
+  } catch {
+    throw new Error('Invalid API URL: DNS resolution failed');
+  }
+  if (records.length === 0) {
+    throw new Error('Invalid API URL: DNS returned no records');
+  }
+  for (const record of records) {
+    if (isBlockedIP(record.address)) {
+      throw new Error('Invalid API URL: resolves to a blocked network range');
     }
   }
 }
@@ -93,6 +148,8 @@ export interface ChatOptions {
   maxTokens?: number;
   responseFormat?: 'json_object' | 'text';
   llmConfig?: LlmConfigOverride;
+  /** Short label identifying the pipeline stage for cost/telemetry (e.g. 'extract', 'synth'). */
+  task?: string;
 }
 
 export async function chat(opts: ChatOptions): Promise<string> {
@@ -156,8 +213,10 @@ export async function chat(opts: ChatOptions): Promise<string> {
     body.response_format = { type: 'json_object' };
   }
 
-  validateApiUrl(gatewayUrl);
+  await validateApiUrl(gatewayUrl);
 
+  const startedAt = Date.now();
+  const task = opts.task ?? 'chat';
   const res = await fetch(gatewayUrl, {
     method: 'POST',
     headers: {
@@ -170,6 +229,12 @@ export async function chat(opts: ChatOptions): Promise<string> {
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
+    recordModelRun({
+      model,
+      task,
+      latencyMs: Date.now() - startedAt,
+      error: `gateway_${res.status}`,
+    });
     throw new Error(`Gateway ${res.status}: ${errText.slice(0, 200)}`);
   }
 
@@ -177,19 +242,39 @@ export async function chat(opts: ChatOptions): Promise<string> {
   const choice = data?.choices?.[0];
   const content = choice?.message?.content;
   const finishReason = choice?.finish_reason;
+  const usage = data?.usage ?? {};
 
   if (typeof content === 'string' && content.length > 0) {
+    recordModelRun({
+      model,
+      task,
+      inputTokens: typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : undefined,
+      outputTokens: typeof usage.completion_tokens === 'number' ? usage.completion_tokens : undefined,
+      latencyMs: Date.now() - startedAt,
+    });
     return content;
   }
 
   // Diagnose why content is missing so the caller gets an actionable hint.
   if (finishReason === 'length') {
+    recordModelRun({
+      model,
+      task,
+      latencyMs: Date.now() - startedAt,
+      error: 'finish_length',
+    });
     throw new Error(
       `Reasoning budget exhausted before content was emitted (finish_reason=length, model=${model}). ` +
         `Try raising max_tokens (>=2000 for reasoning models) or pick a non-reasoning model.`
     );
   }
 
+  recordModelRun({
+    model,
+    task,
+    latencyMs: Date.now() - startedAt,
+    error: 'unexpected_shape',
+  });
   const preview = JSON.stringify(data).slice(0, 600);
   throw new Error(`Unexpected gateway response shape. Body preview: ${preview}`);
 }

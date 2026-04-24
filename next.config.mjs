@@ -1,5 +1,12 @@
 const isDev = process.env.NODE_ENV !== 'production';
 
+// Comma-separated list in env takes precedence. Fall back to safe defaults for
+// local dev + the canonical zeabur deployment so first-run still works.
+const allowedOrigins = (process.env.COMPOUND_ALLOWED_ORIGINS || 'localhost:8080,zhishiku.zeabur.app')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 const scriptSrc = isDev
   ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
   : "script-src 'self' 'unsafe-inline'";
@@ -27,7 +34,7 @@ const nextConfig = {
   // better-sqlite3 is a native module — keep it external so webpack doesn't try to bundle it.
   serverExternalPackages: ['better-sqlite3'],
   experimental: {
-    serverActions: { allowedOrigins: ['localhost:8080', 'zhishiku.zeabur.app'] },
+    serverActions: { allowedOrigins },
   },
   async headers() {
     return [

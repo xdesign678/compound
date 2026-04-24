@@ -56,6 +56,33 @@ function appendLogByJobId(jobId: string, entry: LogEntry, patch: Partial<SyncJob
   });
 }
 
+/**
+ * Exponential backoff with jitter. Used for transient LLM/network failures
+ * during per-file ingest. Rate-limit responses and 5xx are common and worth
+ * retrying once or twice before giving up on the file.
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  opts: { retries: number; baseDelayMs: number; label: string }
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= opts.retries; attempt += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      const message = err instanceof Error ? err.message : String(err);
+      // Permanent-looking errors — skip retry
+      if (/^Invalid API URL/i.test(message) || /401|403|404/.test(message)) break;
+      if (attempt === opts.retries) break;
+      const delay = opts.baseDelayMs * 2 ** attempt + Math.floor(Math.random() * 250);
+      console.warn(`[github-sync-runner] ${opts.label}: attempt ${attempt + 1} failed (${message.slice(0, 120)}), retrying in ${delay}ms`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastError;
+}
+
 function deriveTitle(filePath: string, content: string): string {
   const fm = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*\r?\n/);
   if (fm) {
@@ -229,16 +256,23 @@ async function runGithubSyncLoop(jobId: string): Promise<void> {
     repo.updateSyncJob(jobId, { current: `[${index + 1}/${plan.length}] ${item.path}` });
 
     try {
-      const remoteFile = await fetchMarkdownContent(item.path, cfg, item.sha);
+      const remoteFile = await withRetry(
+        () => fetchMarkdownContent(item.path, cfg, item.sha),
+        { retries: 2, baseDelayMs: 600, label: `fetch ${item.path}` }
+      );
 
       // `ingestSourceToServerDb` handles the update-case dedup via externalKey.
-      const result = await ingestSourceToServerDb({
-        title: deriveTitle(remoteFile.path, remoteFile.content),
-        type: 'file',
-        rawContent: remoteFile.content,
-        externalKey: remoteFile.externalKey,
-        replaceSourceId: item.existingSourceId,
-      });
+      const result = await withRetry(
+        () =>
+          ingestSourceToServerDb({
+            title: deriveTitle(remoteFile.path, remoteFile.content),
+            type: 'file',
+            rawContent: remoteFile.content,
+            externalKey: remoteFile.externalKey,
+            replaceSourceId: item.existingSourceId,
+          }),
+        { retries: 1, baseDelayMs: 1500, label: `ingest ${item.path}` }
+      );
 
       const row = repo.getSyncJob(jobId);
       if (!row) return;

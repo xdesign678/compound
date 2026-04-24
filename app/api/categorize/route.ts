@@ -8,7 +8,7 @@ import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guard
 import type { CategorizeRequest, CategorizeResponse } from '@/lib/types';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 90;
 
 const MAX_BODY_BYTES = 256_000;
 const MAX_BATCH_SIZE = 20;
