@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
 
@@ -80,6 +80,8 @@ const stageText: Record<string, string> = {
   complete: '完成',
 };
 
+const EVENTS_PREVIEW = 8;
+
 function fmtDate(value?: number | null) {
   return value ? new Date(value).toLocaleString() : '-';
 }
@@ -120,6 +122,10 @@ export default function SyncDashboard() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [eventsExpanded, setEventsExpanded] = useState(false);
+  const [runDetailsOpen, setRunDetailsOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -141,6 +147,7 @@ export default function SyncDashboard() {
   const runAction = useCallback(
     async (label: string, fn: () => Promise<unknown>) => {
       setBusy(label);
+      setMoreOpen(false);
       try {
         await fn();
         await load();
@@ -159,51 +166,115 @@ export default function SyncDashboard() {
     return () => window.clearInterval(timer);
   }, [load]);
 
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMoreOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [moreOpen]);
+
   const run = dashboard?.activeRun ?? dashboard?.latestRuns?.[0] ?? null;
   const coverage = dashboard?.coverage ?? {};
   const doneCount = (run?.done_files ?? 0) + (run?.failed_files ?? 0);
   const percent = run ? progress(doneCount, run.changed_files) : 0;
   const analysisRows = useMemo(() => dashboard?.analysisStats ?? [], [dashboard]);
+  const allEvents = dashboard?.events ?? [];
+  const visibleEvents = eventsExpanded ? allEvents : allEvents.slice(0, EVENTS_PREVIEW);
+  const hasMoreEvents = allEvents.length > EVENTS_PREVIEW;
 
   return (
     <main className="ops-page">
       <header className="ops-topbar">
-        <div>
+        <div className="ops-topbar-meta">
           <div className="ops-kicker">Compound Ops</div>
           <h1>同步控制台</h1>
           <p>{run?.current || run?.error || '同步、分析、向量索引和人工审核的实时状态。'}</p>
         </div>
         <div className="ops-actions">
-          <button
-            className="ops-btn primary"
-            disabled={Boolean(busy)}
-            onClick={() => runAction('sync', () => postJson('/api/sync/github/run'))}
-          >
-            {busy === 'sync' ? '启动中' : '立即同步'}
-          </button>
-          <button
-            className="ops-btn"
-            disabled={Boolean(busy)}
-            onClick={() => runAction('worker', () => postJson('/api/sync/worker'))}
-          >
-            跑分析
-          </button>
-          <button
-            className="ops-btn"
-            disabled={Boolean(busy)}
-            onClick={() => runAction('retry', () => postJson('/api/sync/retry', { runId: run?.id }))}
-          >
-            重试失败
-          </button>
-          <button
-            className="ops-btn danger"
-            disabled={Boolean(busy)}
-            onClick={() => runAction('cancel', () => postJson('/api/sync/cancel'))}
-          >
-            取消
-          </button>
-          <Link className="ops-btn" href="/review">审核队列</Link>
-          <Link className="ops-btn subtle" href="/">返回知识库</Link>
+          <div className="ops-actions-group" role="group" aria-label="操作">
+            <button
+              className="ops-btn primary"
+              disabled={Boolean(busy)}
+              onClick={() => runAction('sync', () => postJson('/api/sync/github/run'))}
+            >
+              {busy === 'sync' ? '启动中' : '立即同步'}
+            </button>
+            <button
+              className="ops-btn"
+              disabled={Boolean(busy)}
+              onClick={() => runAction('worker', () => postJson('/api/sync/worker'))}
+            >
+              跑分析
+            </button>
+            <button
+              className="ops-btn ops-actions-overflow"
+              disabled={Boolean(busy)}
+              onClick={() => runAction('retry', () => postJson('/api/sync/retry', { runId: run?.id }))}
+            >
+              重试失败
+            </button>
+            <button
+              className="ops-btn danger ops-actions-overflow"
+              disabled={Boolean(busy)}
+              onClick={() => runAction('cancel', () => postJson('/api/sync/cancel'))}
+            >
+              取消
+            </button>
+          </div>
+          <span className="ops-actions-divider" aria-hidden="true" />
+          <div className="ops-actions-group ops-actions-overflow" role="group" aria-label="导航">
+            <Link className="ops-btn" href="/review">审核队列</Link>
+            <Link className="ops-btn subtle" href="/">返回知识库</Link>
+          </div>
+
+          <div className="ops-more" ref={moreRef}>
+            <button
+              type="button"
+              className="ops-btn ops-more-trigger"
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((v) => !v)}
+            >
+              更多 <span aria-hidden="true">▾</span>
+            </button>
+            {moreOpen ? (
+              <div className="ops-more-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="ops-more-item"
+                  disabled={Boolean(busy)}
+                  onClick={() => runAction('retry', () => postJson('/api/sync/retry', { runId: run?.id }))}
+                >
+                  重试失败
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="ops-more-item danger"
+                  disabled={Boolean(busy)}
+                  onClick={() => runAction('cancel', () => postJson('/api/sync/cancel'))}
+                >
+                  取消
+                </button>
+                <Link className="ops-more-item" role="menuitem" href="/review" onClick={() => setMoreOpen(false)}>
+                  审核队列
+                </Link>
+                <Link className="ops-more-item subtle" role="menuitem" href="/" onClick={() => setMoreOpen(false)}>
+                  返回知识库
+                </Link>
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
 
@@ -219,6 +290,11 @@ export default function SyncDashboard() {
           <span>同步进度</span>
           <strong>{percent}%</strong>
           <em>完成 {run?.done_files ?? 0} / 变更 {run?.changed_files ?? 0}</em>
+          {run ? (
+            <div className="ops-progress-inline" aria-label={`同步进度 ${percent}%`}>
+              <span style={{ width: `${percent}%` }} />
+            </div>
+          ) : null}
         </div>
         <div className="ops-stat">
           <span>分析队列</span>
@@ -233,33 +309,39 @@ export default function SyncDashboard() {
       </section>
 
       {run ? (
-        <section className="ops-panel">
-          <div className="ops-panel-head">
-            <div>
-              <h2>最近任务</h2>
-              <div className="ops-badge-row">
-                <Badge value={run.status} />
-                <Badge value={run.stage} />
-              </div>
+        <section className="ops-panel ops-run-strip">
+          <div className="ops-run-strip-head">
+            <div className="ops-run-strip-badges">
+              <Badge value={run.status} />
+              <Badge value={run.stage} />
+              <span className="ops-run-strip-repo">{run.repo ? `${run.repo}@${run.branch || 'main'}` : '本地'}</span>
             </div>
-            <div className="ops-time">
+            <button
+              type="button"
+              className="ops-run-toggle"
+              aria-expanded={runDetailsOpen}
+              onClick={() => setRunDetailsOpen((v) => !v)}
+            >
+              {runDetailsOpen ? '收起' : '详细'}
+              <span aria-hidden="true">{runDetailsOpen ? '▴' : '▾'}</span>
+            </button>
+          </div>
+          <div className="ops-run-strip-meta">
+            新增 {run.created_files} · 更新 {run.updated_files} · 删除 {run.deleted_files} · 跳过 {run.skipped_files} · 失败 {run.failed_files}
+          </div>
+          {runDetailsOpen ? (
+            <div className="ops-run-strip-extra">
               <span>开始 {fmtDate(run.started_at)}</span>
               <span>结束 {fmtDate(run.finished_at)}</span>
             </div>
-          </div>
-          <div className="ops-progress" aria-label={`同步进度 ${percent}%`}>
-            <span style={{ width: `${percent}%` }} />
-          </div>
-          <div className="ops-run-meta">
-            新增 {run.created_files} · 更新 {run.updated_files} · 删除 {run.deleted_files} · 跳过 {run.skipped_files} · 失败 {run.failed_files}
-          </div>
+          ) : null}
         </section>
       ) : null}
 
       <section className="ops-grid-3">
         <div className="ops-panel">
           <h2>索引覆盖</h2>
-          <div className="ops-metric-grid">
+          <ul className="ops-kv-list">
             {[
               ['GitHub 文档', coverage.githubSources],
               ['活跃文件', coverage.activeSourceFiles],
@@ -270,12 +352,12 @@ export default function SyncDashboard() {
               ['模型调用', coverage.modelRuns],
               ['FTS', coverage.ftsReady ? 'ready' : 'off'],
             ].map(([label, value]) => (
-              <div className="ops-metric" key={String(label)}>
-                <span>{String(label)}</span>
-                <strong>{String(value ?? 0)}</strong>
-              </div>
+              <li className="ops-kv-row" key={String(label)}>
+                <span className="ops-kv-label">{String(label)}</span>
+                <strong className="ops-kv-value">{String(value ?? 0)}</strong>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
 
         <div className="ops-panel">
@@ -394,7 +476,7 @@ export default function SyncDashboard() {
       <section className="ops-panel">
         <h2>事件时间线</h2>
         <div className="ops-timeline">
-          {(dashboard?.events ?? []).map((event) => (
+          {visibleEvents.map((event) => (
             <article className="ops-event" key={event.id}>
               <div className="ops-event-head">
                 <Badge value={event.level} />
@@ -405,8 +487,17 @@ export default function SyncDashboard() {
               <p>{event.message}</p>
             </article>
           ))}
-          {(dashboard?.events ?? []).length === 0 ? <p className="ops-empty">暂无事件。</p> : null}
+          {allEvents.length === 0 ? <p className="ops-empty">暂无事件。</p> : null}
         </div>
+        {hasMoreEvents ? (
+          <button
+            type="button"
+            className="ops-events-toggle"
+            onClick={() => setEventsExpanded((v) => !v)}
+          >
+            {eventsExpanded ? '收起' : `展开全部 (${allEvents.length})`}
+          </button>
+        ) : null}
       </section>
     </main>
   );
