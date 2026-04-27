@@ -36,6 +36,9 @@ jobs:
       - name: Code quality metrics
         run: npm run quality:metrics
 
+      - name: Check alerting rules
+        run: npm run alerts:check
+
       - name: Publish code quality summary
         if: always()
         run: |

@@ -1,0 +1,93 @@
+{
+  "groups": [
+    {
+      "name": "compound.service",
+      "rules": [
+        {
+          "alert": "CompoundServiceDown",
+          "expr": "up{job=\"compound\"} == 0",
+          "for": "2m",
+          "labels": {
+            "severity": "critical",
+            "team": "compound"
+          },
+          "annotations": {
+            "summary": "Compound service is not scrapeable",
+            "description": "Prometheus has not scraped the Compound target for 2 minutes. Check hosting health, the /api/health endpoint, and recent deploys.",
+            "runbook_url": "https://github.com/xdesign678/compound/blob/main/docs/operations/alerting.md#compoundservicedown"
+          }
+        },
+        {
+          "alert": "CompoundApiHighErrorRate",
+          "expr": "sum(rate(compound_http_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(compound_http_requests_total[5m])), 1) > 0.05",
+          "for": "10m",
+          "labels": {
+            "severity": "critical",
+            "team": "compound"
+          },
+          "annotations": {
+            "summary": "Compound API 5xx rate is high",
+            "description": "More than 5% of observed API requests are returning 5xx responses over 10 minutes. Inspect application logs and Sentry for the first failing route.",
+            "runbook_url": "https://github.com/xdesign678/compound/blob/main/docs/operations/alerting.md#compoundapihigherrorrate"
+          }
+        },
+        {
+          "alert": "CompoundApiP95LatencyHigh",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(compound_http_request_duration_seconds_bucket[5m]))) > 2.5",
+          "for": "15m",
+          "labels": {
+            "severity": "warning",
+            "team": "compound"
+          },
+          "annotations": {
+            "summary": "Compound API p95 latency is high",
+            "description": "The 95th percentile API handler latency is above 2.5 seconds for 15 minutes. Check sync, analysis, and database work before increasing capacity.",
+            "runbook_url": "https://github.com/xdesign678/compound/blob/main/docs/operations/alerting.md#compoundapip95latencyhigh"
+          }
+        },
+        {
+          "alert": "CompoundSyncFailuresDetected",
+          "expr": "sum(compound_sync_run_files{state=\"failed\"}) > 0 or sum(compound_sync_items{status=\"failed\"}) > 0 or sum(compound_analysis_jobs{status=\"failed\"}) > 0",
+          "for": "10m",
+          "labels": {
+            "severity": "warning",
+            "team": "compound"
+          },
+          "annotations": {
+            "summary": "Compound sync or analysis failures detected",
+            "description": "The latest GitHub sync or background analysis run has failed files, failed items, or failed analysis jobs. Open /sync and retry only after reading the item errors.",
+            "runbook_url": "https://github.com/xdesign678/compound/blob/main/docs/operations/alerting.md#compoundsyncfailuresdetected"
+          }
+        },
+        {
+          "alert": "CompoundMetricsCollectionFailure",
+          "expr": "sum(compound_metrics_collection_error) > 0",
+          "for": "5m",
+          "labels": {
+            "severity": "warning",
+            "team": "compound"
+          },
+          "annotations": {
+            "summary": "Compound metrics collection is partially failing",
+            "description": "The /api/metrics endpoint is reachable, but at least one internal collector failed. Fix this before trusting sync or review dashboard alerts.",
+            "runbook_url": "https://github.com/xdesign678/compound/blob/main/docs/operations/alerting.md#compoundmetricscollectionfailure"
+          }
+        },
+        {
+          "alert": "CompoundReviewBacklogHigh",
+          "expr": "compound_review_items{status=\"open\"} > 50",
+          "for": "6h",
+          "labels": {
+            "severity": "warning",
+            "team": "compound"
+          },
+          "annotations": {
+            "summary": "Compound review queue backlog is high",
+            "description": "More than 50 review items have remained open for 6 hours. Review queue triage is lagging behind ingestion or analysis output.",
+            "runbook_url": "https://github.com/xdesign678/compound/blob/main/docs/operations/alerting.md#compoundreviewbackloghigh"
+          }
+        }
+      ]
+    }
+  ]
+}
