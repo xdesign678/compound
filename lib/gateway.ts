@@ -13,6 +13,7 @@
 import { promises as dns } from 'node:dns';
 import net from 'node:net';
 import { recordModelRun } from './model-runs';
+import { buildOutboundTraceHeaders } from './request-context';
 
 const METADATA_HOSTS = new Set([
   'metadata.google.internal',
@@ -222,6 +223,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
+      ...buildOutboundTraceHeaders(),
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(55_000),

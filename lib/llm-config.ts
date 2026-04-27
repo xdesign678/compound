@@ -1,5 +1,6 @@
 import type { LlmConfig } from './types';
 import { getAdminAuthHeaders } from './admin-auth-client';
+import { withRequestId } from './trace-client';
 
 const STORAGE_KEY = 'compound_llm_config';
 
@@ -27,7 +28,7 @@ export function saveLlmConfig(config: LlmConfig): void {
 
 export async function fetchCustomModels(): Promise<string[]> {
   const res = await fetch('/api/settings/models', {
-    headers: getAdminAuthHeaders(),
+    headers: withRequestId(getAdminAuthHeaders()),
   });
   if (!res.ok) return [];
   const data = (await res.json()) as { models?: unknown };
@@ -40,10 +41,10 @@ export async function rememberCustomModelOnServer(model: string): Promise<string
 
   const res = await fetch('/api/settings/models', {
     method: 'POST',
-    headers: {
+    headers: withRequestId({
       'Content-Type': 'application/json',
       ...getAdminAuthHeaders(),
-    },
+    }),
     body: JSON.stringify({ model: trimmed }),
   });
   if (!res.ok) return [];

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
+import { withRequestId } from '@/lib/trace-client';
 
 type ReviewItem = {
   id: string;
@@ -33,7 +34,7 @@ function prettyPayload(value: string | null): string {
 async function postJson(path: string, body: unknown) {
   const res = await fetch(path, {
     method: 'POST',
-    headers: { ...getAdminAuthHeaders(), 'Content-Type': 'application/json' },
+    headers: withRequestId({ ...getAdminAuthHeaders(), 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -53,7 +54,7 @@ export default function ReviewQueue() {
   const load = useCallback(async (nextStatus = status) => {
     try {
       const res = await fetch(`/api/review/queue?status=${nextStatus}`, {
-        headers: getAdminAuthHeaders(),
+        headers: withRequestId(getAdminAuthHeaders()),
         cache: 'no-store',
       });
       if (!res.ok) {

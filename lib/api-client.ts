@@ -4,6 +4,7 @@ import { ensureConceptsHydrated } from './cloud-sync';
 import { normalizeCategoryKeys, normalizeCategoryState } from './category-normalization';
 import { getLlmConfig } from './llm-config';
 import { getAdminAuthHeaders } from './admin-auth-client';
+import { generateClientRequestId } from './trace-client';
 import type {
   Source,
   Concept,
@@ -79,6 +80,7 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   const llmConfig = getLlmConfig();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'X-Request-ID': generateClientRequestId(),
     ...getAdminAuthHeaders(),
   };
   // Send via headers (fast path)
@@ -327,7 +329,7 @@ export async function startRepair(findings: RepairFindingPayload[]): Promise<Rep
 
 export async function getRepairStatus(runId: string): Promise<RepairStatusResponse> {
   const res = await fetch(`/api/repair/status?runId=${encodeURIComponent(runId)}`, {
-    headers: getAdminAuthHeaders(),
+    headers: { 'X-Request-ID': generateClientRequestId(), ...getAdminAuthHeaders() },
     cache: 'no-store',
   });
   if (res.status === 404) throw new Error('run not found');

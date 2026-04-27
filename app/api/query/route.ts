@@ -6,6 +6,8 @@ import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
 import { formatQueryContextForPrompt, wikiRepo } from '@/lib/wiki-db';
 import { hybridSearchWikiContext } from '@/lib/embedding';
+import { getRequestContext, withRequestTracing } from '@/lib/request-context';
+import { logger } from '@/lib/server-logger';
 import type { Concept, QueryRequest, QueryResponse } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -58,15 +60,14 @@ async function getServerContext(question: string) {
   try {
     return await hybridSearchWikiContext(question, options);
   } catch (err) {
-    console.warn(
-      '[query] hybrid search failed, falling back to FTS:',
-      err instanceof Error ? err.message : String(err)
-    );
+    logger.warn('query.hybrid_search_fallback', {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return wikiRepo.searchWikiContext(question, options);
   }
 }
 
-export async function POST(req: Request) {
+export const POST = withRequestTracing(async (req: Request) => {
   const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
@@ -131,7 +132,13 @@ export async function POST(req: Request) {
 
     return NextResponse.json(parsed);
   } catch (err) {
-    console.error('[query] error:', err instanceof Error ? err.message : String(err));
-    return NextResponse.json({ error: 'Query processing failed. Please check your API configuration.' }, { status: 500 });
+    logger.error('query.failed', { error: err instanceof Error ? err.message : String(err) });
+    return NextResponse.json(
+      {
+        error: 'Query processing failed. Please check your API configuration.',
+        requestId: getRequestContext()?.requestId,
+      },
+      { status: 500 }
+    );
   }
-}
+});

@@ -9,6 +9,7 @@ import { getDb } from './db';
 import { ingestSource } from './api-client';
 import { externalKeyPath } from './github-sync-shared';
 import { getAdminAuthHeaders } from './admin-auth-client';
+import { withRequestId } from './trace-client';
 
 export type SyncFileStatus =
   | 'unchanged' // 本地 externalKey 完全匹配（path@sha 一致），跳过
@@ -58,7 +59,7 @@ export interface ListResponse {
  * 调服务端 list 接口，返回仓库所有 md 文件清单。
  */
 export async function fetchRemoteFileList(): Promise<ListResponse> {
-  const res = await fetch('/api/sync/github/list', { headers: getAdminAuthHeaders() });
+  const res = await fetch('/api/sync/github/list', { headers: withRequestId(getAdminAuthHeaders()) });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`同步失败 (${res.status}): ${text.slice(0, 300) || '请检查 GitHub 环境变量配置'}`);
@@ -77,7 +78,7 @@ export async function fetchRemoteFileContent(path: string): Promise<{
 }> {
   const res = await fetch('/api/sync/github/content', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAdminAuthHeaders() },
+    headers: withRequestId({ 'Content-Type': 'application/json', ...getAdminAuthHeaders() }),
     body: JSON.stringify({ path }),
   });
   if (!res.ok) {

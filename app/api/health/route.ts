@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import { isAdminAuthConfigured, shouldEnforceAdminAuth } from '@/lib/server-auth';
+import { getRequestContext, withRequestTracing } from '@/lib/request-context';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+export const GET = withRequestTracing(async () => {
+  const ctx = getRequestContext();
   return NextResponse.json({
     status: 'ok',
     service: 'compound',
+    requestId: ctx?.requestId,
+    traceId: ctx?.traceId,
     auth: {
       configured: isAdminAuthConfigured(),
       enforced: shouldEnforceAdminAuth(),
@@ -21,4 +25,4 @@ export async function GET() {
       configured: Boolean(process.env.DATA_DIR),
     },
   });
-}
+});

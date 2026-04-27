@@ -5,6 +5,8 @@ import { CATEGORIZE_SYSTEM_PROMPT } from '@/lib/prompts';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
+import { getRequestContext, withRequestTracing } from '@/lib/request-context';
+import { logger } from '@/lib/server-logger';
 import type { CategorizeRequest, CategorizeResponse } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -13,7 +15,7 @@ export const maxDuration = 90;
 const MAX_BODY_BYTES = 256_000;
 const MAX_BATCH_SIZE = 20;
 
-export async function POST(req: Request) {
+export const POST = withRequestTracing(async (req: Request) => {
   const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
@@ -77,7 +79,10 @@ ${categoryList}
 
     return NextResponse.json(parsed);
   } catch (err) {
-    console.error('[categorize] error:', err instanceof Error ? err.message : String(err));
-    return NextResponse.json({ error: 'Categorize failed. Check API config.' }, { status: 500 });
+    logger.error('categorize.failed', { error: err instanceof Error ? err.message : String(err) });
+    return NextResponse.json(
+      { error: 'Categorize failed. Check API config.', requestId: getRequestContext()?.requestId },
+      { status: 500 }
+    );
   }
-}
+});

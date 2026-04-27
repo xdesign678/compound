@@ -4,6 +4,8 @@ import { LINT_SYSTEM_PROMPT } from '@/lib/prompts';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
+import { getRequestContext, withRequestTracing } from '@/lib/request-context';
+import { logger } from '@/lib/server-logger';
 import type { LintRequest, LintResponse } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -12,7 +14,7 @@ export const maxDuration = 90;
 const MAX_BODY_BYTES = 512_000;
 const MAX_CONCEPTS = 500;
 
-export async function POST(req: Request) {
+export const POST = withRequestTracing(async (req: Request) => {
   const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
@@ -66,7 +68,13 @@ ${listing}
 
     return NextResponse.json(parsed);
   } catch (err) {
-    console.error('[lint] error:', err instanceof Error ? err.message : String(err));
-    return NextResponse.json({ error: 'Lint processing failed. Please check your API configuration.' }, { status: 500 });
+    logger.error('lint.failed', { error: err instanceof Error ? err.message : String(err) });
+    return NextResponse.json(
+      {
+        error: 'Lint processing failed. Please check your API configuration.',
+        requestId: getRequestContext()?.requestId,
+      },
+      { status: 500 }
+    );
   }
-}
+});

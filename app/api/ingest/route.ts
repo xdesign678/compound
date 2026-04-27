@@ -3,6 +3,8 @@ import { ingestSourceToServerDb } from '@/lib/server-ingest';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
+import { getRequestContext, withRequestTracing } from '@/lib/request-context';
+import { logger } from '@/lib/server-logger';
 import type { IngestRequest } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -14,7 +16,7 @@ const MAX_BODY_BYTES = 512_000;
 const MAX_RAW_CONTENT_CHARS = 100_000;
 const MAX_EXISTING_CONCEPTS = 500;
 
-export async function POST(req: Request) {
+export const POST = withRequestTracing(async (req: Request) => {
   const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
@@ -53,10 +55,13 @@ export async function POST(req: Request) {
 
     return NextResponse.json(result);
   } catch (err) {
-    console.error('[ingest] error:', err instanceof Error ? err.message : String(err));
+    logger.error('ingest.failed', { error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json(
-      { error: 'Ingest processing failed. Please check your API configuration.' },
+      {
+        error: 'Ingest processing failed. Please check your API configuration.',
+        requestId: getRequestContext()?.requestId,
+      },
       { status: 500 }
     );
   }
-}
+});

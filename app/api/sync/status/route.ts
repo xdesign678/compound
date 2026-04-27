@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSyncJobStatus } from '@/lib/github-sync-runner';
 import { requireAdmin } from '@/lib/server-auth';
+import { getRequestContext, withRequestTracing } from '@/lib/request-context';
+import { logger } from '@/lib/server-logger';
 
 export const runtime = 'nodejs';
 export const maxDuration = 10;
@@ -9,7 +11,7 @@ export const maxDuration = 10;
  * GET /api/sync/status?jobId=xxx
  * Returns the latest status for a sync job (polled by the client every 1-2s).
  */
-export async function GET(req: Request) {
+export const GET = withRequestTracing(async (req: Request) => {
   const denied = requireAdmin(req);
   if (denied) return denied;
 
@@ -26,7 +28,10 @@ export async function GET(req: Request) {
     return NextResponse.json(status);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[sync/status] error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    logger.error('sync.status.failed', { error: message });
+    return NextResponse.json(
+      { error: message, requestId: getRequestContext()?.requestId },
+      { status: 500 }
+    );
   }
-}
+});

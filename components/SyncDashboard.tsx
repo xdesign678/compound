@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
+import { withRequestId } from '@/lib/trace-client';
 
 type SyncRun = {
   id: string;
@@ -108,7 +109,7 @@ function Badge({ value }: { value: string }) {
 async function postJson(path: string, body?: unknown) {
   const res = await fetch(path, {
     method: 'POST',
-    headers: { ...getAdminAuthHeaders(), 'Content-Type': 'application/json' },
+    headers: withRequestId({ ...getAdminAuthHeaders(), 'Content-Type': 'application/json' }),
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -130,7 +131,7 @@ export default function SyncDashboard() {
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/sync/dashboard', {
-        headers: getAdminAuthHeaders(),
+        headers: withRequestId(getAdminAuthHeaders()),
         cache: 'no-store',
       });
       if (!res.ok) {
