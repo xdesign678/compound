@@ -21,6 +21,7 @@ import {
   maybeFinishRun,
   cancelAnalysisJobs,
 } from './analysis-worker';
+import { logger } from './logging';
 
 const MAX_LOG_ENTRIES = 50;
 const STALE_JOB_MAX_AGE_MS = Number(process.env.COMPOUND_SYNC_STALE_MS || 10 * 60 * 1000);
@@ -170,7 +171,7 @@ export function startGithubSync(options: StartGithubSyncOptions = {}): {
   runId?: string;
 } {
   const recovered = repo.recoverStaleSyncJobs(STALE_JOB_MAX_AGE_MS);
-  if (recovered > 0) console.log(`[github-sync-runner] recovered ${recovered} stale job(s)`);
+  if (recovered > 0) logger.info('github_sync.stale_jobs_recovered', { recovered });
 
   const active = repo.getActiveSyncJob();
   if (active) return { jobId: active.id, existing: true };

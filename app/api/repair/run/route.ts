@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength } from '@/lib/request-guards';
 import { createRepairRun, startRepairWorker, type RepairFindingInput } from '@/lib/repair-worker';
+import { logger } from '@/lib/logging';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -30,7 +31,9 @@ export async function POST(req: Request) {
     startRepairWorker(runId);
     return NextResponse.json({ runId, total, dropped, ok: true });
   } catch (err) {
-    console.error('[repair/run] error:', err instanceof Error ? err.message : String(err));
+    logger.error('repair.run_start_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return NextResponse.json({ error: 'Failed to start repair run' }, { status: 500 });
   }
 }

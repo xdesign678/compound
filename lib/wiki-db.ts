@@ -1,4 +1,5 @@
 import { nanoid } from 'nanoid';
+import { logger } from './logging';
 import { getServerDb, repo } from './server-db';
 import { splitMarkdownIntoChunks, type SourceChunkDraft } from './wiki-chunk';
 import type { Concept, Source } from './types';
@@ -89,7 +90,9 @@ function safeRunFts(callback: () => void): void {
     callback();
   } catch (error) {
     ftsReady = false;
-    console.warn('[wiki-db] FTS disabled:', error instanceof Error ? error.message : String(error));
+    logger.warn('wiki.fts_disabled', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -241,10 +244,10 @@ export function ensureWikiCompilerSchema(): void {
     ftsReady = true;
   } catch (error) {
     ftsReady = false;
-    console.warn(
-      '[wiki-db] FTS5 unavailable; falling back to LIKE search:',
-      error instanceof Error ? error.message : String(error),
-    );
+    logger.warn('wiki.fts_unavailable', {
+      fallback: 'like_search',
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   migrationsReady = true;
@@ -502,10 +505,9 @@ export const wikiRepo = {
         const concepts = repo.getConceptsByIds(rows.map((row) => row.concept_id));
         if (concepts.length > 0) return concepts;
       } catch (error) {
-        console.warn(
-          '[wiki-db] concept FTS search failed:',
-          error instanceof Error ? error.message : String(error),
-        );
+        logger.warn('wiki.concept_fts_search_failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
     return repo.findConceptCandidates(query, normalizedLimit).slice(0, normalizedLimit);
@@ -531,10 +533,9 @@ export const wikiRepo = {
           .all(ftsQuery, normalizedLimit) as Array<Record<string, unknown>>;
         if (rows.length > 0) return rows.map(rowToChunk);
       } catch (error) {
-        console.warn(
-          '[wiki-db] chunk FTS search failed:',
-          error instanceof Error ? error.message : String(error),
-        );
+        logger.warn('wiki.chunk_fts_search_failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 

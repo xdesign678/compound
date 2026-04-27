@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { logger, setLoggerSink } from './server-logger';
+import { logger, setLoggerSink } from './logging';
 import { createRequestContext, runWithRequestContext } from './request-context';
 
 interface Captured {

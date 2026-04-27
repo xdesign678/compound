@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import net from 'node:net';
+import { logger } from './logging';
 
 type Bucket = {
   resetAt: number;
@@ -63,11 +64,10 @@ function getClientKey(req: Request): string {
   // running behind a trusted reverse proxy (Vercel, Cloudflare, etc.).
   if (!globalThis.__compoundRateLimitAnonWarned) {
     globalThis.__compoundRateLimitAnonWarned = true;
-    console.warn(
-      '[compound/rate-limit] COMPOUND_TRUST_PROXY is not set to "true". ' +
-        'All requests share a single rate-limit bucket ("anon"). ' +
-        'Set COMPOUND_TRUST_PROXY=true behind a trusted reverse proxy to enable per-IP limiting.',
-    );
+    logger.warn('rate_limit.trust_proxy_disabled', {
+      bucket: 'anon',
+      recommendation: 'Set COMPOUND_TRUST_PROXY=true behind a trusted reverse proxy.',
+    });
   }
   return 'anon';
 }

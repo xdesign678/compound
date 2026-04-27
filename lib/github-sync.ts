@@ -10,6 +10,7 @@
  */
 
 import { buildExternalKey } from './github-sync-shared';
+import { logger } from './logging';
 import { buildOutboundTraceHeaders } from './request-context';
 
 export { buildExternalKey, parseExternalKey, externalKeyPath } from './github-sync-shared';
@@ -118,9 +119,11 @@ export async function listMarkdownFiles(
   const treeData = (await treeRes.json()) as { tree: GithubTreeItem[]; truncated: boolean };
 
   if (treeData.truncated) {
-    console.warn(
-      `[github-sync] Tree for ${cfg.owner}/${cfg.repo} was truncated; very large vaults may need pagination.`,
-    );
+    logger.warn('github_sync.tree_truncated', {
+      repo: `${cfg.owner}/${cfg.repo}`,
+      branch: cfg.branch,
+      recommendation: 'Very large vaults may need pagination.',
+    });
   }
 
   const files: GithubMarkdownFile[] = [];

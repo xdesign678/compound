@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logging';
 import { requireAdmin } from '@/lib/server-auth';
 import { wikiRepo } from '@/lib/wiki-db';
 
@@ -26,7 +27,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json(context);
   } catch (error) {
-    console.error('[wiki/search] error:', error instanceof Error ? error.message : String(error));
+    logger.error('wiki.search_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json({ error: 'Wiki search failed' }, { status: 500 });
   }
 }

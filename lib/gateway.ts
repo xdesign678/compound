@@ -13,6 +13,7 @@
 import { promises as dns } from 'node:dns';
 import net from 'node:net';
 import { recordModelRun } from './model-runs';
+import { logger } from './logging';
 import { addBreadcrumb, reportError } from './observability/sentry';
 import { buildOutboundTraceHeaders } from './request-context';
 
@@ -298,8 +299,10 @@ export function parseJSON<T>(raw: string): T {
     try {
       return JSON.parse(fixUnescapedQuotes(text)) as T;
     } catch (e2) {
-      console.error('[parseJSON] raw text:', text.slice(0, 500));
-      console.error('[parseJSON] fixed text:', fixUnescapedQuotes(text).slice(0, 500));
+      logger.error('gateway.parse_json_failed', {
+        rawPreview: text.slice(0, 500),
+        fixedPreview: fixUnescapedQuotes(text).slice(0, 500),
+      });
       throw e2;
     }
   }

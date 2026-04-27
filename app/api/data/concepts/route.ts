@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logging';
 import { repo } from '@/lib/server-db';
 import { requireAdmin } from '@/lib/server-auth';
 
@@ -45,7 +46,7 @@ export async function GET(req: Request) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[data/concepts] error:', message);
+    logger.error('data.concepts_failed', { error: message });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

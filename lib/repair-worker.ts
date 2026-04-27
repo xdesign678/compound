@@ -12,6 +12,7 @@
  */
 import { nanoid } from 'nanoid';
 import { chat, parseJSON } from './gateway';
+import { logger } from './logging';
 import { CONFLICT_SYSTEM_PROMPT, MERGE_SYSTEM_PROMPT, ORPHAN_SYSTEM_PROMPT } from './prompts';
 import { createReviewItem } from './review-queue';
 import { getServerDb, repo } from './server-db';
@@ -393,10 +394,10 @@ async function runMergeJob(runId: string, job: RepairJobRow): Promise<void> {
     if (parsed.body && parsed.body.trim().length >= 10) mergedBody = parsed.body.trim();
   } catch (err) {
     aiFallback = true;
-    console.warn(
-      '[repair] merge LLM failed, falling back to mechanical merge:',
-      err instanceof Error ? err.message : String(err),
-    );
+    logger.warn('repair.merge_llm_failed', {
+      fallback: 'mechanical_merge',
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   const ts = now();
@@ -478,7 +479,9 @@ async function runOrphanJob(runId: string, job: RepairJobRow): Promise<void> {
       .filter((id) => valid.has(id) && id !== targetId)
       .slice(0, 3);
   } catch (err) {
-    console.warn('[repair] orphan LLM failed:', err instanceof Error ? err.message : String(err));
+    logger.warn('repair.orphan_llm_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   if (relatedIds.length === 0) {
@@ -540,7 +543,9 @@ async function runConflictJob(runId: string, job: RepairJobRow): Promise<void> {
     if (parsed.verdict && parsed.verdict.trim()) verdict = parsed.verdict.trim();
     if (parsed.reasoning && parsed.reasoning.trim()) reasoning = parsed.reasoning.trim();
   } catch (err) {
-    console.warn('[repair] conflict LLM failed:', err instanceof Error ? err.message : String(err));
+    logger.warn('repair.conflict_llm_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   const pair = `[${a.title}](concept:${a.id}) · [${b.title}](concept:${b.id})`;
@@ -604,7 +609,7 @@ async function dispatchJob(runId: string, job: RepairJobRow): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     markJob(job.id, 'failed', { error: message.slice(0, 500) });
     bumpCounter(runId, 'failed');
-    console.warn('[repair] job failed:', message);
+    logger.warn('repair.job_failed', { runId, jobId: job.id, kind: job.kind, error: message });
   }
 }
 
@@ -634,7 +639,10 @@ export function startRepairWorker(runId: string): void {
   if (g.__compoundRepairWorkers.has(runId)) return;
   const task = runRepairLoop(runId)
     .catch((err) => {
-      console.error('[repair] worker crashed:', err);
+      logger.error('repair.worker_crashed', {
+        runId,
+        error: err instanceof Error ? err.message : String(err),
+      });
       const db = getServerDb();
       db.prepare(`UPDATE repair_runs SET status = 'failed', finished_at = ? WHERE id = ?`).run(
         now(),

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logging';
 import { requireAdmin } from '@/lib/server-auth';
 import { repo } from '@/lib/server-db';
 import { wikiRepo } from '@/lib/wiki-db';
@@ -90,7 +91,9 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ ok: true, files });
   } catch (error) {
-    console.error('[wiki/export] error:', error instanceof Error ? error.message : String(error));
+    logger.error('wiki.export_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json({ error: 'Wiki export failed' }, { status: 500 });
   }
 }

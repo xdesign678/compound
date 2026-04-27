@@ -11,6 +11,7 @@
  */
 
 import { nanoid } from 'nanoid';
+import { logger } from './logging';
 import { getServerDb } from './server-db';
 
 let schemaReady = false;
@@ -40,7 +41,9 @@ function ensureSchema(): void {
     schemaReady = true;
   } catch (err) {
     // Telemetry must never crash the request path.
-    console.warn('[model-runs] schema init failed:', err instanceof Error ? err.message : err);
+    logger.warn('model_runs.schema_init_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
@@ -89,7 +92,11 @@ export function recordModelRun(record: ModelRunRecord): void {
       Date.now(),
     );
   } catch (err) {
-    console.warn('[model-runs] insert failed:', err instanceof Error ? err.message : err);
+    logger.warn('model_runs.insert_failed', {
+      task: record.task,
+      model: record.model,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
@@ -103,7 +110,10 @@ export function pruneModelRuns(olderThanMs: number): number {
     const res = db.prepare('DELETE FROM model_runs WHERE created_at < ?').run(cutoff);
     return typeof res.changes === 'number' ? res.changes : 0;
   } catch (err) {
-    console.warn('[model-runs] prune failed:', err instanceof Error ? err.message : err);
+    logger.warn('model_runs.prune_failed', {
+      olderThanMs,
+      error: err instanceof Error ? err.message : String(err),
+    });
     return 0;
   }
 }
