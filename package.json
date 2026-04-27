@@ -14,10 +14,12 @@
     "test": "node scripts/run-node-tests.mjs",
     "test:coverage": "node scripts/run-node-tests.mjs --coverage",
     "quality:metrics": "node scripts/quality-metrics.mjs",
+    "alerts:generate": "node scripts/generate-alert-rules.mjs",
+    "alerts:check": "node scripts/generate-alert-rules.mjs --check",
     "validate:agents-md": "node scripts/validate-agents-md.mjs",
     "docs:api": "node scripts/generate-api-docs.mjs",
     "docs:api:check": "node scripts/generate-api-docs.mjs --check",
-    "check": "npm run format:check && npm run typecheck && npm run test:coverage && npm run quality:metrics && npm run validate:agents-md && npm run docs:api:check && npm run build",
+    "check": "npm run format:check && npm run typecheck && npm run test:coverage && npm run quality:metrics && npm run alerts:check && npm run validate:agents-md && npm run docs:api:check && npm run build",
     "danger": "danger ci",
     "prepare": "husky"
   },
