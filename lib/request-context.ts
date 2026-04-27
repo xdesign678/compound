@@ -20,6 +20,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { observeHttpRequest } from './observability/prometheus';
+import {
+  createQueryScope,
+  finishQueryScope,
+  runWithExistingQueryScope,
+} from './observability/query-analyzer';
 
 export const REQUEST_ID_HEADER = 'x-request-id';
 export const TRACEPARENT_HEADER = 'traceparent';
@@ -203,9 +208,20 @@ export function withRequestTracing<Args extends unknown[], R extends Response>(
     const ctx = extractRequestContextFromHeaders(req.headers);
     const startedAt = performance.now();
     let status = 500;
+    // Each request opens its own query scope so the analyzer can detect
+    // per-request N+1 patterns and emit a structured `db.query_scope_summary`
+    // log line at completion. The scope is bound via AsyncLocalStorage inside
+    // runWithQueryScope (re-implemented inline here so we can keep the
+    // existing request-context AsyncLocalStorage active too).
+    const queryScope = createQueryScope({
+      label: `${req.method} ${normalizeRouteForScope(req.url)}`,
+      scopeId: ctx.requestId,
+    });
     return runWithRequestContext(ctx, async () => {
       try {
-        const response = await handler(req, ...args);
+        const response = await runWithExistingQueryScope(queryScope, () =>
+          Promise.resolve(handler(req, ...args)),
+        );
         status = response.status;
         applyTraceResponseHeaders(response.headers, ctx);
         return response;
@@ -219,6 +235,7 @@ export function withRequestTracing<Args extends unknown[], R extends Response>(
         applyTraceResponseHeaders(fallback.headers, ctx);
         return fallback;
       } finally {
+        finishQueryScope(queryScope);
         observeHttpRequest({
           method: req.method,
           route: req.url,
@@ -228,4 +245,12 @@ export function withRequestTracing<Args extends unknown[], R extends Response>(
       }
     });
   };
+}
+
+function normalizeRouteForScope(rawUrl: string): string {
+  try {
+    return new URL(rawUrl).pathname;
+  } catch {
+    return rawUrl.split('?')[0] || '/';
+  }
 }

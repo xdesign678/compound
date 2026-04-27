@@ -44,6 +44,7 @@ starts with impact, signals to check, and a safe recovery path.
 | [GitHub sync stuck or failing](github-sync-stuck.md)     | `/sync` is red, a job never finishes, GitHub returns 401/403/429, or files do not appear.          |
 | [LLM gateway degraded](llm-gateway-degraded.md)          | Ingest, analysis, repair, or Q&A fails because the model endpoint is unavailable or misconfigured. |
 | [SQLite data persistence](data-persistence.md)           | Data disappears after deploys, writes fail, or `DATA_DIR` / volume configuration is suspect.       |
+| [N+1 query detection](n-plus-one-queries.md)             | A `db.n_plus_one_detected` log fires or per-route SQL counters spike unexpectedly.                 |
 
 ## Handoff template
 

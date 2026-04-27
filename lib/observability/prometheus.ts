@@ -6,6 +6,7 @@
  * Prometheus, Datadog, New Relic, CloudWatch, or another collector.
  */
 import type { SyncDashboard, SyncRunRow } from '../sync-observability';
+import { getQueryAnalyzerSnapshot } from './query-analyzer';
 
 type LabelValue = string | number | boolean;
 type Labels = Record<string, LabelValue>;
@@ -272,10 +273,72 @@ function addCollectionErrors(
   }
 }
 
+function addQueryAnalyzerMetrics(out: PrometheusTextBuilder): void {
+  const snapshot = getQueryAnalyzerSnapshot(10);
+
+  out.metric(
+    'compound_db_queries_total',
+    'counter',
+    'Total prepared SQL statement executions observed by the query analyzer.',
+  );
+  out.sample('compound_db_queries_total', snapshot.totalQueries);
+
+  out.metric(
+    'compound_db_query_errors_total',
+    'counter',
+    'Prepared SQL statements that threw during execution.',
+  );
+  out.sample('compound_db_query_errors_total', snapshot.totalErrors);
+
+  out.metric(
+    'compound_db_query_duration_seconds_total',
+    'counter',
+    'Cumulative wall-clock time spent executing prepared SQL statements.',
+  );
+  out.sample('compound_db_query_duration_seconds_total', snapshot.totalDurationMs / 1000);
+
+  out.metric(
+    'compound_db_query_duration_seconds_max',
+    'gauge',
+    'Maximum single-statement execution time observed since process start.',
+  );
+  out.sample('compound_db_query_duration_seconds_max', snapshot.maxDurationMs / 1000);
+
+  out.metric(
+    'compound_db_n_plus_one_incidents_total',
+    'counter',
+    'Number of distinct (scope, fingerprint) pairs that crossed the N+1 threshold.',
+  );
+  out.sample('compound_db_n_plus_one_incidents_total', snapshot.totalNPlusOneIncidents);
+
+  out.metric(
+    'compound_db_query_fingerprint_count',
+    'gauge',
+    'Cumulative execution count per top SQL fingerprint (top 10).',
+  );
+  for (const item of snapshot.topFingerprints) {
+    out.sample('compound_db_query_fingerprint_count', item.count, {
+      fingerprint: item.fingerprint.slice(0, 160),
+    });
+  }
+
+  out.metric(
+    'compound_db_n_plus_one_fingerprint_incidents',
+    'gauge',
+    'Number of N+1 incidents per offending SQL fingerprint (top 10).',
+  );
+  for (const item of snapshot.worstNPlusOneFingerprints) {
+    out.sample('compound_db_n_plus_one_fingerprint_incidents', item.incidents, {
+      fingerprint: item.fingerprint.slice(0, 160),
+    });
+  }
+}
+
 export function renderPrometheusMetrics(input: PrometheusRenderInput = {}): string {
   const out = new PrometheusTextBuilder();
   addProcessMetrics(out);
   addHttpMetrics(out);
+  addQueryAnalyzerMetrics(out);
   if (input.syncDashboard) addSyncMetrics(out, input.syncDashboard);
   if (input.reviewMetrics) addReviewMetrics(out, input.reviewMetrics);
   if (input.embeddingMetrics) addEmbeddingMetrics(out, input.embeddingMetrics);

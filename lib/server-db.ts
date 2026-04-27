@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { normalizeCategoryState } from './category-normalization';
+import { instrumentDatabase } from './observability/query-analyzer';
 import type {
   Source,
   Concept,
@@ -56,6 +57,10 @@ function getHolder(): Holder {
   db.pragma('busy_timeout = 3000');
 
   runMigrations(db);
+  // After migrations finish, install the query analyzer so every prepared
+  // statement records its fingerprint, duration, and error state into the
+  // active query scope. Disabled by setting COMPOUND_DISABLE_QUERY_ANALYZER=1.
+  instrumentDatabase(db);
 
   const holder: Holder = { db, path: dbPath };
   g[globalKey] = holder;
