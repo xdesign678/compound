@@ -7602,6 +7602,10 @@ button,
     border-top: 1px solid var(--border-light);
     flex-wrap: wrap;
   }
+  .settings-modal .settings-tool-row:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
   .settings-modal .settings-tool-row-flat {
     padding-bottom: 0;
   }
@@ -7719,6 +7723,10 @@ button,
     flex-direction: column;
     max-height: 88vh;
     max-height: 88dvh;
+    box-sizing: border-box;
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-width: 100%;
   }
   .settings-modal .settings-sidebar {
     display: none;
@@ -7729,6 +7737,7 @@ button,
   }
   .settings-modal .settings-mobile-tabs .settings-segmented {
     width: 100%;
+    box-sizing: border-box;
     display: grid;
     padding: 4px;
     border-radius: 10px;
@@ -7760,8 +7769,13 @@ button,
     padding: 16px 0;
     border-top: 1px solid var(--border-light);
   }
+  .settings-modal .settings-tool-row:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
   .settings-modal .settings-segmented {
     width: 100%;
+    box-sizing: border-box;
     display: grid;
     padding: 3px;
     border-radius: 8px;
