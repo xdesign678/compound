@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useAppStore } from '@/lib/store';
 import { GeneralTab } from './settings/GeneralTab';
 import { ModelTab } from './settings/ModelTab';
@@ -8,10 +8,53 @@ import { DataTab } from './settings/DataTab';
 
 export type SettingsTabId = 'general' | 'model' | 'data';
 
-const TABS: { id: SettingsTabId; label: string; icon: string }[] = [
-  { id: 'general', label: '通用', icon: '🎨' },
-  { id: 'model', label: '模型', icon: '✨' },
-  { id: 'data', label: '数据', icon: '🗄️' },
+function IconGeneral() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconModel() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
+      <path
+        d="M12 2l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5L4.5 9.5l5.5-2z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M18 14l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconData() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
+      <ellipse cx="12" cy="6" rx="8" ry="3" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+const TABS: { id: SettingsTabId; label: string; icon: () => ReactNode }[] = [
+  { id: 'general', label: '通用', icon: IconGeneral },
+  { id: 'model', label: '模型', icon: IconModel },
+  { id: 'data', label: '数据', icon: IconData },
 ];
 
 export function SettingsDrawer() {
@@ -87,18 +130,23 @@ export function SettingsDrawer() {
         <div className="settings-layout">
           {/* 桌面端侧栏导航（≥768px 显示） */}
           <nav className="settings-sidebar" role="tablist" aria-label="设置分类">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                role="tab"
-                aria-selected={activeTab === tab.id}
-                className={`settings-sidebar-item${activeTab === tab.id ? ' active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                <span className="settings-sidebar-icon">{tab.icon}</span>
-                {tab.label}
-              </button>
-            ))}
+            {TABS.map((tab) => {
+              const TabIcon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  className={`settings-sidebar-item${activeTab === tab.id ? ' active' : ''}`}
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  <span className="settings-sidebar-icon">
+                    <TabIcon />
+                  </span>
+                  {tab.label}
+                </button>
+              );
+            })}
           </nav>
 
           <div className="settings-main">
