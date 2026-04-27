@@ -7480,3 +7480,309 @@ button,
   font-size: 13px;
   margin-top: 8px;
 }
+
+/* =========================================
+   SETTINGS PAGE — CLAUDE DESIGN STYLE
+   ========================================= */
+
+/* --- Desktop: full-screen centered dialog --- */
+@media (min-width: 768px) {
+  .modal-overlay:has(.settings-modal) {
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+  }
+  .settings-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    box-sizing: border-box;
+    border-radius: 16px !important;
+    padding: 32px 40px !important;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-primary) !important;
+    border: 1px solid var(--border-light) !important;
+    box-shadow:
+      0 24px 80px rgba(0, 0, 0, 0.12),
+      0 0 0 1px rgba(0, 0, 0, 0.04) !important;
+  }
+  .settings-modal .modal-handle {
+    display: none;
+  }
+
+  /* Hero header */
+  .settings-modal .settings-hero {
+    padding: 0 0 24px;
+    border-bottom: 1px solid var(--border-light);
+    margin-bottom: 24px;
+  }
+  .settings-modal .settings-hero h3 {
+    font-size: 22px;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+  }
+  .settings-modal .settings-kicker {
+    font-size: 12px;
+    letter-spacing: 0.02em;
+  }
+  .settings-modal .settings-close-btn {
+    border-radius: 7.5px !important;
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+
+  /* Layout: sidebar + content */
+  .settings-modal .settings-layout {
+    flex: 1;
+    flex-direction: row;
+    min-height: 0;
+    overflow: hidden;
+    gap: 0;
+  }
+  .settings-modal .settings-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 180px;
+    flex-shrink: 0;
+    padding: 4px 0;
+    border-right: 1px solid var(--border-light);
+    margin-right: 32px;
+  }
+  .settings-modal .settings-sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    transition: background var(--motion-duration-fast) var(--motion-ease-standard);
+  }
+  .settings-modal .settings-sidebar-item:hover {
+    background: var(--bg-muted);
+  }
+  .settings-modal .settings-sidebar-item.active {
+    background: var(--bg-muted);
+    color: var(--text-primary);
+    font-weight: 650;
+  }
+  .settings-modal .settings-sidebar-icon {
+    font-size: 16px;
+    width: 22px;
+    text-align: center;
+  }
+  .settings-modal .settings-mobile-tabs {
+    display: none;
+  }
+  .settings-modal .settings-main {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    padding-right: 8px;
+  }
+
+  /* Content area styles */
+  .settings-modal .settings-tool-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 20px 0;
+    border-top: 1px solid var(--border-light);
+    flex-wrap: wrap;
+  }
+  .settings-modal .settings-tool-row-flat {
+    padding-bottom: 0;
+  }
+  .settings-modal .settings-tool-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 3px;
+  }
+  .settings-modal .settings-card-desc {
+    font-size: 13px;
+    color: var(--text-tertiary);
+  }
+
+  /* Segmented controls */
+  .settings-modal .settings-segmented {
+    display: inline-grid;
+    padding: 4px;
+    border-radius: 10px;
+    background: var(--bg-muted);
+    border: 1px solid var(--border-light);
+    min-width: 180px;
+  }
+  .settings-modal .settings-segmented-three {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  .settings-modal .settings-segmented-five {
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+    min-width: 260px;
+  }
+  .settings-modal .settings-segmented button {
+    min-height: 36px;
+    border: none;
+    border-radius: 7.5px;
+    padding: 0 14px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--motion-duration-fast) var(--motion-ease-standard);
+  }
+  .settings-modal .settings-segmented button.active {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-weight: 600;
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.08),
+      0 0 0 1px rgba(0, 0, 0, 0.04);
+  }
+  .settings-modal .settings-segmented button:hover:not(.active) {
+    color: var(--text-primary);
+  }
+
+  /* Card heads in tabs */
+  .settings-modal .settings-card-head {
+    margin-bottom: 16px;
+  }
+  .settings-modal .settings-card-icon {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    border-radius: 10px;
+  }
+  .settings-modal .settings-card-title {
+    font-size: 16px;
+    font-weight: 650;
+  }
+
+  /* Divider */
+  .settings-modal .settings-tab-divider {
+    height: 1px;
+    background: var(--border-light);
+    margin: 24px 0;
+  }
+
+  /* Fields */
+  .settings-modal .settings-field input {
+    border-radius: 8px;
+    border: 1px solid var(--border-default);
+    background: var(--bg-card);
+    min-height: 44px;
+    font-size: 14px;
+    padding: 10px 14px;
+  }
+  .settings-modal .settings-field input:focus {
+    border-color: var(--text-secondary);
+    box-shadow: 0 0 0 2px rgba(94, 93, 89, 0.12);
+  }
+
+  /* Buttons */
+  .settings-modal .modal-btn {
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    min-height: 42px;
+  }
+  .settings-modal .modal-btn.primary {
+    font-weight: 500;
+  }
+
+  /* Presets */
+  .settings-modal .settings-preset {
+    border-radius: 7.5px;
+    min-height: 32px;
+    font-size: 12px;
+  }
+}
+
+/* --- Mobile: bottom sheet with segmented tabs --- */
+@media (max-width: 767px) {
+  .settings-modal {
+    display: flex;
+    flex-direction: column;
+    max-height: 88vh;
+    max-height: 88dvh;
+  }
+  .settings-modal .settings-sidebar {
+    display: none;
+  }
+  .settings-modal .settings-mobile-tabs {
+    display: block;
+    margin-bottom: 12px;
+  }
+  .settings-modal .settings-mobile-tabs .settings-segmented {
+    width: 100%;
+    display: grid;
+    padding: 4px;
+    border-radius: 10px;
+    background: var(--bg-muted);
+    border: 1px solid var(--border-light);
+  }
+  .settings-modal .settings-mobile-tabs .settings-segmented button {
+    min-height: 38px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 7.5px;
+  }
+  .settings-modal .settings-mobile-tabs .settings-segmented button.active {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+  .settings-modal .settings-main {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .settings-modal .settings-tool-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 16px 0;
+    border-top: 1px solid var(--border-light);
+  }
+  .settings-modal .settings-segmented {
+    width: 100%;
+    display: grid;
+    padding: 3px;
+    border-radius: 8px;
+    background: var(--bg-muted);
+  }
+  .settings-modal .settings-segmented-five {
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+  }
+  .settings-modal .settings-segmented button {
+    min-height: 36px;
+    font-size: 13px;
+    border-radius: 7px;
+  }
+  .settings-modal .settings-tool-title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .settings-modal .settings-card-desc {
+    font-size: 12px;
+  }
+  .settings-modal .settings-hero h3 {
+    font-size: 20px;
+  }
+}
