@@ -30,6 +30,35 @@ jobs:
       - run: npm run typecheck
       - run: npm run test
 
+      - name: Test coverage
+        run: npm run test:coverage
+
+      - name: Code quality metrics
+        run: npm run quality:metrics
+
+      - name: Publish code quality summary
+        if: always()
+        run: |
+          if [ -f tmp/coverage/coverage-summary.md ]; then
+            cat tmp/coverage/coverage-summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f tmp/quality-metrics.md ]; then
+            printf '\n' >> "$GITHUB_STEP_SUMMARY"
+            cat tmp/quality-metrics.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload code quality metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-quality-metrics
+          path: |
+            tmp/coverage/coverage-summary.json
+            tmp/coverage/coverage-summary.md
+            tmp/quality-metrics.json
+            tmp/quality-metrics.md
+          if-no-files-found: warn
+
       # Verify the auto-generated API reference (docs/api-reference.md) is
       # in sync with app/api/**/route.ts. If a route was added/removed/renamed
       # without regenerating the docs, this fails with a clear remediation.
