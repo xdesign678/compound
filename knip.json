@@ -1,0 +1,20 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "app/**/page.tsx",
+    "app/**/layout.tsx",
+    "app/**/route.ts",
+    "app/**/global-error.tsx",
+    "scripts/*.mjs",
+    "lib/**/*.test.ts"
+  ],
+  "project": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "components/**/*.tsx",
+    "lib/**/*.ts",
+    "scripts/**/*.mjs"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "ignoreDependencies": ["@typescript-eslint/eslint-plugin", "@types/dompurify"]
+}
