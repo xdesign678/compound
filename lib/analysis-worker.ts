@@ -13,6 +13,7 @@ import { syncObs, ensureSyncObservabilitySchema } from './sync-observability';
 import { embedSourceChunks } from './embedding';
 import { createReviewItem } from './review-queue';
 import { chat, parseJSON } from './gateway';
+import { now, parseJson } from './utils';
 
 export type AdvancedAnalysisStage =
   | 'github_ingest'
@@ -71,19 +72,6 @@ const WORKER_BATCH = Math.max(1, Number(process.env.COMPOUND_ANALYSIS_WORKER_BAT
 const WORKER_MAX_LOOPS = Math.max(1, Number(process.env.COMPOUND_ANALYSIS_WORKER_MAX_LOOPS || 1000));
 
 let schemaReady = false;
-
-function now(): number {
-  return Date.now();
-}
-
-function parseJson<T>(value: string | null | undefined, fallback: T): T {
-  if (!value) return fallback;
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
-}
 
 function tableColumns(table: string): Set<string> {
   const rows = getServerDb().prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;

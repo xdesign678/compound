@@ -15,6 +15,7 @@ import { chat, parseJSON } from './gateway';
 import { CONFLICT_SYSTEM_PROMPT, MERGE_SYSTEM_PROMPT, ORPHAN_SYSTEM_PROMPT } from './prompts';
 import { createReviewItem } from './review-queue';
 import { getServerDb, repo } from './server-db';
+import { now, parseJson } from './utils';
 import type { ActivityLog, Concept } from './types';
 
 export type RepairJobKind = 'merge' | 'link' | 'orphan' | 'conflict';
@@ -75,19 +76,6 @@ const WORKER_ID = `repair-${nanoid(6)}`;
 const JOB_CAP = Math.max(1, Number(process.env.COMPOUND_REPAIR_JOB_CAP || 50));
 const ORPHAN_CANDIDATE_LIMIT = 40;
 const MAX_BODY_CHARS = 8000;
-
-function now(): number {
-  return Date.now();
-}
-
-function parseJson<T>(raw: string | null | undefined, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
 
 function emptySummary(): RepairSummary {
   return {

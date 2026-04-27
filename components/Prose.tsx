@@ -64,7 +64,7 @@ export function Prose({
       el.removeEventListener('click', clickHandler);
       el.removeEventListener('keydown', keydownHandler);
     };
-  }, [openConcept, citedConceptIds]);
+  }, [openConcept, citedConceptIds, markdown]);
 
   return (
     <div

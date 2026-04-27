@@ -4,6 +4,7 @@ import { ensureConceptsHydrated } from './cloud-sync';
 import { normalizeCategoryKeys, normalizeCategoryState } from './category-normalization';
 import { getLlmConfig } from './llm-config';
 import { getAdminAuthHeaders } from './admin-auth-client';
+import { escapeHTML } from './format';
 import type {
   Source,
   Concept,
@@ -439,10 +440,4 @@ export async function categorizeConcepts(
   }
 
   return { total: uncategorized.length, failed, errors };
-}
-
-function escapeHTML(s: string): string {
-  return s.replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string
-  );
 }

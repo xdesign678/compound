@@ -11,6 +11,8 @@ import {
   getCurrentFileDisplay,
   getSyncStatusCopy,
 } from '@/lib/github-sync-ui';
+import { useModalKeyboard } from '@/lib/hooks/useModalKeyboard';
+import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 
 type Phase = 'idle' | 'starting' | 'running' | 'done' | 'failed';
 
@@ -56,6 +58,10 @@ export function GithubSyncModal() {
   const [pulling, setPulling] = useState(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pulledAfterDoneRef = useRef(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useModalKeyboard(open, close);
+  useFocusTrap(modalRef, open);
 
   // 打开时重置状态
   useEffect(() => {
@@ -166,7 +172,7 @@ export function GithubSyncModal() {
 
   return (
     <div className="modal-overlay visible" onClick={canClose ? close : undefined}>
-      <div className="modal gh-sync-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal gh-sync-modal" ref={modalRef} role="dialog" aria-modal="true" aria-labelledby="gh-sync-title" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="modal-handle" />
         <header className="gh-sync-header">
           <div className="gh-sync-header-row">
@@ -176,7 +182,7 @@ export function GithubSyncModal() {
               </span>
               <div>
                 <p className="gh-sync-eyebrow">{statusCopy.eyebrow}</p>
-                <h2>从 GitHub 同步</h2>
+                <h2 id="gh-sync-title">从 GitHub 同步</h2>
               </div>
             </div>
             <button

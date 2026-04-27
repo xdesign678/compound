@@ -47,7 +47,6 @@ export function IngestModal() {
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
     );
     const first = focusable[0];
-    const last = focusable[focusable.length - 1];
     first?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -233,14 +232,7 @@ export function IngestModal() {
                   />
                 </div>
                 {error && (
-                  <div style={{
-                    padding: '8px 12px',
-                    background: '#fee2e2',
-                    color: '#991b1b',
-                    borderRadius: 6,
-                    fontSize: 13,
-                    marginTop: 8
-                  }}>
+                  <div className="ingest-error-banner">
                     {error}
                   </div>
                 )}

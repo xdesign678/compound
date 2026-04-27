@@ -295,6 +295,16 @@ button {
   flex-shrink: 0;
   z-index: 40;
 }
+/* tablist wrapper: display contents so children participate in parent flex */
+.tabbar-tabs {
+  display: contents;
+}
+/* Visual ordering: first two tabs, then "+", then the rest */
+.tabbar-tabs > :nth-child(1) { order: 1; }
+.tabbar-tabs > :nth-child(2) { order: 2; }
+.tab-add { order: 3; }
+.tabbar-tabs > :nth-child(3) { order: 4; }
+.tabbar-tabs > :nth-child(4) { order: 5; }
 .dark .tabbar {
   background: var(--bg-primary);
 }
@@ -3541,11 +3551,15 @@ button {
   from { opacity: 0; transform: translateY(18px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
 .tab-view {
   animation: tabFadeIn var(--motion-duration-fast) var(--motion-ease-standard) forwards;
 }
 .detail-view {
-  animation: slideUpIn var(--motion-duration-base) var(--motion-ease-emphasized) forwards;
+  animation: slideInRight var(--motion-duration-base) var(--motion-ease-emphasized) forwards;
 }
 
 /* Loading skeleton */
@@ -7105,4 +7119,34 @@ button, .btn, .modal-btn, .desktop-sidebar-btn, .search-input, .form-input, .for
   .ops-actions {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── SwipeBack indicator ─────────────────────────────────────── */
+.swipe-back-indicator {
+  position: fixed;
+  left: env(safe-area-inset-left, 0px);
+  top: 50%;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-button);
+  color: var(--text-on-button);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--motion-duration-fast) var(--motion-ease-standard),
+              transform var(--motion-duration-fast) var(--motion-ease-standard);
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: var(--shadow-md);
+}
+
+/* ── IngestModal error banner ────────────────────────────────── */
+.ingest-error-banner {
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--color-error, #ef4444) 10%, transparent);
+  color: var(--color-error, #991b1b);
+  border-radius: 6px;
+  font-size: 13px;
+  margin-top: 8px;
 }

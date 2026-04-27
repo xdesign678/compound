@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { timingSafeEqual } from 'node:crypto';
 
 const ADMIN_TOKEN_ENV_KEYS = ['COMPOUND_ADMIN_TOKEN', 'ADMIN_TOKEN'] as const;
 
@@ -22,14 +23,28 @@ export function shouldEnforceAdminAuth(): boolean {
   return isAdminAuthConfigured() || process.env.NODE_ENV === 'production';
 }
 
-function safeEqual(a: string, b: string): boolean {
-  if (!a || !b || a.length !== b.length) return false;
+/**
+ * Constant-time string comparison using Node.js crypto.timingSafeEqual.
+ * Exported for use by other server-side modules.
+ * When lengths differ, both buffers are still compared at the longer length
+ * to avoid leaking length information via timing side-channels.
+ */
+export function safeEqual(a: string, b: string): boolean {
+  if (!a || !b) return false;
 
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+
+  // Pad the shorter buffer to the length of the longer one so
+  // timingSafeEqual always receives equal-length buffers.
+  const maxLen = Math.max(bufA.length, bufB.length);
+  const paddedA = Buffer.alloc(maxLen);
+  const paddedB = Buffer.alloc(maxLen);
+  bufA.copy(paddedA);
+  bufB.copy(paddedB);
+
+  // Fold in a length-mismatch check that doesn't short-circuit.
+  return bufA.length === bufB.length && timingSafeEqual(paddedA, paddedB);
 }
 
 function tokenFromAuthorizationHeader(value: string | null): string {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const AUTH_COOKIE_NAME = 'compound_admin_token';
-const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
+const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 function clean(value: string | undefined): string {
   return value?.replace(/^["'\s]+|["'\s]+$/g, '') ?? '';
@@ -11,12 +11,23 @@ function getAdminToken(): string {
   return clean(process.env.COMPOUND_ADMIN_TOKEN) || clean(process.env.ADMIN_TOKEN);
 }
 
+/**
+ * Constant-time string comparison safe for Edge Runtime (no node:crypto).
+ * When lengths differ, pads the shorter string and still performs a full
+ * comparison to avoid leaking length information via timing side-channels.
+ */
 function safeEqual(a: string, b: string): boolean {
-  if (!a || !b || a.length !== b.length) return false;
+  if (!a || !b) return false;
 
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  const maxLen = Math.max(a.length, b.length);
+  // Pad both strings to the same length so the loop always runs maxLen iterations.
+  const paddedA = a.padEnd(maxLen, '\0');
+  const paddedB = b.padEnd(maxLen, '\0');
+
+  // XOR every character; also fold in a length mismatch bit.
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < maxLen; i++) {
+    diff |= paddedA.charCodeAt(i) ^ paddedB.charCodeAt(i);
   }
   return diff === 0;
 }

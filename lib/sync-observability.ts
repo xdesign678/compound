@@ -12,6 +12,7 @@ import crypto from 'node:crypto';
 import { nanoid } from 'nanoid';
 import { getServerDb } from './server-db';
 import { wikiRepo } from './wiki-db';
+import { now } from './utils';
 
 export type SyncRunStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
 export type SyncItemStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'cancelled';
@@ -140,10 +141,6 @@ export interface SyncEventRow {
 }
 
 let schemaReady = false;
-
-function now(): number {
-  return Date.now();
-}
 
 function stableId(...parts: Array<string | null | undefined>): string {
   return crypto

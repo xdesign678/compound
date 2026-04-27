@@ -1,3 +1,4 @@
+// @ts-nocheck — Danger types are provided by the `danger` package at runtime only.
 /**
  * Danger JS configuration for automated PR review.
  *

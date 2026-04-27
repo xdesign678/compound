@@ -21,14 +21,17 @@ export function PullToRefresh({
   onRefresh,
   maxWidth = 1023,
 }: PullToRefreshProps) {
-  const [pulling, setPulling] = useState(false);
-  const [distance, setDistance] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
+  const [, setTick] = useState(0);
+  const distanceRef = useRef(0);
+  const refreshingRef = useRef(false);
+  const pullingRef = useRef(false);
   const startYRef = useRef<number | null>(null);
   const startScrollRef = useRef(0);
   const containerRef = useRef<HTMLElement | null>(null);
   const canPullRef = useRef(false);
   const hasVibratedRef = useRef(false);
+
+  const forceRender = useCallback(() => setTick((t) => t + 1), []);
 
   const getContainer = useCallback(() => {
     if (!containerRef.current) {
@@ -62,14 +65,16 @@ export function PullToRefresh({
       const dy = touch.clientY - startYRef.current;
       if (dy < 0) {
         // scrolling up, release pull
-        setPulling(false);
-        setDistance(0);
+        pullingRef.current = false;
+        distanceRef.current = 0;
         canPullRef.current = false;
+        forceRender();
         return;
       }
       const resisted = Math.min(dy * RESISTANCE, MAX_PULL);
-      setPulling(true);
-      setDistance(resisted);
+      pullingRef.current = true;
+      distanceRef.current = resisted;
+      forceRender();
       if (resisted >= TRIGGER_DISTANCE && !hasVibratedRef.current) {
         hasVibratedRef.current = true;
         hapticLight();
@@ -79,16 +84,20 @@ export function PullToRefresh({
     const onTouchEnd = () => {
       if (!canPullRef.current) return;
       canPullRef.current = false;
-      setPulling(false);
-      if (distance >= TRIGGER_DISTANCE && !refreshing) {
-        setRefreshing(true);
+      pullingRef.current = false;
+      if (distanceRef.current >= TRIGGER_DISTANCE && !refreshingRef.current) {
+        refreshingRef.current = true;
         hapticSuccess();
         onRefresh();
         // auto-reset after a sensible delay
-        window.setTimeout(() => setRefreshing(false), 600);
+        window.setTimeout(() => {
+          refreshingRef.current = false;
+          forceRender();
+        }, 600);
       }
-      setDistance(0);
+      distanceRef.current = 0;
       startYRef.current = null;
+      forceRender();
     };
 
     document.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -102,7 +111,11 @@ export function PullToRefresh({
       document.removeEventListener('touchend', onTouchEnd);
       document.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, [getContainer, onRefresh, maxWidth, distance, refreshing]);
+  }, [getContainer, onRefresh, maxWidth, forceRender]);
+
+  const pulling = pullingRef.current;
+  const distance = distanceRef.current;
+  const refreshing = refreshingRef.current;
 
   if (!pulling && !refreshing && distance === 0) return null;
 

@@ -422,6 +422,17 @@ function rowToAsk(r: AskRow): AskMessage {
 }
 
 // --------------------------------------------------------------------
+// Category keys cache – avoids full table scan on every call.
+// --------------------------------------------------------------------
+
+let _categoryKeysCache: { keys: string[]; ts: number } | null = null;
+const CATEGORY_CACHE_TTL = 30_000; // 30 seconds
+
+function invalidateCategoryKeysCache(): void {
+  _categoryKeysCache = null;
+}
+
+// --------------------------------------------------------------------
 // Public repository API
 // --------------------------------------------------------------------
 
@@ -521,6 +532,7 @@ export const repo = {
         updated_at: c.updatedAt,
         version: c.version ?? 1,
       });
+    invalidateCategoryKeysCache();
   },
 
   getConcept(id: string): Concept | null {
@@ -595,12 +607,17 @@ export const repo = {
   },
 
   listCategoryKeys(): string[] {
+    if (_categoryKeysCache && Date.now() - _categoryKeysCache.ts < CATEGORY_CACHE_TTL) {
+      return _categoryKeysCache.keys;
+    }
     const rows = getServerDb()
       .prepare(`SELECT category_keys FROM concepts`)
       .all() as Array<{ category_keys: string }>;
-    return normalizeCategoryState({
+    const result = normalizeCategoryState({
       categoryKeys: rows.flatMap((row) => parseJsonArray<string>(row.category_keys)),
     }).categoryKeys;
+    _categoryKeysCache = { keys: result, ts: Date.now() };
+    return result;
   },
 
   /**
@@ -624,6 +641,7 @@ export const repo = {
     safeExec(`DELETE FROM concept_evidence WHERE concept_id = ?`, [id]);
     safeExec(`DELETE FROM concept_relations WHERE source_concept_id = ? OR target_concept_id = ?`, [id, id]);
     safeExec(`DELETE FROM concept_versions WHERE concept_id = ?`, [id]);
+    invalidateCategoryKeysCache();
   },
 
   /**
@@ -670,6 +688,36 @@ export const repo = {
       return repo.listConcepts({ summariesOnly: true, limit: normalizedLimit });
     }
 
+    // --- FTS5 fast path (concept_fts created lazily by wiki-db.ts) ---
+    const ftsQuery = keywords.map((k) => `"${k.replace(/"/g, '')}"`).join(' OR ');
+    if (ftsQuery) {
+      try {
+        const ftsRows = getServerDb()
+          .prepare(
+            `SELECT concept_id FROM concept_fts WHERE concept_fts MATCH ? ORDER BY bm25(concept_fts) LIMIT ?`
+          )
+          .all(ftsQuery, normalizedLimit) as Array<{ concept_id: string }>;
+        if (ftsRows.length > 0) {
+          const matched = repo.getConceptsByIds(
+            ftsRows.map((r) => r.concept_id),
+            { summariesOnly: true }
+          );
+          if (matched.length >= Math.min(normalizedLimit, 80)) {
+            return matched;
+          }
+          // Pad with recent concepts when FTS results are insufficient
+          const existingIds = new Set(matched.map((c) => c.id));
+          const fallback = repo
+            .listConcepts({ summariesOnly: true, limit: normalizedLimit * 2 })
+            .filter((c) => !existingIds.has(c.id));
+          return [...matched, ...fallback].slice(0, normalizedLimit);
+        }
+      } catch {
+        // concept_fts table missing or FTS5 unavailable – fall through to LIKE
+      }
+    }
+
+    // --- LIKE fallback ---
     const queryParts = keywords.map(
       () => `(title LIKE ? COLLATE NOCASE OR summary LIKE ? COLLATE NOCASE)`
     );

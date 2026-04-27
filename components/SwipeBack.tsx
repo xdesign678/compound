@@ -7,7 +7,6 @@ import { hapticLight, hapticSuccess } from '@/lib/haptic';
 const EDGE_WIDTH = 36;       // px from left edge to start (was 24)
 const MIN_DISTANCE = 60;     // px to trigger back
 const MAX_Y_DRIFT = 100;     // px vertical drift tolerance
-const INDICATOR_SIZE = 32;
 
 export function SwipeBack() {
   const back = useAppStore((s) => s.back);
@@ -99,23 +98,8 @@ export function SwipeBack() {
       ref={indicatorRef}
       className="swipe-back-indicator"
       style={{
-        position: 'fixed',
-        left: 0,
-        top: '50%',
-        width: INDICATOR_SIZE,
-        height: INDICATOR_SIZE,
-        borderRadius: '50%',
-        background: 'var(--bg-button)',
-        color: 'var(--text-on-button)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
         opacity: 0,
         transform: 'translateX(-100%) translateY(-50%) scale(0.6)',
-        transition: 'opacity var(--motion-duration-fast) var(--motion-ease-standard), transform var(--motion-duration-fast) var(--motion-ease-standard)',
-        zIndex: 100,
-        pointerEvents: 'none',
-        boxShadow: 'var(--shadow-md)',
       }}
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

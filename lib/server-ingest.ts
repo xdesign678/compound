@@ -13,6 +13,7 @@ import { normalizeCategoryKeys, normalizeCategoryState } from './category-normal
 import { runIngestLLM } from './ingest-core';
 import { compileWikiArtifactsAfterIngest } from './wiki-compiler';
 import { wikiRepo } from './wiki-db';
+import { escapeHTML } from './format';
 import type {
   Source,
   Concept,
@@ -229,14 +230,4 @@ export async function ingestSourceToServerDb(
     activity,
     compiler: compilerResult,
   };
-}
-
-function escapeHTML(s: string): string {
-  return s.replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
-        c
-      ] as string
-  );
 }

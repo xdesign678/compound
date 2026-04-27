@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { renderMarkdown } from '@/lib/format';
+import { useAppStore } from '@/lib/store';
 import DOMPurify from 'dompurify';
 
 const DRAFT_KEY = 'compound_note_draft';
@@ -16,7 +17,6 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
   const [text, setText] = useState('');
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [draftRestored, setDraftRestored] = useState(false);
-  const [showDraftHint, setShowDraftHint] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -68,17 +68,10 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
   }
 
   function handleCancel() {
-    // If draft exists in localStorage, show hint
-    try {
-      const saved = localStorage.getItem(DRAFT_KEY);
-      if (saved && saved.trim()) {
-        setShowDraftHint(true);
-        setTimeout(() => {
-          onCancel();
-        }, 1800);
-        return;
-      }
-    } catch { /* ignore */ }
+    const hasDraft = (() => { try { return localStorage.getItem(DRAFT_KEY)?.trim(); } catch { return ''; } })();
+    if (hasDraft) {
+      useAppStore.getState().showToast('草稿已保存，下次打开会自动恢复');
+    }
     onCancel();
   }
 
@@ -117,15 +110,9 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
         </button>
       </div>
 
-      {draftRestored && !showDraftHint && (
+      {draftRestored && (
         <div className="note-editor-draft-banner">
           已恢复上次草稿
-        </div>
-      )}
-
-      {showDraftHint && (
-        <div className="note-editor-draft-banner">
-          草稿已保存，下次打开会自动恢复
         </div>
       )}
 

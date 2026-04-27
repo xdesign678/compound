@@ -213,6 +213,33 @@ export async function embedSourceChunks(sourceId: string): Promise<{ total: numb
   return { total: chunks.length, embedded, provider, model };
 }
 
+/**
+ * Use chunk_fts to get candidate chunk IDs for pre-filtering the vector scan.
+ * Returns an empty array when FTS is unavailable or the query yields no terms.
+ */
+function getFtsChunkIds(query: string, limit: number): string[] {
+  const terms = query
+    .toLowerCase()
+    .split(/[^a-z0-9\u4e00-\u9fff]+/i)
+    .map((p) => p.trim())
+    .filter((p) => p.length >= 2);
+  if (terms.length === 0) return [];
+  const ftsExpr = Array.from(new Set(terms))
+    .slice(0, 10)
+    .map((t) => `"${t.replace(/"/g, '')}"`)
+    .join(' OR ');
+  if (!ftsExpr) return [];
+  try {
+    const rows = getServerDb()
+      .prepare(`SELECT chunk_id FROM chunk_fts WHERE chunk_fts MATCH ? LIMIT ?`)
+      .all(ftsExpr, limit) as Array<{ chunk_id: string }>;
+    return rows.map((r) => r.chunk_id);
+  } catch {
+    // chunk_fts table missing or FTS5 unavailable
+    return [];
+  }
+}
+
 export async function hybridSearchWikiContext(
   query: string,
   options: { conceptLimit?: number; chunkLimit?: number } = {}
@@ -222,26 +249,49 @@ export async function hybridSearchWikiContext(
   const chunkLimit = options.chunkLimit ?? Number(process.env.COMPOUND_QUERY_CONTEXT_CHUNK_LIMIT || 12);
 
   const base = wikiRepo.searchWikiContext(query, { conceptLimit, chunkLimit });
-  const vectorRows = getServerDb()
-    .prepare(
-      `SELECT chunk_embeddings.vector_json, source_chunks.*
-       FROM chunk_embeddings
-       JOIN source_chunks ON source_chunks.id = chunk_embeddings.chunk_id
-       ORDER BY chunk_embeddings.updated_at DESC
-       LIMIT ?`
-    )
-    .all(Number(process.env.COMPOUND_HYBRID_VECTOR_SCAN_LIMIT || 5000)) as Array<Record<string, unknown>>;
+
+  // --- FTS pre-filter: narrow vector scan to relevant chunks ---
+  const ftsChunkIds = getFtsChunkIds(query, 200);
+  const baseChunkIds = base.chunks.map((chunk) => chunk.id);
+  // Merge base chunk IDs (already FTS-ranked) with additional FTS candidates
+  const candidateIds = Array.from(new Set([...baseChunkIds, ...ftsChunkIds]));
+
+  let vectorRows: Array<Record<string, unknown>>;
+
+  if (candidateIds.length > 0) {
+    // Targeted vector lookup – only load embeddings for FTS-matched chunks
+    const placeholders = candidateIds.map(() => '?').join(',');
+    vectorRows = getServerDb()
+      .prepare(
+        `SELECT ce.vector_json, sc.*
+         FROM chunk_embeddings ce
+         JOIN source_chunks sc ON sc.id = ce.chunk_id
+         WHERE ce.chunk_id IN (${placeholders})`
+      )
+      .all(...candidateIds) as Array<Record<string, unknown>>;
+  } else {
+    // No FTS results – fallback to a reduced full scan
+    vectorRows = getServerDb()
+      .prepare(
+        `SELECT ce.vector_json, sc.*
+         FROM chunk_embeddings ce
+         JOIN source_chunks sc ON sc.id = ce.chunk_id
+         ORDER BY ce.updated_at DESC
+         LIMIT ?`
+      )
+      .all(Number(process.env.COMPOUND_HYBRID_VECTOR_SCAN_LIMIT || 2000)) as Array<Record<string, unknown>>;
+  }
 
   if (vectorRows.length === 0) return base;
 
   const queryVec = (await embedTexts([query])).vectors[0];
-  const ftsIds = new Set(base.chunks.map((chunk) => chunk.id));
+  const ftsIdSet = new Set(base.chunks.map((chunk) => chunk.id));
   const ranked = vectorRows
     .map((row) => {
       const chunk = rowToChunk(row);
       const vector = JSON.parse(String(row.vector_json || '[]')) as number[];
       const vectorScore = cosine(queryVec, vector);
-      const ftsBoost = ftsIds.has(chunk.id) ? 0.25 : 0;
+      const ftsBoost = ftsIdSet.has(chunk.id) ? 0.25 : 0;
       return { chunk, score: vectorScore + ftsBoost };
     })
     .sort((a, b) => b.score - a.score)

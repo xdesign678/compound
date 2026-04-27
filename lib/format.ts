@@ -71,3 +71,10 @@ export function groupActivityByDate<T extends { at: number }>(items: T[]): Array
   const order = ['今天', '昨天', '本周', '更早'];
   return order.filter((k) => groups.has(k)).map((label) => ({ label, items: groups.get(label)! }));
 }
+
+/** Escape HTML special characters for safe interpolation into HTML strings. */
+export function escapeHTML(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string
+  );
+}

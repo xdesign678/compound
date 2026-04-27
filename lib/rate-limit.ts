@@ -13,6 +13,8 @@ declare global {
   var __compoundRateLimitStore: Store | undefined;
   // eslint-disable-next-line no-var
   var __compoundRateLimitGcAt: number | undefined;
+  // eslint-disable-next-line no-var
+  var __compoundRateLimitAnonWarned: boolean | undefined;
 }
 
 function getStore(): Store {
@@ -55,6 +57,18 @@ function getClientKey(req: Request): string {
   }
   // Fall back to a per-deployment constant so the limiter still functions as
   // a global throttle even without IP attribution.
+  // WARNING: Without COMPOUND_TRUST_PROXY=true, ALL users share the same
+  // rate-limit bucket ('anon'), meaning a single aggressive client can
+  // exhaust the quota for everyone. Set COMPOUND_TRUST_PROXY=true when
+  // running behind a trusted reverse proxy (Vercel, Cloudflare, etc.).
+  if (!globalThis.__compoundRateLimitAnonWarned) {
+    globalThis.__compoundRateLimitAnonWarned = true;
+    console.warn(
+      '[compound/rate-limit] COMPOUND_TRUST_PROXY is not set to "true". ' +
+        'All requests share a single rate-limit bucket ("anon"). ' +
+        'Set COMPOUND_TRUST_PROXY=true behind a trusted reverse proxy to enable per-IP limiting.'
+    );
+  }
   return 'anon';
 }
 

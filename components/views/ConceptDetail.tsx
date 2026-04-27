@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { ensureConceptHydrated } from '@/lib/cloud-sync';
@@ -15,10 +15,11 @@ export function ConceptDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
   const openSource = useAppStore((s) => s.openSource);
   const freshIds = useAppStore((s) => s.freshConceptIds);
-  const [hydrating, setHydrating] = useState(false);
+  const [, setHydrating] = useState(false);
   const [hydrateError, setHydrateError] = useState<string | null>(null);
   const [hydrateAttempt, setHydrateAttempt] = useState(0);
   const [retrying, setRetrying] = useState(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const concept = useLiveQuery(async () => getDb().concepts.get(id), [id]);
   const sources = useLiveQuery(async () => {
@@ -45,6 +46,7 @@ export function ConceptDetail({ id }: { id: string }) {
       console.warn('[concept-detail] hydrate failed:', err);
       setHydrateError('正文拉取失败，请重试。');
     } finally {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       setHydrating(false);
       setRetrying(false);
     }
@@ -106,11 +108,10 @@ export function ConceptDetail({ id }: { id: string }) {
             type="button"
             disabled={retrying}
             onClick={() => {
+              if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
               setRetrying(true);
               setHydrateAttempt((count) => count + 1);
-              // retrying state will be cleared when hydrateBody resolves
-              // use a small guard: clear after 10s max in case of silent failure
-              setTimeout(() => setRetrying(false), 10000);
+              retryTimerRef.current = setTimeout(() => setRetrying(false), 10000);
             }}
           >
             {retrying ? '加载中...' : '重新加载正文'}

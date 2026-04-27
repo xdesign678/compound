@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '@/lib/store';
+import { useModalKeyboard } from '@/lib/hooks/useModalKeyboard';
+import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 import {
   filterObsidianFiles,
   readObsidianBatch,
@@ -58,9 +60,13 @@ export function ObsidianImportModal() {
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [confirmingClearManifest, setConfirmingClearManifest] = useState(false);
   const stopRef = useRef(false);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dirInputRef = useRef<HTMLInputElement>(null);
+
+  useModalKeyboard(isOpen, close);
+  useFocusTrap(modalRef, isOpen);
 
   // 打开时刷新 manifest 统计
   useEffect(() => {
@@ -250,9 +256,11 @@ export function ObsidianImportModal() {
     <div className="modal-overlay visible" onClick={handleClose}>
       <div
         className="modal obsidian-import-modal"
+        ref={modalRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="obsidian-import-title"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-handle" />

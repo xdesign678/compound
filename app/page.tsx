@@ -6,7 +6,6 @@ import dynamic from 'next/dynamic';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
-import { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } from '@/lib/seed';
 import { DESKTOP_LAYOUT_MIN_WIDTH, isDesktopWidth } from '@/lib/responsive';
 
 import { Header } from '@/components/Header';
@@ -16,17 +15,25 @@ import { SwipeBack } from '@/components/SwipeBack';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { Icon } from '@/components/Icons';
 
+const ViewSkeleton = () => (
+  <div className="loading-skeleton">
+    <div className="skeleton skeleton-header" />
+    <div className="skeleton skeleton-card" />
+    <div className="skeleton skeleton-card" style={{ opacity: 0.7 }} />
+  </div>
+);
+
 const IngestModal = dynamic(() => import('@/components/IngestModal').then(m => ({ default: m.IngestModal })), { ssr: false });
 const SettingsDrawer = dynamic(() => import('@/components/SettingsDrawer').then(m => ({ default: m.SettingsDrawer })), { ssr: false });
 const ObsidianImportModal = dynamic(() => import('@/components/ObsidianImportModal').then(m => ({ default: m.ObsidianImportModal })), { ssr: false });
 const GithubSyncModal = dynamic(() => import('@/components/GithubSyncModal').then(m => ({ default: m.GithubSyncModal })), { ssr: false });
-const WikiView = dynamic(() => import('@/components/views/WikiView').then(m => ({ default: m.WikiView })), { ssr: false });
-const LibraryView = dynamic(() => import('@/components/views/LibraryView').then(m => ({ default: m.LibraryView })), { ssr: false });
-const SourcesView = dynamic(() => import('@/components/views/SourcesView').then(m => ({ default: m.SourcesView })), { ssr: false });
-const AskView = dynamic(() => import('@/components/views/AskView').then(m => ({ default: m.AskView })), { ssr: false });
-const ActivityView = dynamic(() => import('@/components/views/ActivityView').then(m => ({ default: m.ActivityView })), { ssr: false });
-const ConceptDetail = dynamic(() => import('@/components/views/ConceptDetail').then(m => ({ default: m.ConceptDetail })), { ssr: false });
-const SourceDetail = dynamic(() => import('@/components/views/SourceDetail').then(m => ({ default: m.SourceDetail })), { ssr: false });
+const WikiView = dynamic(() => import('@/components/views/WikiView').then(m => ({ default: m.WikiView })), { ssr: false, loading: ViewSkeleton });
+const LibraryView = dynamic(() => import('@/components/views/LibraryView').then(m => ({ default: m.LibraryView })), { ssr: false, loading: ViewSkeleton });
+const SourcesView = dynamic(() => import('@/components/views/SourcesView').then(m => ({ default: m.SourcesView })), { ssr: false, loading: ViewSkeleton });
+const AskView = dynamic(() => import('@/components/views/AskView').then(m => ({ default: m.AskView })), { ssr: false, loading: ViewSkeleton });
+const ActivityView = dynamic(() => import('@/components/views/ActivityView').then(m => ({ default: m.ActivityView })), { ssr: false, loading: ViewSkeleton });
+const ConceptDetail = dynamic(() => import('@/components/views/ConceptDetail').then(m => ({ default: m.ConceptDetail })), { ssr: false, loading: ViewSkeleton });
+const SourceDetail = dynamic(() => import('@/components/views/SourceDetail').then(m => ({ default: m.SourceDetail })), { ssr: false, loading: ViewSkeleton });
 
 const DESKTOP_MEDIA_QUERY = `(min-width: ${DESKTOP_LAYOUT_MIN_WIDTH}px)`;
 const LIBRARY_DETAIL_TRANSITION_MS = 320;
@@ -62,6 +69,20 @@ export default function Page() {
     };
   }, [hydrateHomeStyle]);
 
+  // Browser history support for detail navigation
+  useEffect(() => {
+    const handler = (e: PopStateEvent) => {
+      const state = e.state;
+      if (state?.detail) {
+        useAppStore.setState({ detail: state.detail });
+      } else {
+        useAppStore.setState({ detail: null });
+      }
+    };
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, []);
+
   const conceptCount = useLiveQuery(
     async () => (mounted ? getDb().concepts.count() : undefined),
     [mounted]
@@ -80,6 +101,7 @@ export default function Page() {
     if (conceptCount > 0 || sourceCount > 0) return;
     seedingRef.current = true;
     (async () => {
+      const { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } = await import('@/lib/seed');
       const db = getDb();
       await db.sources.bulkPut(SEED_SOURCES);
       await db.concepts.bulkPut(SEED_CONCEPTS);
@@ -329,7 +351,11 @@ export default function Page() {
     <div className="app-shell">
       <Toast />
       <SwipeBack />
-      <PullToRefresh onRefresh={() => window.location.reload()} />
+      <PullToRefresh onRefresh={async () => {
+        const { pullSnapshotFromCloud } = await import('@/lib/cloud-sync');
+        await pullSnapshotFromCloud();
+        useAppStore.getState().showToast('数据已刷新');
+      }} />
       <Header conceptCount={conceptCount ?? 0} sourceCount={sourceCount ?? 0} />
 
       <main className="app-main">

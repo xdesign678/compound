@@ -58,7 +58,8 @@ export function ViewportObserver() {
 
     attachBar();
     const mutationObserver = new MutationObserver(() => attachBar());
-    mutationObserver.observe(document.body, { childList: true, subtree: true });
+    const mutationTarget = document.querySelector('.app-main') || document.body;
+    mutationObserver.observe(mutationTarget, { childList: true, subtree: true });
 
     return () => {
       vv?.removeEventListener('resize', updateKb);

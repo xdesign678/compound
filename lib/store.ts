@@ -103,6 +103,9 @@ function readStoredColorMode(): ColorMode {
   return raw === 'dark' || raw === 'system' ? raw : 'light';
 }
 
+// Module-level toast auto-dismiss timer
+let _toastTimer: ReturnType<typeof setTimeout> | null = null;
+
 function applyColorMode(mode: ColorMode) {
   if (typeof window === 'undefined') return;
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -131,8 +134,20 @@ export const useAppStore = create<AppState>((set) => ({
   searchFocusNonce: 0,
 
   setTab: (t) => set({ tab: t, detail: null }),
-  openConcept: (id) => set({ detail: { type: 'concept', id } }),
-  openSource: (id) => set({ detail: { type: 'source', id } }),
+  openConcept: (id) => {
+    const newDetail: DetailState = { type: 'concept', id };
+    set({ detail: newDetail });
+    if (typeof window !== 'undefined') {
+      history.pushState({ detail: newDetail }, '');
+    }
+  },
+  openSource: (id) => {
+    const newDetail: DetailState = { type: 'source', id };
+    set({ detail: newDetail });
+    if (typeof window !== 'undefined') {
+      history.pushState({ detail: newDetail }, '');
+    }
+  },
   back: () => set({ detail: null }),
   openModal: () => set({ modalOpen: true }),
   closeModal: () => set({ modalOpen: false }),
@@ -142,7 +157,19 @@ export const useAppStore = create<AppState>((set) => ({
   closeObsidianImport: () => set({ obsidianImportOpen: false }),
   openGithubSync: () => set({ githubSyncOpen: true }),
   closeGithubSync: () => set({ githubSyncOpen: false }),
-  showToast: (text, loading = false, isError = false) => set({ toast: { visible: true, text, loading, isError } }),
+  showToast: (text, loading = false, isError = false) => {
+    if (_toastTimer) {
+      clearTimeout(_toastTimer);
+      _toastTimer = null;
+    }
+    set({ toast: { visible: true, text, loading, isError } });
+    if (!loading && !isError) {
+      _toastTimer = setTimeout(() => {
+        set((s) => ({ toast: { ...s.toast, visible: false } }));
+        _toastTimer = null;
+      }, 3000);
+    }
+  },
   hideToast: () => set((s) => ({ toast: { ...s.toast, visible: false } })),
   markFresh: (ids: string[]) => set((s) => {
     const next = { ...s.freshConceptIds };

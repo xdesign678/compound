@@ -516,9 +516,24 @@ export const wikiRepo = {
 
     const terms = extractSearchTerms(query, 8);
     if (terms.length === 0) return [];
+
+    // SQL-level pre-filter with LIKE on heading + substr(content) to avoid
+    // loading full content of 500 rows into JS memory.
+    const likeClauses = terms.map(
+      () => `(heading LIKE ? COLLATE NOCASE OR content LIKE ? COLLATE NOCASE)`
+    );
+    const likeParams = terms.flatMap((t) => [`%${t}%`, `%${t}%`]);
     const rows = getServerDb()
-      .prepare(`SELECT * FROM source_chunks ORDER BY updated_at DESC LIMIT 500`)
-      .all() as Array<Record<string, unknown>>;
+      .prepare(
+        `SELECT id, source_id, chunk_index, heading, heading_path,
+                substr(content, 1, 500) AS content, token_count, content_hash,
+                created_at, updated_at
+         FROM source_chunks
+         WHERE ${likeClauses.join(' OR ')}
+         ORDER BY updated_at DESC
+         LIMIT 100`
+      )
+      .all(...likeParams) as Array<Record<string, unknown>>;
     return rows
       .map((row) => ({ row, score: scoreChunkText(`${row.heading}\n${row.content}`, terms) }))
       .filter((item) => item.score > 0)

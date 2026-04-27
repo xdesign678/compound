@@ -20,8 +20,6 @@
     ]
   },
   "dependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/dompurify": "^3.0.5",
     "better-sqlite3": "^12.9.0",
     "dexie": "4.0.10",
     "dexie-react-hooks": "1.1.7",
@@ -36,6 +34,8 @@
     "zustand": "5.0.2"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/dompurify": "^3.0.5",
     "@types/node": "22.9.0",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
