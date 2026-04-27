@@ -1,0 +1,275 @@
+/*
+ * shadcn-globals.css
+ * ─────────────────────────────────────────────────────────────────
+ * Drop-in globals.css for any shadcn/ui (Next.js / React) project.
+ * Replaces the default :root and .dark blocks with Anthropic/Claude
+ * design tokens in HSL format, as required by shadcn/ui.
+ *
+ * Usage:
+ *   1. Replace app/globals.css content with this file.
+ *   2. Copy the font <link> tags below into your layout.tsx <head>.
+ *   3. Keep tailwind.config.ts aligned with references/shadcn.md.
+ *
+ * Font loading (add to app/layout.tsx):
+ *   <link rel="preconnect" href="https://fonts.googleapis.com" />
+ *   <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+ *   <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+ *
+ * HEX → HSL reference: see references/shadcn.md
+ * ─────────────────────────────────────────────────────────────────
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ──────────────────────────────────────────────────────────────────
+   FONT VARIABLES
+   Assign loaded font families to CSS variables for use in
+   tailwind.config.ts fontFamily overrides.
+   ────────────────────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    /* Set these via next/font or matching the Google Fonts families above */
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-serif: 'Lora', Georgia, 'Times New Roman', serif;
+    --font-mono: 'Geist Mono', 'JetBrains Mono', 'SF Mono', monospace;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   LIGHT MODE — Anthropic/Claude design tokens in HSL
+   All values from references/shadcn.md HEX→HSL conversion table.
+   ────────────────────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    /* ── Page ── */
+    --background: 48 33% 97%; /* #faf9f5 — warm cream */
+    --foreground: 40 7% 8%; /* #141413 — near-black */
+
+    /* ── Card / Panel ── */
+    --card: 0 0% 100%; /* #ffffff */
+    --card-foreground: 40 7% 8%; /* #141413 */
+
+    /* ── Popover ── */
+    --popover: 0 0% 100%; /* #ffffff */
+    --popover-foreground: 40 7% 8%; /* #141413 */
+
+    /* ── Primary (button: near-black bg, cream text) ── */
+    --primary: 40 7% 6%; /* #0f0f0e — Anthropic dark button */
+    --primary-foreground: 48 33% 97%; /* #faf9f5 — cream text on dark */
+
+    /* ── Secondary (ghost / muted button) ── */
+    --secondary: 48 14% 94%; /* #f0eee6 — bg-secondary */
+    --secondary-foreground: 40 7% 8%; /* #141413 */
+
+    /* ── Muted (badges, code backgrounds) ── */
+    --muted: 48 14% 94%; /* #f0efe8 — bg-muted */
+    --muted-foreground: 41 5% 36%; /* #5e5d59 — text-secondary */
+
+    /* ── Accent (hover states) ── */
+    --accent: 48 18% 95%; /* #f5f4f0 — bg-hover */
+    --accent-foreground: 40 7% 8%; /* #141413 */
+
+    /* ── Destructive (warm brick — NOT saturated red) ── */
+    --destructive: 13 39% 50%; /* #b85b44 — warm brick red */
+    --destructive-foreground: 48 33% 97%; /* #faf9f5 — cream on dark */
+
+    /* ── Borders & inputs ── */
+    --border: 40 8% 91%; /* approximates rgba(20,20,19,0.08) */
+    --input: 40 8% 88%; /* approximates rgba(20,20,19,0.12) */
+    --ring: 41 5% 36%; /* #5e5d59 — text-secondary focus ring */
+
+    /* ── Brand ── */
+    --brand-clay: 18 62% 64%; /* #d97757 — Claude signature orange (logo only) */
+
+    /* ── Border radius — Anthropic signature ── */
+    --radius: 0.47rem; /* ~7.5px — buttons, inputs */
+  }
+
+  /* ──────────────────────────────────────────────────────────────────
+     DARK MODE — MUST come AFTER :root (same specificity 0,1,0;
+     later declaration wins). Never reorder.
+     ────────────────────────────────────────────────────────────────── */
+  .dark {
+    /* ── Page ── */
+    --background: 40 5% 10%; /* #1a1a18 — warm charcoal */
+    --foreground: 48 14% 92%; /* #ece9e1 — warm off-white */
+
+    /* ── Card / Panel ── */
+    --card: 40 5% 13%; /* #232320 */
+    --card-foreground: 48 14% 92%; /* #ece9e1 */
+
+    /* ── Popover ── */
+    --popover: 40 5% 13%; /* #232320 */
+    --popover-foreground: 48 14% 92%; /* #ece9e1 */
+
+    /* ── Primary (inverted: cream bg, dark text) ── */
+    --primary: 48 14% 92%; /* #ece9e1 — light button in dark mode */
+    --primary-foreground: 40 5% 10%; /* #1a1a18 — dark text on light */
+
+    /* ── Secondary ── */
+    --secondary: 40 5% 16%; /* #2a2a27 — bg-hover dark */
+    --secondary-foreground: 48 14% 92%; /* #ece9e1 */
+
+    /* ── Muted ── */
+    --muted: 40 5% 16%; /* #2a2a27 — bg-muted dark */
+    --muted-foreground: 41 2% 60%; /* #9b9b95 — text-secondary dark */
+
+    /* ── Accent ── */
+    --accent: 40 5% 16%; /* #2a2a27 */
+    --accent-foreground: 48 14% 92%; /* #ece9e1 */
+
+    /* ── Destructive (lighter warm terracotta on dark bg) ── */
+    --destructive: 16 55% 62%; /* #d4826a — warmer/lighter for dark bg */
+    --destructive-foreground: 40 5% 10%; /* #1a1a18 — dark bg for contrast */
+
+    /* ── Borders & inputs ── */
+    --border: 48 14% 92% / 0.1; /* rgba(236,233,225,0.10) */
+    --input: 48 14% 92% / 0.12; /* rgba(236,233,225,0.12) */
+    --ring: 41 2% 60%; /* #9b9b95 */
+
+    /* --brand-clay stays the same in dark mode */
+    /* --radius stays the same in dark mode */
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   BASE STYLES
+   ────────────────────────────────────────────────────────────────── */
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    font-feature-settings:
+      'rlig' 1,
+      'calt' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ── Text selection: warm clay ── */
+  ::selection {
+    background: rgba(204, 120, 92, 0.5);
+    color: inherit;
+  }
+
+  /* ── Typography defaults ── */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    color: hsl(var(--foreground));
+  }
+
+  h1 {
+    font-size: clamp(2.5rem, 2.041rem + 1.959vw, 4rem);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+
+  h2 {
+    font-size: clamp(1.75rem, 1.5rem + 1.04vw, 2.5rem);
+    margin-top: 4rem; /* 64px */
+    margin-bottom: 2rem; /* 32px */
+  }
+
+  h3 {
+    font-size: clamp(1.125rem, 1rem + 0.52vw, 1.5rem);
+    margin-top: 2.5rem; /* 40px */
+    margin-bottom: 1rem; /* 16px */
+  }
+
+  /* Reading content: serif body by default (claude.ai pattern) */
+  /* For marketing pages, override body font-family to --font-sans */
+  p {
+    font-family: var(--font-serif);
+    font-size: 1.0625rem; /* 17px */
+    line-height: 1.6;
+    color: hsl(var(--foreground) / 0.85);
+    margin-bottom: 1rem;
+  }
+
+  /* ── Links ── */
+  a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+    text-decoration-color: hsl(var(--foreground) / 0.3);
+    transition: text-decoration-color 150ms ease;
+  }
+
+  a:hover {
+    text-decoration-color: hsl(var(--foreground) / 0.6);
+  }
+
+  /* ── Code ── */
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: hsl(var(--muted));
+    padding: 0.125rem 0.375rem;
+    border-radius: calc(var(--radius) - 3px); /* ~4px */
+  }
+
+  pre {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    padding: 1rem;
+    overflow-x: auto;
+    line-height: 1.5;
+  }
+
+  pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+  }
+
+  /* ── Inputs ── */
+  input,
+  textarea,
+  select {
+    font-size: 16px; /* 16px required — prevents iOS auto-zoom on focus */
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   REDUCED MOTION
+   ────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   MOBILE SAFE AREAS
+   ────────────────────────────────────────────────────────────────── */
+.fixed-bottom-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}

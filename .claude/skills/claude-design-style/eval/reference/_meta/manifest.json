@@ -1,0 +1,99 @@
+{
+  "captured_at": "2026-04-04T19:58:50.117983",
+  "urls": [
+    {
+      "id": "R01",
+      "url": "https://www.anthropic.com",
+      "group": "landing",
+      "name": "R01-homepage",
+      "status": "success",
+      "desktop_screenshot": "screenshots/R01-homepage-desktop.png",
+      "mid_screenshot": "screenshots/R01-homepage-desktop-mid.png",
+      "actual_url": "https://www.anthropic.com/"
+    },
+    {
+      "id": "R02",
+      "url": "https://www.anthropic.com/claude",
+      "group": "landing",
+      "name": "R02-claude",
+      "status": "success",
+      "desktop_screenshot": "screenshots/R02-claude-desktop.png",
+      "mid_screenshot": "screenshots/R02-claude-desktop-mid.png",
+      "actual_url": "https://claude.com/product/overview"
+    },
+    {
+      "id": "R03",
+      "url": "https://www.anthropic.com/research",
+      "group": "article",
+      "name": "R03-research",
+      "status": "success",
+      "desktop_screenshot": "screenshots/R03-research-desktop.png",
+      "mid_screenshot": "screenshots/R03-research-desktop-mid.png"
+    },
+    {
+      "id": "R04",
+      "url": "https://www.anthropic.com/news",
+      "group": "article",
+      "name": "R04-news",
+      "status": "success",
+      "desktop_screenshot": "screenshots/R04-news-desktop.png",
+      "mid_screenshot": "screenshots/R04-news-desktop-mid.png"
+    },
+    {
+      "id": "R05",
+      "url": "https://www.anthropic.com/news/extended-thinking",
+      "group": "article",
+      "name": "R05-article-detail",
+      "status": "not_found",
+      "http_status": 404
+    },
+    {
+      "id": "R06",
+      "url": "https://www.anthropic.com/pricing",
+      "group": "pricing",
+      "name": "R06-pricing",
+      "status": "success",
+      "desktop_screenshot": "screenshots/R06-pricing-desktop.png",
+      "mid_screenshot": "screenshots/R06-pricing-desktop-mid.png",
+      "actual_url": "https://claude.com/pricing"
+    },
+    {
+      "id": "R07",
+      "url": "https://www.anthropic.com/api",
+      "group": "product",
+      "name": "R07-api",
+      "status": "success",
+      "desktop_screenshot": "screenshots/R07-api-desktop.png",
+      "mid_screenshot": "screenshots/R07-api-desktop-mid.png",
+      "actual_url": "https://claude.com/platform/api"
+    },
+    {
+      "id": "R08",
+      "url": "https://docs.anthropic.com",
+      "group": "docs",
+      "name": "R08-docs",
+      "status": "success",
+      "desktop_screenshot": "screenshots/R08-docs-desktop.png",
+      "mid_screenshot": "screenshots/R08-docs-desktop-mid.png",
+      "actual_url": "https://platform.claude.com/docs/en/home"
+    },
+    {
+      "id": "R09",
+      "url": "https://www.anthropic.com/careers",
+      "group": "misc",
+      "name": "R09-careers",
+      "status": "success",
+      "desktop_screenshot": "screenshots/R09-careers-desktop.png",
+      "mid_screenshot": "screenshots/R09-careers-desktop-mid.png"
+    },
+    {
+      "id": "R10",
+      "url": "https://www.anthropic.com/company",
+      "group": "misc",
+      "name": "R10-about",
+      "status": "success",
+      "desktop_screenshot": "screenshots/R10-about-desktop.png",
+      "mid_screenshot": "screenshots/R10-about-desktop-mid.png"
+    }
+  ]
+}

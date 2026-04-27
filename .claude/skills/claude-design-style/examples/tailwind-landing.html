@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Quill — AI Writing Assistant</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Lora (serif) + Inter (Geist fallback) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Geist Mono via jsDelivr -->
+  <link href="https://cdn.jsdelivr.net/npm/geist@1.3.0/dist/fonts/geist-mono/style.css" rel="stylesheet">
+
+  <script>
+    // ── Tailwind config: map all Anthropic/Claude design tokens ──
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            // Brand
+            'brand-clay': '#d97757',
+
+            // Backgrounds — light
+            'bg-primary':      '#faf9f5',
+            'bg-secondary':    '#f0eee6',
+            'bg-hover':        '#f5f4f0',
+            'bg-card':         '#fefdfb',
+            'bg-button':       '#0f0f0e',
+            'bg-button-hover': '#3d3d3a',
+            'bg-muted':        '#f0efe8',
+
+            // Text — light
+            'text-primary':    '#141413',
+            'text-secondary':  '#5e5d59',
+            'text-tertiary':   '#b0aea5',
+            'text-on-button':  '#faf9f5',
+
+            // Backgrounds — dark
+            'dark-bg-primary':   '#1a1a18',
+            'dark-bg-secondary': '#232320',
+            'dark-bg-hover':     '#2a2a27',
+            'dark-bg-card':      '#232320',
+            'dark-bg-button':    '#ece9e1',
+            'dark-bg-muted':     '#2a2a27',
+
+            // Text — dark
+            'dark-text-primary':   '#ece9e1',
+            'dark-text-secondary': '#9b9b95',
+            'dark-text-on-button': '#1a1a18',
+
+            // State colors (warm, brand-aligned — never saturated red/green)
+            'state-error':   '#b85b44',
+            'state-success': '#5a856a',
+          },
+          fontFamily: {
+            sans:  ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            serif: ['Lora', 'Georgia', '"Times New Roman"', 'serif'],
+            mono:  ['"Geist Mono"', '"JetBrains Mono"', '"SF Mono"', 'monospace'],
+          },
+          borderRadius: {
+            'btn':  '7.5px',   // Anthropic signature button radius
+            'card': '8px',
+            'xl':   '12px',
+            '2xl':  '16px',
+          },
+          transitionDuration: {
+            'fast': '150ms',
+            'base': '200ms',
+            'slow': '300ms',
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    /* ── Global base ── */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* ── Text selection: warm clay ── */
+    ::selection {
+      background: rgba(204, 120, 92, 0.5);
+      color: inherit;
+    }
+
+    /* ── Reduced motion ── */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* ── Fluid type helpers (not available via Tailwind CDN config) ── */
+    .text-display {
+      font-size: clamp(2.5rem, 2.041rem + 1.959vw, 4rem);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+    .text-section-title {
+      font-size: clamp(1.75rem, 1.5rem + 1.04vw, 2.5rem);
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+    }
+    .text-card-title {
+      font-size: clamp(1.125rem, 1rem + 0.52vw, 1.5rem);
+      line-height: 1.3;
+    }
+
+    /* ── Site horizontal padding (matches SKILL.md nav spec) ── */
+    .site-px {
+      padding-left:  clamp(2rem, 1.08rem + 3.92vw, 5rem);
+      padding-right: clamp(2rem, 1.08rem + 3.92vw, 5rem);
+    }
+
+    /* ── Card grid sibling dimming ── */
+    .card-grid:has(.card:hover) .card:not(:hover) {
+      opacity: 0.6;
+      transition: opacity 300ms ease;
+    }
+
+    /* ── Pricing featured card dark-mode edge case ── */
+    .dark .pricing-featured {
+      background: #2e2e2b;
+      border-color: rgba(236, 233, 225, 0.15);
+    }
+    .dark .pricing-featured .btn-primary-featured {
+      background: #ece9e1;
+      color: #1a1a18;
+    }
+
+    /* ── Mobile nav ── */
+    #mobile-menu { display: none; }
+    #mobile-menu.open { display: flex; }
+  </style>
+</head>
+
+<body class="bg-bg-primary dark:bg-dark-bg-primary text-text-primary dark:text-dark-text-primary font-sans transition-colors duration-base">
+
+  <!-- ════════════════════════════════════════════
+       NAVIGATION
+  ════════════════════════════════════════════ -->
+  <nav class="site-px h-[68px] flex items-center justify-between border-b border-[rgba(20,20,19,0.06)] dark:border-[rgba(236,233,225,0.08)] bg-bg-primary dark:bg-dark-bg-primary sticky top-0 z-50">
+    <!-- Logo -->
+    <a href="#" class="flex items-center gap-2 no-underline">
+      <!-- Quill icon (filled SVG, currentColor, 20px) -->
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" class="text-text-primary dark:text-dark-text-primary" aria-hidden="true">
+        <path d="M17.414 2.586a2 2 0 0 0-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 0 0 0-2.828zM5 12v3h3l-3-3zm0 5H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1h2v4z"/>
+      </svg>
+      <span class="text-[15px] font-semibold tracking-tight text-text-primary dark:text-dark-text-primary">Quill</span>
+    </a>
+
+    <!-- Desktop nav links -->
+    <ul class="hidden md:flex items-center gap-8 list-none m-0 p-0">
+      <li><a href="#features" class="text-[15px] text-text-secondary dark:text-dark-text-secondary hover:text-text-primary dark:hover:text-dark-text-primary no-underline transition-colors duration-fast">Features</a></li>
+      <li><a href="#pricing" class="text-[15px] text-text-secondary dark:text-dark-text-secondary hover:text-text-primary dark:hover:text-dark-text-primary no-underline transition-colors duration-fast">Pricing</a></li>
+      <li><a href="#" class="text-[15px] text-text-secondary dark:text-dark-text-secondary hover:text-text-primary dark:hover:text-dark-text-primary no-underline transition-colors duration-fast">Blog</a></li>
+    </ul>
+
+    <!-- Desktop CTA + dark toggle -->
+    <div class="hidden md:flex items-center gap-3">
+      <!-- Dark mode toggle -->
+      <button
+        id="theme-toggle"
+        aria-label="Toggle dark mode"
+        class="w-9 h-9 flex items-center justify-center rounded-card text-text-secondary dark:text-dark-text-secondary hover:bg-bg-hover dark:hover:bg-dark-bg-hover transition-colors duration-fast"
+      >
+        <svg id="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" class="hidden dark:block" aria-hidden="true">
+          <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1 0-1h1a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1 0-1h1A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-.707.707a.5.5 0 0 1-.707-.707l.707-.707a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.757 12.95a.5.5 0 0 1-.707-.707l.707-.707a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-.707-.707a.5.5 0 0 1 .707-.707l.707.707a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L3.05 3.758a.5.5 0 1 1 .707-.707l.707.707a.5.5 0 0 1 0 .707z"/>
+        </svg>
+        <svg id="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" class="block dark:hidden" aria-hidden="true">
+          <path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/>
+        </svg>
+      </button>
+
+      <a href="#" class="text-[15px] text-text-secondary dark:text-dark-text-secondary hover:text-text-primary dark:hover:text-dark-text-primary no-underline px-4 py-2 transition-colors duration-fast min-h-[44px] flex items-center">Sign in</a>
+      <a href="#" class="text-[15px] bg-bg-button dark:bg-dark-bg-button text-text-on-button dark:text-dark-text-on-button no-underline px-4 py-2 rounded-btn hover:bg-bg-button-hover dark:hover:opacity-90 transition-all duration-base hover:-translate-y-px hover:shadow-md min-h-[44px] flex items-center">Get started free</a>
+    </div>
+
+    <!-- Mobile hamburger -->
+    <button
+      id="hamburger"
+      aria-label="Open navigation menu"
+      aria-expanded="false"
+      class="md:hidden w-11 h-11 flex flex-col justify-center items-center gap-1.5 text-text-secondary dark:text-dark-text-secondary"
+    >
+      <span class="block w-5 h-px bg-current transition-all duration-base"></span>
+      <span class="block w-5 h-px bg-current transition-all duration-base"></span>
+      <span class="block w-5 h-px bg-current transition-all duration-base"></span>
+    </button>
+  </nav>
+
+  <!-- Mobile menu -->
+  <div id="mobile-menu" class="md:hidden flex-col gap-0 bg-bg-primary dark:bg-dark-bg-primary border-b border-[rgba(20,20,19,0.06)] dark:border-[rgba(236,233,225,0.08)]">
+    <a href="#features" class="block px-8 py-4 text-[15px] text-text-secondary dark:text-dark-text-secondary hover:text-text-primary dark:hover:text-dark-text-primary no-underline min-h-[44px] flex items-center">Features</a>
+    <a href="#pricing" class="block px-8 py-4 text-[15px] text-text-secondary dark:text-dark-text-secondary hover:text-text-primary dark:hover:text-dark-text-primary no-underline min-h-[44px] flex items-center">Pricing</a>
+    <a href="#" class="block px-8 py-4 text-[15px] text-text-secondary dark:text-dark-text-secondary hover:text-text-primary dark:hover:text-dark-text-primary no-underline min-h-[44px] flex items-center">Blog</a>
+    <div class="px-8 py-4 flex gap-3">
+      <a href="#" class="text-[15px] bg-bg-button dark:bg-dark-bg-button text-text-on-button dark:text-dark-text-on-button no-underline px-4 py-2 rounded-btn min-h-[44px] flex items-center">Get started free</a>
+    </div>
+  </div>
+
+
+  <!-- ════════════════════════════════════════════
+       HERO
+  ════════════════════════════════════════════ -->
+  <section class="site-px py-20 md:py-28 max-w-[1200px] mx-auto">
+    <div class="max-w-[680px]">
+      <!-- Eyebrow label -->
+      <p class="text-[12px] font-medium tracking-[0.05em] uppercase text-text-secondary dark:text-dark-text-secondary mb-6">AI Writing Assistant</p>
+
+      <!-- Display headline — sans per marketing pattern -->
+      <h1 class="text-display font-bold text-text-primary dark:text-dark-text-primary font-sans mb-6">
+        Write better,<br>think clearer.
+      </h1>
+
+      <!-- Hero subtext — serif for reading warmth -->
+      <p class="font-serif text-[1.0625rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)] mb-10 max-w-[520px]">
+        Quill helps you draft, refine, and polish any piece of writing — from emails to essays — with an AI that understands voice, context, and intent.
+      </p>
+
+      <!-- CTA group -->
+      <div class="flex flex-wrap gap-3 items-center">
+        <a href="#" class="text-[15px] bg-bg-button dark:bg-dark-bg-button text-text-on-button dark:text-dark-text-on-button no-underline px-5 py-3 rounded-btn hover:bg-bg-button-hover dark:hover:opacity-90 transition-all duration-base hover:-translate-y-px hover:shadow-md min-h-[44px] flex items-center font-sans">
+          Start writing for free
+        </a>
+        <a href="#features" class="text-[15px] text-text-primary dark:text-dark-text-primary border border-[rgba(20,20,19,0.12)] dark:border-[rgba(236,233,225,0.12)] no-underline px-5 py-3 rounded-btn hover:bg-bg-hover dark:hover:bg-dark-bg-hover transition-all duration-base min-h-[44px] flex items-center font-sans">
+          See how it works
+        </a>
+      </div>
+
+      <!-- Social proof -->
+      <p class="mt-8 text-[13px] text-text-tertiary dark:text-[#6b6b66]">
+        Trusted by 40,000+ writers, journalists, and teams
+      </p>
+    </div>
+  </section>
+
+  <!-- ── Divider ── -->
+  <hr class="border-0 border-t border-[rgba(20,20,19,0.06)] dark:border-[rgba(236,233,225,0.06)] mx-0">
+
+
+  <!-- ════════════════════════════════════════════
+       FEATURES
+  ════════════════════════════════════════════ -->
+  <section id="features" class="site-px py-20 md:py-24 max-w-[1200px] mx-auto">
+
+    <!-- Section header -->
+    <div class="mb-16">
+      <p class="text-[12px] font-medium tracking-[0.05em] uppercase text-text-secondary dark:text-dark-text-secondary mb-4">Features</p>
+      <h2 class="text-section-title font-semibold text-text-primary dark:text-dark-text-primary font-sans max-w-[480px]">Everything a serious writer needs</h2>
+    </div>
+
+    <!-- Feature card grid -->
+    <div class="card-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+
+      <!-- Card 1 -->
+      <div class="card group bg-bg-card dark:bg-dark-bg-card border border-[rgba(20,20,19,0.08)] dark:border-[rgba(236,233,225,0.08)] rounded-card p-6 transition-shadow duration-base hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.32)]">
+        <div class="w-8 h-8 flex items-center justify-center rounded mb-5 text-text-secondary dark:text-dark-text-secondary">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path d="M13.586 3.586a2 2 0 1 1 2.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+          </svg>
+        </div>
+        <h3 class="text-card-title font-semibold font-sans text-text-primary dark:text-dark-text-primary mb-3">Inline suggestions</h3>
+        <p class="font-serif text-[1rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+          Get contextual rewrites and improvements directly inside your document — accept or discard with a single keystroke.
+        </p>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="card group bg-bg-card dark:bg-dark-bg-card border border-[rgba(20,20,19,0.08)] dark:border-[rgba(236,233,225,0.08)] rounded-card p-6 transition-shadow duration-base hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.32)]">
+        <div class="w-8 h-8 flex items-center justify-center rounded mb-5 text-text-secondary dark:text-dark-text-secondary">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path d="M9 4.804A7.968 7.968 0 0 0 5.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 0 1 5.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0 1 14.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0 0 14.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 1 1-2 0V4.804z"/>
+          </svg>
+        </div>
+        <h3 class="text-card-title font-semibold font-sans text-text-primary dark:text-dark-text-primary mb-3">Voice & tone memory</h3>
+        <p class="font-serif text-[1rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+          Quill learns how you write. Paste a few samples and it matches your vocabulary, cadence, and personal style with precision.
+        </p>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="card group bg-bg-card dark:bg-dark-bg-card border border-[rgba(20,20,19,0.08)] dark:border-[rgba(236,233,225,0.08)] rounded-card p-6 transition-shadow duration-base hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.32)]">
+        <div class="w-8 h-8 flex items-center justify-center rounded mb-5 text-text-secondary dark:text-dark-text-secondary">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M12.316 3.051a1 1 0 0 1 .633 1.265l-4 12a1 1 0 1 1-1.898-.632l4-12a1 1 0 0 1 1.265-.633zM5.707 6.293a1 1 0 0 1 0 1.414L3.414 10l2.293 2.293a1 1 0 1 1-1.414 1.414l-3-3a1 1 0 0 1 0-1.414l3-3a1 1 0 0 1 1.414 0zm8.586 0a1 1 0 0 1 1.414 0l3 3a1 1 0 0 1 0 1.414l-3 3a1 1 0 1 1-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 0 1 0-1.414z" clip-rule="evenodd"/>
+          </svg>
+        </div>
+        <h3 class="text-card-title font-semibold font-sans text-text-primary dark:text-dark-text-primary mb-3">Smart outlines</h3>
+        <p class="font-serif text-[1rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+          Describe your idea in a sentence and Quill builds a structured outline. Rearrange, expand, or collapse sections as you think.
+        </p>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="card group bg-bg-card dark:bg-dark-bg-card border border-[rgba(20,20,19,0.08)] dark:border-[rgba(236,233,225,0.08)] rounded-card p-6 transition-shadow duration-base hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.32)]">
+        <div class="w-8 h-8 flex items-center justify-center rounded mb-5 text-text-secondary dark:text-dark-text-secondary">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path d="M2 5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H9l-3 3v-3H4a2 2 0 0 1-2-2V5z"/>
+            <path d="M15 7v2a4 4 0 0 1-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1z"/>
+          </svg>
+        </div>
+        <h3 class="text-card-title font-semibold font-sans text-text-primary dark:text-dark-text-primary mb-3">Real-time feedback</h3>
+        <p class="font-serif text-[1rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+          Clarity scores, readability grades, and grammar notes surface as you type — no need to run a separate check.
+        </p>
+      </div>
+
+      <!-- Card 5 -->
+      <div class="card group bg-bg-card dark:bg-dark-bg-card border border-[rgba(20,20,19,0.08)] dark:border-[rgba(236,233,225,0.08)] rounded-card p-6 transition-shadow duration-base hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.32)]">
+        <div class="w-8 h-8 flex items-center justify-center rounded mb-5 text-text-secondary dark:text-dark-text-secondary">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path d="M5 4a1 1 0 0 0-2 0v7.268a2 2 0 0 0 0 3.464V16a1 1 0 1 0 2 0v-1.268a2 2 0 0 0 0-3.464V4zm6 0a1 1 0 1 0-2 0v1.268a2 2 0 0 0 0 3.464V16a1 1 0 1 0 2 0V8.732a2 2 0 0 0 0-3.464V4zm5-1a1 1 0 0 1 1 1v7.268a2 2 0 0 1 0 3.464V16a1 1 0 1 1-2 0v-1.268a2 2 0 0 1 0-3.464V4a1 1 0 0 1 1-1z"/>
+          </svg>
+        </div>
+        <h3 class="text-card-title font-semibold font-sans text-text-primary dark:text-dark-text-primary mb-3">Format flexibility</h3>
+        <p class="font-serif text-[1rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+          Export to Markdown, HTML, plain text, or Notion. Quill preserves every heading, list, and footnote through conversion.
+        </p>
+      </div>
+
+      <!-- Card 6 -->
+      <div class="card group bg-bg-card dark:bg-dark-bg-card border border-[rgba(20,20,19,0.08)] dark:border-[rgba(236,233,225,0.08)] rounded-card p-6 transition-shadow duration-base hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.32)]">
+        <div class="w-8 h-8 flex items-center justify-center rounded mb-5 text-text-secondary dark:text-dark-text-secondary">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0 0 10 1.944 11.954 11.954 0 0 0 17.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 0 0-1.414-1.414L9 10.586 7.707 9.293a1 1 0 0 0-1.414 1.414l2 2a1 1 0 0 0 1.414 0l4-4z" clip-rule="evenodd"/>
+          </svg>
+        </div>
+        <h3 class="text-card-title font-semibold font-sans text-text-primary dark:text-dark-text-primary mb-3">Privacy first</h3>
+        <p class="font-serif text-[1rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+          Your drafts are never used for training. End-to-end encryption means your words stay yours — always.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Divider ── -->
+  <hr class="border-0 border-t border-[rgba(20,20,19,0.06)] dark:border-[rgba(236,233,225,0.06)] mx-0">
+
+
+  <!-- ════════════════════════════════════════════
+       PRICING
+  ════════════════════════════════════════════ -->
+  <section id="pricing" class="site-px py-20 md:py-24 max-w-[1200px] mx-auto">
+
+    <!-- Section header -->
+    <div class="mb-16">
+      <p class="text-[12px] font-medium tracking-[0.05em] uppercase text-text-secondary dark:text-dark-text-secondary mb-4">Pricing</p>
+      <h2 class="text-section-title font-semibold text-text-primary dark:text-dark-text-primary font-sans">Simple, honest pricing</h2>
+    </div>
+
+    <!-- Pricing cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+
+      <!-- Free -->
+      <div class="bg-bg-card dark:bg-dark-bg-card border border-[rgba(20,20,19,0.08)] dark:border-[rgba(236,233,225,0.08)] rounded-xl p-8">
+        <p class="text-[12px] font-medium tracking-[0.05em] uppercase text-text-secondary dark:text-dark-text-secondary mb-4">Free</p>
+        <p class="font-sans text-[2.25rem] font-bold text-text-primary dark:text-dark-text-primary leading-none mb-1">$0</p>
+        <p class="text-[13px] text-text-secondary dark:text-dark-text-secondary mb-8">Forever free</p>
+
+        <a href="#" class="block text-center text-[15px] border border-[rgba(20,20,19,0.12)] dark:border-[rgba(236,233,225,0.12)] text-text-primary dark:text-dark-text-primary no-underline px-5 py-3 rounded-btn hover:bg-bg-hover dark:hover:bg-dark-bg-hover transition-all duration-base min-h-[44px] flex items-center justify-center mb-8 font-sans">
+          Get started
+        </a>
+
+        <ul class="space-y-3">
+          <li class="flex items-start gap-3 font-serif text-[1rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+            <svg class="w-4 h-4 mt-1 shrink-0 text-text-secondary dark:text-dark-text-secondary" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+            5,000 words per month
+          </li>
+          <li class="flex items-start gap-3 font-serif text-[1rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+            <svg class="w-4 h-4 mt-1 shrink-0 text-text-secondary dark:text-dark-text-secondary" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+            Basic inline suggestions
+          </li>
+          <li class="flex items-start gap-3 font-serif text-[1rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+            <svg class="w-4 h-4 mt-1 shrink-0 text-text-secondary dark:text-dark-text-secondary" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+            3 documents saved
+          </li>
+        </ul>
+      </div>
+
+      <!-- Pro — featured, color inversion -->
+      <div class="pricing-featured bg-bg-button dark:bg-[#2e2e2b] border border-[rgba(236,233,225,0.12)] dark:border-[rgba(236,233,225,0.15)] rounded-xl p-8 relative">
+        <!-- Popular badge -->
+        <span class="absolute -top-3 left-8 text-[11px] font-medium tracking-[0.05em] uppercase bg-bg-primary dark:bg-dark-bg-primary text-text-secondary dark:text-dark-text-secondary border border-[rgba(20,20,19,0.08)] dark:border-[rgba(236,233,225,0.08)] px-3 py-1 rounded">Most popular</span>
+
+        <p class="text-[12px] font-medium tracking-[0.05em] uppercase text-[rgba(250,249,245,0.6)] dark:text-dark-text-secondary mb-4">Pro</p>
+        <p class="font-sans text-[2.25rem] font-bold text-text-on-button dark:text-dark-text-primary leading-none mb-1">$12</p>
+        <p class="text-[13px] text-[rgba(250,249,245,0.6)] dark:text-dark-text-secondary mb-8">per month, billed annually</p>
+
+        <a href="#" class="btn-primary-featured block text-center text-[15px] bg-text-on-button dark:bg-dark-bg-button text-text-primary dark:text-dark-text-on-button no-underline px-5 py-3 rounded-btn transition-all duration-base hover:-translate-y-px hover:shadow-md min-h-[44px] flex items-center justify-center mb-8 font-sans font-medium">
+          Start free trial
+        </a>
+
+        <ul class="space-y-3">
+          <li class="flex items-start gap-3 font-serif text-[1rem] leading-[1.6] text-[rgba(250,249,245,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+            <svg class="w-4 h-4 mt-1 shrink-0 text-[rgba(250,249,245,0.6)] dark:text-dark-text-secondary" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+            Unlimited words
+          </li>
+          <li class="flex items-start gap-3 font-serif text-[1rem] leading-[1.6] text-[rgba(250,249,245,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+            <svg class="w-4 h-4 mt-1 shrink-0 text-[rgba(250,249,245,0.6)] dark:text-dark-text-secondary" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+            Voice &amp; tone memory
+          </li>
+          <li class="flex items-start gap-3 font-serif text-[1rem] leading-[1.6] text-[rgba(250,249,245,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+            <svg class="w-4 h-4 mt-1 shrink-0 text-[rgba(250,249,245,0.6)] dark:text-dark-text-secondary" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+            Unlimited documents
+          </li>
+          <li class="flex items-start gap-3 font-serif text-[1rem] leading-[1.6] text-[rgba(250,249,245,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+            <svg class="w-4 h-4 mt-1 shrink-0 text-[rgba(250,249,245,0.6)] dark:text-dark-text-secondary" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+            Smart outlines + export
+          </li>
+          <li class="flex items-start gap-3 font-serif text-[1rem] leading-[1.6] text-[rgba(250,249,245,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+            <svg class="w-4 h-4 mt-1 shrink-0 text-[rgba(250,249,245,0.6)] dark:text-dark-text-secondary" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+            Priority support
+          </li>
+        </ul>
+      </div>
+
+      <!-- Team -->
+      <div class="bg-bg-card dark:bg-dark-bg-card border border-[rgba(20,20,19,0.08)] dark:border-[rgba(236,233,225,0.08)] rounded-xl p-8">
+        <p class="text-[12px] font-medium tracking-[0.05em] uppercase text-text-secondary dark:text-dark-text-secondary mb-4">Team</p>
+        <p class="font-sans text-[2.25rem] font-bold text-text-primary dark:text-dark-text-primary leading-none mb-1">$29</p>
+        <p class="text-[13px] text-text-secondary dark:text-dark-text-secondary mb-8">per seat / month, billed annually</p>
+
+        <a href="#" class="block text-center text-[15px] bg-bg-button dark:bg-dark-bg-button text-text-on-button dark:text-dark-text-on-button no-underline px-5 py-3 rounded-btn hover:bg-bg-button-hover dark:hover:opacity-90 transition-all duration-base hover:-translate-y-px hover:shadow-md min-h-[44px] flex items-center justify-center mb-8 font-sans">
+          Contact sales
+        </a>
+
+        <ul class="space-y-3">
+          <li class="flex items-start gap-3 font-serif text-[1rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+            <svg class="w-4 h-4 mt-1 shrink-0 text-text-secondary dark:text-dark-text-secondary" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+            Everything in Pro
+          </li>
+          <li class="flex items-start gap-3 font-serif text-[1rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+            <svg class="w-4 h-4 mt-1 shrink-0 text-text-secondary dark:text-dark-text-secondary" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+            Shared style guides
+          </li>
+          <li class="flex items-start gap-3 font-serif text-[1rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+            <svg class="w-4 h-4 mt-1 shrink-0 text-text-secondary dark:text-dark-text-secondary" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+            Admin dashboard
+          </li>
+          <li class="flex items-start gap-3 font-serif text-[1rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)]">
+            <svg class="w-4 h-4 mt-1 shrink-0 text-text-secondary dark:text-dark-text-secondary" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
+            SSO &amp; audit logs
+          </li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Divider ── -->
+  <hr class="border-0 border-t border-[rgba(20,20,19,0.06)] dark:border-[rgba(236,233,225,0.06)] mx-0">
+
+
+  <!-- ════════════════════════════════════════════
+       CTA SECTION
+  ════════════════════════════════════════════ -->
+  <section class="site-px py-20 md:py-28 max-w-[1200px] mx-auto">
+    <div class="max-w-[560px]">
+      <h2 class="text-section-title font-semibold text-text-primary dark:text-dark-text-primary font-sans mb-6">
+        Start with one sentence.<br>See where it takes you.
+      </h2>
+      <p class="font-serif text-[1.0625rem] leading-[1.6] text-[rgba(20,20,19,0.85)] dark:text-[rgba(236,233,225,0.85)] mb-10">
+        No setup, no templates, no friction. Open Quill and begin. Your first 5,000 words are always free.
+      </p>
+      <a href="#" class="inline-flex items-center text-[15px] bg-bg-button dark:bg-dark-bg-button text-text-on-button dark:text-dark-text-on-button no-underline px-6 py-3 rounded-btn hover:bg-bg-button-hover dark:hover:opacity-90 transition-all duration-base hover:-translate-y-px hover:shadow-md min-h-[44px] font-sans">
+        Start writing for free
+      </a>
+    </div>
+  </section>
+
+
+  <!-- ════════════════════════════════════════════
+       FOOTER
+  ════════════════════════════════════════════ -->
+  <footer class="site-px py-12 border-t border-[rgba(20,20,19,0.06)] dark:border-[rgba(236,233,225,0.06)]">
+    <div class="max-w-[1200px] mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-8">
+
+      <!-- Brand -->
+      <div class="flex items-center gap-2">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" class="text-text-tertiary dark:text-[#6b6b66]" aria-hidden="true">
+          <path d="M13.586 3.586a2 2 0 1 1 2.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+        </svg>
+        <span class="text-[13px] text-text-tertiary dark:text-[#6b6b66] font-sans">Quill</span>
+      </div>
+
+      <!-- Footer links -->
+      <nav aria-label="Footer navigation">
+        <ul class="flex flex-wrap gap-6 list-none m-0 p-0">
+          <li><a href="#" class="text-[13px] text-text-secondary dark:text-dark-text-secondary hover:text-text-primary dark:hover:text-dark-text-primary no-underline transition-colors duration-fast">Privacy</a></li>
+          <li><a href="#" class="text-[13px] text-text-secondary dark:text-dark-text-secondary hover:text-text-primary dark:hover:text-dark-text-primary no-underline transition-colors duration-fast">Terms</a></li>
+          <li><a href="#" class="text-[13px] text-text-secondary dark:text-dark-text-secondary hover:text-text-primary dark:hover:text-dark-text-primary no-underline transition-colors duration-fast">Blog</a></li>
+          <li><a href="#" class="text-[13px] text-text-secondary dark:text-dark-text-secondary hover:text-text-primary dark:hover:text-dark-text-primary no-underline transition-colors duration-fast">Changelog</a></li>
+          <li><a href="#" class="text-[13px] text-text-secondary dark:text-dark-text-secondary hover:text-text-primary dark:hover:text-dark-text-primary no-underline transition-colors duration-fast">Support</a></li>
+        </ul>
+      </nav>
+
+      <!-- Copyright -->
+      <p class="text-[12px] text-text-tertiary dark:text-[#6b6b66] font-sans m-0">
+        &copy; 2026 Quill, Inc.
+      </p>
+
+    </div>
+  </footer>
+
+
+  <!-- ════════════════════════════════════════════
+       SCRIPTS
+  ════════════════════════════════════════════ -->
+  <script>
+    // ── Dark mode toggle ──
+    const html = document.documentElement;
+    const toggleBtn = document.getElementById('theme-toggle');
+
+    // Persist preference
+    if (localStorage.getItem('theme') === 'dark' ||
+        (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+
+    toggleBtn.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.setItem('theme', html.classList.contains('dark') ? 'dark' : 'light');
+    });
+
+    // ── Mobile nav ──
+    const hamburger = document.getElementById('hamburger');
+    const mobileMenu = document.getElementById('mobile-menu');
+
+    hamburger.addEventListener('click', () => {
+      const isOpen = mobileMenu.classList.toggle('open');
+      hamburger.setAttribute('aria-expanded', isOpen.toString());
+    });
+
+    // Close mobile menu on link click
+    mobileMenu.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.remove('open');
+        hamburger.setAttribute('aria-expanded', 'false');
+      });
+    });
+  </script>
+
+</body>
+</html>

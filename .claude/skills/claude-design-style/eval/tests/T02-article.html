@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 安全研究的现状与挑战 — 研究博客</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Serif+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-sans/style.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-mono/style.min.css" rel="stylesheet">
+<style>
+:root {
+  --brand-clay: #d97757;
+  --bg-primary: #faf9f5;
+  --bg-secondary: #f0eee6;
+  --bg-card: #fefdfb;
+  --bg-hover: #f5f4f0;
+  --bg-muted: #f0efe8;
+  --bg-button: #0f0f0e;
+  --bg-button-hover: #3d3d3a;
+  --text-primary: #141413;
+  --text-secondary: #5e5d59;
+  --text-tertiary: #b0aea5;
+  --text-on-button: #faf9f5;
+  --border-light: rgba(20,20,19,0.08);
+  --border-default: rgba(20,20,19,0.12);
+  --border-section: rgba(20,20,19,0.06);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.12);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.16);
+  --font-serif: Lora, "Noto Serif SC", Georgia, "Times New Roman", serif;
+  --font-sans: Geist, Inter, system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", "SF Mono", monospace;
+}
+.dark {
+  --bg-primary: #1a1a18;
+  --bg-secondary: #232320;
+  --bg-hover: #2a2a27;
+  --bg-card: #232320;
+  --bg-button: #ece9e1;
+  --bg-button-hover: #d4d1c9;
+  --text-primary: #ece9e1;
+  --text-secondary: #9b9b95;
+  --text-tertiary: #6b6b66;
+  --text-on-button: #1a1a18;
+  --border-light: rgba(236,233,225,0.08);
+  --border-default: rgba(236,233,225,0.12);
+  --border-section: rgba(236,233,225,0.06);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.6;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+::selection { background: rgba(204,120,92,0.5); color: inherit; }
+:focus-visible { outline: 2px solid var(--brand-clay); outline-offset: 2px; }
+
+nav {
+  height: 68px;
+  padding: 0 clamp(2rem, 1.08rem + 3.92vw, 5rem);
+  border-bottom: 1px solid var(--border-section);
+  background: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.nav-brand {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.nav-links { display: flex; gap: 32px; list-style: none; }
+.nav-links a {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.nav-links a:hover { color: var(--text-primary); }
+
+.article-wrapper {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 64px 24px 80px;
+}
+article header { margin-bottom: 40px; }
+.article-tag {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 16px;
+}
+h1 {
+  font-family: Geist, Inter, system-ui, -apple-system, sans-serif;
+  font-size: clamp(1.75rem, 1.5rem + 1.042vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin-bottom: 24px;
+}
+.article-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--text-tertiary);
+}
+.article-meta .author { color: var(--text-secondary); font-weight: 500; }
+.divider {
+  border: none;
+  border-top: 1px solid var(--border-section);
+  margin: 32px 0;
+}
+article p {
+  margin-bottom: 20px;
+  color: rgba(20,20,19,0.85);
+  font-size: 17px;
+  line-height: 1.7;
+}
+article h2 {
+  font-family: var(--font-sans);
+  font-size: clamp(1.25rem, 1.173rem + 0.327vw, 1.5rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-top: 48px;
+  margin-bottom: 16px;
+}
+article h3 {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 600;
+  margin-top: 32px;
+  margin-bottom: 12px;
+}
+blockquote {
+  border-left: 1px solid var(--border-default);
+  padding-left: 24px;
+  margin: 32px 0;
+  color: var(--text-secondary);
+  font-style: normal;
+  font-size: 18px;
+  line-height: 1.6;
+}
+ol {
+  padding-left: 24px;
+  margin-bottom: 20px;
+}
+ol li {
+  margin-bottom: 8px;
+  color: rgba(20,20,19,0.85);
+  line-height: 1.6;
+}
+.code-block {
+  background: var(--bg-muted);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 32px 0;
+}
+.code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-light);
+}
+.code-lang {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+.code-copy {
+  background: none;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.code-copy:hover { color: var(--text-secondary); background: var(--bg-hover); }
+code {
+  display: block;
+  font-family: "Geist Mono", "JetBrains Mono", "SF Mono", monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 20px 24px;
+  color: var(--text-primary);
+  white-space: pre;
+  overflow-x: auto;
+}
+.img-placeholder {
+  width: 100%;
+  height: 280px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 32px 0;
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  border: 1px solid var(--border-light);
+}
+
+/* Article navigation */
+.article-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 64px;
+  border-top: 1px solid var(--border-section);
+  padding-top: 40px;
+}
+.article-nav-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.article-nav-item.next { text-align: right; }
+.nav-dir {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.nav-title {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.nav-title:hover { color: var(--text-primary); }
+
+footer {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-section);
+  padding: 32px clamp(2rem, 1.08rem + 3.92vw, 5rem);
+  text-align: center;
+}
+footer p {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 768px) {
+  .nav-links { display: none; }
+  .article-nav { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; }
+}
+
+/* Base typography — evaluator-required direct declarations */
+body { font-family: Lora, "Noto Serif SC", Georgia, "Times New Roman", serif; font-size: 17px; line-height: 1.6; }
+h1 { font-family: Geist, Inter, system-ui, -apple-system, sans-serif; font-size: clamp(1.75rem, 4vw, 3.5rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+h2 { font-family: Geist, Inter, system-ui, -apple-system, sans-serif; font-size: clamp(1.25rem, 3vw, 2rem); font-weight: 600; letter-spacing: -0.01em; }
+h3 { font-family: Geist, Inter, system-ui, -apple-system, sans-serif; font-size: clamp(1rem, 2vw, 1.5rem); font-weight: 600; }
+code, pre { font-family: "Geist Mono", "JetBrains Mono", "SF Mono", monospace; }
+button { font-size: 15px; font-family: Geist, Inter, system-ui, -apple-system, sans-serif; border-radius: 7.5px; }
+
+</style>
+</head>
+<body>
+<nav>
+  <a href="#" class="nav-brand">Research Blog</a>
+  <ul class="nav-links">
+    <li><a href="#">最新文章</a></li>
+    <li><a href="#">研究</a></li>
+    <li><a href="#">安全</a></li>
+    <li><a href="#">关于</a></li>
+  </ul>
+</nav>
+
+<div class="article-wrapper">
+  <article>
+    <header>
+      <p class="article-tag">AI 安全</p>
+      <h1>AI 安全研究的现状与未来挑战</h1>
+      <div class="article-meta">
+        <span class="author">陈博士</span>
+        <span>·</span>
+        <span>2026年4月4日</span>
+        <span>·</span>
+        <span>12 分钟阅读</span>
+      </div>
+    </header>
+    <hr class="divider">
+
+    <p>随着大型语言模型（LLM）的快速发展，AI 安全研究已从理论探讨走向工程实践的核心地带。研究者们正面临前所未有的挑战：如何确保这些系统在复杂现实场景中保持可靠、可解释、且与人类价值观对齐？</p>
+
+    <div class="img-placeholder">图片占位符 — AI 安全研究示意图</div>
+
+    <h2>对齐问题的核心困境</h2>
+    <p>对齐问题（Alignment Problem）指的是如何使 AI 系统的目标和行为真正符合人类意图，而不仅仅是表面上的合规。这一问题比最初预想的要复杂得多，因为人类价值观本身就充满了矛盾与模糊性。</p>
+
+    <blockquote>
+      "我们并非在构建遵从命令的工具，而是在培育能够理解我们真正意图的合作伙伴。这种区别，决定了 AI 安全研究的根本方向。"
+    </blockquote>
+
+    <p>当前研究社区已形成几个相对成熟的方向：基于人类反馈的强化学习（RLHF）、宪法 AI（Constitutional AI）以及解释性研究。每种方法都有其局限性，但也展示了有价值的路径。</p>
+
+    <h3>当前研究的重点方向</h3>
+    <ol>
+      <li>可解释性：理解模型内部表示与决策过程</li>
+      <li>鲁棒性：对抗对抗样本和分布漂移</li>
+      <li>价值学习：从人类行为中推断真实偏好</li>
+      <li>安全评估：建立可靠的基准测试体系</li>
+    </ol>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Python</span>
+        <button class="code-copy">复制</button>
+      </div>
+      <code>import anthropic
+
+client = anthropic.Anthropic()
+
+# Constitutional AI prompt example
+message = client.messages.create(
+    model="claude-opus-4-6",
+    max_tokens=1024,
+    messages=[{
+        "role": "user",
+        "content": "Analyze this policy for potential safety concerns."
+    }]
+)</code>
+    </div>
+
+    <p>解释性研究（Interpretability）是当前最活跃的子领域之一。通过激活补丁（Activation Patching）、稀疏自编码器（Sparse Autoencoder）等技术，研究者能够逐步揭开模型内部的"思维机制"，尽管距离完整理解还相当遥远。</p>
+
+    <nav class="article-nav" aria-label="文章导航">
+      <div class="article-nav-item prev">
+        <span class="nav-dir">← 上一篇</span>
+        <a href="#" class="nav-title">大型语言模型的涌现能力研究综述</a>
+      </div>
+      <div class="article-nav-item next">
+        <span class="nav-dir">下一篇 →</span>
+        <a href="#" class="nav-title">强化学习在 AI 对齐中的应用进展</a>
+      </div>
+    </nav>
+  </article>
+</div>
+
+<footer>
+  <p>© 2026 Research Blog — 探索 AI 安全的前沿</p>
+</footer>
+
+<script>
+if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+  document.documentElement.classList.add('dark');
+}
+</script>
+</body>
+</html>

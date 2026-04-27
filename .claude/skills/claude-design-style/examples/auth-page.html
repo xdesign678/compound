@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>登录 / 注册 — Noteflux</title>
+  <!--
+    FONT LOADING NOTE:
+    Geist is not available on Google Fonts. Inter is the closest public equivalent.
+    For projects using npm/CDN Geist, replace Inter with Geist in --font-sans below.
+    See references/typography.md for font loading patterns.
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ===== CSS Variables: Light Mode ===== */
+    :root {
+      /* Brand */
+      --brand-clay: #d97757;
+
+      /* Backgrounds */
+      --bg-primary: #faf9f5;
+      --bg-secondary: #f0eee6;
+      --bg-hover: #f5f4f0;
+      --bg-active: rgba(20,20,19,0.06);
+      --bg-card: #fefdfb;
+      --bg-button: #0f0f0e;
+      --bg-button-hover: #3d3d3a;
+      --bg-muted: #f0efe8;
+
+      /* Text */
+      --text-primary: #141413;
+      --text-body: rgba(20,20,19,0.85);
+      --text-secondary: #5e5d59;
+      --text-tertiary: #b0aea5;
+      --text-on-button: #faf9f5;
+
+      /* Validation colors — warm, brand-aligned (NOT pure red/green) */
+      --state-error: #b85b44;
+      --state-error-bg: rgba(184,91,68,0.06);
+      --state-error-border: rgba(184,91,68,0.35);
+      --state-success: #5a856a;
+      --state-success-bg: rgba(90,133,106,0.06);
+      --state-success-border: rgba(90,133,106,0.3);
+
+      /* Typography — same in light and dark mode */
+      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-reading: 'Lora', "Noto Serif SC", Georgia, "Times New Roman", serif;
+      --font-mono: "Geist Mono", "JetBrains Mono", "SF Mono", monospace;
+
+      /* Borders */
+      --border-light: rgba(20,20,19,0.08);
+      --border-default: rgba(20,20,19,0.12);
+      --border-section: rgba(20,20,19,0.06);
+
+      /* Shadows */
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.12);
+      --shadow-lg: 0 8px 24px rgba(0,0,0,0.16);
+
+      /* Ring (focus) */
+      --ring-color: rgba(94,93,89,0.15);
+
+      /* Transitions */
+      --transition-fast: 150ms ease;
+      --transition-base: 200ms ease;
+      --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* ===== Dark Mode (MUST come AFTER :root) ===== */
+    .dark {
+      --bg-primary: #1a1a18;
+      --bg-secondary: #232320;
+      --bg-hover: #2a2a27;
+      --bg-active: rgba(236,233,225,0.08);
+      --bg-card: #232320;
+      --bg-button: #ece9e1;
+      --bg-button-hover: #d4d1c9;
+      --bg-muted: #2a2a27;
+
+      --text-primary: #ece9e1;
+      --text-body: rgba(236,233,225,0.85);
+      --text-secondary: #9b9b95;
+      --text-tertiary: #6b6b66;
+      --text-on-button: #1a1a18;
+
+      /* Validation — lighter warm tones for dark backgrounds */
+      --state-error: #d4826a;
+      --state-error-bg: rgba(212,130,106,0.08);
+      --state-error-border: rgba(212,130,106,0.3);
+      --state-success: #7aab87;
+      --state-success-bg: rgba(122,171,135,0.08);
+      --state-success-border: rgba(122,171,135,0.25);
+
+      --border-light: rgba(236,233,225,0.08);
+      --border-default: rgba(236,233,225,0.12);
+      --border-section: rgba(236,233,225,0.06);
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.24);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.32);
+      --shadow-lg: 0 8px 24px rgba(0,0,0,0.40);
+
+      --ring-color: rgba(155,155,149,0.2);
+    }
+
+    /* ===== Reset & Base ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 15px;
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      transition: background var(--transition-slow), color var(--transition-slow);
+    }
+
+    ::selection {
+      background: rgba(204, 120, 92, 0.5);
+      color: inherit;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: underline;
+      text-underline-offset: 0.2em;
+      text-decoration-color: rgba(20,20,19,0.3);
+      transition: text-decoration-color var(--transition-fast);
+    }
+    a:hover { text-decoration-color: rgba(20,20,19,0.6); }
+    .dark a { text-decoration-color: rgba(236,233,225,0.3); }
+    .dark a:hover { text-decoration-color: rgba(236,233,225,0.6); }
+
+    /* ===== Navigation ===== */
+    nav {
+      height: 68px;
+      padding: 0 clamp(2rem, 1.08rem + 3.92vw, 5rem);
+      border-bottom: 1px solid var(--border-section);
+      background: var(--bg-primary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-brand {
+      font-family: var(--font-sans);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      text-decoration: none;
+      letter-spacing: -0.01em;
+    }
+
+    .theme-toggle {
+      background: none;
+      border: 1px solid var(--border-default);
+      border-radius: 7.5px;
+      padding: 6px 12px;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all var(--transition-base);
+      min-height: 44px;
+    }
+    .theme-toggle:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    /* ===== Main Layout ===== */
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px clamp(1rem, 4vw, 2rem);
+    }
+
+    /* ===== Auth Container ===== */
+    .auth-container {
+      width: 100%;
+      max-width: 400px;
+    }
+
+    /* ===== Auth Header ===== */
+    .auth-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .auth-title {
+      font-family: var(--font-sans);
+      font-size: clamp(1.5rem, 1.4rem + 0.4vw, 2rem);
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .auth-subtitle {
+      font-family: var(--font-reading);
+      font-size: 15px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* ===== Tab Switcher ===== */
+    .auth-tabs {
+      display: flex;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      padding: 4px;
+      margin-bottom: 32px;
+    }
+
+    .auth-tab {
+      flex: 1;
+      padding: 8px 16px;
+      border: none;
+      background: none;
+      border-radius: 7.5px;
+      font-family: var(--font-sans);
+      font-size: 15px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all var(--transition-base);
+      min-height: 44px;
+    }
+
+    .auth-tab.active {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* ===== Form Card ===== */
+    .auth-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      padding: 32px;
+    }
+
+    /* ===== Form Fields ===== */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .form-input {
+      width: 100%;
+      border: 1px solid var(--border-default);
+      border-radius: 7.5px;
+      padding: 10px 16px;
+      font-size: 16px; /* 16px required — prevents iOS auto-zoom on focus */
+      font-family: var(--font-sans);
+      background: var(--bg-card);
+      color: var(--text-primary);
+      transition: border-color var(--transition-base), box-shadow var(--transition-base);
+      min-height: 44px;
+    }
+
+    .form-input::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--text-secondary);
+      box-shadow: 0 0 0 2px var(--ring-color);
+    }
+
+    .form-input.error {
+      border-color: var(--state-error-border);
+      background: var(--state-error-bg);
+    }
+    .form-input.error:focus {
+      box-shadow: 0 0 0 2px rgba(184,91,68,0.15);
+    }
+
+    .form-input.success {
+      border-color: var(--state-success-border);
+    }
+
+    .form-error {
+      font-family: var(--font-sans);
+      font-size: 13px;
+      color: var(--state-error);
+      margin-top: 6px;
+      display: none;
+    }
+
+    .form-error.visible { display: block; }
+
+    .form-hint {
+      font-family: var(--font-sans);
+      font-size: 13px;
+      color: var(--text-tertiary);
+      margin-top: 6px;
+    }
+
+    /* ===== Password Field ===== */
+    .input-wrapper {
+      position: relative;
+    }
+
+    .input-action {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      padding: 4px;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      transition: color var(--transition-fast);
+      min-width: 44px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .input-action:hover { color: var(--text-secondary); }
+
+    /* ===== Password Strength ===== */
+    .password-strength {
+      margin-top: 8px;
+      display: none;
+    }
+    .password-strength.visible { display: block; }
+
+    .strength-bar {
+      height: 3px;
+      background: var(--border-default);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+
+    .strength-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width var(--transition-base), background-color var(--transition-base);
+      width: 0%;
+    }
+
+    .strength-fill.weak    { width: 33%; background: var(--state-error); }
+    .strength-fill.medium  { width: 66%; background: #c4834a; }
+    .strength-fill.strong  { width: 100%; background: var(--state-success); }
+
+    .strength-label {
+      font-family: var(--font-sans);
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    /* ===== Checkbox ===== */
+    .form-check {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 24px;
+      min-height: 44px;
+    }
+
+    .form-check input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      min-width: 18px;
+      accent-color: var(--text-primary);
+      margin-top: 2px;
+      cursor: pointer;
+    }
+
+    .form-check label {
+      font-family: var(--font-sans);
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      cursor: pointer;
+    }
+
+    /* ===== Divider ===== */
+    .form-divider {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 24px 0;
+    }
+
+    .divider-line {
+      flex: 1;
+      height: 1px;
+      background: var(--border-section);
+    }
+
+    .divider-text {
+      font-family: var(--font-sans);
+      font-size: 13px;
+      color: var(--text-tertiary);
+    }
+
+    /* ===== Buttons ===== */
+    .btn-primary {
+      width: 100%;
+      background: var(--bg-button);
+      color: var(--text-on-button);
+      border: none;
+      border-radius: 7.5px;
+      padding: 10px 16px;
+      font-size: 15px;
+      font-weight: 400;
+      font-family: var(--font-sans);
+      cursor: pointer;
+      transition: all var(--transition-base);
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-primary:hover {
+      background: var(--bg-button-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    }
+    .btn-primary:active { transform: translateY(0); }
+
+    .btn-oauth {
+      width: 100%;
+      background: transparent;
+      color: var(--text-primary);
+      border: 1px solid var(--border-default);
+      border-radius: 7.5px;
+      padding: 10px 16px;
+      font-size: 15px;
+      font-family: var(--font-sans);
+      cursor: pointer;
+      transition: all var(--transition-base);
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .btn-oauth:hover { background: var(--bg-hover); }
+
+    /* ===== Links ===== */
+    .auth-link {
+      text-align: center;
+      margin-top: 24px;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .form-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .forgot-link {
+      font-family: var(--font-sans);
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    /* ===== Footer ===== */
+    footer {
+      padding: 24px clamp(2rem, 1.08rem + 3.92vw, 5rem);
+      border-top: 1px solid var(--border-section);
+      text-align: center;
+    }
+
+    .footer-text {
+      font-family: var(--font-sans);
+      font-size: 13px;
+      color: var(--text-tertiary);
+    }
+
+    /* ===== Panels: visible / hidden ===== */
+    .auth-panel { display: none; }
+    .auth-panel.active { display: block; }
+
+    /* ===== Focus visible ===== */
+    :focus-visible {
+      outline: 2px solid var(--text-secondary);
+      outline-offset: 2px;
+    }
+
+    /* ===== Reduced Motion ===== */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* ===== Mobile ===== */
+    @media (max-width: 767px) {
+      /* All inputs must be 16px to prevent iOS zoom */
+      .form-input {
+        font-size: 16px !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav>
+    <a href="#" class="nav-brand">Noteflux</a>
+    <button class="theme-toggle" onclick="toggleDark()">暗色模式</button>
+  </nav>
+
+  <!-- Main Auth Area -->
+  <main>
+    <div class="auth-container">
+      <!-- Header -->
+      <div class="auth-header">
+        <h1 class="auth-title">欢迎回来</h1>
+        <p class="auth-subtitle">开始今天的深度思考之旅</p>
+      </div>
+
+      <!-- Tab Switcher -->
+      <div class="auth-tabs" role="tablist">
+        <button class="auth-tab active" role="tab" onclick="switchTab('login', this)">登录</button>
+        <button class="auth-tab" role="tab" onclick="switchTab('register', this)">注册</button>
+      </div>
+
+      <!-- Login Panel -->
+      <div class="auth-panel active" id="panel-login">
+        <div class="auth-card">
+          <!-- OAuth -->
+          <button class="btn-oauth">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M15.545 6.558a9.42 9.42 0 0 1 .139 1.626c0 2.434-.87 4.492-2.384 5.885h.002C11.978 15.292 10.158 16 8 16A8 8 0 1 1 8 0a7.689 7.689 0 0 1 5.352 2.082l-2.284 2.284A4.347 4.347 0 0 0 8 3.166c-2.087 0-3.86 1.408-4.492 3.304a4.792 4.792 0 0 0 0 3.063h.003c.635 1.893 2.405 3.301 4.492 3.301 1.078 0 2.004-.276 2.722-.764h-.003a3.702 3.702 0 0 0 1.599-2.431H8v-3.08h7.545z"/>
+            </svg>
+            使用 Google 账号登录
+          </button>
+
+          <div class="form-divider">
+            <div class="divider-line"></div>
+            <span class="divider-text">或使用邮箱</span>
+            <div class="divider-line"></div>
+          </div>
+
+          <!-- Email Field -->
+          <div class="form-group">
+            <label class="form-label" for="login-email">邮箱地址</label>
+            <input
+              type="email"
+              id="login-email"
+              class="form-input"
+              placeholder="name@example.com"
+              autocomplete="email"
+            >
+            <span class="form-error" id="login-email-error">请输入有效的邮箱地址</span>
+          </div>
+
+          <!-- Password Field -->
+          <div class="form-group">
+            <label class="form-label" for="login-password">密码</label>
+            <div class="input-wrapper">
+              <input
+                type="password"
+                id="login-password"
+                class="form-input"
+                placeholder="输入密码"
+                autocomplete="current-password"
+              >
+              <button class="input-action" onclick="togglePassword('login-password', this)" type="button">显示</button>
+            </div>
+          </div>
+
+          <!-- Remember + Forgot -->
+          <div class="form-footer">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; min-height:44px;">
+              <input type="checkbox" style="accent-color: var(--text-primary); width:16px; height:16px;">
+              <span style="font-family: var(--font-sans); font-size:14px; color:var(--text-secondary);">记住我</span>
+            </label>
+            <a href="#" class="forgot-link">忘记密码？</a>
+          </div>
+
+          <button class="btn-primary" onclick="handleLogin()">登录账号</button>
+        </div>
+
+        <p class="auth-link">
+          还没有账号？<a href="#" onclick="return switchTabByLink('register')">免费注册</a>
+        </p>
+      </div>
+
+      <!-- Register Panel -->
+      <div class="auth-panel" id="panel-register">
+        <div class="auth-card">
+          <!-- OAuth -->
+          <button class="btn-oauth">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M15.545 6.558a9.42 9.42 0 0 1 .139 1.626c0 2.434-.87 4.492-2.384 5.885h.002C11.978 15.292 10.158 16 8 16A8 8 0 1 1 8 0a7.689 7.689 0 0 1 5.352 2.082l-2.284 2.284A4.347 4.347 0 0 0 8 3.166c-2.087 0-3.86 1.408-4.492 3.304a4.792 4.792 0 0 0 0 3.063h.003c.635 1.893 2.405 3.301 4.492 3.301 1.078 0 2.004-.276 2.722-.764h-.003a3.702 3.702 0 0 0 1.599-2.431H8v-3.08h7.545z"/>
+            </svg>
+            使用 Google 账号注册
+          </button>
+
+          <div class="form-divider">
+            <div class="divider-line"></div>
+            <span class="divider-text">或使用邮箱</span>
+            <div class="divider-line"></div>
+          </div>
+
+          <!-- Name Field -->
+          <div class="form-group">
+            <label class="form-label" for="reg-name">你的名字</label>
+            <input
+              type="text"
+              id="reg-name"
+              class="form-input"
+              placeholder="如：张晓明"
+              autocomplete="name"
+            >
+          </div>
+
+          <!-- Email Field -->
+          <div class="form-group">
+            <label class="form-label" for="reg-email">邮箱地址</label>
+            <input
+              type="email"
+              id="reg-email"
+              class="form-input"
+              placeholder="name@example.com"
+              autocomplete="email"
+            >
+            <span class="form-error" id="reg-email-error">该邮箱已被注册</span>
+          </div>
+
+          <!-- Password Field -->
+          <div class="form-group">
+            <label class="form-label" for="reg-password">设置密码</label>
+            <div class="input-wrapper">
+              <input
+                type="password"
+                id="reg-password"
+                class="form-input"
+                placeholder="至少 8 个字符"
+                autocomplete="new-password"
+                oninput="checkPasswordStrength(this.value)"
+              >
+              <button class="input-action" onclick="togglePassword('reg-password', this)" type="button">显示</button>
+            </div>
+
+            <!-- Password Strength Indicator -->
+            <div class="password-strength" id="password-strength">
+              <div class="strength-bar">
+                <div class="strength-fill" id="strength-fill"></div>
+              </div>
+              <span class="strength-label" id="strength-label">密码强度：弱</span>
+            </div>
+
+            <span class="form-hint">建议使用字母、数字和符号的组合</span>
+          </div>
+
+          <!-- Terms Checkbox -->
+          <div class="form-check">
+            <input type="checkbox" id="reg-terms">
+            <label for="reg-terms">
+              我已阅读并同意 <a href="#">服务条款</a> 和 <a href="#">隐私政策</a>
+            </label>
+          </div>
+
+          <button class="btn-primary" onclick="handleRegister()">创建账号</button>
+        </div>
+
+        <p class="auth-link">
+          已有账号？<a href="#" onclick="return switchTabByLink('login')">直接登录</a>
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <p class="footer-text">
+      © 2026 Noteflux Inc. ·
+      <a href="#" style="text-decoration:none; color:var(--text-tertiary);">隐私政策</a> ·
+      <a href="#" style="text-decoration:none; color:var(--text-tertiary);">服务条款</a>
+    </p>
+  </footer>
+
+  <script>
+    // Dark mode toggle
+    function toggleDark() {
+      document.body.classList.toggle('dark');
+      const btn = document.querySelector('.theme-toggle');
+      btn.textContent = document.body.classList.contains('dark') ? '亮色模式' : '暗色模式';
+    }
+
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.body.classList.add('dark');
+      document.querySelector('.theme-toggle').textContent = '亮色模式';
+    }
+
+    // Tab switching
+    function switchTab(name, btn) {
+      document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.auth-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('panel-' + name).classList.add('active');
+
+      const titleEl = document.querySelector('.auth-title');
+      const subEl = document.querySelector('.auth-subtitle');
+      if (name === 'login') {
+        titleEl.textContent = '欢迎回来';
+        subEl.textContent = '开始今天的深度思考之旅';
+      } else {
+        titleEl.textContent = '创建账号';
+        subEl.textContent = '加入 12 万名深度思考者';
+      }
+    }
+
+    function switchTabByLink(name) {
+      const tabs = document.querySelectorAll('.auth-tab');
+      const idx = name === 'login' ? 0 : 1;
+      switchTab(name, tabs[idx]);
+      return false;
+    }
+
+    // Password visibility toggle
+    function togglePassword(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.textContent = '隐藏';
+      } else {
+        input.type = 'password';
+        btn.textContent = '显示';
+      }
+    }
+
+    // Password strength
+    function checkPasswordStrength(val) {
+      const indicator = document.getElementById('password-strength');
+      const fill = document.getElementById('strength-fill');
+      const label = document.getElementById('strength-label');
+
+      if (val.length === 0) {
+        indicator.classList.remove('visible');
+        return;
+      }
+      indicator.classList.add('visible');
+
+      const hasLower = /[a-z]/.test(val);
+      const hasUpper = /[A-Z]/.test(val);
+      const hasNum = /\d/.test(val);
+      const hasSpecial = /[^a-zA-Z0-9]/.test(val);
+      const score = [hasLower, hasUpper, hasNum, hasSpecial, val.length >= 8].filter(Boolean).length;
+
+      fill.className = 'strength-fill';
+      if (score <= 2) { fill.classList.add('weak'); label.textContent = '密码强度：弱'; }
+      else if (score <= 3) { fill.classList.add('medium'); label.textContent = '密码强度：中'; }
+      else { fill.classList.add('strong'); label.textContent = '密码强度：强'; }
+    }
+
+    // Demo: show error state on login
+    function handleLogin() {
+      const emailEl = document.getElementById('login-email');
+      const errorEl = document.getElementById('login-email-error');
+      const val = emailEl.value;
+
+      if (!val || !val.includes('@')) {
+        emailEl.classList.add('error');
+        emailEl.classList.remove('success');
+        errorEl.classList.add('visible');
+      } else {
+        emailEl.classList.remove('error');
+        emailEl.classList.add('success');
+        errorEl.classList.remove('visible');
+      }
+    }
+
+    // Demo: show error state on register
+    function handleRegister() {
+      const emailEl = document.getElementById('reg-email');
+      const errorEl = document.getElementById('reg-email-error');
+      const val = emailEl.value;
+
+      if (val === 'test@example.com') {
+        emailEl.classList.add('error');
+        emailEl.classList.remove('success');
+        errorEl.classList.add('visible');
+      } else if (val.includes('@')) {
+        emailEl.classList.remove('error');
+        emailEl.classList.add('success');
+        errorEl.classList.remove('visible');
+      }
+    }
+  </script>
+</body>
+</html>

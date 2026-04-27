@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AI 如何改变教育 — 深度思考</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ===== CSS Variables: Light Mode ===== */
+    :root {
+      --bg-primary: #faf9f5;
+      --bg-secondary: #f0eee6;
+      --bg-hover: #f5f4f0;
+      --bg-active: rgba(20,20,19,0.06);
+      --bg-card: #fefdfb;
+      --bg-button: #0f0f0e;
+      --bg-button-hover: #3d3d3a;
+      --bg-muted: #f0efe8;
+
+      --text-primary: #141413;
+      --text-body: rgba(20,20,19,0.85);
+      --text-secondary: #5e5d59;
+      --text-tertiary: #b0aea5;
+      --text-on-button: #faf9f5;
+
+      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-reading: 'Lora', Georgia, 'Times New Roman', serif;
+      --font-mono: 'Geist Mono', 'JetBrains Mono', monospace;
+
+      --border-light: rgba(20,20,19,0.08);
+      --border-default: rgba(20,20,19,0.12);
+      --border-section: rgba(20,20,19,0.06);
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.12);
+      --shadow-lg: 0 8px 24px rgba(0,0,0,0.16);
+
+      --transition-fast: 150ms ease;
+      --transition-base: 200ms ease;
+      --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* ===== CSS Variables: Dark Mode (MUST come AFTER :root) ===== */
+    .dark {
+      --bg-primary: #1a1a18;
+      --bg-secondary: #232320;
+      --bg-hover: #2a2a27;
+      --bg-active: rgba(236,233,225,0.08);
+      --bg-card: #232320;
+      --bg-button: #ece9e1;
+      --bg-button-hover: #d4d1c9;
+      --bg-muted: #2a2a27;
+
+      --text-primary: #ece9e1;
+      --text-body: rgba(236,233,225,0.85);
+      --text-secondary: #9b9b95;
+      --text-tertiary: #6b6b66;
+      --text-on-button: #1a1a18;
+
+      --border-light: rgba(236,233,225,0.08);
+      --border-default: rgba(236,233,225,0.12);
+      --border-section: rgba(236,233,225,0.06);
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.24);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.32);
+      --shadow-lg: 0 8px 24px rgba(0,0,0,0.40);
+    }
+
+    /* ===== Reset & Base ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-reading);
+      font-size: 17px;
+      line-height: 1.6;
+      transition: background var(--transition-slow), color var(--transition-slow);
+    }
+
+    ::selection {
+      background: rgba(204, 120, 92, 0.5);
+      color: inherit;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: underline;
+      text-underline-offset: 0.2em;
+      text-decoration-color: rgba(20,20,19,0.3);
+      transition: text-decoration-color var(--transition-fast);
+    }
+    a:hover { text-decoration-color: rgba(20,20,19,0.6); }
+    .dark a { text-decoration-color: rgba(236,233,225,0.3); }
+    .dark a:hover { text-decoration-color: rgba(236,233,225,0.6); }
+
+    /* ===== Navigation ===== */
+    nav {
+      height: 68px;
+      padding: 0 clamp(2rem, 1.08rem + 3.92vw, 5rem);
+      border-bottom: 1px solid var(--border-section);
+      background: var(--bg-primary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .nav-brand {
+      font-family: var(--font-sans);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      text-decoration: none;
+      letter-spacing: -0.01em;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      font-family: var(--font-sans);
+      font-size: 15px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color var(--transition-fast);
+    }
+    .nav-links a:hover { color: var(--text-primary); }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* ===== Dark Mode Toggle ===== */
+    .theme-toggle {
+      background: none;
+      border: 1px solid var(--border-default);
+      border-radius: 7.5px;
+      padding: 6px 12px;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all var(--transition-base);
+    }
+    .theme-toggle:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    /* ===== Article Layout ===== */
+    .article-wrapper {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 80px clamp(1rem, 4vw, 2rem);
+    }
+
+    /* ===== Article Meta ===== */
+    .article-category {
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      text-decoration: none;
+      display: inline-block;
+      margin-bottom: 24px;
+    }
+
+    .article-title {
+      font-family: var(--font-sans);
+      font-size: clamp(2rem, 1.694rem + 1.306vw, 3rem);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      margin-bottom: 24px;
+    }
+
+    .article-lead {
+      font-family: var(--font-reading);
+      font-size: 19px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      margin-bottom: 40px;
+      font-weight: 400;
+    }
+
+    .article-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding-bottom: 40px;
+      border-bottom: 1px solid var(--border-section);
+      margin-bottom: 48px;
+    }
+
+    .meta-author {
+      font-family: var(--font-sans);
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .meta-dot {
+      color: var(--text-tertiary);
+    }
+
+    .meta-date {
+      font-family: var(--font-sans);
+      font-size: 14px;
+      color: var(--text-tertiary);
+    }
+
+    .meta-read-time {
+      font-family: var(--font-sans);
+      font-size: 14px;
+      color: var(--text-tertiary);
+    }
+
+    /* ===== Article Body ===== */
+    .article-body p {
+      color: var(--text-body);
+      margin-bottom: 20px;
+      font-family: var(--font-reading);
+      font-size: 17px;
+      line-height: 1.6;
+    }
+
+    .article-body h2 {
+      font-family: var(--font-sans);
+      font-size: clamp(1.25rem, 1.14rem + 0.49vw, 1.75rem);
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+      margin-top: 64px;
+      margin-bottom: 32px;
+    }
+
+    .article-body h3 {
+      font-family: var(--font-sans);
+      font-size: clamp(1.125rem, 1.087rem + 0.163vw, 1.25rem);
+      font-weight: 600;
+      line-height: 1.3;
+      color: var(--text-primary);
+      margin-top: 40px;
+      margin-bottom: 16px;
+    }
+
+    blockquote {
+      border-left: 1px solid var(--text-primary);
+      padding-left: 16px;
+      margin: 32px 0;
+      font-style: normal;
+      color: var(--text-secondary);
+    }
+
+    blockquote p {
+      color: var(--text-secondary) !important;
+      font-size: 17px;
+    }
+
+    /* ===== Article Cover Image Placeholder ===== */
+    .article-cover {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      margin-bottom: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border-light);
+    }
+
+    .cover-caption {
+      font-family: var(--font-sans);
+      font-size: 12px;
+      color: var(--text-tertiary);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    /* ===== Tags ===== */
+    .article-tags {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 64px;
+      padding-top: 40px;
+      border-top: 1px solid var(--border-section);
+    }
+
+    .tag {
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      background: var(--bg-secondary);
+      border-radius: 4px;
+      padding: 4px 10px;
+      text-decoration: none;
+      transition: background var(--transition-fast);
+    }
+    .tag:hover { background: var(--bg-hover); }
+
+    /* ===== Related Articles ===== */
+    .related-section {
+      background: var(--bg-secondary);
+      padding: 80px clamp(2rem, 1.08rem + 3.92vw, 5rem);
+      margin-top: 80px;
+    }
+
+    .related-title {
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      margin-bottom: 32px;
+    }
+
+    .related-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 24px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .related-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      padding: 24px;
+      transition: box-shadow var(--transition-base);
+      cursor: pointer;
+      text-decoration: none;
+      display: block;
+    }
+    .related-card:hover { box-shadow: var(--shadow-md); }
+
+    .related-grid:has(.related-card:hover) .related-card:not(:hover) {
+      opacity: 0.6;
+      transition: opacity 300ms ease;
+    }
+
+    .related-card-category {
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      margin-bottom: 12px;
+    }
+
+    .related-card-title {
+      font-family: var(--font-sans);
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.4;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .related-card-date {
+      font-family: var(--font-sans);
+      font-size: 13px;
+      color: var(--text-tertiary);
+    }
+
+    /* ===== Footer ===== */
+    footer {
+      padding: 48px clamp(2rem, 1.08rem + 3.92vw, 5rem);
+      border-top: 1px solid var(--border-section);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-text {
+      font-family: var(--font-sans);
+      font-size: 14px;
+      color: var(--text-tertiary);
+    }
+
+    /* ===== Reduced Motion ===== */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* ===== Mobile ===== */
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      footer { flex-direction: column; gap: 16px; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav>
+    <a href="#" class="nav-brand">Thinking</a>
+    <ul class="nav-links">
+      <li><a href="#">研究</a></li>
+      <li><a href="#">教育</a></li>
+      <li><a href="#">技术</a></li>
+      <li><a href="#">关于</a></li>
+    </ul>
+    <div class="nav-right">
+      <button class="theme-toggle" onclick="toggleDark()" aria-label="切换暗色模式">暗色模式</button>
+    </div>
+  </nav>
+
+  <!-- Article -->
+  <article>
+    <div class="article-wrapper">
+      <a href="#" class="article-category">教育与技术</a>
+
+      <h1 class="article-title">AI 如何从根本上改变我们的学习方式</h1>
+
+      <p class="article-lead">
+        从苏格拉底式对话到现代课堂，教育的本质一直是人与知识之间的关系。而人工智能的出现，正在以一种前所未有的方式重塑这一关系——不是取代教师，而是重新定义学习本身的意义。
+      </p>
+
+      <div class="article-meta">
+        <span class="meta-author">陈明远</span>
+        <span class="meta-dot">·</span>
+        <span class="meta-date">2026 年 4 月 5 日</span>
+        <span class="meta-dot">·</span>
+        <span class="meta-read-time">12 分钟阅读</span>
+      </div>
+
+      <!-- Cover -->
+      <div class="article-cover">
+        <span class="cover-caption">插图 — 知识图谱与人工智能</span>
+      </div>
+
+      <!-- Body -->
+      <div class="article-body">
+        <p>
+          在过去的三年里，我走访了十二所学校，从北京的重点高中到云南偏远山区的村小。在这些截然不同的教学环境中，我看到了同一件事正在悄然发生：孩子们开始以一种截然不同的方式与知识建立联系。
+        </p>
+
+        <p>
+          这不是关于技术本身的故事。技术只是载体。真正值得关注的，是技术背后那些关于学习、记忆、理解与创造的深层变化。
+        </p>
+
+        <h2>个性化：从规模化生产到量身定制</h2>
+
+        <p>
+          传统教育面临一个根本矛盾：教师是有限的，学生是多样的。一个优秀的教师或许能同时照顾三十名学生，但每个学生的学习节奏、理解方式和兴趣领域都大相径庭。工业时代的学校用标准化课程解决了这一矛盾，代价是忽视了个体差异。
+        </p>
+
+        <blockquote>
+          <p>
+            "最好的教学，是在学生恰好准备好接受的那一刻，给予恰好合适的挑战。" — 列夫·维果茨基
+          </p>
+        </blockquote>
+
+        <p>
+          AI 系统正在让这种"最好的教学"得以规模化。通过持续分析学生的回答模式、错误类型和学习速度，自适应学习系统可以为每个学生构建一条独特的学习路径。这不是科幻小说——这已经在发生。
+        </p>
+
+        <h3>超越知识传递</h3>
+
+        <p>
+          更深刻的变化发生在认知层面。当 AI 能够即时回答任何事实性问题时，记忆知识的价值就下降了。教育的重心必然从"记住什么"转向"如何思考"。
+        </p>
+
+        <p>
+          这实际上是一个好消息。批判性思维、创造力、跨学科连接——这些本来就是教育的终极目标，只不过长期被应试压力所遮蔽。AI 的出现，客观上迫使教育回归其本质。
+        </p>
+
+        <h2>教师角色的深刻转变</h2>
+
+        <p>
+          在我访问的学校中，最令人印象深刻的不是技术，而是教师。那些适应了 AI 时代的教师，都不约而同地做了同一件事：他们从知识的"传递者"变成了学习的"引导者"。
+        </p>
+
+        <p>
+          他们把更多时间花在情感支持、道德判断和创意激发上——这些恰好是 AI 最难复制的能力。在这个意义上，AI 不是在取代教师，而是在解放教师，让他们去做最重要的事。
+        </p>
+
+        <h3>新的数字鸿沟</h3>
+
+        <p>
+          当然，这幅图景并非没有阴影。AI 教育工具的普及速度在不同地区、不同群体之间差异巨大。如果我们不加干预，技术可能会加剧而不是缩小教育不平等。
+        </p>
+
+        <p>
+          在云南山区的那所小学，我遇到的最大问题不是缺乏 AI，而是缺乏稳定的电力供应。这提醒我们，技术变革的讨论必须落地，必须面对最基本的基础设施现实。
+        </p>
+
+        <h2>我们正站在什么样的历史节点上</h2>
+
+        <p>
+          人类历史上有过几次真正的教育革命：文字的发明让知识得以跨越时间；印刷机让知识得以大规模复制；互联网让知识得以即时传播。AI 正在开启第四次革命——让学习得以真正个性化。
+        </p>
+
+        <p>
+          每一次革命都带来了恐惧，也带来了机遇。印刷机曾被认为会让人们停止思考，因为他们可以"查书"。互联网曾被认为会让人们变得浅薄。事实证明，恐惧往往被夸大，而机遇往往被低估。
+        </p>
+
+        <p>
+          AI 也不例外。问题从来不是"AI 会不会改变教育"——它已经在改变了。问题是：我们如何确保这种改变朝着更公平、更深刻、更有人性的方向发展？
+        </p>
+      </div>
+
+      <!-- Tags -->
+      <div class="article-tags">
+        <a href="#" class="tag">人工智能</a>
+        <a href="#" class="tag">教育</a>
+        <a href="#" class="tag">技术</a>
+        <a href="#" class="tag">个性化学习</a>
+        <a href="#" class="tag">未来</a>
+      </div>
+    </div>
+  </article>
+
+  <!-- Related Articles -->
+  <section class="related-section">
+    <p class="related-title" style="text-align:center;">相关文章</p>
+    <div class="related-grid">
+      <a href="#" class="related-card" style="text-decoration:none;">
+        <div class="related-card-category">研究</div>
+        <div class="related-card-title">大型语言模型在课堂中的实证研究</div>
+        <div class="related-card-date">2026 年 3 月 18 日</div>
+      </a>
+      <a href="#" class="related-card" style="text-decoration:none;">
+        <div class="related-card-category">观点</div>
+        <div class="related-card-title">当算法决定我们学什么：一个伦理框架</div>
+        <div class="related-card-date">2026 年 3 月 2 日</div>
+      </a>
+      <a href="#" class="related-card" style="text-decoration:none;">
+        <div class="related-card-category">案例</div>
+        <div class="related-card-title">芬兰教育模式与 AI 整合的启示</div>
+        <div class="related-card-date">2026 年 2 月 14 日</div>
+      </a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <span class="footer-text">© 2026 Thinking. 深度思考，理性表达。</span>
+    <span class="footer-text">用 Claude 辅助写作</span>
+  </footer>
+
+  <script>
+    function toggleDark() {
+      document.body.classList.toggle('dark');
+      const btn = document.querySelector('.theme-toggle');
+      btn.textContent = document.body.classList.contains('dark') ? '亮色模式' : '暗色模式';
+    }
+
+    // Respect system preference
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.body.classList.add('dark');
+      document.querySelector('.theme-toggle').textContent = '亮色模式';
+    }
+  </script>
+</body>
+</html>

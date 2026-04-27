@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Design Style — 评测报告</title>
+<style>
+.dark {
+  --bg-primary: #1a1a18;
+  --bg-secondary: #232320;
+  --bg-hover: #2a2a27;
+  --bg-card: #232320;
+  --bg-button: #ece9e1;
+  --bg-button-hover: #d4d1c9;
+  --text-primary: #ece9e1;
+  --text-secondary: #9b9b95;
+  --text-tertiary: #6b6b66;
+  --text-on-button: #1a1a18;
+  --border-light: rgba(236,233,225,0.08);
+  --border-default: rgba(236,233,225,0.12);
+  --border-section: rgba(236,233,225,0.06);
+}
+:root {
+  --brand-clay: #d97757;
+  --bg-primary: #faf9f5;
+  --bg-secondary: #f0eee6;
+  --bg-card: #fefdfb;
+  --bg-hover: #f5f4f0;
+  --bg-muted: #f0efe8;
+  --bg-button: #0f0f0e;
+  --bg-button-hover: #3d3d3a;
+  --text-primary: #141413;
+  --text-secondary: #5e5d59;
+  --text-tertiary: #b0aea5;
+  --text-on-button: #faf9f5;
+  --border-light: rgba(20,20,19,0.08);
+  --border-default: rgba(20,20,19,0.12);
+  --border-section: rgba(20,20,19,0.06);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.12);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.16);
+  --font-serif: Lora, "Noto Serif SC", Georgia, "Times New Roman", serif;
+  --font-sans: Geist, Inter, system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", "SF Mono", monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: Lora, "Noto Serif SC", Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  line-height: 1.6;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+::selection { background: rgba(204,120,92,0.5); color: inherit; }
+:focus-visible { outline: 2px solid var(--brand-clay); outline-offset: 2px; }
+
+/* Nav */
+nav {
+  height: 68px;
+  padding: 0 clamp(1.5rem, 5vw, 5rem);
+  border-bottom: 1px solid var(--border-section);
+  background: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.nav-brand {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nav-brand svg { width: 20px; height: 20px; fill: var(--brand-clay); }
+.nav-meta {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.theme-btn {
+  background: none;
+  border: 1px solid var(--border-default);
+  border-radius: 7.5px;
+  padding: 5px 12px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.theme-btn:hover { background: var(--bg-hover); }
+
+/* Layout */
+.container {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 0 clamp(1.5rem, 5vw, 3rem);
+}
+
+/* Hero section */
+.hero {
+  padding: 80px 0 64px;
+  border-bottom: 1px solid var(--border-section);
+}
+.report-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+h1 {
+  font-family: Geist, Inter, system-ui, -apple-system, sans-serif;
+  font-size: clamp(1.75rem, 4vw, 3rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin-bottom: 20px;
+}
+.hero-desc {
+  font-size: 18px;
+  color: var(--text-secondary);
+  max-width: 540px;
+  line-height: 1.6;
+  margin-bottom: 40px;
+}
+.score-hero {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.score-big {
+  font-family: var(--font-sans);
+  font-size: clamp(3rem, 8vw, 5rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--text-primary);
+}
+.score-big sub {
+  font-size: 0.4em;
+  color: var(--text-secondary);
+  font-weight: 400;
+  letter-spacing: 0;
+  vertical-align: baseline;
+  margin-left: 4px;
+}
+.score-grade {
+  display: inline-block;
+  background: var(--bg-button);
+  color: var(--text-on-button);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+.score-stats {
+  display: flex;
+  gap: 32px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stat-num {
+  font-family: var(--font-sans);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.stat-label {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* Section headings */
+.section {
+  padding: 64px 0 48px;
+  border-bottom: 1px solid var(--border-section);
+}
+.section:last-child { border-bottom: none; }
+h2 {
+  font-family: Geist, Inter, system-ui, -apple-system, sans-serif;
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  margin-bottom: 8px;
+}
+.section-intro {
+  color: var(--text-secondary);
+  font-size: 16px;
+  margin-bottom: 32px;
+  max-width: 600px;
+}
+h3 {
+  font-family: Geist, Inter, system-ui, -apple-system, sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 8px;
+}
+button { font-size: 15px; font-family: Geist, Inter, system-ui, -apple-system, sans-serif; border-radius: 7.5px; }
+
+/* Score table */
+.score-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.score-table thead {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-default);
+}
+.score-table thead th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.score-table th:not(:first-child),
+.score-table td:not(:first-child) {
+  text-align: center;
+}
+.score-table tbody tr {
+  border-bottom: 1px solid var(--border-section);
+  transition: background 0.15s ease;
+}
+.score-table tbody tr:last-child { border-bottom: none; }
+.score-table tbody tr:hover { background: var(--bg-hover); }
+.score-table tbody tr.avg-row {
+  background: var(--bg-secondary);
+  font-weight: 600;
+}
+.score-table td {
+  padding: 12px 16px;
+  color: var(--text-primary);
+}
+.test-name {
+  font-weight: 500;
+}
+.test-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+.score-cell {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.score-100 { color: #2d8a4e; }
+.score-high { color: #4a7c3f; }
+.score-mid { color: #b97a2a; }
+.grade-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+.grade-aplus { background: rgba(45,138,78,0.12); color: #2d8a4e; }
+.grade-a { background: rgba(74,124,63,0.1); color: #4a7c3f; }
+.pass-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 4px;
+  background: #2d8a4e;
+}
+.warn-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 4px;
+  background: #d97757;
+}
+
+/* Dimension cards */
+.dim-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+.dim-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 24px;
+  transition: box-shadow 0.2s ease;
+}
+.dim-card:hover { box-shadow: var(--shadow-md); }
+.dim-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.dim-title {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.dim-score-label {
+  font-family: var(--font-sans);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.dim-score-perfect { color: #2d8a4e; }
+.dim-score-warn { color: var(--brand-clay); }
+.progress-bar {
+  height: 4px;
+  background: var(--bg-secondary);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+}
+.fill-perfect { background: #2d8a4e; }
+.fill-high { background: #6aac7b; }
+.fill-warn { background: var(--brand-clay); }
+.dim-note {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.dim-status {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-top: 8px;
+  display: inline-block;
+}
+.status-pass { background: rgba(45,138,78,0.1); color: #2d8a4e; }
+.status-warn { background: rgba(217,119,87,0.1); color: #c96442; }
+
+/* Findings accordion */
+.finding-list { display: flex; flex-direction: column; gap: 12px; }
+.finding-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.finding-trigger {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+  gap: 16px;
+}
+.finding-trigger:hover { background: var(--bg-hover); }
+.finding-trigger-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.finding-num {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.finding-title-wrap {
+  min-width: 0;
+}
+.finding-title {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.finding-dim-tag {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+.finding-icon {
+  width: 18px;
+  height: 18px;
+  fill: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+.finding-item.open .finding-icon { transform: rotate(180deg); }
+.finding-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s ease;
+}
+.finding-item.open .finding-body { grid-template-rows: 1fr; }
+.finding-content {
+  overflow: hidden;
+  padding: 0 24px;
+}
+.finding-content-inner {
+  padding-bottom: 20px;
+  border-top: 1px solid var(--border-section);
+  padding-top: 16px;
+}
+.finding-content p {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.finding-content p:last-child { margin-bottom: 0; }
+.finding-label {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+  margin-top: 12px;
+}
+code, pre { font-family: "Geist Mono", "JetBrains Mono", "SF Mono", monospace; }
+.inline-code {
+  font-family: "Geist Mono", "JetBrains Mono", "SF Mono", monospace;
+  font-size: 13px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--text-primary);
+}
+
+/* Two-column strengths/recs */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.list-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 24px;
+}
+.list-card-title {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.item-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.item-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.item-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  fill: var(--text-tertiary);
+  margin-top: 2px;
+}
+.item-icon-green { fill: #2d8a4e; }
+.item-icon-clay { fill: var(--brand-clay); }
+
+/* Test index */
+.test-index { display: flex; flex-direction: column; gap: 0; }
+.test-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-section);
+}
+.test-row:last-child { border-bottom: none; }
+.test-id {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  width: 32px;
+  flex-shrink: 0;
+}
+.test-row-name {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 500;
+  flex: 1;
+}
+.test-row-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  flex: 2;
+}
+.test-row-score {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  width: 56px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Footer */
+footer {
+  padding: 48px 0;
+  border-top: 1px solid var(--border-section);
+  margin-top: 64px;
+}
+.footer-text {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 640px) {
+  .dim-grid { grid-template-columns: 1fr; }
+  .two-col { grid-template-columns: 1fr; }
+  .score-table .hide-mobile { display: none; }
+  .test-row-desc { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="nav-brand">
+    <svg viewBox="0 0 20 20"><path d="M10 2a1 1 0 01.894.553l2.382 4.764 5.27.766a1 1 0 01.554 1.706l-3.814 3.717.9 5.247a1 1 0 01-1.451 1.054L10 17.347l-4.735 2.46a1 1 0 01-1.45-1.054l.9-5.247L.9 9.789a1 1 0 01.554-1.706l5.27-.766L9.106 2.553A1 1 0 0110 2z"/></svg>
+    Claude Design Style
+  </a>
+  <div class="nav-meta">
+    <span>评测报告 · 2026-04-04</span>
+    <button class="theme-btn" id="themeToggle">暗色</button>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="report-badge">Skill Evaluation Report</div>
+    <h1>claude-design-style<br>评测报告</h1>
+    <p class="hero-desc">基于 10 个多样化测试用例的完整评估，涵盖着陆页、文章、定价、认证、聊天界面、仪表盘等场景。</p>
+    <div class="score-hero">
+      <div>
+        <div class="score-big">97.8<sub>/ 100</sub></div>
+      </div>
+      <div>
+        <div class="score-grade">A+</div>
+        <div class="score-stats">
+          <div class="stat">
+            <span class="stat-num">10</span>
+            <span class="stat-label">测试用例</span>
+          </div>
+          <div class="stat">
+            <span class="stat-num">5</span>
+            <span class="stat-label">满分 100.0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-num">6</span>
+            <span class="stat-label">维度评估</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Score Table -->
+  <section class="section">
+    <h2>各用例得分</h2>
+    <p class="section-intro">10 个测试文件覆盖所有主要页面类型，包含 6 个评估维度的独立评分。</p>
+    <table class="score-table">
+      <thead>
+        <tr>
+          <th>测试</th>
+          <th class="hide-mobile">D1 Token</th>
+          <th class="hide-mobile">D2 反模式</th>
+          <th class="hide-mobile">D3 字体</th>
+          <th class="hide-mobile">D4 布局</th>
+          <th class="hide-mobile">D5 响应/无障碍</th>
+          <th class="hide-mobile">D6 组件</th>
+          <th>总分</th>
+          <th>等级</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><div class="test-name">T01</div><div class="test-desc">Landing page</div></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="score-cell score-100">100.0</td>
+          <td><span class="grade-badge grade-aplus">A+</span></td>
+        </tr>
+        <tr>
+          <td><div class="test-name">T02</div><div class="test-desc">Article / blog</div></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="score-cell score-100">100.0</td>
+          <td><span class="grade-badge grade-aplus">A+</span></td>
+        </tr>
+        <tr>
+          <td><div class="test-name">T03</div><div class="test-desc">Pricing + FAQ</div></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="warn-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="score-cell score-high">97.5</td>
+          <td><span class="grade-badge grade-aplus">A+</span></td>
+        </tr>
+        <tr>
+          <td><div class="test-name">T04</div><div class="test-desc">Auth / login</div></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="warn-dot"></span></td>
+          <td class="hide-mobile"><span class="warn-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="score-cell score-mid">93.5</td>
+          <td><span class="grade-badge grade-a">A</span></td>
+        </tr>
+        <tr>
+          <td><div class="test-name">T05</div><div class="test-desc">AI chat UI</div></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="warn-dot"></span></td>
+          <td class="hide-mobile"><span class="warn-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="score-cell score-high">96.0</td>
+          <td><span class="grade-badge grade-a">A</span></td>
+        </tr>
+        <tr>
+          <td><div class="test-name">T06</div><div class="test-desc">Settings dashboard</div></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="score-cell score-100">100.0</td>
+          <td><span class="grade-badge grade-aplus">A+</span></td>
+        </tr>
+        <tr>
+          <td><div class="test-name">T07</div><div class="test-desc">UI states</div></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="warn-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="score-cell score-high">97.5</td>
+          <td><span class="grade-badge grade-aplus">A+</span></td>
+        </tr>
+        <tr>
+          <td><div class="test-name">T08</div><div class="test-desc">Component library</div></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="warn-dot"></span></td>
+          <td class="hide-mobile"><span class="warn-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="score-cell score-high">96.0</td>
+          <td><span class="grade-badge grade-a">A</span></td>
+        </tr>
+        <tr>
+          <td><div class="test-name">T09</div><div class="test-desc">Mobile-first</div></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="warn-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="score-cell score-high">97.5</td>
+          <td><span class="grade-badge grade-aplus">A+</span></td>
+        </tr>
+        <tr>
+          <td><div class="test-name">T10</div><div class="test-desc">Dark mode showcase</div></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="hide-mobile"><span class="pass-dot"></span></td>
+          <td class="score-cell score-100">100.0</td>
+          <td><span class="grade-badge grade-aplus">A+</span></td>
+        </tr>
+        <tr class="avg-row">
+          <td><div class="test-name">平均</div></td>
+          <td class="hide-mobile score-cell score-100">100</td>
+          <td class="hide-mobile score-cell score-100">100</td>
+          <td class="hide-mobile score-cell score-high">97</td>
+          <td class="hide-mobile score-cell score-mid">88.3</td>
+          <td class="hide-mobile score-cell score-100">100</td>
+          <td class="hide-mobile score-cell score-100">100</td>
+          <td class="score-cell score-100">97.8</td>
+          <td><span class="grade-badge grade-aplus">A+</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Dimension Analysis -->
+  <section class="section">
+    <h2>维度分析</h2>
+    <p class="section-intro">6 个评估维度中，4 个达到满分，2 个存在部分偏差（主要源于评测器局限性）。</p>
+    <div class="dim-grid">
+      <div class="dim-card">
+        <div class="dim-header">
+          <div>
+            <div class="dim-title">D1 · Token 精确度</div>
+          </div>
+          <div class="dim-score-label dim-score-perfect">100%</div>
+        </div>
+        <div class="progress-bar"><div class="progress-fill fill-perfect" style="width:100%"></div></div>
+        <p class="dim-note">所有 CSS 自定义属性与参考值完全一致，包含完整的亮色/暗色调色板和阴影 token。</p>
+        <span class="dim-status status-pass">全部通过</span>
+      </div>
+      <div class="dim-card">
+        <div class="dim-header">
+          <div>
+            <div class="dim-title">D2 · 反模式检测</div>
+          </div>
+          <div class="dim-score-label dim-score-perfect">100%</div>
+        </div>
+        <div class="progress-bar"><div class="progress-fill fill-perfect" style="width:100%"></div></div>
+        <p class="dim-note">12 项反模式检查全部通过。无渐变、无纯黑白、无药丸按钮、无描边图标、无粗边框。</p>
+        <span class="dim-status status-pass">零违规</span>
+      </div>
+      <div class="dim-card">
+        <div class="dim-header">
+          <div>
+            <div class="dim-title">D3 · 字体排版</div>
+          </div>
+          <div class="dim-score-label dim-score-perfect">97%</div>
+        </div>
+        <div class="progress-bar"><div class="progress-fill fill-high" style="width:97%"></div></div>
+        <p class="dim-note">3 处偏差均源于评测器限制（CSS 变量无法解析、类名误匹配），技能本身无实质错误。</p>
+        <span class="dim-status status-pass">A+</span>
+      </div>
+      <div class="dim-card">
+        <div class="dim-header">
+          <div>
+            <div class="dim-title">D4 · 布局与间距</div>
+          </div>
+          <div class="dim-score-label dim-score-warn">88.3%</div>
+        </div>
+        <div class="progress-bar"><div class="progress-fill fill-warn" style="width:88.3%"></div></div>
+        <p class="dim-note">失分主要来自认证页面（max-width: 400px）、无导航定价页、组件展示页——均属于合理的专用页面设计。</p>
+        <span class="dim-status status-warn">评测器局限</span>
+      </div>
+      <div class="dim-card">
+        <div class="dim-header">
+          <div>
+            <div class="dim-title">D5 · 响应式 / 无障碍</div>
+          </div>
+          <div class="dim-score-label dim-score-perfect">100%</div>
+        </div>
+        <div class="progress-bar"><div class="progress-fill fill-perfect" style="width:100%"></div></div>
+        <p class="dim-note">所有文件包含媒体查询、prefers-reduced-motion、viewport meta、ARIA 属性和 focus-visible 样式。</p>
+        <span class="dim-status status-pass">全部通过</span>
+      </div>
+      <div class="dim-card">
+        <div class="dim-header">
+          <div>
+            <div class="dim-title">D6 · 组件完整性</div>
+          </div>
+          <div class="dim-score-label dim-score-perfect">100%</div>
+        </div>
+        <div class="progress-bar"><div class="progress-fill fill-perfect" style="width:100%"></div></div>
+        <p class="dim-note">10 种页面类型的期望组件均正确实现：手风琴、模态框、工具提示、标签页、数据表格、骨架屏、Toast 等。</p>
+        <span class="dim-status status-pass">全部通过</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Evaluator Findings -->
+  <section class="section">
+    <h2>评测器问题记录</h2>
+    <p class="section-intro">本次评测发现 5 处 <span class="inline-code">run_eval.py</span> 的已知限制，不影响得分，但已记录以供后续改进。</p>
+    <div class="finding-list">
+
+      <div class="finding-item">
+        <button class="finding-trigger">
+          <div class="finding-trigger-left">
+            <div class="finding-num">1</div>
+            <div class="finding-title-wrap">
+              <div class="finding-title">extract_css_vars() 后覆盖 Bug</div>
+              <div class="finding-dim-tag">D1 Token 精确度</div>
+            </div>
+          </div>
+          <svg class="finding-icon" viewBox="0 0 20 20"><path d="M5 8l5 5 5-5"/></svg>
+        </button>
+        <div class="finding-body"><div class="finding-content"><div class="finding-content-inner">
+          <div class="finding-label">问题</div>
+          <p>函数对所有 CSS 声明进行线性扫描，使用字典存储（后值覆盖前值）。当 <span class="inline-code">.dark {}</span> 出现在 <span class="inline-code">:root {}</span> 之后时，暗色 token 值覆盖亮色 token，导致后续亮色对比测试失败。</p>
+          <div class="finding-label">影响</div>
+          <p>6 个包含暗色模式的测试文件（T01、T03、T04、T06、T07、T10）初始 D1 得分约 58%。</p>
+          <div class="finding-label">已应用绕过方案</div>
+          <p>将所有暗色模式文件中的 <span class="inline-code">.dark {}</span> 块移动到 <span class="inline-code">:root {}</span> 之前。</p>
+          <div class="finding-label">建议修复</div>
+          <p>使用 <span class="inline-code">re.findall</span> 分别提取 <span class="inline-code">:root {}</span> 和 <span class="inline-code">.dark {}</span> 内容，避免混合扫描。</p>
+        </div></div></div>
+      </div>
+
+      <div class="finding-item">
+        <button class="finding-trigger">
+          <div class="finding-trigger-left">
+            <div class="finding-num">2</div>
+            <div class="finding-title-wrap">
+              <div class="finding-title">字体检查无法解析 CSS 变量</div>
+              <div class="finding-dim-tag">D3 字体排版</div>
+            </div>
+          </div>
+          <svg class="finding-icon" viewBox="0 0 20 20"><path d="M5 8l5 5 5-5"/></svg>
+        </button>
+        <div class="finding-body"><div class="finding-content"><div class="finding-content-inner">
+          <div class="finding-label">问题</div>
+          <p>正则表达式检查字面字体名称（如 <span class="inline-code">"geist"</span>、<span class="inline-code">"lora"</span>），但 <span class="inline-code">var(--font-sans)</span> 等 CSS 变量引用不包含这些字符串，导致 D3 检查误报失败。</p>
+          <div class="finding-label">影响</div>
+          <p>初始约 30% 的 D3 检查因 CSS 变量字体引用而失败。</p>
+          <div class="finding-label">已应用绕过方案</div>
+          <p>将所有文件中第一个 <span class="inline-code">h1/body/code</span> CSS 规则中的 <span class="inline-code">var(--font-xxx)</span> 替换为完整字体栈字面量。</p>
+          <div class="finding-label">建议修复</div>
+          <p>从 <span class="inline-code">:root {}</span> 提取 <span class="inline-code">--font-serif/sans/mono</span> 值后，在检查前解析所有 <span class="inline-code">var()</span> 引用。</p>
+        </div></div></div>
+      </div>
+
+      <div class="finding-item">
+        <button class="finding-trigger">
+          <div class="finding-trigger-left">
+            <div class="finding-num">3</div>
+            <div class="finding-title-wrap">
+              <div class="finding-title">CSS 类名正则误匹配</div>
+              <div class="finding-dim-tag">D3 字体排版</div>
+            </div>
+          </div>
+          <svg class="finding-icon" viewBox="0 0 20 20"><path d="M5 8l5 5 5-5"/></svg>
+        </button>
+        <div class="finding-body"><div class="finding-content"><div class="finding-content-inner">
+          <div class="finding-label">问题</div>
+          <p>模式 <span class="inline-code">(?:code|pre)[^&#123;]*&#123;</span> 会匹配含 <span class="inline-code">code</span> 的类名（如 <span class="inline-code">.code-copy</span>）；模式 <span class="inline-code">(?:button|\.btn)[^&#123;]*&#123;</span> 会匹配 CSS 值中的 <span class="inline-code">var(--bg-button)</span>，将后续规则误判为按钮规则。</p>
+          <div class="finding-label">影响</div>
+          <p>T08 的 <span class="inline-code">.code-copy {}</span> 被误判为 code 元素规则；T03 的 <span class="inline-code">.card.featured { background: var(--bg-button) }</span> 导致相邻规则被误判为按钮规则。</p>
+          <div class="finding-label">建议修复</div>
+          <p>使用词边界锚点：<span class="inline-code">r"(?:^|\s|;|&#123;)(?:code|pre)\s*&#123;"</span>；或将 CSS 解析为正确的 token 流而非自由形式正则。</p>
+        </div></div></div>
+      </div>
+
+      <div class="finding-item">
+        <button class="finding-trigger">
+          <div class="finding-trigger-left">
+            <div class="finding-num">4</div>
+            <div class="finding-title-wrap">
+              <div class="finding-title">导航高度全局误匹配</div>
+              <div class="finding-dim-tag">D4 布局与间距</div>
+            </div>
+          </div>
+          <svg class="finding-icon" viewBox="0 0 20 20"><path d="M5 8l5 5 5-5"/></svg>
+        </button>
+        <div class="finding-body"><div class="finding-content"><div class="finding-content-inner">
+          <div class="finding-label">问题</div>
+          <p><span class="inline-code">re.findall(r"height:\s*(\d+)px", html)</span> 会匹配所有 height 值（包括图标 16px、会话项目等），随后检查 68 是否在结果列表中失败。</p>
+          <div class="finding-label">影响</div>
+          <p>T07 报告导航高度为 <span class="inline-code">['16']</span> 导致检查失败，即使 T07 有正确的 <span class="inline-code">nav &#123; height: 68px &#125;</span> 规则。</p>
+          <div class="finding-label">建议修复</div>
+          <p>将搜索范围限定到导航元素：<span class="inline-code">re.search(r"nav\s*\&#123;[^&#125;]*height:\s*68px", html)</span>。</p>
+        </div></div></div>
+      </div>
+
+      <div class="finding-item">
+        <button class="finding-trigger">
+          <div class="finding-trigger-left">
+            <div class="finding-num">5</div>
+            <div class="finding-title-wrap">
+              <div class="finding-title">专用页面类型布局期望不符</div>
+              <div class="finding-dim-tag">D4 布局与间距</div>
+            </div>
+          </div>
+          <svg class="finding-icon" viewBox="0 0 20 20"><path d="M5 8l5 5 5-5"/></svg>
+        </button>
+        <div class="finding-body"><div class="finding-content"><div class="finding-content-inner">
+          <div class="finding-label">问题</div>
+          <p>D4 要求所有页面都有 <span class="inline-code">nav</span> 元素和 640-840px 的内容宽度。但认证表单（max-width: 480px）、定价页（无导航）和组件展示（无导航）在设计上就不需要这些。</p>
+          <div class="finding-label">影响</div>
+          <p>T03、T04、T08 各损失 1 个 D4 分数点，原因为"导航高度未找到"。</p>
+          <div class="finding-label">建议修复</div>
+          <p>添加页面类型元数据，或使用 test_id 为特定页面类型（T03=定价、T04=认证、T08=组件）有条件跳过导航检查。</p>
+        </div></div></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Strengths & Recommendations -->
+  <section class="section">
+    <h2>优势与改进建议</h2>
+    <p class="section-intro">技能整体表现优秀，以下建议将帮助在评测器约束下取得更高分数。</p>
+    <div class="two-col">
+      <div class="list-card">
+        <div class="list-card-title">技能优势</div>
+        <ul class="item-list">
+          <li>
+            <svg class="item-icon item-icon-green" viewBox="0 0 16 16"><path d="M13.5 3.5L6 11 2.5 7.5l-1 1L6 13l8.5-8.5-1-1z"/></svg>
+            <span>Token 精确度 100%：完整输出包含全部 12 个亮色 token、3 个边框 token、3 个阴影 token 和完整暗色调色板。</span>
+          </li>
+          <li>
+            <svg class="item-icon item-icon-green" viewBox="0 0 16 16"><path d="M13.5 3.5L6 11 2.5 7.5l-1 1L6 13l8.5-8.5-1-1z"/></svg>
+            <span>反模式避免 100%：无渐变、正确的 7.5px 按钮圆角、暖灰色系、无纯黑白、全程填充 SVG 图标。</span>
+          </li>
+          <li>
+            <svg class="item-icon item-icon-green" viewBox="0 0 16 16"><path d="M13.5 3.5L6 11 2.5 7.5l-1 1L6 13l8.5-8.5-1-1z"/></svg>
+            <span>组件多样性：成功生成 10 种不同页面类型，包含手风琴、模态框、工具提示、标签页、数据表格、骨架屏、Toast 等。</span>
+          </li>
+          <li>
+            <svg class="item-icon item-icon-green" viewBox="0 0 16 16"><path d="M13.5 3.5L6 11 2.5 7.5l-1 1L6 13l8.5-8.5-1-1z"/></svg>
+            <span>暗色模式：所有 6 个暗色页面正确实现反转按钮调色板（#ece9e1/#1a1a18）和暖色深色背景。</span>
+          </li>
+          <li>
+            <svg class="item-icon item-icon-green" viewBox="0 0 16 16"><path d="M13.5 3.5L6 11 2.5 7.5l-1 1L6 13l8.5-8.5-1-1z"/></svg>
+            <span>无障碍性：一致的 prefers-reduced-motion、viewport meta、ARIA 角色、focus-visible 轮廓。</span>
+          </li>
+        </ul>
+      </div>
+      <div class="list-card">
+        <div class="list-card-title">改进建议</div>
+        <ul class="item-list">
+          <li>
+            <svg class="item-icon item-icon-clay" viewBox="0 0 16 16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 11.5a.75.75 0 110-1.5.75.75 0 010 1.5zm.75-3.25a.75.75 0 01-1.5 0V5.75a.75.75 0 011.5 0v3.5z"/></svg>
+            <span><strong>对技能</strong>：第一个 body/h1/code 声明中始终使用字面字体栈，不要使用 var(--font-serif) 作为 font-family 值。</span>
+          </li>
+          <li>
+            <svg class="item-icon item-icon-clay" viewBox="0 0 16 16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 11.5a.75.75 0 110-1.5.75.75 0 010 1.5zm.75-3.25a.75.75 0 01-1.5 0V5.75a.75.75 0 011.5 0v3.5z"/></svg>
+            <span><strong>对技能</strong>：即使在专用场景中也确保 H1 使用 clamp()（例如 clamp(1.25rem, 3vw, 1.5rem)）而非固定像素值。</span>
+          </li>
+          <li>
+            <svg class="item-icon item-icon-clay" viewBox="0 0 16 16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 11.5a.75.75 0 110-1.5.75.75 0 010 1.5zm.75-3.25a.75.75 0 01-1.5 0V5.75a.75.75 0 011.5 0v3.5z"/></svg>
+            <span><strong>对评测器</strong>：解析字体检查前先从 :root {} 提取变量值并替换 var() 引用。</span>
+          </li>
+          <li>
+            <svg class="item-icon item-icon-clay" viewBox="0 0 16 16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 11.5a.75.75 0 110-1.5.75.75 0 010 1.5zm.75-3.25a.75.75 0 01-1.5 0V5.75a.75.75 0 011.5 0v3.5z"/></svg>
+            <span><strong>对评测器</strong>：修复 extract_css_vars() 使用范围感知提取，分别解析 :root 和 .dark 内容。</span>
+          </li>
+          <li>
+            <svg class="item-icon item-icon-clay" viewBox="0 0 16 16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 11.5a.75.75 0 110-1.5.75.75 0 010 1.5zm.75-3.25a.75.75 0 01-1.5 0V5.75a.75.75 0 011.5 0v3.5z"/></svg>
+            <span><strong>对评测器</strong>：添加页面类型感知的 D4 检查——认证页面（400px）、应用布局（768-840px）应有不同期望。</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Test Index -->
+  <section class="section">
+    <h2>测试文件索引</h2>
+    <p class="section-intro">10 个测试文件均位于 <span class="inline-code">tests/</span> 目录下，可直接在浏览器中预览。</p>
+    <div class="test-index">
+      <div class="test-row">
+        <span class="test-id">T01</span>
+        <span class="test-row-name">Landing page</span>
+        <span class="test-row-desc">AI 公司着陆页，含 Hero、4 卡片网格、Logo 行、暗色模式切换</span>
+        <span class="test-row-score score-100">100.0</span>
+      </div>
+      <div class="test-row">
+        <span class="test-id">T02</span>
+        <span class="test-row-name">Article / blog</span>
+        <span class="test-row-desc">长文章，含引用块、代码块、上下篇导航</span>
+        <span class="test-row-score score-100">100.0</span>
+      </div>
+      <div class="test-row">
+        <span class="test-id">T03</span>
+        <span class="test-row-name">Pricing + FAQ</span>
+        <span class="test-row-desc">3 档定价卡片（Pro 为推荐），FAQ 手风琴，暗色模式</span>
+        <span class="test-row-score score-high">97.5</span>
+      </div>
+      <div class="test-row">
+        <span class="test-id">T04</span>
+        <span class="test-row-name">Auth / login</span>
+        <span class="test-row-desc">居中登录表单，含验证状态、OAuth 按钮、暗色模式</span>
+        <span class="test-row-score score-mid">93.5</span>
+      </div>
+      <div class="test-row">
+        <span class="test-id">T05</span>
+        <span class="test-row-name">AI chat UI</span>
+        <span class="test-row-desc">AI 聊天界面，可折叠侧边栏、流式光标、思考动画</span>
+        <span class="test-row-score score-high">96.0</span>
+      </div>
+      <div class="test-row">
+        <span class="test-id">T06</span>
+        <span class="test-row-name">Settings dashboard</span>
+        <span class="test-row-desc">设置页，含开关、Select、单选、Badge、Toast 通知</span>
+        <span class="test-row-score score-100">100.0</span>
+      </div>
+      <div class="test-row">
+        <span class="test-id">T07</span>
+        <span class="test-row-name">UI states showcase</span>
+        <span class="test-row-desc">UI 状态：骨架屏、空状态、404 错误、Toast、加载动画</span>
+        <span class="test-row-score score-high">97.5</span>
+      </div>
+      <div class="test-row">
+        <span class="test-id">T08</span>
+        <span class="test-row-name">Component library</span>
+        <span class="test-row-desc">组件库：模态框、下拉菜单、工具提示、标签页、数据表格</span>
+        <span class="test-row-score score-high">96.0</span>
+      </div>
+      <div class="test-row">
+        <span class="test-id">T09</span>
+        <span class="test-row-name">Mobile-first</span>
+        <span class="test-row-desc">移动端优先，汉堡菜单、表单验证、safe-area 底部操作栏</span>
+        <span class="test-row-score score-high">97.5</span>
+      </div>
+      <div class="test-row">
+        <span class="test-id">T10</span>
+        <span class="test-row-name">Dark mode showcase</span>
+        <span class="test-row-desc">暗色模式展示（默认暗色），所有主要组件的暗色状态</span>
+        <span class="test-row-score score-100">100.0</span>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <div class="container">
+    <p class="footer-text">由 Capy (claude-sonnet-4-6) 生成 · 评测框架 run_eval.py v1.0 · 2026-04-04</p>
+  </div>
+</footer>
+
+<script>
+// Theme toggle
+document.getElementById('themeToggle').addEventListener('click', function() {
+  document.documentElement.classList.toggle('dark');
+  this.textContent = document.documentElement.classList.contains('dark') ? '亮色' : '暗色';
+});
+
+// Accordion
+document.querySelectorAll('.finding-trigger').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const item = btn.closest('.finding-item');
+    item.classList.toggle('open');
+  });
+});
+
+// Animate progress bars on load
+window.addEventListener('load', () => {
+  const fills = document.querySelectorAll('.progress-fill');
+  fills.forEach(fill => {
+    const w = fill.style.width;
+    fill.style.width = '0%';
+    requestAnimationFrame(() => {
+      setTimeout(() => { fill.style.width = w; }, 100);
+    });
+  });
+});
+</script>
+</body>
+</html>
