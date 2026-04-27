@@ -84,6 +84,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     if (theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.documentElement.classList.add('dark');
     }
+    var fs = localStorage.getItem('compound_font_size');
+    var fsMap = {xs:14,sm:15,md:16,lg:18,xl:20};
+    if (fs && fsMap[fs]) {
+      document.documentElement.style.setProperty('--prose-font-size', fsMap[fs] + 'px');
+    }
   } catch(e) {}
 `,
           }}

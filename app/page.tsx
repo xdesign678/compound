@@ -80,6 +80,7 @@ export default function Page() {
   const back = useAppStore((s) => s.back);
   const homeStyle = useAppStore((s) => s.homeStyle);
   const hydrateHomeStyle = useAppStore((s) => s.hydrateHomeStyle);
+  const hydrateFontSize = useAppStore((s) => s.hydrateFontSize);
 
   // Only render dexie-driven content after client mount to avoid SSR/CSR mismatch
   const [mounted, setMounted] = useState(false);
@@ -90,6 +91,7 @@ export default function Page() {
   useEffect(() => {
     setMounted(true);
     hydrateHomeStyle();
+    hydrateFontSize();
     const media = window.matchMedia(DESKTOP_MEDIA_QUERY);
     const syncLayout = () => setIsDesktop(isDesktopWidth(window.innerWidth) && media.matches);
 
@@ -101,7 +103,7 @@ export default function Page() {
       media.removeEventListener('change', syncLayout);
       window.removeEventListener('resize', syncLayout);
     };
-  }, [hydrateHomeStyle]);
+  }, [hydrateHomeStyle, hydrateFontSize]);
 
   // Browser history support for detail navigation
   useEffect(() => {
