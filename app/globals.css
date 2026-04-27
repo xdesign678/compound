@@ -4456,10 +4456,20 @@ button {
     height: calc(100dvh - 64px);
     max-height: calc(100vh - 64px);
     max-height: calc(100dvh - 64px);
+    box-sizing: border-box;
     border-radius: 20px;
     padding: 32px 40px;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+  }
+  .settings-modal .settings-layout {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .settings-modal .settings-main {
+    overflow-y: auto;
   }
 }
 
