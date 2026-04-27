@@ -1,5 +1,6 @@
 {
   "extends": ["next/core-web-vitals", "prettier"],
+  "plugins": ["@typescript-eslint"],
   "ignorePatterns": [
     ".next/",
     "node_modules/",
@@ -9,5 +10,49 @@
     "public/swe-worker-development.js",
     "tmp/",
     "output/"
-  ]
+  ],
+  "rules": {
+    "@typescript-eslint/naming-convention": [
+      "error",
+      {
+        "selector": "variable",
+        "modifiers": ["const"],
+        "format": ["camelCase", "UPPER_CASE", "PascalCase"],
+        "leadingUnderscore": "allow"
+      },
+      {
+        "selector": "variable",
+        "format": ["camelCase", "UPPER_CASE", "PascalCase"],
+        "leadingUnderscore": "allow"
+      },
+      {
+        "selector": "function",
+        "format": ["camelCase", "PascalCase", "UPPER_CASE"]
+      },
+      {
+        "selector": "parameter",
+        "format": ["camelCase"],
+        "leadingUnderscore": "allow"
+      },
+      {
+        "selector": "memberLike",
+        "modifiers": ["private"],
+        "format": ["camelCase"],
+        "leadingUnderscore": "allow"
+      },
+      {
+        "selector": "typeLike",
+        "format": ["PascalCase"]
+      },
+      {
+        "selector": "enumMember",
+        "format": ["PascalCase", "UPPER_CASE"]
+      },
+      {
+        "selector": "property",
+        "modifiers": ["static", "readonly"],
+        "format": ["UPPER_CASE", "camelCase"]
+      }
+    ]
+  }
 }

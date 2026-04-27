@@ -8,8 +8,8 @@ process.env.COMPOUND_TRUST_PROXY = 'true';
 import { rateLimit } from './rate-limit';
 
 function resetRateLimitStore() {
-  globalThis.__compoundRateLimitStore = undefined;
-  globalThis.__compoundRateLimitGcAt = undefined;
+  globalThis._compoundRateLimitStore = undefined;
+  globalThis._compoundRateLimitGcAt = undefined;
 }
 
 test('blocks requests after the limit is exceeded', () => {

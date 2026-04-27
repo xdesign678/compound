@@ -11,16 +11,16 @@ type Store = Map<string, Bucket>;
 
 declare global {
   // eslint-disable-next-line no-var
-  var __compoundRateLimitStore: Store | undefined;
+  var _compoundRateLimitStore: Store | undefined;
   // eslint-disable-next-line no-var
-  var __compoundRateLimitGcAt: number | undefined;
+  var _compoundRateLimitGcAt: number | undefined;
   // eslint-disable-next-line no-var
-  var __compoundRateLimitAnonWarned: boolean | undefined;
+  var _compoundRateLimitAnonWarned: boolean | undefined;
 }
 
 function getStore(): Store {
-  globalThis.__compoundRateLimitStore ??= new Map<string, Bucket>();
-  return globalThis.__compoundRateLimitStore;
+  globalThis._compoundRateLimitStore ??= new Map<string, Bucket>();
+  return globalThis._compoundRateLimitStore;
 }
 
 /** Max entries retained. When exceeded we sweep expired buckets aggressively. */
@@ -29,9 +29,9 @@ const MAX_ENTRIES = 5_000;
 const GC_MIN_INTERVAL_MS = 30_000;
 
 function maybeGc(store: Store, now: number): void {
-  const lastGc = globalThis.__compoundRateLimitGcAt ?? 0;
+  const lastGc = globalThis._compoundRateLimitGcAt ?? 0;
   if (store.size < MAX_ENTRIES && now - lastGc < GC_MIN_INTERVAL_MS) return;
-  globalThis.__compoundRateLimitGcAt = now;
+  globalThis._compoundRateLimitGcAt = now;
   for (const [key, bucket] of store) {
     if (bucket.resetAt <= now) store.delete(key);
   }
@@ -62,8 +62,8 @@ function getClientKey(req: Request): string {
   // rate-limit bucket ('anon'), meaning a single aggressive client can
   // exhaust the quota for everyone. Set COMPOUND_TRUST_PROXY=true when
   // running behind a trusted reverse proxy (Vercel, Cloudflare, etc.).
-  if (!globalThis.__compoundRateLimitAnonWarned) {
-    globalThis.__compoundRateLimitAnonWarned = true;
+  if (!globalThis._compoundRateLimitAnonWarned) {
+    globalThis._compoundRateLimitAnonWarned = true;
     logger.warn('rate_limit.trust_proxy_disabled', {
       bucket: 'anon',
       recommendation: 'Set COMPOUND_TRUST_PROXY=true behind a trusted reverse proxy.',
