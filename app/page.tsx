@@ -171,8 +171,9 @@ export default function Page() {
   const openGithubSync = useAppStore((s) => s.openGithubSync);
   const showFab = !detail && (tab === 'wiki' || tab === 'sources');
   const inLibraryMode = tab === 'wiki' && homeStyle === 'library';
+  const usesDetailOverlay = inLibraryMode || tab === 'ask';
   const shouldShowDesktopDetail =
-    isDesktop && !inLibraryMode && (tab === 'wiki' || tab === 'sources' || detail !== null);
+    isDesktop && !usesDetailOverlay && (tab === 'wiki' || tab === 'sources' || detail !== null);
   const desktopSummary = ready
     ? `${conceptCount ?? 0} 个概念 · ${sourceCount ?? 0} 份资料`
     : '正在同步本地知识库';
@@ -191,7 +192,7 @@ export default function Page() {
       libraryOverlayTimerRef.current = null;
     }
 
-    if (!isDesktop || !inLibraryMode) {
+    if (!usesDetailOverlay) {
       setLibraryOverlayVisible(false);
       setLibraryOverlayDetail(null);
       return;
@@ -210,7 +211,7 @@ export default function Page() {
         libraryOverlayTimerRef.current = null;
       }, LIBRARY_DETAIL_TRANSITION_MS);
     }
-  }, [detail, inLibraryMode, isDesktop, libraryOverlayDetail]);
+  }, [detail, usesDetailOverlay, libraryOverlayDetail]);
 
   const bootShell = (
     <div className="app-shell">
@@ -357,18 +358,18 @@ export default function Page() {
           </main>
         </div>
 
-        {/* Library mode: detail as modal overlay */}
-        {homeStyle === 'library' && libraryOverlayDetail && (
+        {/* Library and ask mode: detail as side overlay */}
+        {usesDetailOverlay && libraryOverlayDetail && (
           <div
-            className={`library-detail-overlay${libraryOverlayVisible ? ' is-open' : ''}`}
+            className={`library-detail-overlay${tab === 'ask' ? ' ask-detail-overlay' : ''}${libraryOverlayVisible ? ' is-open' : ''}`}
             aria-hidden={!libraryOverlayVisible}
             onClick={back}
           >
             <div
-              className="library-detail-modal"
+              className={`library-detail-modal${tab === 'ask' ? ' ask-detail-modal' : ''}`}
               role="dialog"
               aria-modal="true"
-              aria-label="概念详情"
+              aria-label={libraryOverlayDetail.type === 'concept' ? '概念详情' : '资料详情'}
               onClick={(e) => e.stopPropagation()}
             >
               <button className="library-detail-modal-close" onClick={back} aria-label="关闭">
@@ -405,7 +406,7 @@ export default function Page() {
       <main className="app-main">
         {!ready ? (
           renderPrimaryView('.app-main')
-        ) : detail ? (
+        ) : detail && tab !== 'ask' ? (
           <div key={detail.id} className="detail-view">
             {renderDetail()}
           </div>
@@ -420,6 +421,27 @@ export default function Page() {
         <button className="fab" onClick={openModal} aria-label="添加资料">
           <Icon.Plus />
         </button>
+      )}
+
+      {tab === 'ask' && libraryOverlayDetail && (
+        <div
+          className={`library-detail-overlay ask-detail-overlay${libraryOverlayVisible ? ' is-open' : ''}`}
+          aria-hidden={!libraryOverlayVisible}
+          onClick={back}
+        >
+          <div
+            className="library-detail-modal ask-detail-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={libraryOverlayDetail.type === 'concept' ? '概念详情' : '资料详情'}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button className="library-detail-modal-close" onClick={back} aria-label="关闭">
+              ✕
+            </button>
+            <div className="library-detail-modal-scroll">{renderDetail(libraryOverlayDetail)}</div>
+          </div>
+        </div>
       )}
 
       <TabBar />

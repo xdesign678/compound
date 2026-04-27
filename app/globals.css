@@ -6509,6 +6509,28 @@ button,
   transform: translateY(-1px);
 }
 
+.ask-detail-overlay {
+  z-index: 260;
+  background: rgba(18, 17, 15, 0.32);
+}
+
+.ask-detail-modal {
+  width: min(58vw, 820px);
+  max-width: calc(100vw - 20px);
+}
+
+.ask-detail-modal .library-detail-modal-scroll > .concept-detail,
+.ask-detail-modal .library-detail-modal-scroll > .source-detail-page {
+  padding-left: clamp(22px, 3vw, 36px);
+  padding-right: clamp(22px, 3vw, 36px);
+}
+
+@media (max-width: 767px) {
+  .ask-detail-modal {
+    width: calc(100vw - 18px);
+  }
+}
+
 /* Sync and review operations pages */
 .ops-page {
   min-height: 100vh;
