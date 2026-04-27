@@ -57,6 +57,9 @@ screenshots/
 
 # Build performance metrics produced by scripts/measure-build.mjs
 tmp/build-metrics.json
+
+# Local profiling output produced by Clinic.js and Node CPU/heap profiles
+tmp/profiles/
 .local/
 
 # Sentry

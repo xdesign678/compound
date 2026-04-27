@@ -1,8 +1,17 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, appendFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+  appendFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { performance } from 'node:perf_hooks';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Measure a `next build` run: capture wall-clock duration, compare the
@@ -15,7 +24,7 @@ import { performance } from 'node:perf_hooks';
  * fails, while still producing a metrics artifact.
  */
 
-const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const nextDir = path.join(repoRoot, '.next');
 const cacheDir = path.join(nextDir, 'cache');
 const staticDir = path.join(nextDir, 'static');
@@ -93,7 +102,10 @@ function resolveNextBin() {
   );
   if (existsSync(local)) return { command: local, args: ['build'] };
   // Fall back to npx if the local bin isn't present (shouldn't happen after npm ci).
-  return { command: process.platform === 'win32' ? 'npx.cmd' : 'npx', args: ['--no-install', 'next', 'build'] };
+  return {
+    command: process.platform === 'win32' ? 'npx.cmd' : 'npx',
+    args: ['--no-install', 'next', 'build'],
+  };
 }
 
 function parseRouteCount(log) {
