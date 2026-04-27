@@ -3551,6 +3551,75 @@ button {
 .settings-tab-content {
   padding: 4px 0 0;
 }
+.settings-tab-divider {
+  height: 1px;
+  background: var(--border-section);
+  margin: 16px 0;
+}
+.settings-card-head-adjacent {
+  border-top: none;
+  padding-top: 0;
+}
+.settings-lint-results {
+  padding: 10px 0;
+  border-top: 1px solid var(--border-section);
+}
+.settings-lint-empty {
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+.settings-lint-finding {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-section);
+}
+.settings-lint-finding.last {
+  border-bottom: none;
+}
+.settings-lint-finding-type {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--brand-clay);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+.settings-lint-finding-msg {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.settings-lint-finding-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.settings-concept-chip {
+  background: var(--bg-muted);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text-primary);
+  border: none;
+  cursor: pointer;
+}
+.settings-confirm-block {
+  padding: 4px 0;
+}
+.settings-confirm-danger {
+  padding: 14px;
+  border: 1px solid rgba(201, 100, 66, 0.34);
+  border-radius: 8px;
+  background: rgba(201, 100, 66, 0.06);
+}
+.settings-data-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
 .settings-segmented button {
   min-height: 34px;
   border: none;
