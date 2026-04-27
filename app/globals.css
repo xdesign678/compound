@@ -4447,6 +4447,20 @@ button {
   .modal-handle {
     margin-bottom: 16px;
   }
+
+  /* Settings modal override: near-fullscreen */
+  .settings-modal {
+    width: calc(100vw - 64px);
+    max-width: calc(100vw - 64px);
+    height: calc(100vh - 64px);
+    height: calc(100dvh - 64px);
+    max-height: calc(100vh - 64px);
+    max-height: calc(100dvh - 64px);
+    border-radius: 20px;
+    padding: 32px 40px;
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 /* =========================================
