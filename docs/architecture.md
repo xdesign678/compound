@@ -184,11 +184,25 @@ flowchart LR
 > - `DATA_DIR` 必须挂到持久卷，否则容器重启会丢失 Wiki。
 > - 容器要长驻运行（不要 serverless），因为同步与分析 worker 是有状态的后台任务。
 
-## 6. API 路由地图
+## 6. 部署观测与告警
+
+部署影响要从四层同时看：部署平台、错误追踪、指标面板、应用内任务状态。
+完整运行手册见 [`docs/deployment-observability.md`](deployment-observability.md)。
+
+| 层级           | 入口                                                                                                                                                                                                                                                                   | 用途                                                                                          |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 部署平台       | [Zeabur Projects](https://dash.zeabur.com/projects)                                                                                                                                                                                                                    | 查看最近一次部署、构建日志、运行日志、重启次数、CPU / 内存、`/data` 卷挂载。                  |
+| 错误与性能     | [Sentry Issues](https://sentry.io/issues/)、[Sentry Performance](https://sentry.io/performance/)                                                                                                                                                                       | 按 `SENTRY_RELEASE` 看新错误、请求 trace、source map 后的真实堆栈。                           |
+| 指标面板       | `GET /api/metrics`，接入 [Grafana](https://grafana.com/docs/grafana/latest/dashboards/)、[Datadog OpenMetrics](https://docs.datadoghq.com/integrations/openmetrics/) 或 [New Relic Prometheus](https://docs.newrelic.com/docs/infrastructure/prometheus-integrations/) | 观察 5xx、p95 延迟、进程 uptime、内存、同步失败、分析队列、review queue、embedding fallback。 |
+| 应用内实时状态 | `/api/health`、`/api/wiki/health`、`/sync`、`/review`                                                                                                                                                                                                                  | 验证生产配置、Wiki 索引覆盖度、GitHub 同步进度、分析 worker 状态、人工评审压力。              |
+| 部署通知       | Zeabur 项目通知，或 GitHub Actions + [`SLACK_WEBHOOK_URL`](https://api.slack.com/messaging/webhooks)                                                                                                                                                                   | 每次部署把环境、commit、部署链接、健康检查、`/sync` 链接和 Sentry release 链接发到 Slack。    |
+
+## 7. API 路由地图
 
 | 路径                                   | 方法     | 说明                                     |
 | -------------------------------------- | -------- | ---------------------------------------- |
 | `/api/health`                          | GET      | 健康检查（无鉴权依赖处可探活）           |
+| `/api/metrics`                         | GET      | Prometheus 指标（需 admin token）        |
 | `/api/lint`                            | POST     | 内置 lint pipeline，给概念体做格式化校验 |
 | `/api/ingest`                          | POST     | 直接摄入用户粘贴 / 上传的 Markdown       |
 | `/api/categorize`                      | POST     | 概念分类规范化                           |
@@ -214,7 +228,7 @@ flowchart LR
 | `/api/review/queue`                    | GET/POST | 人工评审队列                             |
 | `/api/settings/models`                 | GET/POST | LLM 模型选择历史                         |
 
-## 7. 故障与回退路径
+## 8. 故障与回退路径
 
 | 故障                  | 行为                                                                                                  |
 | --------------------- | ----------------------------------------------------------------------------------------------------- |
