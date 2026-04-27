@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import {
   STAGE_TEXT,
   STATUS_TEXT,
@@ -153,8 +153,8 @@ export default function FileTable({
               const tone = rowTone(item);
               const isOpen = expanded[item.id];
               return (
-                <>
-                  <tr key={item.id} className={`ops-file-row tone-${tone}`}>
+                <Fragment key={item.id}>
+                  <tr className={`ops-file-row tone-${tone}`}>
                     <td title={item.path}>
                       <button
                         type="button"
@@ -203,7 +203,7 @@ export default function FileTable({
                     </td>
                   </tr>
                   {isOpen ? (
-                    <tr key={`${item.id}-detail`} className="ops-file-detail-row">
+                    <tr className="ops-file-detail-row">
                       <td colSpan={9}>
                         <dl className="ops-file-detail">
                           <div>
@@ -238,7 +238,7 @@ export default function FileTable({
                       </td>
                     </tr>
                   ) : null}
-                </>
+                </Fragment>
               );
             })}
             {filtered.length === 0 ? (

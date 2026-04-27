@@ -53,9 +53,11 @@ export default function PipelineStrip({ stages, onSelect, selected }: Props) {
             onClick={onSelect ? () => onSelect(stage.stage) : undefined}
             title={`${stage.label}\n成功 ${stage.succeeded} · 失败 ${stage.failed} · 运行 ${stage.running} · 排队 ${stage.queued} · 跳过 ${stage.skipped} · 取消 ${stage.cancelled}`}
           >
-            <span className="ops-pipeline-step-index">{i + 1}</span>
             <span className="ops-pipeline-step-body">
-              <strong>{stage.label}</strong>
+              <strong>
+                <span className="ops-pipeline-step-index">{i + 1}</span>
+                {stage.label}
+              </strong>
               <em>{view.main}</em>
               <small>{view.detail}</small>
             </span>
