@@ -3510,10 +3510,10 @@ button {
 }
 .settings-tool-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, 0.6fr);
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 1.2fr);
   align-items: center;
-  gap: 10px;
-  padding: 12px 0;
+  gap: 12px;
+  padding: 14px 0;
   border-top: 1px solid var(--border-section);
 }
 .settings-card-head + .settings-tool-row {
@@ -3547,6 +3547,7 @@ button {
 }
 .settings-segmented-five {
   grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+  min-width: 200px;
 }
 .settings-tab-content {
   padding: 4px 0 0;
@@ -3733,22 +3734,41 @@ button {
 /* Desktop: sidebar + content */
 @media (min-width: 768px) {
   .settings-modal {
-    max-width: 640px;
+    max-width: 780px;
+    width: 90%;
+    max-height: 80vh;
+    max-height: 80dvh;
+    margin: auto;
+    border-radius: 16px;
+    padding: 24px 28px;
+  }
+  .modal-overlay:has(.settings-modal) {
+    align-items: center;
+    justify-content: center;
+  }
+  .settings-modal .modal-handle {
+    display: none;
+  }
+  .settings-hero {
+    padding: 0 4px 18px;
+  }
+  .settings-hero h3 {
+    font-size: 22px;
   }
   .settings-layout {
     flex-direction: row;
     gap: 0;
-    min-height: 380px;
+    min-height: 420px;
   }
   .settings-sidebar {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    width: 140px;
+    width: 160px;
     flex-shrink: 0;
-    padding: 0 6px 0 0;
+    padding: 4px 0;
     border-right: 1px solid var(--border-section);
-    margin-right: 16px;
+    margin-right: 24px;
   }
   .settings-sidebar-item {
     display: flex;
