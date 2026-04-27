@@ -24,5 +24,12 @@ async function run(req: Request) {
   }
 }
 
+/**
+ * Force a full GitHub re-scan. Designed to be invoked from a scheduler
+ * (Vercel Cron, GitHub Actions, external uptime ping). Authenticates with
+ * either `Authorization: Bearer ${CRON_SECRET}` or the standard admin
+ * token. Both `GET` and `POST` are accepted to fit different schedulers.
+ */
 export const GET = run;
+/** See {@link GET}. POST variant for schedulers that prefer non-idempotent verbs. */
 export const POST = run;

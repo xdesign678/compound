@@ -58,3 +58,7 @@ screenshots/
 # Build performance metrics produced by scripts/measure-build.mjs
 tmp/build-metrics.json
 .local/
+
+# Sentry
+.sentryclirc
+.env.sentry-build-plugin

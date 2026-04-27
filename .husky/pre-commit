@@ -1,1 +1,7 @@
 npx lint-staged
+
+# Validate AGENTS.md whenever it, package.json, or referenced scripts/workflows
+# change in this commit. Keeps AGENTS.md commands in sync with the codebase.
+if git diff --cached --name-only | grep -E '^(AGENTS\.md|package\.json|scripts/.*\.mjs|\.github/workflows/.*\.ya?ml|\.gitignore)$' > /dev/null; then
+  node scripts/validate-agents-md.mjs
+fi

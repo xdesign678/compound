@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withSentryConfig } from '@sentry/nextjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.env.NODE_ENV !== 'production';
@@ -36,6 +37,10 @@ const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
   outputFileTracingRoot: __dirname,
+  // Production source maps are required for Sentry to symbolicate stack
+  // traces. The Sentry plugin (withSentryConfig) automatically uploads and
+  // then deletes them from the public bundle when an auth token is present.
+  productionBrowserSourceMaps: true,
   // better-sqlite3 is a native module — keep it external so webpack doesn't try to bundle it.
   serverExternalPackages: ['better-sqlite3'],
   experimental: {
@@ -58,4 +63,30 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+// Sentry build-time integration: uploads source maps so production stack
+// traces are mapped back to the original TypeScript, tunnels client-side
+// requests through `/monitoring` to dodge ad-blockers, and tree-shakes the
+// SDK logger in production.
+//
+// All options are intentionally inert when the matching env vars are absent
+// (no SENTRY_AUTH_TOKEN -> no upload, no DSN -> SDK is a no-op), so the
+// repository continues to build cleanly without Sentry credentials.
+const sentryWebpackPluginOptions = {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  // Only upload source maps when we have an auth token; otherwise the plugin
+  // would emit noisy warnings on every build.
+  sourcemaps: {
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+    deleteSourcemapsAfterUpload: true,
+  },
+  widenClientFileUpload: true,
+  hideSourceMaps: true,
+  disableLogger: true,
+  tunnelRoute: '/monitoring',
+  automaticVercelMonitors: false,
+};
+
+export default withSentryConfig(nextConfig, sentryWebpackPluginOptions);

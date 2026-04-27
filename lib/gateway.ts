@@ -13,6 +13,7 @@
 import { promises as dns } from 'node:dns';
 import net from 'node:net';
 import { recordModelRun } from './model-runs';
+import { addBreadcrumb, reportError } from './observability/sentry';
 
 const METADATA_HOSTS = new Set(['metadata.google.internal', 'metadata', 'metadata.goog']);
 
@@ -210,6 +211,22 @@ export async function chat(opts: ChatOptions): Promise<string> {
 
   const startedAt = Date.now();
   const task = opts.task ?? 'chat';
+  // Breadcrumb so the call sequence (and which task triggered it) is visible
+  // in Sentry alongside any subsequent exception.
+  addBreadcrumb({
+    category: 'llm.gateway',
+    type: 'http',
+    level: 'info',
+    message: `LLM request: ${task}`,
+    data: {
+      task,
+      model,
+      maxTokens,
+      gatewayHost: (() => {
+        try { return new URL(gatewayUrl).host; } catch { return 'unknown'; }
+      })(),
+    },
+  });
   const res = await fetch(gatewayUrl, {
     method: 'POST',
     headers: {
@@ -228,7 +245,13 @@ export async function chat(opts: ChatOptions): Promise<string> {
       latencyMs: Date.now() - startedAt,
       error: `gateway_${res.status}`,
     });
-    throw new Error(`Gateway ${res.status}: ${errText.slice(0, 200)}`);
+    const err = new Error(`Gateway ${res.status}: ${errText.slice(0, 200)}`);
+    reportError(err, {
+      tags: { area: 'llm-gateway', task, status: res.status },
+      extras: { model, latencyMs: Date.now() - startedAt },
+      fingerprint: ['llm-gateway', String(res.status), task],
+    });
+    throw err;
   }
 
   const data = await res.json();
