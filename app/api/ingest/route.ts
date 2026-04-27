@@ -3,6 +3,8 @@ import { ingestSourceToServerDb } from '@/lib/server-ingest';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
+import { getRequestContext, withRequestTracing } from '@/lib/request-context';
+import { logger } from '@/lib/server-logger';
 import type { IngestRequest } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -14,20 +16,8 @@ const MAX_BODY_BYTES = 512_000;
 const MAX_RAW_CONTENT_CHARS = 100_000;
 const MAX_EXISTING_CONCEPTS = 500;
 
-/**
- * Ingest a raw source document (markdown, link, free text) and return the
- * extracted/updated concept set. Pipes the payload to the server-side LLM
- * ingest pipeline (`ingestSourceToServerDb`), which normalises categories,
- * stores the source row, and merges concepts into the SQLite-backed Wiki.
- *
- * Body: `IngestRequest` — `source.rawContent` is required (≤ 100k chars).
- * Optional `existingConcepts` (≤ 500) hints the LLM about prior concepts.
- *
- * Guards: admin token, LLM rate limit, 512KB body cap.
- */
-export async function POST(req: Request) {
-  const denied =
-    requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
+export const POST = withRequestTracing(async (req: Request) => {
+  const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
   try {
@@ -41,7 +31,7 @@ export async function POST(req: Request) {
     if (body.source.rawContent.length > MAX_RAW_CONTENT_CHARS) {
       return NextResponse.json(
         { error: `source.rawContent is too long. Max ${MAX_RAW_CONTENT_CHARS} characters.` },
-        { status: 413 },
+        { status: 413 }
       );
     }
     if (body.existingConcepts !== undefined && !Array.isArray(body.existingConcepts)) {
@@ -65,10 +55,13 @@ export async function POST(req: Request) {
 
     return NextResponse.json(result);
   } catch (err) {
-    console.error('[ingest] error:', err instanceof Error ? err.message : String(err));
+    logger.error('ingest.failed', { error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json(
-      { error: 'Ingest processing failed. Please check your API configuration.' },
-      { status: 500 },
+      {
+        error: 'Ingest processing failed. Please check your API configuration.',
+        requestId: getRequestContext()?.requestId,
+      },
+      { status: 500 }
     );
   }
-}
+});

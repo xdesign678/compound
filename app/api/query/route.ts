@@ -6,6 +6,8 @@ import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
 import { formatQueryContextForPrompt, wikiRepo } from '@/lib/wiki-db';
 import { hybridSearchWikiContext } from '@/lib/embedding';
+import { getRequestContext, withRequestTracing } from '@/lib/request-context';
+import { logger } from '@/lib/server-logger';
 import type { Concept, QueryRequest, QueryResponse } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -58,28 +60,15 @@ async function getServerContext(question: string) {
   try {
     return await hybridSearchWikiContext(question, options);
   } catch (err) {
-    console.warn(
-      '[query] hybrid search failed, falling back to FTS:',
-      err instanceof Error ? err.message : String(err),
-    );
+    logger.warn('query.hybrid_search_fallback', {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return wikiRepo.searchWikiContext(question, options);
   }
 }
 
-/**
- * Answer a natural-language question against the user's Wiki. Performs
- * hybrid retrieval (FTS + embeddings, with FTS-only fallback) to assemble
- * a context window from concept pages and source chunks, then asks the LLM
- * for a structured JSON response (`QueryResponse`).
- *
- * Body: `QueryRequest` — `question` is required (≤ 2k chars). Optional
- * `concepts` (≤ 500) and `conversationHistory` (last 6 turns are kept).
- *
- * Guards: admin token, LLM rate limit, 512KB body cap.
- */
-export async function POST(req: Request) {
-  const denied =
-    requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
+export const POST = withRequestTracing(async (req: Request) => {
+  const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
   try {
@@ -143,10 +132,13 @@ export async function POST(req: Request) {
 
     return NextResponse.json(parsed);
   } catch (err) {
-    console.error('[query] error:', err instanceof Error ? err.message : String(err));
+    logger.error('query.failed', { error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json(
-      { error: 'Query processing failed. Please check your API configuration.' },
-      { status: 500 },
+      {
+        error: 'Query processing failed. Please check your API configuration.',
+        requestId: getRequestContext()?.requestId,
+      },
+      { status: 500 }
     );
   }
-}
+});

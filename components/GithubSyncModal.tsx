@@ -6,6 +6,7 @@ import { Icon } from './Icons';
 import { pullSnapshotFromCloud } from '@/lib/cloud-sync';
 import { getPollFailurePlan } from '@/lib/github-sync-poll';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
+import { withRequestId } from '@/lib/trace-client';
 import {
   buildSyncStageItems,
   getCurrentFileDisplay,
@@ -89,7 +90,7 @@ export function GithubSyncModal() {
     try {
       const res = await fetch(`/api/sync/status?jobId=${encodeURIComponent(jobId)}`, {
         cache: 'no-store',
-        headers: getAdminAuthHeaders(),
+        headers: withRequestId(getAdminAuthHeaders()),
       });
       if (!res.ok) {
         const text = await res.text().catch(() => '');
@@ -145,7 +146,7 @@ export function GithubSyncModal() {
     try {
       const res = await fetch('/api/sync/github/run', {
         method: 'POST',
-        headers: getAdminAuthHeaders(),
+        headers: withRequestId(getAdminAuthHeaders()),
       });
       if (!res.ok) {
         const text = await res.text().catch(() => '');

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
+import { withRequestId } from '@/lib/trace-client';
 
 type ReviewItem = {
   id: string;
@@ -33,7 +34,7 @@ function prettyPayload(value: string | null): string {
 async function postJson(path: string, body: unknown) {
   const res = await fetch(path, {
     method: 'POST',
-    headers: { ...getAdminAuthHeaders(), 'Content-Type': 'application/json' },
+    headers: withRequestId({ ...getAdminAuthHeaders(), 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -50,27 +51,24 @@ export default function ReviewQueue() {
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState('');
 
-  const load = useCallback(
-    async (nextStatus = status) => {
-      try {
-        const res = await fetch(`/api/review/queue?status=${nextStatus}`, {
-          headers: getAdminAuthHeaders(),
-          cache: 'no-store',
-        });
-        if (!res.ok) {
-          const json = await res.json().catch(() => null);
-          throw new Error(json?.error || `HTTP ${res.status}`);
-        }
-        const json = await res.json();
-        setItems(json.items || []);
-        setMetrics(json.metrics || {});
-        setError('');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+  const load = useCallback(async (nextStatus = status) => {
+    try {
+      const res = await fetch(`/api/review/queue?status=${nextStatus}`, {
+        headers: withRequestId(getAdminAuthHeaders()),
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        throw new Error(json?.error || `HTTP ${res.status}`);
       }
-    },
-    [status],
-  );
+      const json = await res.json();
+      setItems(json.items || []);
+      setMetrics(json.metrics || {});
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [status]);
 
   const resolve = useCallback(
     async (id: string, next: 'approved' | 'rejected' | 'resolved') => {
@@ -84,7 +82,7 @@ export default function ReviewQueue() {
         setBusyId('');
       }
     },
-    [load],
+    [load]
   );
 
   useEffect(() => {
@@ -118,12 +116,8 @@ export default function ReviewQueue() {
           >
             全部
           </button>
-          <Link className="ops-btn" href="/sync">
-            同步控制台
-          </Link>
-          <Link className="ops-btn subtle" href="/">
-            返回知识库
-          </Link>
+          <Link className="ops-btn" href="/sync">同步控制台</Link>
+          <Link className="ops-btn subtle" href="/">返回知识库</Link>
         </div>
       </header>
 
@@ -139,40 +133,19 @@ export default function ReviewQueue() {
                 <div className="review-meta">
                   <span className="ops-badge tone-neutral">{item.kind}</span>
                   <span className="ops-badge tone-warn">{item.status}</span>
-                  {typeof item.confidence === 'number' ? (
-                    <span>置信度 {item.confidence.toFixed(2)}</span>
-                  ) : null}
+                  {typeof item.confidence === 'number' ? <span>置信度 {item.confidence.toFixed(2)}</span> : null}
                 </div>
                 <h2>{item.title}</h2>
                 <p>
-                  target={item.target_type || '-'}:{item.target_id || '-'} · source=
-                  {item.source_id || '-'} · {fmtDate(item.created_at)}
+                  target={item.target_type || '-'}:{item.target_id || '-'} · source={item.source_id || '-'} · {fmtDate(item.created_at)}
                 </p>
               </div>
 
               {item.status === 'open' ? (
                 <div className="review-actions">
-                  <button
-                    className="ops-btn good"
-                    disabled={busy}
-                    onClick={() => void resolve(item.id, 'approved')}
-                  >
-                    批准
-                  </button>
-                  <button
-                    className="ops-btn danger"
-                    disabled={busy}
-                    onClick={() => void resolve(item.id, 'rejected')}
-                  >
-                    拒绝
-                  </button>
-                  <button
-                    className="ops-btn"
-                    disabled={busy}
-                    onClick={() => void resolve(item.id, 'resolved')}
-                  >
-                    标记已处理
-                  </button>
+                  <button className="ops-btn good" disabled={busy} onClick={() => void resolve(item.id, 'approved')}>批准</button>
+                  <button className="ops-btn danger" disabled={busy} onClick={() => void resolve(item.id, 'rejected')}>拒绝</button>
+                  <button className="ops-btn" disabled={busy} onClick={() => void resolve(item.id, 'resolved')}>标记已处理</button>
                 </div>
               ) : null}
 

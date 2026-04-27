@@ -4,7 +4,7 @@ import { ensureConceptsHydrated } from './cloud-sync';
 import { normalizeCategoryKeys, normalizeCategoryState } from './category-normalization';
 import { getLlmConfig } from './llm-config';
 import { getAdminAuthHeaders } from './admin-auth-client';
-import { escapeHTML } from './format';
+import { generateClientRequestId } from './trace-client';
 import type {
   Source,
   Concept,
@@ -30,14 +30,14 @@ function extractSearchTerms(text: string): string[] {
         .toLowerCase()
         .split(/[^a-z0-9\u4e00-\u9fff]+/i)
         .map((part) => part.trim())
-        .filter((part) => part.length >= 2),
-    ),
+        .filter((part) => part.length >= 2)
+    )
   ).slice(0, 12);
 }
 
 async function findClientConceptCandidates(
   searchText: string,
-  limit: number = CLIENT_CANDIDATE_LIMIT,
+  limit: number = CLIENT_CANDIDATE_LIMIT
 ): Promise<Concept[]> {
   const db = getDb();
   const keywords = extractSearchTerms(searchText);
@@ -64,21 +64,13 @@ async function findClientConceptCandidates(
   return [...matched, ...fallback.filter((concept) => !seen.has(concept.id))].slice(0, limit);
 }
 
-async function addBidirectionalLinks(
-  db: ReturnType<typeof getDb>,
-  sourceId: string,
-  relatedIds: string[],
-  now: number,
-) {
+async function addBidirectionalLinks(db: ReturnType<typeof getDb>, sourceId: string, relatedIds: string[], now: number) {
   const fetched = await db.concepts.bulkGet(relatedIds);
   await db.transaction('rw', db.concepts, async () => {
     for (let i = 0; i < relatedIds.length; i++) {
       const c = fetched[i];
       if (c && !c.related.includes(sourceId)) {
-        await db.concepts.update(relatedIds[i], {
-          related: [...c.related, sourceId],
-          updatedAt: now,
-        });
+        await db.concepts.update(relatedIds[i], { related: [...c.related, sourceId], updatedAt: now });
       }
     }
   });
@@ -88,6 +80,7 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   const llmConfig = getLlmConfig();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'X-Request-ID': generateClientRequestId(),
     ...getAdminAuthHeaders(),
   };
   // Send via headers (fast path)
@@ -96,7 +89,9 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   if (llmConfig.model) headers['X-User-Model'] = llmConfig.model;
   // Also embed in body as fallback (some proxies strip custom headers)
   const hasConfig = !!(llmConfig.apiKey || llmConfig.model || llmConfig.apiUrl);
-  const payload = hasConfig ? { ...(body as object), llmConfig } : body;
+  const payload = hasConfig
+    ? { ...(body as object), llmConfig }
+    : body;
   let res: Response;
   try {
     res = await fetch(path, {
@@ -123,11 +118,7 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
-function buildLintActivity(
-  id: string,
-  status: NonNullable<ActivityLog['status']>,
-  details: string,
-): ActivityLog {
+function buildLintActivity(id: string, status: NonNullable<ActivityLog['status']>, details: string): ActivityLog {
   const titleMap: Record<NonNullable<ActivityLog['status']>, string> = {
     running: '深度检查进行中',
     success: '健康检查完成',
@@ -148,7 +139,7 @@ export async function startLintActivity(): Promise<string> {
   const db = getDb();
   const activityId = 'a-' + nanoid(8);
   await db.activity.put(
-    buildLintActivity(activityId, 'running', '正在扫描概念结构、关联关系和潜在重复问题'),
+    buildLintActivity(activityId, 'running', '正在扫描概念结构、关联关系和潜在重复问题')
   );
   return activityId;
 }
@@ -156,7 +147,7 @@ export async function startLintActivity(): Promise<string> {
 export async function failLintActivity(activityId: string, message: string): Promise<void> {
   const db = getDb();
   await db.activity.put(
-    buildLintActivity(activityId, 'error', `检查未完成 · ${message.slice(0, 140)}`),
+    buildLintActivity(activityId, 'error', `检查未完成 · ${message.slice(0, 140)}`)
   );
 }
 
@@ -178,12 +169,7 @@ export async function ingestSource(input: {
   url?: string;
   rawContent: string;
   externalKey?: string;
-}): Promise<{
-  sourceId: string;
-  newConceptIds: string[];
-  updatedConceptIds: string[];
-  activityId: string;
-}> {
+}): Promise<{ sourceId: string; newConceptIds: string[]; updatedConceptIds: string[]; activityId: string }> {
   const db = getDb();
   const now = Date.now();
 
@@ -220,9 +206,7 @@ export async function ingestSource(input: {
   await db.transaction('rw', [db.sources, db.concepts, db.activity], async () => {
     await db.sources.put({ ...resp.source, contentStatus: 'full' });
     if (resp.concepts.length > 0) {
-      await db.concepts.bulkPut(
-        resp.concepts.map((concept) => ({ ...concept, contentStatus: 'full' as const })),
-      );
+      await db.concepts.bulkPut(resp.concepts.map((concept) => ({ ...concept, contentStatus: 'full' as const })));
     }
     await db.activity.put(resp.activity);
   });
@@ -237,7 +221,7 @@ export async function ingestSource(input: {
 
 export async function askWiki(
   question: string,
-  history: Array<{ role: 'user' | 'ai'; text: string }>,
+  history: Array<{ role: 'user' | 'ai'; text: string }>
 ): Promise<QueryResponse> {
   const db = getDb();
   const conceptsToSend = await findClientConceptCandidates(question, QUERY_CANDIDATE_LIMIT);
@@ -250,10 +234,10 @@ export async function askWiki(
     concepts: conceptsToSend.map((c) => {
       const full = hydratedMap.get(c.id) ?? c;
       return {
-        id: c.id,
-        title: c.title,
-        summary: c.summary,
-        body: full.body,
+      id: c.id,
+      title: c.title,
+      summary: c.summary,
+      body: full.body,
       };
     }),
     conversationHistory: history,
@@ -266,7 +250,7 @@ export async function archiveAnswerAsConcept(
   title: string,
   summary: string,
   body: string,
-  citedConceptIds: string[],
+  citedConceptIds: string[]
 ): Promise<string> {
   const db = getDb();
   const now = Date.now();
@@ -345,7 +329,7 @@ export async function startRepair(findings: RepairFindingPayload[]): Promise<Rep
 
 export async function getRepairStatus(runId: string): Promise<RepairStatusResponse> {
   const res = await fetch(`/api/repair/status?runId=${encodeURIComponent(runId)}`, {
-    headers: getAdminAuthHeaders(),
+    headers: { 'X-Request-ID': generateClientRequestId(), ...getAdminAuthHeaders() },
     cache: 'no-store',
   });
   if (res.status === 404) throw new Error('run not found');
@@ -381,7 +365,7 @@ export async function lintWiki(activityId?: string): Promise<LintResponse> {
       ? '未发现问题 · Wiki 结构健康'
       : `发现 ${resp.findings.length} 处问题需要关注`;
   await db.activity.put(
-    buildLintActivity(activityId ?? 'a-' + nanoid(8), 'success', successDetails),
+    buildLintActivity(activityId ?? ('a-' + nanoid(8)), 'success', successDetails)
   );
 
   return resp;
@@ -393,7 +377,7 @@ export async function lintWiki(activityId?: string): Promise<LintResponse> {
  * Returns the total number of concepts processed.
  */
 export async function categorizeConcepts(
-  onProgress?: (done: number, total: number, failed: number, errors: string[]) => void,
+  onProgress?: (done: number, total: number, failed: number, errors: string[]) => void
 ): Promise<{ total: number; failed: number; errors: string[] }> {
   const db = getDb();
   const all = await db.concepts.toArray();
@@ -415,10 +399,10 @@ export async function categorizeConcepts(
       concepts: batch.map((c) => {
         const full = hydratedMap.get(c.id) ?? c;
         return {
-          id: c.id,
-          title: c.title,
-          summary: c.summary,
-          body: full.body,
+        id: c.id,
+        title: c.title,
+        summary: c.summary,
+        body: full.body,
         };
       }),
       existingCategories,
@@ -457,4 +441,10 @@ export async function categorizeConcepts(
   }
 
   return { total: uncategorized.length, failed, errors };
+}
+
+function escapeHTML(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string
+  );
 }

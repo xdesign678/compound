@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useAppStore } from '@/lib/store';
 import {
   fetchCustomModels,
   getLlmConfig,
@@ -15,8 +14,6 @@ import type { LlmConfig } from '@/lib/types';
 import { Icon } from '../Icons';
 
 export function ModelTab() {
-  const showToast = useAppStore((s) => s.showToast);
-
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
   const [customModels, setCustomModels] = useState<string[]>([]);
   const [llmAdvancedExpanded, setLlmAdvancedExpanded] = useState(false);

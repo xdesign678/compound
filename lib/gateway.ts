@@ -13,9 +13,13 @@
 import { promises as dns } from 'node:dns';
 import net from 'node:net';
 import { recordModelRun } from './model-runs';
-import { addBreadcrumb, reportError } from './observability/sentry';
+import { buildOutboundTraceHeaders } from './request-context';
 
-const METADATA_HOSTS = new Set(['metadata.google.internal', 'metadata', 'metadata.goog']);
+const METADATA_HOSTS = new Set([
+  'metadata.google.internal',
+  'metadata',
+  'metadata.goog',
+]);
 
 /**
  * IPv4 private / loopback / reserved ranges that must never be reached from the
@@ -28,14 +32,14 @@ function isBlockedIPv4(ip: string): boolean {
   }
   const [o1, o2] = parts;
   return (
-    o1 === 0 || // 0.0.0.0/8 — "this network"
-    o1 === 10 || // 10.0.0.0/8 — private
-    o1 === 127 || // 127.0.0.0/8 — loopback
+    o1 === 0 ||                              // 0.0.0.0/8 — "this network"
+    o1 === 10 ||                             // 10.0.0.0/8 — private
+    o1 === 127 ||                            // 127.0.0.0/8 — loopback
     (o1 === 100 && o2 >= 64 && o2 <= 127) || // 100.64.0.0/10 — CGN
-    (o1 === 169 && o2 === 254) || // 169.254.0.0/16 — link-local / metadata
-    (o1 === 172 && o2 >= 16 && o2 <= 31) || // 172.16.0.0/12 — private
-    (o1 === 192 && o2 === 0) || // 192.0.0.0/24 — IETF protocol
-    (o1 === 192 && o2 === 168) || // 192.168.0.0/16 — private
+    (o1 === 169 && o2 === 254) ||            // 169.254.0.0/16 — link-local / metadata
+    (o1 === 172 && o2 >= 16 && o2 <= 31) ||  // 172.16.0.0/12 — private
+    (o1 === 192 && o2 === 0) ||              // 192.0.0.0/24 — IETF protocol
+    (o1 === 192 && o2 === 168) ||            // 192.168.0.0/16 — private
     (o1 === 198 && (o2 === 18 || o2 === 19)) // 198.18.0.0/15 — benchmark
   );
 }
@@ -44,7 +48,7 @@ function isBlockedIPv6(ip: string): boolean {
   const lower = ip.toLowerCase();
   if (lower === '::' || lower === '::1') return true;
   if (lower.startsWith('fe80:') || lower.startsWith('fe80%')) return true; // link-local
-  if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // fc00::/7 ULA
+  if (lower.startsWith('fc') || lower.startsWith('fd')) return true;        // fc00::/7 ULA
   // IPv4-mapped IPv6 (::ffff:127.0.0.1) — decay to IPv4 check.
   const mapped = lower.match(/^::ffff:([0-9a-f:.]+)$/);
   if (mapped) {
@@ -154,7 +158,8 @@ export async function chat(opts: ChatOptions): Promise<string> {
   const clean = (s?: string) => s?.replace(/^["'\s]+|["'\s]+$/g, '') || '';
   const userApiKey = clean(opts.llmConfig?.apiKey);
   const userApiUrl = clean(opts.llmConfig?.apiUrl);
-  const serverApiKey = clean(process.env.LLM_API_KEY) || clean(process.env.AI_GATEWAY_API_KEY);
+  const serverApiKey =
+    clean(process.env.LLM_API_KEY) || clean(process.env.AI_GATEWAY_API_KEY);
 
   let apiKey: string;
   let gatewayUrl: string;
@@ -192,7 +197,9 @@ export async function chat(opts: ChatOptions): Promise<string> {
 
   // Raise the floor for reasoning models so the visible answer actually gets emitted.
   const requestedMaxTokens = opts.maxTokens ?? 4000;
-  const maxTokens = isReasoningModel ? Math.max(requestedMaxTokens, 2000) : requestedMaxTokens;
+  const maxTokens = isReasoningModel
+    ? Math.max(requestedMaxTokens, 2000)
+    : requestedMaxTokens;
 
   const body: Record<string, unknown> = {
     model,
@@ -211,27 +218,12 @@ export async function chat(opts: ChatOptions): Promise<string> {
 
   const startedAt = Date.now();
   const task = opts.task ?? 'chat';
-  // Breadcrumb so the call sequence (and which task triggered it) is visible
-  // in Sentry alongside any subsequent exception.
-  addBreadcrumb({
-    category: 'llm.gateway',
-    type: 'http',
-    level: 'info',
-    message: `LLM request: ${task}`,
-    data: {
-      task,
-      model,
-      maxTokens,
-      gatewayHost: (() => {
-        try { return new URL(gatewayUrl).host; } catch { return 'unknown'; }
-      })(),
-    },
-  });
   const res = await fetch(gatewayUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
+      ...buildOutboundTraceHeaders(),
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(55_000),
@@ -245,13 +237,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
       latencyMs: Date.now() - startedAt,
       error: `gateway_${res.status}`,
     });
-    const err = new Error(`Gateway ${res.status}: ${errText.slice(0, 200)}`);
-    reportError(err, {
-      tags: { area: 'llm-gateway', task, status: res.status },
-      extras: { model, latencyMs: Date.now() - startedAt },
-      fingerprint: ['llm-gateway', String(res.status), task],
-    });
-    throw err;
+    throw new Error(`Gateway ${res.status}: ${errText.slice(0, 200)}`);
   }
 
   const data = await res.json();
@@ -265,8 +251,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
       model,
       task,
       inputTokens: typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : undefined,
-      outputTokens:
-        typeof usage.completion_tokens === 'number' ? usage.completion_tokens : undefined,
+      outputTokens: typeof usage.completion_tokens === 'number' ? usage.completion_tokens : undefined,
       latencyMs: Date.now() - startedAt,
     });
     return content;
@@ -282,7 +267,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
     });
     throw new Error(
       `Reasoning budget exhausted before content was emitted (finish_reason=length, model=${model}). ` +
-        `Try raising max_tokens (>=2000 for reasoning models) or pick a non-reasoning model.`,
+        `Try raising max_tokens (>=2000 for reasoning models) or pick a non-reasoning model.`
     );
   }
 
@@ -361,11 +346,7 @@ function fixUnescapedQuotes(json: string): string {
         // Value string — only end on `"` followed by a JSON structural boundary.
         // Look past whitespace to find the next non-whitespace char.
         let j = i + 1;
-        while (
-          j < json.length &&
-          (json[j] === ' ' || json[j] === '\t' || json[j] === '\r' || json[j] === '\n')
-        )
-          j++;
+        while (j < json.length && (json[j] === ' ' || json[j] === '\t' || json[j] === '\r' || json[j] === '\n')) j++;
         const next = json[j];
 
         if (next === '}' || next === ']' || j >= json.length) {
@@ -377,11 +358,7 @@ function fixUnescapedQuotes(json: string): string {
           // Look further: if the pattern is `","key":` (a JSON key follows), end the string.
           // If the pattern is `","non-key` (e.g. "概念A","概念B"), it's inside the value.
           let k = j + 1;
-          while (
-            k < json.length &&
-            (json[k] === ' ' || json[k] === '\t' || json[k] === '\r' || json[k] === '\n')
-          )
-            k++;
+          while (k < json.length && (json[k] === ' ' || json[k] === '\t' || json[k] === '\r' || json[k] === '\n')) k++;
           const afterComma = json[k];
           if (afterComma === '}' || afterComma === ']') {
             // `",}` or `",]` — clear boundary
@@ -393,11 +370,7 @@ function fixUnescapedQuotes(json: string): string {
             let m = k + 1;
             while (m < json.length && json[m] !== '"') m++; // find closing `"` of potential key
             let n = m + 1;
-            while (
-              n < json.length &&
-              (json[n] === ' ' || json[n] === '\t' || json[n] === '\r' || json[n] === '\n')
-            )
-              n++;
+            while (n < json.length && (json[n] === ' ' || json[n] === '\t' || json[n] === '\r' || json[n] === '\n')) n++;
             if (json[n] === ':') {
               // Pattern `"value","key": → real JSON boundary
               inStr = false;

@@ -9,7 +9,7 @@ import { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } from '@/lib/seed';
 import type { LintResponse } from '@/lib/types';
 import { Icon } from '../Icons';
 
-export function DataTab({ onClose }: { onClose: () => void }) {
+export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
   const openConcept = useAppStore((s) => s.openConcept);
   const showToast = useAppStore((s) => s.showToast);
   const hideToast = useAppStore((s) => s.hideToast);
@@ -52,7 +52,7 @@ export function DataTab({ onClose }: { onClose: () => void }) {
     await db.concepts.bulkPut(SEED_CONCEPTS);
     await db.activity.bulkPut(SEED_ACTIVITY);
     setConfirming(null);
-    onClose();
+    onCloseAction();
     showToast('示例 Wiki 已载入 · 9 个概念, 5 份资料', false);
     setTimeout(() => hideToast(), 3000);
   }
@@ -66,7 +66,7 @@ export function DataTab({ onClose }: { onClose: () => void }) {
     clearFresh();
     setLintResult(null);
     setConfirming(null);
-    onClose();
+    onCloseAction();
     showToast('已清空所有数据', false);
     safeTimeout(() => hideToast(), 2500);
   }
@@ -120,7 +120,7 @@ export function DataTab({ onClose }: { onClose: () => void }) {
                       key={cid}
                       id={cid}
                       onClick={() => {
-                        onClose();
+                        onCloseAction();
                         openConcept(cid);
                       }}
                     />

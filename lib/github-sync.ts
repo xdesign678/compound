@@ -10,6 +10,7 @@
  */
 
 import { buildExternalKey } from './github-sync-shared';
+import { buildOutboundTraceHeaders } from './request-context';
 
 export { buildExternalKey, parseExternalKey, externalKeyPath } from './github-sync-shared';
 
@@ -80,6 +81,7 @@ async function githubFetch(
       Accept: accept,
       'X-GitHub-Api-Version': '2022-11-28',
       'User-Agent': 'compound-sync/1.0',
+      ...buildOutboundTraceHeaders(),
     },
     signal: AbortSignal.timeout(30_000),
   });

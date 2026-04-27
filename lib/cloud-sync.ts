@@ -16,6 +16,7 @@
 import { getDb } from './db';
 import { mergeRemoteConcept, mergeRemoteSource } from './snapshot-merge';
 import { getAdminAuthHeaders } from './admin-auth-client';
+import { withRequestId } from './trace-client';
 import type { Source, Concept, ActivityLog, AskMessage } from './types';
 
 interface SnapshotResponse {
@@ -73,7 +74,7 @@ async function fetchConceptDetails(ids: string[]): Promise<Concept[]> {
   const search = new URLSearchParams({ ids: uniqueIds.join(',') });
   const res = await fetch(`/api/data/concepts?${search.toString()}`, {
     cache: 'no-store',
-    headers: getAdminAuthHeaders(),
+    headers: withRequestId(getAdminAuthHeaders()),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -88,7 +89,7 @@ async function fetchSourceDetails(ids: string[]): Promise<Source[]> {
   const search = new URLSearchParams({ ids: uniqueIds.join(',') });
   const res = await fetch(`/api/data/sources?${search.toString()}`, {
     cache: 'no-store',
-    headers: getAdminAuthHeaders(),
+    headers: withRequestId(getAdminAuthHeaders()),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -101,7 +102,7 @@ export async function pullSnapshotFromCloud(): Promise<PullResult> {
   const since = getLastPullAt();
   const res = await fetch(buildSnapshotRequestPath(since), {
     cache: 'no-store',
-    headers: getAdminAuthHeaders(),
+    headers: withRequestId(getAdminAuthHeaders()),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
