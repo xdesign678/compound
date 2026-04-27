@@ -1,0 +1,19 @@
+{
+  "threshold": 5,
+  "reporters": ["console", "markdown"],
+  "format": ["typescript", "javascript"],
+  "minLines": 6,
+  "minTokens": 50,
+  "output": "tmp/duplicate-report",
+  "absolutePathToReport": true,
+  "ignore": [
+    "**/node_modules/**",
+    "**/.next/**",
+    "**/tmp/**",
+    "**/coverage/**",
+    "**/*.test.*",
+    "**/*.d.ts"
+  ],
+  "blame": false,
+  "silent": false
+}

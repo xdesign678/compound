@@ -36,6 +36,9 @@ jobs:
       - name: Code quality metrics
         run: npm run quality:metrics
 
+      - name: Duplicate code detection
+        run: npm run quality:duplicates
+
       - name: Check alerting rules
         run: npm run alerts:check
 
@@ -49,6 +52,10 @@ jobs:
             printf '\n' >> "$GITHUB_STEP_SUMMARY"
             cat tmp/quality-metrics.md >> "$GITHUB_STEP_SUMMARY"
           fi
+          if [ -f tmp/duplicate-report.md ]; then
+            printf '\n' >> "$GITHUB_STEP_SUMMARY"
+            cat tmp/duplicate-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload code quality metrics
         if: always()
@@ -60,6 +67,8 @@ jobs:
             tmp/coverage/coverage-summary.md
             tmp/quality-metrics.json
             tmp/quality-metrics.md
+            tmp/duplicate-report.json
+            tmp/duplicate-report.md
           if-no-files-found: warn
 
       # Verify the auto-generated API reference (docs/api-reference.md) is
