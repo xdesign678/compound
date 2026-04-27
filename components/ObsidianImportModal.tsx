@@ -59,6 +59,7 @@ export function ObsidianImportModal() {
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [confirmingClearManifest, setConfirmingClearManifest] = useState(false);
+  const [visible, setVisible] = useState(false);
   const stopRef = useRef(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -67,6 +68,16 @@ export function ObsidianImportModal() {
 
   useModalKeyboard(isOpen, close);
   useFocusTrap(modalRef, isOpen);
+
+  useEffect(() => {
+    if (isOpen) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setVisible(true));
+      });
+    } else {
+      setVisible(false);
+    }
+  }, [isOpen]);
 
   // 打开时刷新 manifest 统计
   useEffect(() => {
@@ -250,10 +261,8 @@ export function ObsidianImportModal() {
     });
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="modal-overlay visible" onClick={handleClose}>
+    <div className={`modal-overlay${visible ? ' visible' : ''}`} onClick={handleClose}>
       <div
         className="modal obsidian-import-modal"
         ref={modalRef}

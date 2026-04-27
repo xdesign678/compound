@@ -28,6 +28,17 @@ export function IngestModal() {
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setVisible(true));
+      });
+    } else {
+      setVisible(false);
+    }
+  }, [isOpen]);
 
   const safeTimeout = useCallback((fn: () => void, ms: number) => {
     const id = setTimeout(fn, ms);
@@ -170,7 +181,7 @@ export function IngestModal() {
   }
 
   return (
-    <div className={`modal-overlay ${isOpen ? 'visible' : ''}`} onClick={handleClose}>
+    <div className={`modal-overlay${visible ? ' visible' : ''}`} onClick={handleClose}>
       <div
         className="modal"
         ref={modalRef}

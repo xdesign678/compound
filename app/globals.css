@@ -3678,7 +3678,7 @@ button {
 @keyframes tabFadeIn {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -3698,7 +3698,7 @@ button {
 @keyframes slideInRight {
   from {
     opacity: 0;
-    transform: translateX(20px);
+    transform: translateX(28px);
   }
   to {
     opacity: 1;
@@ -3706,10 +3706,10 @@ button {
   }
 }
 .tab-view {
-  animation: tabFadeIn var(--motion-duration-fast) var(--motion-ease-standard) forwards;
+  animation: tabFadeIn var(--motion-duration-base) var(--motion-ease-emphasized) forwards;
 }
 .detail-view {
-  animation: slideInRight var(--motion-duration-base) var(--motion-ease-emphasized) forwards;
+  animation: slideInRight var(--motion-duration-slow) var(--motion-ease-emphasized) forwards;
 }
 
 /* Settings responsive layout */
@@ -4436,7 +4436,7 @@ button {
     max-height: min(84vh, 820px);
     border-radius: 12px;
     padding: 16px 24px 24px;
-    transform: translateY(16px) scale(0.98);
+    transform: translateY(20px) scale(0.96);
     box-shadow: var(--shadow-lg);
   }
 
@@ -6437,8 +6437,8 @@ button,
   opacity: 0;
   pointer-events: none;
   transition:
-    opacity var(--motion-duration-base) var(--motion-ease-standard),
-    background var(--motion-duration-base) var(--motion-ease-standard);
+    opacity 280ms var(--motion-ease-standard),
+    background 280ms var(--motion-ease-standard);
 }
 
 .library-detail-overlay.is-open {
@@ -6455,12 +6455,12 @@ button,
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
-  opacity: 0.92;
-  transform: translateX(36px) scale(0.985);
+  opacity: 0;
+  transform: translateX(48px) scale(0.97);
   will-change: transform, opacity;
   transition:
-    transform var(--motion-duration-slow) var(--motion-ease-emphasized),
-    opacity var(--motion-duration-base) var(--motion-ease-standard),
+    transform 400ms var(--motion-ease-emphasized),
+    opacity 300ms var(--motion-ease-standard),
     box-shadow var(--motion-duration-base) var(--motion-ease-standard);
 }
 

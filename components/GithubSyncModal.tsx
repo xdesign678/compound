@@ -57,12 +57,23 @@ export function GithubSyncModal() {
   const [pollIssue, setPollIssue] = useState<string | null>(null);
   const [job, setJob] = useState<JobStatus | null>(null);
   const [pulling, setPulling] = useState(false);
+  const [visible, setVisible] = useState(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pulledAfterDoneRef = useRef(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
   useModalKeyboard(open, close);
   useFocusTrap(modalRef, open);
+
+  useEffect(() => {
+    if (open) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setVisible(true));
+      });
+    } else {
+      setVisible(false);
+    }
+  }, [open]);
 
   // 打开时重置状态
   useEffect(() => {
@@ -162,8 +173,6 @@ export function GithubSyncModal() {
     }
   }, [pollOnce]);
 
-  if (!open) return null;
-
   const canClose = phase !== 'starting';
   const progressPct =
     job && job.total > 0 ? Math.round(((job.done + job.failed) / job.total) * 100) : 0;
@@ -172,7 +181,10 @@ export function GithubSyncModal() {
   const statusCopy = getSyncStatusCopy({ phase, pulling, job, pollIssue, error });
 
   return (
-    <div className="modal-overlay visible" onClick={canClose ? close : undefined}>
+    <div
+      className={`modal-overlay${visible ? ' visible' : ''}`}
+      onClick={canClose ? close : undefined}
+    >
       <div
         className="modal gh-sync-modal"
         ref={modalRef}

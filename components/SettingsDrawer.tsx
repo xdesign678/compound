@@ -63,7 +63,18 @@ export function SettingsDrawer() {
   const hydrateColorMode = useAppStore((s) => s.hydrateColorMode);
 
   const [activeTab, setActiveTab] = useState<SettingsTabId>('general');
+  const [visible, setVisible] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setVisible(true));
+      });
+    } else {
+      setVisible(false);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     hydrateColorMode();
@@ -103,7 +114,7 @@ export function SettingsDrawer() {
   }, [isOpen, close]);
 
   return (
-    <div className={`modal-overlay ${isOpen ? 'visible' : ''}`} onClick={close}>
+    <div className={`modal-overlay${visible ? ' visible' : ''}`} onClick={close}>
       <div
         className="modal settings-modal"
         ref={modalRef}

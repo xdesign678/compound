@@ -71,6 +71,20 @@ const SourceDetail = dynamic(
 
 const DESKTOP_MEDIA_QUERY = `(min-width: ${DESKTOP_LAYOUT_MIN_WIDTH}px)`;
 const LIBRARY_DETAIL_TRANSITION_MS = 320;
+const MODAL_EXIT_DURATION_MS = 320;
+
+function useDelayedUnmount(isOpen: boolean, delayMs = MODAL_EXIT_DURATION_MS): boolean {
+  const [shouldRender, setShouldRender] = useState(isOpen);
+  useEffect(() => {
+    if (isOpen) {
+      setShouldRender(true);
+    } else {
+      const timer = setTimeout(() => setShouldRender(false), delayMs);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, delayMs]);
+  return shouldRender;
+}
 
 export default function Page() {
   const tab = useAppStore((s) => s.tab);
@@ -167,6 +181,10 @@ export default function Page() {
   const settingsOpen = useAppStore((s) => s.settingsOpen);
   const obsidianImportOpen = useAppStore((s) => s.obsidianImportOpen);
   const githubSyncOpen = useAppStore((s) => s.githubSyncOpen);
+  const renderModal = useDelayedUnmount(modalOpen);
+  const renderSettings = useDelayedUnmount(settingsOpen);
+  const renderObsidianImport = useDelayedUnmount(obsidianImportOpen);
+  const renderGithubSync = useDelayedUnmount(githubSyncOpen);
   const openObsidianImport = useAppStore((s) => s.openObsidianImport);
   const openGithubSync = useAppStore((s) => s.openGithubSync);
   const showFab = !detail && (tab === 'wiki' || tab === 'sources');
@@ -382,10 +400,10 @@ export default function Page() {
           </div>
         )}
 
-        {modalOpen && <IngestModal />}
-        {settingsOpen && <SettingsDrawer />}
-        {obsidianImportOpen && <ObsidianImportModal />}
-        {githubSyncOpen && <GithubSyncModal />}
+        {renderModal && <IngestModal />}
+        {renderSettings && <SettingsDrawer />}
+        {renderObsidianImport && <ObsidianImportModal />}
+        {renderGithubSync && <GithubSyncModal />}
       </div>
     );
   }
@@ -445,10 +463,10 @@ export default function Page() {
       )}
 
       <TabBar />
-      {modalOpen && <IngestModal />}
-      {settingsOpen && <SettingsDrawer />}
-      {obsidianImportOpen && <ObsidianImportModal />}
-      {githubSyncOpen && <GithubSyncModal />}
+      {renderModal && <IngestModal />}
+      {renderSettings && <SettingsDrawer />}
+      {renderObsidianImport && <ObsidianImportModal />}
+      {renderGithubSync && <GithubSyncModal />}
     </div>
   );
 }
