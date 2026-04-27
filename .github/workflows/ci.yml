@@ -30,6 +30,12 @@ jobs:
       - run: npm run typecheck
       - run: npm run test
 
+      # Verify the auto-generated API reference (docs/api-reference.md) is
+      # in sync with app/api/**/route.ts. If a route was added/removed/renamed
+      # without regenerating the docs, this fails with a clear remediation.
+      - name: Check generated API reference
+        run: npm run docs:api:check
+
       - name: Build (with performance tracking)
         run: npm run build:measure
 

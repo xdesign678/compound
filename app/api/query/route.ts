@@ -66,6 +66,17 @@ async function getServerContext(question: string) {
   }
 }
 
+/**
+ * Answer a natural-language question against the user's Wiki. Performs
+ * hybrid retrieval (FTS + embeddings, with FTS-only fallback) to assemble
+ * a context window from concept pages and source chunks, then asks the LLM
+ * for a structured JSON response (`QueryResponse`).
+ *
+ * Body: `QueryRequest` — `question` is required (≤ 2k chars). Optional
+ * `concepts` (≤ 500) and `conversationHistory` (last 6 turns are kept).
+ *
+ * Guards: admin token, LLM rate limit, 512KB body cap.
+ */
 export async function POST(req: Request) {
   const denied =
     requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);

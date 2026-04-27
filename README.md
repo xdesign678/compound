@@ -100,5 +100,22 @@ docker run --rm -p 3000:3000 \
 ```bash
 npm run typecheck
 npm run test
+npm run docs:api:check   # ensures docs/api-reference.md is up to date
 npm run build
 ```
+
+## API reference
+
+The full HTTP API surface is documented in
+[`docs/api-reference.md`](docs/api-reference.md). That file is generated
+automatically from the JSDoc comments and exported handlers in
+`app/api/**/route.ts`:
+
+```bash
+npm run docs:api          # regenerate docs/api-reference.md
+npm run docs:api:check    # fail if the file is stale (CI uses this)
+```
+
+A dedicated GitHub Actions workflow (`.github/workflows/docs-autogen.yml`)
+also regenerates and commits the file on every push to `main` that touches
+the API routes or the generator script.
