@@ -21,7 +21,7 @@ test('hasConceptBodyContent accepts legacy rows with body but partial status', (
       body: '这是旧数据里已经存在的正文',
       contentStatus: 'partial',
     }),
-    true
+    true,
   );
 });
 
@@ -31,6 +31,6 @@ test('hasSourceRawContent accepts legacy rows with content but missing full stat
       rawContent: '原文已经在本地了',
       contentStatus: 'partial',
     }),
-    true
+    true,
   );
 });

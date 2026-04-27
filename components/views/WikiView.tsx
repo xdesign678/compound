@@ -26,25 +26,19 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [scrolled, setScrolled] = useState(false);
 
-  const concepts = useLiveQuery(
-    async () => {
-      const q = deferredQuery.trim().toLowerCase();
-      const collection = getDb().concepts.orderBy('updatedAt').reverse();
-      if (!q) {
-        return collection.limit(visibleCount).toArray();
-      }
-      return collection
-        .filter((concept) => {
-          return (
-            concept.title.toLowerCase().includes(q) ||
-            concept.summary.toLowerCase().includes(q)
-          );
-        })
-        .limit(visibleCount)
-        .toArray();
-    },
-    [deferredQuery, visibleCount]
-  );
+  const concepts = useLiveQuery(async () => {
+    const q = deferredQuery.trim().toLowerCase();
+    const collection = getDb().concepts.orderBy('updatedAt').reverse();
+    if (!q) {
+      return collection.limit(visibleCount).toArray();
+    }
+    return collection
+      .filter((concept) => {
+        return concept.title.toLowerCase().includes(q) || concept.summary.toLowerCase().includes(q);
+      })
+      .limit(visibleCount)
+      .toArray();
+  }, [deferredQuery, visibleCount]);
 
   const totalConceptCount = useLiveQuery(async () => {
     return getDb().concepts.count();
@@ -54,14 +48,10 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
     const q = deferredQuery.trim().toLowerCase();
     if (!q) return getDb().concepts.count();
     return getDb()
-      .concepts
-      .orderBy('updatedAt')
+      .concepts.orderBy('updatedAt')
       .reverse()
       .filter((concept) => {
-        return (
-          concept.title.toLowerCase().includes(q) ||
-          concept.summary.toLowerCase().includes(q)
-        );
+        return concept.title.toLowerCase().includes(q) || concept.summary.toLowerCase().includes(q);
       })
       .count();
   }, [deferredQuery]);
@@ -97,7 +87,10 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   }, [searchFocusNonce]);
 
   const fresh = useMemo(() => (concepts ?? []).filter((c) => freshIds[c.id]), [concepts, freshIds]);
-  const others = useMemo(() => (concepts ?? []).filter((c) => !freshIds[c.id]), [concepts, freshIds]);
+  const others = useMemo(
+    () => (concepts ?? []).filter((c) => !freshIds[c.id]),
+    [concepts, freshIds],
+  );
 
   if (!concepts) {
     return <div className="empty-state">加载中...</div>;
@@ -152,16 +145,14 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
               <Icon.Sparkle />
             </div>
             <h3>Wiki 还是空的</h3>
-            <p>点击右下角 <strong>+</strong> 添加第一份资料,AI 会把它编译成你的第一批概念页。</p>
+            <p>
+              点击右下角 <strong>+</strong> 添加第一份资料,AI 会把它编译成你的第一批概念页。
+            </p>
           </div>
         ) : (
           <div className="empty-state">
             <p>没有匹配的概念</p>
-            <button
-              className="modal-btn"
-              onClick={() => setQuery('')}
-              type="button"
-            >
+            <button className="modal-btn" onClick={() => setQuery('')} type="button">
               清空搜索
             </button>
           </div>
@@ -182,11 +173,15 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
           )}
           <div className="list-end-hint">
             <span>
-              已显示 {concepts.length} / {totalMatches ?? concepts.length} 个概念 · 点击 + 添加更多知识
+              已显示 {concepts.length} / {totalMatches ?? concepts.length} 个概念 · 点击 +
+              添加更多知识
             </span>
           </div>
           {concepts.length < (totalMatches ?? 0) && (
-            <button className="modal-btn" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
+            <button
+              className="modal-btn"
+              onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+            >
               加载更多
             </button>
           )}

@@ -31,7 +31,8 @@ const notoSerifSC = Noto_Serif_SC({
 
 export const metadata: Metadata = {
   title: 'Compound · 让 AI 维护你的知识库',
-  description: '基于 LLM Wiki 理念的笔记应用 — 你只管喂资料，AI 在后台当编辑，把原文编译成一部相互链接、持续生长的知识 Wiki。',
+  description:
+    '基于 LLM Wiki 理念的笔记应用 — 你只管喂资料，AI 在后台当编辑，把原文编译成一部相互链接、持续生长的知识 Wiki。',
   applicationName: 'Compound',
   manifest: '/manifest.json',
   appleWebApp: {
@@ -75,14 +76,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${inter.variable} ${geistMono.variable} ${lora.variable} ${notoSerifSC.variable}`}
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: `
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
   try {
     var theme = localStorage.getItem('compound_theme');
     if (theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.documentElement.classList.add('dark');
     }
   } catch(e) {}
-` }} />
+`,
+          }}
+        />
       </head>
       <body>
         {children}

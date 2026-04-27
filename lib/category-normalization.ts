@@ -94,8 +94,8 @@ export function normalizeCategoryKeys(categoryKeys: string[]): string[] {
           primary: parts[0] ?? '',
           secondary: parts.length > 1 ? parts.slice(1).join('/') : undefined,
         };
-      })
-    )
+      }),
+    ),
   );
 }
 

@@ -9,14 +9,14 @@ export function inferContentStatusFromText(value: string | null | undefined): Co
 }
 
 export function hasConceptBodyContent(
-  concept: Pick<Concept, 'body' | 'contentStatus'> | null | undefined
+  concept: Pick<Concept, 'body' | 'contentStatus'> | null | undefined,
 ): boolean {
   if (!concept) return false;
   return concept.contentStatus === 'full' || hasNonEmptyText(concept.body);
 }
 
 export function hasSourceRawContent(
-  source: Pick<Source, 'rawContent' | 'contentStatus'> | null | undefined
+  source: Pick<Source, 'rawContent' | 'contentStatus'> | null | undefined,
 ): boolean {
   if (!source) return false;
   return source.contentStatus === 'full' || hasNonEmptyText(source.rawContent);

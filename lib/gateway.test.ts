@@ -5,7 +5,7 @@ import { chat } from './gateway';
 
 async function withEnv<T>(
   values: Record<string, string | undefined>,
-  fn: () => Promise<T> | T
+  fn: () => Promise<T> | T,
 ): Promise<T> {
   const previous = new Map<string, string | undefined>();
   for (const [key, value] of Object.entries(values)) {
@@ -52,54 +52,58 @@ test('rejects custom api url without a user-provided api key', { concurrency: fa
           messages: [{ role: 'user', content: 'hi' }],
           llmConfig: { apiUrl: 'https://example.com/v1/chat/completions' },
         }),
-        /user-provided API key/
+        /user-provided API key/,
       );
-    }
-  );
-});
-
-test('uses the user key for custom api urls instead of the server key', { concurrency: false }, async () => {
-  let authorization = '';
-
-  await withEnv(
-    {
-      LLM_API_KEY: 'server-key',
-      AI_GATEWAY_API_KEY: undefined,
-      COMPOUND_ALLOW_CUSTOM_LLM_API_URL: undefined,
-      COMPOUND_SKIP_DNS_GUARD: 'true',
     },
-    async () => {
-      const mockFetch: typeof fetch = async (_input, init) => {
-        const headers = init?.headers as Record<string, string> | undefined;
-        authorization = headers?.Authorization ?? '';
-
-        return new Response(
-          JSON.stringify({
-            choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
-          }),
-          {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          }
-        );
-      };
-
-      await withMockFetch(mockFetch, async () => {
-        const result = await chat({
-          messages: [{ role: 'user', content: 'hi' }],
-          llmConfig: {
-            apiUrl: 'https://example.com/v1/chat/completions',
-            apiKey: 'user-key',
-          },
-          maxTokens: 10,
-        });
-
-        assert.equal(result, 'ok');
-        assert.equal(authorization, 'Bearer user-key');
-      });
-    }
   );
 });
+
+test(
+  'uses the user key for custom api urls instead of the server key',
+  { concurrency: false },
+  async () => {
+    let authorization = '';
+
+    await withEnv(
+      {
+        LLM_API_KEY: 'server-key',
+        AI_GATEWAY_API_KEY: undefined,
+        COMPOUND_ALLOW_CUSTOM_LLM_API_URL: undefined,
+        COMPOUND_SKIP_DNS_GUARD: 'true',
+      },
+      async () => {
+        const mockFetch: typeof fetch = async (_input, init) => {
+          const headers = init?.headers as Record<string, string> | undefined;
+          authorization = headers?.Authorization ?? '';
+
+          return new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+            }),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            },
+          );
+        };
+
+        await withMockFetch(mockFetch, async () => {
+          const result = await chat({
+            messages: [{ role: 'user', content: 'hi' }],
+            llmConfig: {
+              apiUrl: 'https://example.com/v1/chat/completions',
+              apiKey: 'user-key',
+            },
+            maxTokens: 10,
+          });
+
+          assert.equal(result, 'ok');
+          assert.equal(authorization, 'Bearer user-key');
+        });
+      },
+    );
+  },
+);
 
 test('blocks private or loopback custom api urls', { concurrency: false }, async () => {
   await withEnv(
@@ -116,8 +120,8 @@ test('blocks private or loopback custom api urls', { concurrency: false }, async
             apiKey: 'user-key',
           },
         }),
-        /public HTTPS endpoint/
+        /public HTTPS endpoint/,
       );
-    }
+    },
   );
 });

@@ -94,7 +94,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
 
   const concepts = useLiveQuery(
     async () => getDb().concepts.orderBy('updatedAt').reverse().toArray(),
-    []
+    [],
   );
 
   const [query, setQuery] = useState('');
@@ -104,7 +104,10 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   const [scrolled, setScrolled] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [primaryRailState, setPrimaryRailState] = useState({ canScrollLeft: false, canScrollRight: false });
+  const [primaryRailState, setPrimaryRailState] = useState({
+    canScrollLeft: false,
+    canScrollRight: false,
+  });
   const primaryRailRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -210,9 +213,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
     if (deferredQuery.trim()) {
       const q = deferredQuery.toLowerCase();
       result = result.filter(
-        (c) =>
-          c.title.toLowerCase().includes(q) ||
-          c.summary.toLowerCase().includes(q)
+        (c) => c.title.toLowerCase().includes(q) || c.summary.toLowerCase().includes(q),
       );
     }
 
@@ -288,13 +289,19 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
       )}
 
       <div className="library-filter-stack">
-        <section className="library-filter-section library-filter-section-primary" aria-label="一级分类">
+        <section
+          className="library-filter-section library-filter-section-primary"
+          aria-label="一级分类"
+        >
           <div className="library-filter-heading">
             <div className="library-filter-heading-main">
               <span className="library-filter-eyebrow">一级分类</span>
               <span className="library-filter-hint">先选领域，再看细分方向</span>
             </div>
-            <div className="library-primary-controls" aria-hidden={!primaryRailState.canScrollLeft && !primaryRailState.canScrollRight}>
+            <div
+              className="library-primary-controls"
+              aria-hidden={!primaryRailState.canScrollLeft && !primaryRailState.canScrollRight}
+            >
               <button
                 className="library-primary-scroll-btn"
                 type="button"
@@ -320,7 +327,10 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
               <button
                 className={`library-primary-card${selectedPrimary === null ? ' active' : ''}`}
                 aria-pressed={selectedPrimary === null}
-                onClick={() => { setSelectedPrimary(null); setSelectedSecondary(null); }}
+                onClick={() => {
+                  setSelectedPrimary(null);
+                  setSelectedSecondary(null);
+                }}
               >
                 <span className="library-primary-card-icon" aria-hidden="true">
                   <Grid2x2 size={28} strokeWidth={1.85} />
@@ -358,7 +368,10 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
         </section>
 
         {selectedPrimary && currentSecondaries.length > 0 && currentPrimaryNode && (
-          <section className="library-filter-section library-filter-section-secondary" aria-label="二级标签">
+          <section
+            className="library-filter-section library-filter-section-secondary"
+            aria-label="二级标签"
+          >
             <div className="library-filter-heading library-filter-heading-secondary">
               <div className="library-filter-heading-main">
                 <span className="library-filter-eyebrow">
@@ -376,7 +389,12 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                   <span className="library-secondary-chip-label">全部方向</span>
                   <span className="library-secondary-chip-count">{currentPrimaryNode.count}</span>
                 </span>
-                <ChevronRight size={14} strokeWidth={2} className="library-secondary-chip-arrow" aria-hidden="true" />
+                <ChevronRight
+                  size={14}
+                  strokeWidth={2}
+                  className="library-secondary-chip-arrow"
+                  aria-hidden="true"
+                />
               </button>
               {visibleSecondaries.map((sec) => (
                 <button
@@ -391,7 +409,12 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                     <span className="library-secondary-chip-label">{sec.name}</span>
                     <span className="library-secondary-chip-count">{sec.count}</span>
                   </span>
-                  <ChevronRight size={14} strokeWidth={2} className="library-secondary-chip-arrow" aria-hidden="true" />
+                  <ChevronRight
+                    size={14}
+                    strokeWidth={2}
+                    className="library-secondary-chip-arrow"
+                    aria-hidden="true"
+                  />
                 </button>
               ))}
               {hasMoreSecondaries && (
@@ -422,19 +445,22 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
       {selectedPrimary && deferredQuery.trim() && (
         <div className="filter-indicator">
           <span className="filter-indicator-text">
-            在 <strong>{selectedSecondary ? `${selectedPrimary} › ${selectedSecondary}` : selectedPrimary}</strong> 中搜索 &ldquo;{deferredQuery.trim()}&rdquo;
+            在{' '}
+            <strong>
+              {selectedSecondary ? `${selectedPrimary} › ${selectedSecondary}` : selectedPrimary}
+            </strong>{' '}
+            中搜索 &ldquo;{deferredQuery.trim()}&rdquo;
           </span>
           <div className="filter-indicator-actions">
-            <button
-              className="filter-indicator-clear"
-              onClick={() => setQuery('')}
-              type="button"
-            >
+            <button className="filter-indicator-clear" onClick={() => setQuery('')} type="button">
               清除搜索词
             </button>
             <button
               className="filter-indicator-clear"
-              onClick={() => { setSelectedPrimary(null); setSelectedSecondary(null); }}
+              onClick={() => {
+                setSelectedPrimary(null);
+                setSelectedSecondary(null);
+              }}
               type="button"
             >
               取消分类
@@ -450,7 +476,9 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
               <Icon.Sparkle />
             </div>
             <h3>Wiki 还是空的</h3>
-            <p>点击右下角 <strong>+</strong> 添加第一份资料，AI 会把它编译成你的第一批概念页。</p>
+            <p>
+              点击右下角 <strong>+</strong> 添加第一份资料，AI 会把它编译成你的第一批概念页。
+            </p>
           </div>
         ) : (
           <div className="empty-state">没有匹配的概念</div>
@@ -469,7 +497,10 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                 {c.categories && c.categories.length > 0 && (
                   <div className="library-card-tags">
                     {c.categories.map((cat) => (
-                      <span key={`${cat.primary}-${cat.secondary ?? ''}`} className="library-card-tag">
+                      <span
+                        key={`${cat.primary}-${cat.secondary ?? ''}`}
+                        className="library-card-tag"
+                      >
                         {cat.secondary || cat.primary}
                       </span>
                     ))}
@@ -487,10 +518,15 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
             ))}
           </div>
           <div className="list-end-hint">
-            <span>已显示 {visibleConcepts.length} / {filtered.length} 个概念</span>
+            <span>
+              已显示 {visibleConcepts.length} / {filtered.length} 个概念
+            </span>
           </div>
           {visibleConcepts.length < filtered.length && (
-            <button className="modal-btn" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
+            <button
+              className="modal-btn"
+              onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+            >
               加载更多
             </button>
           )}

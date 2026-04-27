@@ -5,7 +5,7 @@ import { getAdminToken, isAuthorizedRequest, requireAdmin } from './server-auth'
 
 async function withEnv<T>(
   values: Record<string, string | undefined>,
-  fn: () => Promise<T> | T
+  fn: () => Promise<T> | T,
 ): Promise<T> {
   const previous = new Map<string, string | undefined>();
   for (const [key, value] of Object.entries(values)) {
@@ -38,7 +38,7 @@ test('reads trimmed admin token from env', { concurrency: false }, async () => {
     },
     () => {
       assert.equal(getAdminToken(), 'secret');
-    }
+    },
   );
 });
 
@@ -55,7 +55,7 @@ test('authorizes requests with x-compound-admin-token', { concurrency: false }, 
       });
       assert.equal(isAuthorizedRequest(req), true);
       assert.equal(requireAdmin(req), null);
-    }
+    },
   );
 });
 
@@ -72,7 +72,7 @@ test('accepts basic auth password as admin token', { concurrency: false }, async
         headers: { authorization: auth },
       });
       assert.equal(isAuthorizedRequest(req), true);
-    }
+    },
   );
 });
 
@@ -87,21 +87,25 @@ test('returns 503 in production when admin token is missing', { concurrency: fal
       const req = new Request('http://example.com/api/data');
       const res = requireAdmin(req);
       assert.equal(res?.status, 503);
-    }
+    },
   );
 });
 
-test('returns 401 when token is configured but request is unauthorized', { concurrency: false }, async () => {
-  await withEnv(
-    {
-      COMPOUND_ADMIN_TOKEN: 'secret',
-      ADMIN_TOKEN: undefined,
-      NODE_ENV: 'production',
-    },
-    () => {
-      const req = new Request('http://example.com/api/data');
-      const res = requireAdmin(req);
-      assert.equal(res?.status, 401);
-    }
-  );
-});
+test(
+  'returns 401 when token is configured but request is unauthorized',
+  { concurrency: false },
+  async () => {
+    await withEnv(
+      {
+        COMPOUND_ADMIN_TOKEN: 'secret',
+        ADMIN_TOKEN: undefined,
+        NODE_ENV: 'production',
+      },
+      () => {
+        const req = new Request('http://example.com/api/data');
+        const res = requireAdmin(req);
+        assert.equal(res?.status, 401);
+      },
+    );
+  },
+);

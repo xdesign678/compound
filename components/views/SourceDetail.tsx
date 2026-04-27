@@ -72,7 +72,10 @@ function serializeBlockNode(node: ChildNode): string {
       .replace(/\n{3,}/g, '\n\n')
       .trim();
     if (!inner) return '';
-    return `${inner.split('\n').map((line) => (line ? `> ${line}` : '>')).join('\n')}\n\n`;
+    return `${inner
+      .split('\n')
+      .map((line) => (line ? `> ${line}` : '>'))
+      .join('\n')}\n\n`;
   }
   if (tag === 'DIV') {
     if (element.childElementCount === 0) {
@@ -99,7 +102,8 @@ function serializeInlineNode(node: ChildNode): string {
   if (tag === 'BR') return '\n';
   if (tag === 'STRONG' || tag === 'B') return `**${serializeInlineChildren(element)}**`;
   if (tag === 'EM' || tag === 'I') return `*${serializeInlineChildren(element)}*`;
-  if (tag === 'DEL' || tag === 'S' || tag === 'STRIKE') return `~~${serializeInlineChildren(element)}~~`;
+  if (tag === 'DEL' || tag === 'S' || tag === 'STRIKE')
+    return `~~${serializeInlineChildren(element)}~~`;
   if (tag === 'CODE') return `\`${normalizeText(element.textContent || '')}\``;
 
   if (tag === 'A') {
@@ -162,7 +166,7 @@ export function SourceDetail({ id }: { id: string }) {
   const source = useLiveQuery(async () => getDb().sources.get(id), [id]);
   const generated = useLiveQuery(
     async () => getDb().concepts.where('sources').equals(id).toArray(),
-    [id]
+    [id],
   );
   const hasFullContent = Boolean(source?.rawContent.trim()) || source?.contentStatus === 'full';
 
@@ -220,7 +224,7 @@ export function SourceDetail({ id }: { id: string }) {
       document.execCommand(command, false, value);
       syncDraftFromEditor();
     },
-    [syncDraftFromEditor]
+    [syncDraftFromEditor],
   );
 
   const handleResetDraft = useCallback(() => {
@@ -310,7 +314,9 @@ export function SourceDetail({ id }: { id: string }) {
               className="source-hero-link"
             >
               访问原文
-              <span aria-hidden="true" className="source-hero-link-arrow">↗</span>
+              <span aria-hidden="true" className="source-hero-link-arrow">
+                ↗
+              </span>
             </a>
           </div>
         )}
@@ -324,22 +330,46 @@ export function SourceDetail({ id }: { id: string }) {
             aria-label="正文格式工具"
           >
             <div className="source-editor-bar-format">
-              <button type="button" className="source-editor-bar-btn" onMouseDown={handleFormat('formatBlock', '<p>')}>
+              <button
+                type="button"
+                className="source-editor-bar-btn"
+                onMouseDown={handleFormat('formatBlock', '<p>')}
+              >
                 正文
               </button>
-              <button type="button" className="source-editor-bar-btn" onMouseDown={handleFormat('formatBlock', '<h2>')}>
+              <button
+                type="button"
+                className="source-editor-bar-btn"
+                onMouseDown={handleFormat('formatBlock', '<h2>')}
+              >
                 标题
               </button>
-              <button type="button" className="source-editor-bar-btn source-editor-bar-btn-bold" onMouseDown={handleFormat('bold')}>
+              <button
+                type="button"
+                className="source-editor-bar-btn source-editor-bar-btn-bold"
+                onMouseDown={handleFormat('bold')}
+              >
                 B
               </button>
-              <button type="button" className="source-editor-bar-btn source-editor-bar-btn-italic" onMouseDown={handleFormat('italic')}>
+              <button
+                type="button"
+                className="source-editor-bar-btn source-editor-bar-btn-italic"
+                onMouseDown={handleFormat('italic')}
+              >
                 I
               </button>
-              <button type="button" className="source-editor-bar-btn" onMouseDown={handleFormat('insertUnorderedList')}>
+              <button
+                type="button"
+                className="source-editor-bar-btn"
+                onMouseDown={handleFormat('insertUnorderedList')}
+              >
                 列表
               </button>
-              <button type="button" className="source-editor-bar-btn" onMouseDown={handleFormat('formatBlock', '<blockquote>')}>
+              <button
+                type="button"
+                className="source-editor-bar-btn"
+                onMouseDown={handleFormat('formatBlock', '<blockquote>')}
+              >
                 引用
               </button>
             </div>
@@ -445,7 +475,9 @@ export function SourceDetail({ id }: { id: string }) {
                 className="source-aside-link"
               >
                 <span className="source-aside-link-host">{sourceHost}</span>
-                <span aria-hidden="true" className="source-aside-link-arrow">↗</span>
+                <span aria-hidden="true" className="source-aside-link-arrow">
+                  ↗
+                </span>
               </a>
             </section>
           )}

@@ -79,7 +79,7 @@ export function createReviewItem(input: {
     .prepare(
       `INSERT INTO review_items
         (id, kind, status, title, target_type, target_id, source_id, confidence, payload_json, created_at, updated_at)
-       VALUES (?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -91,12 +91,14 @@ export function createReviewItem(input: {
       input.confidence ?? null,
       input.payload === undefined ? null : JSON.stringify(input.payload),
       ts,
-      ts
+      ts,
     );
   return id;
 }
 
-export function listReviewItems(options: { status?: ReviewStatus | 'all'; limit?: number } = {}): ReviewItem[] {
+export function listReviewItems(
+  options: { status?: ReviewStatus | 'all'; limit?: number } = {},
+): ReviewItem[] {
   ensureReviewQueueSchema();
   const status = options.status || 'open';
   const limit = Math.max(1, Math.min(500, options.limit || 100));
@@ -113,7 +115,7 @@ export function listReviewItems(options: { status?: ReviewStatus | 'all'; limit?
 export function resolveReviewItem(
   id: string,
   status: Extract<ReviewStatus, 'approved' | 'rejected' | 'resolved'>,
-  resolution?: unknown
+  resolution?: unknown,
 ): ReviewItem | null {
   ensureReviewQueueSchema();
   const ts = now();
@@ -121,17 +123,24 @@ export function resolveReviewItem(
     .prepare(
       `UPDATE review_items
        SET status = ?, resolution_json = ?, resolved_at = ?, updated_at = ?
-       WHERE id = ? AND status = 'open'`
+       WHERE id = ? AND status = 'open'`,
     )
     .run(status, resolution === undefined ? null : JSON.stringify(resolution), ts, ts, id);
-  return (getServerDb().prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as ReviewItem | undefined) ?? null;
+  return (
+    (getServerDb().prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as
+      | ReviewItem
+      | undefined) ?? null
+  );
 }
 
 export function getReviewMetrics(): Record<string, number> {
   ensureReviewQueueSchema();
-  const scalar = (sql: string) => Number((getServerDb().prepare(sql).get() as { count?: number } | undefined)?.count ?? 0);
+  const scalar = (sql: string) =>
+    Number((getServerDb().prepare(sql).get() as { count?: number } | undefined)?.count ?? 0);
   return {
     reviewOpen: scalar(`SELECT COUNT(*) AS count FROM review_items WHERE status = 'open'`),
-    reviewResolved: scalar(`SELECT COUNT(*) AS count FROM review_items WHERE status IN ('approved', 'rejected', 'resolved')`),
+    reviewResolved: scalar(
+      `SELECT COUNT(*) AS count FROM review_items WHERE status IN ('approved', 'rejected', 'resolved')`,
+    ),
   };
 }

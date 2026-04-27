@@ -154,7 +154,9 @@ function runMigrations(db: DB): void {
   `);
 
   const conceptColumns = new Set(
-    (db.prepare(`PRAGMA table_info(concepts)`).all() as Array<{ name: string }>).map((row) => row.name)
+    (db.prepare(`PRAGMA table_info(concepts)`).all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    ),
   );
 
   if (!conceptColumns.has('categories')) {
@@ -166,7 +168,9 @@ function runMigrations(db: DB): void {
   }
 
   const syncJobColumns = new Set(
-    (db.prepare(`PRAGMA table_info(sync_jobs)`).all() as Array<{ name: string }>).map((row) => row.name)
+    (db.prepare(`PRAGMA table_info(sync_jobs)`).all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    ),
   );
   if (!syncJobColumns.has('heartbeat_at')) {
     db.exec(`ALTER TABLE sync_jobs ADD COLUMN heartbeat_at INTEGER;`);
@@ -189,19 +193,23 @@ function runCategoryNormalizationIfNeeded(db: DB): void {
 
   normalizeStoredConceptCategories(db);
 
-  db.prepare(`INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)`)
-    .run('concept_categories_revision', CATEGORY_NORMALIZATION_REVISION);
+  db.prepare(`INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)`).run(
+    'concept_categories_revision',
+    CATEGORY_NORMALIZATION_REVISION,
+  );
 }
 
 function normalizeStoredConceptCategories(db: DB): void {
-  const rows = db
-    .prepare(`SELECT id, categories, category_keys FROM concepts`)
-    .all() as Array<{ id: string; categories: string; category_keys: string }>;
+  const rows = db.prepare(`SELECT id, categories, category_keys FROM concepts`).all() as Array<{
+    id: string;
+    categories: string;
+    category_keys: string;
+  }>;
 
   const update = db.prepare(
     `UPDATE concepts
      SET categories = @categories, category_keys = @category_keys
-     WHERE id = @id`
+     WHERE id = @id`,
   );
 
   const run = db.transaction(() => {
@@ -300,7 +308,10 @@ function parseJsonArray<T>(s: string | null | undefined, fallback: T[] = []): T[
   }
 }
 
-function buildTimeWindowClause(column: string, options: TimeWindowOptions = {}): {
+function buildTimeWindowClause(
+  column: string,
+  options: TimeWindowOptions = {},
+): {
   clause: string;
   params: number[];
 } {
@@ -432,7 +443,7 @@ export const repo = {
       .prepare(
         `INSERT OR REPLACE INTO sources
           (id, title, type, author, url, raw_content, ingested_at, external_key)
-          VALUES (@id, @title, @type, @author, @url, @raw_content, @ingested_at, @external_key)`
+          VALUES (@id, @title, @type, @author, @url, @raw_content, @ingested_at, @external_key)`,
       )
       .run({
         id: s.id,
@@ -454,9 +465,9 @@ export const repo = {
   },
 
   getSourceByExternalKey(key: string): Source | null {
-    const row = getServerDb()
-      .prepare(`SELECT * FROM sources WHERE external_key = ?`)
-      .get(key) as SourceRow | undefined;
+    const row = getServerDb().prepare(`SELECT * FROM sources WHERE external_key = ?`).get(key) as
+      | SourceRow
+      | undefined;
     return row ? rowToSource(row) : null;
   },
 
@@ -469,7 +480,7 @@ export const repo = {
     const { clause: limitClause, params: limitParams } = buildLimitClause(options);
     const rows = getServerDb()
       .prepare(
-        `SELECT ${selectSourceColumns(options.summariesOnly)} FROM sources ${clause} ORDER BY ingested_at DESC${limitClause}`
+        `SELECT ${selectSourceColumns(options.summariesOnly)} FROM sources ${clause} ORDER BY ingested_at DESC${limitClause}`,
       )
       .all(...params, ...limitParams) as SourceRow[];
     return rows.map((row) => rowToSource(row, options.summariesOnly ? 'partial' : 'full'));
@@ -481,11 +492,11 @@ export const repo = {
     const placeholders = uniqueIds.map(() => '?').join(', ');
     const rows = getServerDb()
       .prepare(
-        `SELECT ${selectSourceColumns(options.summariesOnly)} FROM sources WHERE id IN (${placeholders})`
+        `SELECT ${selectSourceColumns(options.summariesOnly)} FROM sources WHERE id IN (${placeholders})`,
       )
       .all(...uniqueIds) as SourceRow[];
     const rowMap = mapRowsById(
-      rows.map((row) => rowToSource(row, options.summariesOnly ? 'partial' : 'full'))
+      rows.map((row) => rowToSource(row, options.summariesOnly ? 'partial' : 'full')),
     );
     return uniqueIds.map((id) => rowMap.get(id)).filter((row): row is Source => Boolean(row));
   },
@@ -506,7 +517,7 @@ export const repo = {
       .prepare(
         `INSERT OR REPLACE INTO concepts
           (id, title, summary, body, sources, related, categories, category_keys, created_at, updated_at, version)
-          VALUES (@id, @title, @summary, @body, @sources, @related, @categories, @category_keys, @created_at, @updated_at, @version)`
+          VALUES (@id, @title, @summary, @body, @sources, @related, @categories, @category_keys, @created_at, @updated_at, @version)`,
       )
       .run({
         id: c.id,
@@ -535,7 +546,7 @@ export const repo = {
     const { clause: limitClause, params: limitParams } = buildLimitClause(options);
     const rows = getServerDb()
       .prepare(
-        `SELECT ${selectConceptColumns(options.summariesOnly)} FROM concepts ${clause} ORDER BY updated_at DESC${limitClause}`
+        `SELECT ${selectConceptColumns(options.summariesOnly)} FROM concepts ${clause} ORDER BY updated_at DESC${limitClause}`,
       )
       .all(...params, ...limitParams) as ConceptRow[];
     return rows.map((row) => rowToConcept(row, options.summariesOnly ? 'partial' : 'full'));
@@ -547,11 +558,11 @@ export const repo = {
     const placeholders = uniqueIds.map(() => '?').join(', ');
     const rows = getServerDb()
       .prepare(
-        `SELECT ${selectConceptColumns(options.summariesOnly)} FROM concepts WHERE id IN (${placeholders})`
+        `SELECT ${selectConceptColumns(options.summariesOnly)} FROM concepts WHERE id IN (${placeholders})`,
       )
       .all(...uniqueIds) as ConceptRow[];
     const rowMap = mapRowsById(
-      rows.map((row) => rowToConcept(row, options.summariesOnly ? 'partial' : 'full'))
+      rows.map((row) => rowToConcept(row, options.summariesOnly ? 'partial' : 'full')),
     );
     return uniqueIds.map((id) => rowMap.get(id)).filter((row): row is Concept => Boolean(row));
   },
@@ -563,7 +574,11 @@ export const repo = {
     return row ? rowToConcept(row) : null;
   },
 
-  replaceSourceIdInConcepts(oldSourceId: string, newSourceId: string, updatedAt = Date.now()): number {
+  replaceSourceIdInConcepts(
+    oldSourceId: string,
+    newSourceId: string,
+    updatedAt = Date.now(),
+  ): number {
     if (!oldSourceId || !newSourceId || oldSourceId === newSourceId) return 0;
 
     const rows = getServerDb()
@@ -575,7 +590,9 @@ export const repo = {
       const concept = rowToConcept(row);
       if (!concept.sources.includes(oldSourceId)) continue;
       const nextSources = Array.from(
-        new Set(concept.sources.map((sourceId) => (sourceId === oldSourceId ? newSourceId : sourceId)))
+        new Set(
+          concept.sources.map((sourceId) => (sourceId === oldSourceId ? newSourceId : sourceId)),
+        ),
       );
       if (
         nextSources.length === concept.sources.length &&
@@ -595,9 +612,9 @@ export const repo = {
   },
 
   listCategoryKeys(): string[] {
-    const rows = getServerDb()
-      .prepare(`SELECT category_keys FROM concepts`)
-      .all() as Array<{ category_keys: string }>;
+    const rows = getServerDb().prepare(`SELECT category_keys FROM concepts`).all() as Array<{
+      category_keys: string;
+    }>;
     return normalizeCategoryState({
       categoryKeys: rows.flatMap((row) => parseJsonArray<string>(row.category_keys)),
     }).categoryKeys;
@@ -622,7 +639,10 @@ export const repo = {
     db.prepare(`DELETE FROM concepts WHERE id = ?`).run(id);
     safeExec(`DELETE FROM concept_fts WHERE concept_id = ?`, [id]);
     safeExec(`DELETE FROM concept_evidence WHERE concept_id = ?`, [id]);
-    safeExec(`DELETE FROM concept_relations WHERE source_concept_id = ? OR target_concept_id = ?`, [id, id]);
+    safeExec(`DELETE FROM concept_relations WHERE source_concept_id = ? OR target_concept_id = ?`, [
+      id,
+      id,
+    ]);
     safeExec(`DELETE FROM concept_versions WHERE concept_id = ?`, [id]);
   },
 
@@ -662,8 +682,8 @@ export const repo = {
           .toLowerCase()
           .split(/[^a-z0-9\u4e00-\u9fff]+/i)
           .map((part) => part.trim())
-          .filter((part) => part.length >= 2)
-      )
+          .filter((part) => part.length >= 2),
+      ),
     ).slice(0, 12);
 
     if (keywords.length === 0) {
@@ -671,7 +691,7 @@ export const repo = {
     }
 
     const queryParts = keywords.map(
-      () => `(title LIKE ? COLLATE NOCASE OR summary LIKE ? COLLATE NOCASE)`
+      () => `(title LIKE ? COLLATE NOCASE OR summary LIKE ? COLLATE NOCASE)`,
     );
     const queryParams = keywords.flatMap((keyword) => [`%${keyword}%`, `%${keyword}%`]);
 
@@ -681,7 +701,7 @@ export const repo = {
          FROM concepts
          WHERE ${queryParts.join(' OR ')}
          ORDER BY updated_at DESC
-         LIMIT ?`
+         LIMIT ?`,
       )
       .all(...queryParams, normalizedLimit) as ConceptRow[];
 
@@ -691,10 +711,12 @@ export const repo = {
     }
 
     const existingIds = new Set(matched.map((concept) => concept.id));
-    const fallback = repo.listConcepts({
-      summariesOnly: true,
-      limit: normalizedLimit * 2,
-    }).filter((concept) => !existingIds.has(concept.id));
+    const fallback = repo
+      .listConcepts({
+        summariesOnly: true,
+        limit: normalizedLimit * 2,
+      })
+      .filter((concept) => !existingIds.has(concept.id));
 
     return [...matched, ...fallback].slice(0, normalizedLimit);
   },
@@ -705,7 +727,7 @@ export const repo = {
       .prepare(
         `INSERT OR REPLACE INTO activity
           (id, type, title, details, source_ids, concept_ids, at)
-          VALUES (@id, @type, @title, @details, @source_ids, @concept_ids, @at)`
+          VALUES (@id, @type, @title, @details, @source_ids, @concept_ids, @at)`,
       )
       .run({
         id: a.id,
@@ -767,7 +789,7 @@ export const repo = {
          SET status = 'failed',
              error = COALESCE(error, '服务重启导致任务中断（已自动回收）'),
              finished_at = ?
-         WHERE status = 'running' AND COALESCE(heartbeat_at, started_at) < ?`
+         WHERE status = 'running' AND COALESCE(heartbeat_at, started_at) < ?`,
       )
       .run(Date.now(), cutoff);
     return result.changes;
@@ -786,7 +808,7 @@ export const repo = {
       .prepare(
         `INSERT INTO sync_jobs
           (id, kind, status, total, done, failed, current, log, error, started_at, finished_at, heartbeat_at)
-          VALUES (@id, @kind, @status, @total, @done, @failed, @current, @log, @error, @started_at, @finished_at, @heartbeat_at)`
+          VALUES (@id, @kind, @status, @total, @done, @failed, @current, @log, @error, @started_at, @finished_at, @heartbeat_at)`,
       )
       .run(row);
   },
@@ -808,7 +830,7 @@ export const repo = {
             status = @status, total = @total, done = @done, failed = @failed,
             current = @current, log = @log, error = @error, finished_at = @finished_at,
             heartbeat_at = @heartbeat_at
-          WHERE id = @id`
+          WHERE id = @id`,
       )
       .run(next);
   },

@@ -14,8 +14,8 @@ function parseIdsParam(value: string | null): string[] {
       value
         .split(',')
         .map((item) => item.trim())
-        .filter(Boolean)
-    )
+        .filter(Boolean),
+    ),
   );
 }
 
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     if (ids.length > MAX_IDS) {
       return NextResponse.json(
         { error: `Too many ids (max ${MAX_IDS})`, received: ids.length, max: MAX_IDS },
-        { status: 413 }
+        { status: 413 },
       );
     }
 

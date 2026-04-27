@@ -6,13 +6,13 @@
 export function buildExternalKey(
   cfg: { owner: string; repo: string },
   path: string,
-  sha: string
+  sha: string,
 ): string {
   return `github:${cfg.owner}/${cfg.repo}:${path}@${sha}`;
 }
 
 export function parseExternalKey(
-  key: string
+  key: string,
 ): { owner: string; repo: string; path: string; sha: string } | null {
   const match = key.match(/^github:([^/]+)\/([^:]+):(.+)@([^@]+)$/);
   if (!match) return null;

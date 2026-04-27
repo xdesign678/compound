@@ -50,7 +50,7 @@ export function ObsidianImportModal() {
   const [stage, setStage] = useState<Stage>('idle');
   const [filesMap, setFilesMap] = useState<Record<string, ObsidianFile>>({});
   const [fileIds, setFileIds] = useState<string[]>([]);
-  const files = useMemo(() => fileIds.map(id => filesMap[id]), [fileIds, filesMap]);
+  const files = useMemo(() => fileIds.map((id) => filesMap[id]), [fileIds, filesMap]);
 
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [manifestSize, setManifestSize] = useState(0);
@@ -308,13 +308,22 @@ export function ObsidianImportModal() {
             {confirmingClearManifest ? (
               <div style={{ marginTop: 12 }}>
                 <p className="modal-desc" style={{ marginBottom: 8 }}>
-                  确定清除 {manifestSize} 条导入记录吗？已导入的资料本身不会被删除，但下次再选同样的文件会被当作新文件重复导入。
+                  确定清除 {manifestSize}{' '}
+                  条导入记录吗？已导入的资料本身不会被删除，但下次再选同样的文件会被当作新文件重复导入。
                 </p>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="modal-btn primary" onClick={confirmClearManifest} style={{ background: 'var(--brand-clay)', flex: 1 }}>
+                  <button
+                    className="modal-btn primary"
+                    onClick={confirmClearManifest}
+                    style={{ background: 'var(--brand-clay)', flex: 1 }}
+                  >
                     确认清除
                   </button>
-                  <button className="modal-btn" onClick={() => setConfirmingClearManifest(false)} style={{ flex: 1 }}>
+                  <button
+                    className="modal-btn"
+                    onClick={() => setConfirmingClearManifest(false)}
+                    style={{ flex: 1 }}
+                  >
                     取消
                   </button>
                 </div>
@@ -445,10 +454,17 @@ export function ObsidianImportModal() {
             <div className="obsidian-import-actions">
               {confirmingClose ? (
                 <>
-                  <p className="modal-desc" style={{ width: '100%', marginBottom: 8, color: 'var(--brand-clay)' }}>
+                  <p
+                    className="modal-desc"
+                    style={{ width: '100%', marginBottom: 8, color: 'var(--brand-clay)' }}
+                  >
                     导入正在进行，确定关闭吗？未完成的文件会停止处理（下次可以断点续传）。
                   </p>
-                  <button className="modal-btn primary" onClick={confirmClose} style={{ background: 'var(--brand-clay)' }}>
+                  <button
+                    className="modal-btn primary"
+                    onClick={confirmClose}
+                    style={{ background: 'var(--brand-clay)' }}
+                  >
                     确认关闭
                   </button>
                   <button className="modal-btn" onClick={() => setConfirmingClose(false)}>

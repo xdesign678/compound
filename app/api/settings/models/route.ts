@@ -22,9 +22,10 @@ export async function POST(req: Request) {
     body = {};
   }
 
-  const model = typeof (body as { model?: unknown }).model === 'string'
-    ? (body as { model: string }).model
-    : '';
+  const model =
+    typeof (body as { model?: unknown }).model === 'string'
+      ? (body as { model: string }).model
+      : '';
 
   return NextResponse.json({ models: saveCustomModel(model) });
 }

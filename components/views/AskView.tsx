@@ -7,7 +7,13 @@ import { nanoid } from 'nanoid';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { askWiki, archiveAnswerAsConcept } from '@/lib/api-client';
-import { fetchCustomModels, getLlmConfig, modelLabel, PRESET_MODELS, saveLlmConfig } from '@/lib/llm-config';
+import {
+  fetchCustomModels,
+  getLlmConfig,
+  modelLabel,
+  PRESET_MODELS,
+  saveLlmConfig,
+} from '@/lib/llm-config';
 import { Icon, SourceTypeIcon } from '../Icons';
 import { Prose } from '../Prose';
 import type { AskMessage, LlmConfig, Source, SourceType } from '@/lib/types';
@@ -63,22 +69,23 @@ export function AskView() {
   const [customModels, setCustomModels] = useState<string[]>([]);
   const [caretPosition, setCaretPosition] = useState(0);
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const pickerSearchRef = useRef<HTMLInputElement>(null);
 
-  const history = useLiveQuery(
-    async () => getDb().askHistory.orderBy('at').toArray(),
-    []
-  );
+  const history = useLiveQuery(async () => getDb().askHistory.orderBy('at').toArray(), []);
 
   const conceptCount = useLiveQuery(async () => getDb().concepts.count(), []);
 
   useEffect(() => {
     setLlmConfig(getLlmConfig());
-    void fetchCustomModels().then(setCustomModels).catch(() => setCustomModels([]));
+    void fetchCustomModels()
+      .then(setCustomModels)
+      .catch(() => setCustomModels([]));
   }, []);
 
   useEffect(() => {
@@ -127,24 +134,28 @@ export function AskView() {
 
   const inlineMention = useMemo(
     () => detectInlineMention(input, caretPosition),
-    [input, caretPosition]
+    [input, caretPosition],
   );
 
   const modelOptions = useMemo<ModelOption[]>(() => {
     const customModel = llmConfig.model?.trim();
-    const options: ModelOption[] = [{
-      label: '服务端默认',
-      value: '',
-      helper: '跟随当前服务端配置',
-    }, ...PRESET_MODELS.map((item) => ({
-      label: item.label,
-      value: item.value,
-      helper: item.value,
-    })), ...customModels.map((model) => ({
-      label: modelLabel(model),
-      value: model,
-      helper: model,
-    }))];
+    const options: ModelOption[] = [
+      {
+        label: '服务端默认',
+        value: '',
+        helper: '跟随当前服务端配置',
+      },
+      ...PRESET_MODELS.map((item) => ({
+        label: item.label,
+        value: item.value,
+        helper: item.value,
+      })),
+      ...customModels.map((model) => ({
+        label: modelLabel(model),
+        value: model,
+        helper: model,
+      })),
+    ];
 
     if (customModel && !options.some((item) => item.value === customModel)) {
       options.splice(1, 0, {
@@ -211,9 +222,7 @@ export function AskView() {
     const finalText = buildAskText(selectedMentions, text);
     if (!text || loading || !finalText) return;
 
-    const recentHistory = (history || [])
-      .slice(-6)
-      .map((m) => ({ role: m.role, text: m.text }));
+    const recentHistory = (history || []).slice(-6).map((m) => ({ role: m.role, text: m.text }));
 
     const db = getDb();
     const now = Date.now();
@@ -262,8 +271,16 @@ export function AskView() {
   async function handleArchive(msg: AskMessage, userQuestion: string | null) {
     if (!msg.citedConcepts || msg.citedConcepts.length === 0) return;
     setArchiving(msg.id);
-    const title = userQuestion ? (userQuestion.length > 20 ? userQuestion.slice(0, 20) + '…' : userQuestion) : '新归档概念';
-    const summary = msg.text.replace(/<[^>]+>/g, '').replace(/\*\*/g, '').slice(0, 80) + (msg.text.length > 80 ? '…' : '');
+    const title = userQuestion
+      ? userQuestion.length > 20
+        ? userQuestion.slice(0, 20) + '…'
+        : userQuestion
+      : '新归档概念';
+    const summary =
+      msg.text
+        .replace(/<[^>]+>/g, '')
+        .replace(/\*\*/g, '')
+        .slice(0, 80) + (msg.text.length > 80 ? '…' : '');
     try {
       const newId = await archiveAnswerAsConcept(title, summary, msg.text, msg.citedConcepts);
       const db = getDb();
@@ -291,12 +308,17 @@ export function AskView() {
 
   function handleSelectMention(item: MentionItem, source: 'picker' | 'inline') {
     setSelectedMentions((prev) => {
-      if (prev.some((existing) => existing.id === item.id && existing.kind === item.kind)) return prev;
+      if (prev.some((existing) => existing.id === item.id && existing.kind === item.kind))
+        return prev;
       return [...prev, item];
     });
 
     if (source === 'inline' && inlineMention) {
-      const nextInput = `${input.slice(0, inlineMention.start)}${input.slice(inlineMention.end)}`.replace(/\s{2,}/g, ' ');
+      const nextInput =
+        `${input.slice(0, inlineMention.start)}${input.slice(inlineMention.end)}`.replace(
+          /\s{2,}/g,
+          ' ',
+        );
       updateInput(nextInput, inlineMention.start);
     }
 
@@ -306,7 +328,9 @@ export function AskView() {
   }
 
   function removeMention(target: MentionItem) {
-    setSelectedMentions((prev) => prev.filter((item) => !(item.id === target.id && item.kind === target.kind)));
+    setSelectedMentions((prev) =>
+      prev.filter((item) => !(item.id === target.id && item.kind === target.kind)),
+    );
     requestAnimationFrame(() => textareaRef.current?.focus());
   }
 
@@ -327,8 +351,7 @@ export function AskView() {
   const [conceptTitles, setConceptTitles] = useState<string[]>([]);
   useEffect(() => {
     getDb()
-      .concepts
-      .orderBy('updatedAt')
+      .concepts.orderBy('updatedAt')
       .reverse()
       .limit(50)
       .toArray()
@@ -358,26 +381,25 @@ export function AskView() {
           <div className="ask-toolbar-inner">
             {confirmClear ? (
               <>
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)', marginRight: 8 }}>确认清空所有对话？</span>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)', marginRight: 8 }}>
+                  确认清空所有对话？
+                </span>
                 <button
                   className="ask-reset-btn"
-                  onClick={() => { clearAskHistory(); setConfirmClear(false); }}
+                  onClick={() => {
+                    clearAskHistory();
+                    setConfirmClear(false);
+                  }}
                   style={{ background: 'var(--brand-clay)', color: '#fff', marginRight: 4 }}
                 >
                   清空
                 </button>
-                <button
-                  className="ask-reset-btn"
-                  onClick={() => setConfirmClear(false)}
-                >
+                <button className="ask-reset-btn" onClick={() => setConfirmClear(false)}>
                   取消
                 </button>
               </>
             ) : (
-              <button
-                className="ask-reset-btn"
-                onClick={() => setConfirmClear(true)}
-              >
+              <button className="ask-reset-btn" onClick={() => setConfirmClear(true)}>
                 新对话
               </button>
             )}
@@ -395,7 +417,13 @@ export function AskView() {
               <h3>从你的 Wiki 问起</h3>
               <p>
                 答案从已综合的概念页中提取,带引用。好的回答可以归档为新页面。
-                {(conceptCount ?? 0) === 0 && <><br /><br /><strong>Wiki 当前为空</strong>,请先添加一些资料。</>}
+                {(conceptCount ?? 0) === 0 && (
+                  <>
+                    <br />
+                    <br />
+                    <strong>Wiki 当前为空</strong>,请先添加一些资料。
+                  </>
+                )}
               </p>
               {suggestions.length > 0 && (
                 <div className="suggested-questions">
@@ -413,11 +441,16 @@ export function AskView() {
                 <div className="ask-recovery-banner">
                   <div>
                     <div className="ask-recovery-title">上一次问答没有完成</div>
-                    <div className="ask-recovery-copy">通常是 API 配置或服务端暂时不可用。可以重新开始，也可以保留记录继续问。</div>
+                    <div className="ask-recovery-copy">
+                      通常是 API 配置或服务端暂时不可用。可以重新开始，也可以保留记录继续问。
+                    </div>
                   </div>
                   <button
                     className="ask-reset-btn ask-recovery-action"
-                    onClick={() => { clearAskHistory(); setConfirmClear(false); }}
+                    onClick={() => {
+                      clearAskHistory();
+                      setConfirmClear(false);
+                    }}
                   >
                     重新开始
                   </button>
@@ -441,10 +474,17 @@ export function AskView() {
                       {failedAnswer ? (
                         <div className="ask-failure-copy">
                           <div className="ask-failure-title">问答暂时没成功</div>
-                          <p>通常是模型 API 或服务端配置暂时不可用。你可以检查设置里的模型配置，或者稍后重新提问。</p>
+                          <p>
+                            通常是模型 API
+                            或服务端配置暂时不可用。你可以检查设置里的模型配置，或者稍后重新提问。
+                          </p>
                         </div>
                       ) : (
-                        <Prose markdown={m.text} citedConceptIds={m.citedConcepts} className="prose-answer" />
+                        <Prose
+                          markdown={m.text}
+                          citedConceptIds={m.citedConcepts}
+                          className="prose-answer"
+                        />
                       )}
                       {!failedAnswer && m.citedConcepts && m.citedConcepts.length > 0 && (
                         <div className="msg-sources">
@@ -452,8 +492,10 @@ export function AskView() {
                           <CitedList ids={m.citedConcepts} onClick={openConcept} />
                         </div>
                       )}
-                      {!failedAnswer && m.citedConcepts && m.citedConcepts.length > 0 && (
-                        m.savedAsConceptId ? (
+                      {!failedAnswer &&
+                        m.citedConcepts &&
+                        m.citedConcepts.length > 0 &&
+                        (m.savedAsConceptId ? (
                           <button className="save-as-page" disabled>
                             <Icon.Save />
                             已归档为 Wiki 页面
@@ -467,8 +509,7 @@ export function AskView() {
                             <Icon.Save />
                             {archiving === m.id ? '归档中...' : '归档为新页面'}
                           </button>
-                        )
-                      )}
+                        ))}
                     </div>
                   </div>
                 );
@@ -500,7 +541,9 @@ export function AskView() {
                     onClick={() => removeMention(item)}
                     title="移除引用"
                   >
-                    <span className="ask-mention-chip-kind">{item.kind === 'concept' ? '@概念' : '@文件'}</span>
+                    <span className="ask-mention-chip-kind">
+                      {item.kind === 'concept' ? '@概念' : '@文件'}
+                    </span>
                     <span className="ask-mention-chip-title">{item.title}</span>
                     <span className="ask-mention-chip-close">×</span>
                   </button>
@@ -508,81 +551,91 @@ export function AskView() {
               </div>
             )}
 
-            {referencePickerOpen && mounted && createPortal(
-              <>
-                <div
-                  className="ask-flyout-backdrop"
-                  onClick={() => setReferencePickerOpen(false)}
-                  aria-hidden="true"
-                />
-                <div className="ask-flyout ask-reference-flyout">
-                  <div className="ask-flyout-header">
-                    <div className="ask-flyout-title">添加引用</div>
-                    <div className="ask-segmented">
-                      <button
-                        className={`ask-segmented-btn${referenceMode === 'concept' ? ' active' : ''}`}
-                        onClick={() => setReferenceMode('concept')}
-                      >
-                        引用概念
-                      </button>
-                      <button
-                        className={`ask-segmented-btn${referenceMode === 'source' ? ' active' : ''}`}
-                        onClick={() => setReferenceMode('source')}
-                      >
-                        引用文件
-                      </button>
+            {referencePickerOpen &&
+              mounted &&
+              createPortal(
+                <>
+                  <div
+                    className="ask-flyout-backdrop"
+                    onClick={() => setReferencePickerOpen(false)}
+                    aria-hidden="true"
+                  />
+                  <div className="ask-flyout ask-reference-flyout">
+                    <div className="ask-flyout-header">
+                      <div className="ask-flyout-title">添加引用</div>
+                      <div className="ask-segmented">
+                        <button
+                          className={`ask-segmented-btn${referenceMode === 'concept' ? ' active' : ''}`}
+                          onClick={() => setReferenceMode('concept')}
+                        >
+                          引用概念
+                        </button>
+                        <button
+                          className={`ask-segmented-btn${referenceMode === 'source' ? ' active' : ''}`}
+                          onClick={() => setReferenceMode('source')}
+                        >
+                          引用文件
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="ask-flyout-search">
-                    <Icon.Search />
-                    <input
-                      ref={pickerSearchRef}
-                      value={pickerSearch}
-                      onChange={(e) => setPickerSearch(e.target.value)}
-                      placeholder={referenceMode === 'concept' ? '搜索概念页...' : '搜索资料或文件...'}
+                    <div className="ask-flyout-search">
+                      <Icon.Search />
+                      <input
+                        ref={pickerSearchRef}
+                        value={pickerSearch}
+                        onChange={(e) => setPickerSearch(e.target.value)}
+                        placeholder={
+                          referenceMode === 'concept' ? '搜索概念页...' : '搜索资料或文件...'
+                        }
+                      />
+                    </div>
+                    <MentionResults
+                      items={pickerResults}
+                      emptyLabel={
+                        referenceMode === 'concept' ? '没有找到匹配的概念页' : '没有找到匹配的资料'
+                      }
+                      onSelect={(item) => handleSelectMention(item, 'picker')}
                     />
                   </div>
-                  <MentionResults
-                    items={pickerResults}
-                    emptyLabel={referenceMode === 'concept' ? '没有找到匹配的概念页' : '没有找到匹配的资料'}
-                    onSelect={(item) => handleSelectMention(item, 'picker')}
-                  />
-                </div>
-              </>,
-              document.body
-            )}
+                </>,
+                document.body,
+              )}
 
-            {modelMenuOpen && mounted && createPortal(
-              <>
-                <div
-                  className="ask-flyout-backdrop"
-                  onClick={() => setModelMenuOpen(false)}
-                  aria-hidden="true"
-                />
-                <div className="ask-flyout ask-model-flyout">
-                  <div className="ask-flyout-title">切换模型</div>
-                  <div className="ask-model-list">
-                    {modelOptions.map((item) => {
-                      const active = llmConfig.model === item.value;
-                      return (
-                        <button
-                          key={item.value}
-                          className={`ask-model-option${active ? ' active' : ''}`}
-                          onClick={() => selectModel(item.value)}
-                        >
-                          <span className="ask-model-option-copy">
-                            <span className="ask-model-option-label">{item.label}</span>
-                            {item.helper && <span className="ask-model-option-helper">{item.helper}</span>}
-                          </span>
-                          <span className="ask-model-option-check">{active ? '✓' : ''}</span>
-                        </button>
-                      );
-                    })}
+            {modelMenuOpen &&
+              mounted &&
+              createPortal(
+                <>
+                  <div
+                    className="ask-flyout-backdrop"
+                    onClick={() => setModelMenuOpen(false)}
+                    aria-hidden="true"
+                  />
+                  <div className="ask-flyout ask-model-flyout">
+                    <div className="ask-flyout-title">切换模型</div>
+                    <div className="ask-model-list">
+                      {modelOptions.map((item) => {
+                        const active = llmConfig.model === item.value;
+                        return (
+                          <button
+                            key={item.value}
+                            className={`ask-model-option${active ? ' active' : ''}`}
+                            onClick={() => selectModel(item.value)}
+                          >
+                            <span className="ask-model-option-copy">
+                              <span className="ask-model-option-label">{item.label}</span>
+                              {item.helper && (
+                                <span className="ask-model-option-helper">{item.helper}</span>
+                              )}
+                            </span>
+                            <span className="ask-model-option-check">{active ? '✓' : ''}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              </>,
-              document.body
-            )}
+                </>,
+                document.body,
+              )}
 
             {showInlinePanel && (
               <div className="ask-flyout ask-inline-flyout">
@@ -764,7 +817,7 @@ async function lookupMentions(
   kind: MentionKind,
   rawQuery: string,
   selected: MentionItem[],
-  limit = 6
+  limit = 6,
 ): Promise<MentionItem[]> {
   const db = getDb();
   const excluded = new Set(selected.filter((item) => item.kind === kind).map((item) => item.id));
@@ -777,11 +830,17 @@ async function lookupMentions(
           .filter((concept) => matchesText([concept.title, concept.summary], query))
           .limit(limit * 3)
           .toArray()
-      : await db.concepts.orderBy('updatedAt').reverse().limit(limit * 2).toArray();
+      : await db.concepts
+          .orderBy('updatedAt')
+          .reverse()
+          .limit(limit * 2)
+          .toArray();
 
     concepts = concepts
       .filter((concept) => !excluded.has(concept.id))
-      .sort((a, b) => scoreMatch([b.title, b.summary], query) - scoreMatch([a.title, a.summary], query))
+      .sort(
+        (a, b) => scoreMatch([b.title, b.summary], query) - scoreMatch([a.title, a.summary], query),
+      )
       .slice(0, limit);
 
     return concepts.map((concept) => ({
@@ -798,11 +857,19 @@ async function lookupMentions(
         .filter((source) => matchesText([source.title, source.author, source.url], query))
         .limit(limit * 3)
         .toArray()
-    : await db.sources.orderBy('ingestedAt').reverse().limit(limit * 2).toArray();
+    : await db.sources
+        .orderBy('ingestedAt')
+        .reverse()
+        .limit(limit * 2)
+        .toArray();
 
   sources = sources
     .filter((source) => !excluded.has(source.id))
-    .sort((a, b) => scoreMatch([b.title, b.author, b.url], query) - scoreMatch([a.title, a.author, a.url], query))
+    .sort(
+      (a, b) =>
+        scoreMatch([b.title, b.author, b.url], query) -
+        scoreMatch([a.title, a.author, a.url], query),
+    )
     .slice(0, limit);
 
   return sources.map((source) => ({

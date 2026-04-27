@@ -37,14 +37,16 @@ export function IngestModal() {
 
   useEffect(() => {
     const timers = timersRef.current;
-    return () => { timers.forEach(clearTimeout); };
+    return () => {
+      timers.forEach(clearTimeout);
+    };
   }, []);
 
   useEffect(() => {
     const el = modalRef.current;
     if (!el || !isOpen) return;
     const focusable = el.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
     );
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
@@ -53,14 +55,20 @@ export function IngestModal() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Tab') {
         const current = el.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
         );
         const f = current[0];
         const l = current[current.length - 1];
         if (e.shiftKey) {
-          if (document.activeElement === f) { e.preventDefault(); l?.focus(); }
+          if (document.activeElement === f) {
+            e.preventDefault();
+            l?.focus();
+          }
         } else {
-          if (document.activeElement === l) { e.preventDefault(); f?.focus(); }
+          if (document.activeElement === l) {
+            e.preventDefault();
+            f?.focus();
+          }
         }
       }
     };
@@ -94,7 +102,7 @@ export function IngestModal() {
       markFresh(result.newConceptIds);
       showToast(
         `完成 · 新建 ${result.newConceptIds.length} 个概念，更新 ${result.updatedConceptIds.length} 个`,
-        false
+        false,
       );
       safeTimeout(() => hideToast(), 3500);
       reset();
@@ -138,7 +146,7 @@ export function IngestModal() {
       markFresh(result.newConceptIds);
       showToast(
         `完成 · 新建 ${result.newConceptIds.length} 个概念,更新 ${result.updatedConceptIds.length} 个`,
-        false
+        false,
       );
       safeTimeout(() => hideToast(), 3500);
       reset();
@@ -155,14 +163,23 @@ export function IngestModal() {
     return (
       <NoteEditor
         onDone={handleNoteEditorDone}
-        onCancel={() => { setNoteEditorOpen(false); }}
+        onCancel={() => {
+          setNoteEditorOpen(false);
+        }}
       />
     );
   }
 
   return (
     <div className={`modal-overlay ${isOpen ? 'visible' : ''}`} onClick={handleClose}>
-      <div className="modal" ref={modalRef} role="dialog" aria-modal="true" aria-labelledby="ingest-modal-title" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal"
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ingest-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-handle" />
         {step === 'choose' && (
           <>
@@ -170,28 +187,40 @@ export function IngestModal() {
             <p className="modal-desc">原文只读 · AI 会把它编译进你的 Wiki,不会改动原文。</p>
             <div className="ingest-options">
               <button className="ingest-option" onClick={() => setStep('link')}>
-                <div className="opt-icon"><Icon.Link /></div>
+                <div className="opt-icon">
+                  <Icon.Link />
+                </div>
                 <div>
                   <div className="opt-title">粘贴链接</div>
                   <div className="opt-sub">带上文章/帖子的正文</div>
                 </div>
               </button>
               <button className="ingest-option" onClick={() => setNoteEditorOpen(true)}>
-                <div className="opt-icon"><Icon.Text /></div>
+                <div className="opt-icon">
+                  <Icon.Text />
+                </div>
                 <div>
                   <div className="opt-title">新建笔记</div>
                   <div className="opt-sub">支持 Markdown，实时预览</div>
                 </div>
               </button>
-              <button className="ingest-option" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>
-                <div className="opt-icon"><Icon.File /></div>
+              <button
+                className="ingest-option"
+                disabled
+                style={{ opacity: 0.5, cursor: 'not-allowed' }}
+              >
+                <div className="opt-icon">
+                  <Icon.File />
+                </div>
                 <div>
                   <div className="opt-title">上传文件</div>
                   <div className="opt-sub">PDF / Markdown (即将推出)</div>
                 </div>
               </button>
             </div>
-            <button className="modal-btn" onClick={handleClose}>取消</button>
+            <button className="modal-btn" onClick={handleClose}>
+              取消
+            </button>
           </>
         )}
 
@@ -201,8 +230,12 @@ export function IngestModal() {
             {confirmClose ? (
               <div className="ingest-confirm-close">
                 <p className="modal-desc">已填写的内容将丢失，确认关闭？</p>
-                <button className="modal-btn primary" onClick={handleConfirmClose}>确认</button>
-                <button className="modal-btn" onClick={() => setConfirmClose(false)}>继续编辑</button>
+                <button className="modal-btn primary" onClick={handleConfirmClose}>
+                  确认
+                </button>
+                <button className="modal-btn" onClick={() => setConfirmClose(false)}>
+                  继续编辑
+                </button>
               </div>
             ) : (
               <>
@@ -211,15 +244,32 @@ export function IngestModal() {
                 </p>
                 <div className="form-field">
                   <label htmlFor="link-title">标题</label>
-                  <input id="link-title" className="form-input" placeholder="例如: LLM Wiki by Karpathy" value={title} onChange={(e) => setTitle(e.target.value)} />
+                  <input
+                    id="link-title"
+                    className="form-input"
+                    placeholder="例如: LLM Wiki by Karpathy"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
                 </div>
                 <div className="form-field">
                   <label htmlFor="link-author">作者(可选)</label>
-                  <input id="link-author" className="form-input" value={author} onChange={(e) => setAuthor(e.target.value)} />
+                  <input
+                    id="link-author"
+                    className="form-input"
+                    value={author}
+                    onChange={(e) => setAuthor(e.target.value)}
+                  />
                 </div>
                 <div className="form-field">
                   <label htmlFor="link-url">链接 URL</label>
-                  <input id="link-url" className="form-input" placeholder="https://..." value={url} onChange={(e) => setUrl(e.target.value)} />
+                  <input
+                    id="link-url"
+                    className="form-input"
+                    placeholder="https://..."
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                  />
                 </div>
                 <div className="form-field">
                   <label htmlFor="link-content">正文(粘贴原文)</label>
@@ -233,14 +283,16 @@ export function IngestModal() {
                   />
                 </div>
                 {error && (
-                  <div style={{
-                    padding: '8px 12px',
-                    background: '#fee2e2',
-                    color: '#991b1b',
-                    borderRadius: 6,
-                    fontSize: 13,
-                    marginTop: 8
-                  }}>
+                  <div
+                    style={{
+                      padding: '8px 12px',
+                      background: '#fee2e2',
+                      color: '#991b1b',
+                      borderRadius: 6,
+                      fontSize: 13,
+                      marginTop: 8,
+                    }}
+                  >
                     {error}
                   </div>
                 )}
@@ -251,7 +303,13 @@ export function IngestModal() {
                 >
                   {submitting ? '编译中...' : '送入 AI 编译'}
                 </button>
-                <button className="modal-btn" disabled={submitting} onClick={() => setStep('choose')}>返回</button>
+                <button
+                  className="modal-btn"
+                  disabled={submitting}
+                  onClick={() => setStep('choose')}
+                >
+                  返回
+                </button>
               </>
             )}
           </>

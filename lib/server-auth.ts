@@ -88,7 +88,7 @@ export function requireAdmin(req: Request): NextResponse | null {
   if (!isAdminAuthConfigured()) {
     return NextResponse.json(
       { error: 'COMPOUND_ADMIN_TOKEN or ADMIN_TOKEN must be configured in production.' },
-      { status: 503 }
+      { status: 503 },
     );
   }
 

@@ -4,9 +4,9 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '@/lib/store';
 import { hapticLight, hapticSuccess } from '@/lib/haptic';
 
-const EDGE_WIDTH = 36;       // px from left edge to start (was 24)
-const MIN_DISTANCE = 60;     // px to trigger back
-const MAX_Y_DRIFT = 100;     // px vertical drift tolerance
+const EDGE_WIDTH = 36; // px from left edge to start (was 24)
+const MIN_DISTANCE = 60; // px to trigger back
+const MAX_Y_DRIFT = 100; // px vertical drift tolerance
 const INDICATOR_SIZE = 32;
 
 export function SwipeBack() {
@@ -112,13 +112,23 @@ export function SwipeBack() {
         justifyContent: 'center',
         opacity: 0,
         transform: 'translateX(-100%) translateY(-50%) scale(0.6)',
-        transition: 'opacity var(--motion-duration-fast) var(--motion-ease-standard), transform var(--motion-duration-fast) var(--motion-ease-standard)',
+        transition:
+          'opacity var(--motion-duration-fast) var(--motion-ease-standard), transform var(--motion-duration-fast) var(--motion-ease-standard)',
         zIndex: 100,
         pointerEvents: 'none',
         boxShadow: 'var(--shadow-md)',
       }}
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <polyline points="15 18 9 12 15 6" />
       </svg>
     </div>

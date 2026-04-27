@@ -61,7 +61,7 @@ function getClientKey(req: Request): string {
 export function rateLimit(
   req: Request,
   scope: string,
-  options: { limit: number; windowMs: number }
+  options: { limit: number; windowMs: number },
 ): NextResponse | null {
   if (options.limit <= 0) return null;
 
@@ -82,7 +82,7 @@ export function rateLimit(
   const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
   return NextResponse.json(
     { error: 'Too many requests', retryAfter },
-    { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    { status: 429, headers: { 'Retry-After': String(retryAfter) } },
   );
 }
 

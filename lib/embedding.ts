@@ -46,14 +46,19 @@ function embeddingModel(): string {
 }
 
 function embeddingApiKey(): string {
-  return clean(process.env.COMPOUND_EMBEDDING_API_KEY) || clean(process.env.LLM_API_KEY) || clean(process.env.AI_GATEWAY_API_KEY);
+  return (
+    clean(process.env.COMPOUND_EMBEDDING_API_KEY) ||
+    clean(process.env.LLM_API_KEY) ||
+    clean(process.env.AI_GATEWAY_API_KEY)
+  );
 }
 
 function embeddingApiUrl(): string {
   const explicit = clean(process.env.COMPOUND_EMBEDDING_API_URL);
   if (explicit) return explicit;
   const chatUrl = clean(process.env.LLM_API_URL);
-  if (chatUrl.includes('/chat/completions')) return chatUrl.replace('/chat/completions', '/embeddings');
+  if (chatUrl.includes('/chat/completions'))
+    return chatUrl.replace('/chat/completions', '/embeddings');
   return 'https://api.openai.com/v1/embeddings';
 }
 
@@ -80,7 +85,10 @@ function normalize(vec: Vector): Vector {
   return vec.map((x) => x / norm);
 }
 
-function localEmbedding(text: string, dims = Number(process.env.COMPOUND_LOCAL_EMBEDDING_DIMS || 256)): Vector {
+function localEmbedding(
+  text: string,
+  dims = Number(process.env.COMPOUND_LOCAL_EMBEDDING_DIMS || 256),
+): Vector {
   const v = new Array(dims).fill(0);
   const tokens = text
     .toLowerCase()
@@ -119,7 +127,9 @@ async function remoteEmbeddings(texts: string[]): Promise<Vector[] | null> {
     },
     body: JSON.stringify({
       model: embeddingModel(),
-      input: texts.map((text) => text.slice(0, Number(process.env.COMPOUND_EMBEDDING_MAX_CHARS || 8000))),
+      input: texts.map((text) =>
+        text.slice(0, Number(process.env.COMPOUND_EMBEDDING_MAX_CHARS || 8000)),
+      ),
     }),
     signal: AbortSignal.timeout(45_000),
   });
@@ -128,14 +138,18 @@ async function remoteEmbeddings(texts: string[]): Promise<Vector[] | null> {
     throw new Error(`Embedding ${res.status}: ${err.slice(0, 200)}`);
   }
   const data = await res.json();
-  const vectors = data?.data?.map((item: { embedding?: number[] }) => item.embedding) as number[][] | undefined;
+  const vectors = data?.data?.map((item: { embedding?: number[] }) => item.embedding) as
+    | number[][]
+    | undefined;
   if (!Array.isArray(vectors) || vectors.length !== texts.length) {
     throw new Error('Unexpected embedding response shape');
   }
   return vectors.map((v) => normalize(v));
 }
 
-async function embedTexts(texts: string[]): Promise<{ vectors: Vector[]; provider: string; model: string }> {
+async function embedTexts(
+  texts: string[],
+): Promise<{ vectors: Vector[]; provider: string; model: string }> {
   const remote = await remoteEmbeddings(texts);
   if (remote) return { vectors: remote, provider: 'remote', model: embeddingModel() };
   return {
@@ -167,7 +181,9 @@ function cosine(a: Vector, b: Vector): number {
   return score;
 }
 
-export async function embedSourceChunks(sourceId: string): Promise<{ total: number; embedded: number; provider: string; model: string }> {
+export async function embedSourceChunks(
+  sourceId: string,
+): Promise<{ total: number; embedded: number; provider: string; model: string }> {
   ensureEmbeddingSchema();
   const chunks = getServerDb()
     .prepare(`SELECT * FROM source_chunks WHERE source_id = ? ORDER BY chunk_index ASC`)
@@ -203,7 +219,7 @@ export async function embedSourceChunks(sourceId: string): Promise<{ total: numb
           JSON.stringify(vector),
           String(chunk.content_hash),
           ts,
-          ts
+          ts,
         );
       }
     });
@@ -215,11 +231,13 @@ export async function embedSourceChunks(sourceId: string): Promise<{ total: numb
 
 export async function hybridSearchWikiContext(
   query: string,
-  options: { conceptLimit?: number; chunkLimit?: number } = {}
+  options: { conceptLimit?: number; chunkLimit?: number } = {},
 ): Promise<QueryContext> {
   ensureEmbeddingSchema();
-  const conceptLimit = options.conceptLimit ?? Number(process.env.COMPOUND_QUERY_CONTEXT_CONCEPT_LIMIT || 24);
-  const chunkLimit = options.chunkLimit ?? Number(process.env.COMPOUND_QUERY_CONTEXT_CHUNK_LIMIT || 12);
+  const conceptLimit =
+    options.conceptLimit ?? Number(process.env.COMPOUND_QUERY_CONTEXT_CONCEPT_LIMIT || 24);
+  const chunkLimit =
+    options.chunkLimit ?? Number(process.env.COMPOUND_QUERY_CONTEXT_CHUNK_LIMIT || 12);
 
   const base = wikiRepo.searchWikiContext(query, { conceptLimit, chunkLimit });
   const vectorRows = getServerDb()
@@ -228,9 +246,11 @@ export async function hybridSearchWikiContext(
        FROM chunk_embeddings
        JOIN source_chunks ON source_chunks.id = chunk_embeddings.chunk_id
        ORDER BY chunk_embeddings.updated_at DESC
-       LIMIT ?`
+       LIMIT ?`,
     )
-    .all(Number(process.env.COMPOUND_HYBRID_VECTOR_SCAN_LIMIT || 5000)) as Array<Record<string, unknown>>;
+    .all(Number(process.env.COMPOUND_HYBRID_VECTOR_SCAN_LIMIT || 5000)) as Array<
+    Record<string, unknown>
+  >;
 
   if (vectorRows.length === 0) return base;
 
@@ -260,7 +280,8 @@ export async function hybridSearchWikiContext(
 
 export function getEmbeddingMetrics(): Record<string, number | string> {
   ensureEmbeddingSchema();
-  const scalar = (sql: string) => Number((getServerDb().prepare(sql).get() as { count?: number } | undefined)?.count ?? 0);
+  const scalar = (sql: string) =>
+    Number((getServerDb().prepare(sql).get() as { count?: number } | undefined)?.count ?? 0);
   const row = getServerDb()
     .prepare(`SELECT provider, model FROM chunk_embeddings ORDER BY updated_at DESC LIMIT 1`)
     .get() as { provider?: string; model?: string } | undefined;

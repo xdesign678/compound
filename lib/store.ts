@@ -106,7 +106,10 @@ function readStoredColorMode(): ColorMode {
 function applyColorMode(mode: ColorMode) {
   if (typeof window === 'undefined') return;
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  document.documentElement.classList.toggle('dark', mode === 'dark' || (mode === 'system' && prefersDark));
+  document.documentElement.classList.toggle(
+    'dark',
+    mode === 'dark' || (mode === 'system' && prefersDark),
+  );
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -142,13 +145,17 @@ export const useAppStore = create<AppState>((set) => ({
   closeObsidianImport: () => set({ obsidianImportOpen: false }),
   openGithubSync: () => set({ githubSyncOpen: true }),
   closeGithubSync: () => set({ githubSyncOpen: false }),
-  showToast: (text, loading = false, isError = false) => set({ toast: { visible: true, text, loading, isError } }),
+  showToast: (text, loading = false, isError = false) =>
+    set({ toast: { visible: true, text, loading, isError } }),
   hideToast: () => set((s) => ({ toast: { ...s.toast, visible: false } })),
-  markFresh: (ids: string[]) => set((s) => {
-    const next = { ...s.freshConceptIds };
-    ids.forEach(id => { next[id] = true; });
-    return { freshConceptIds: next };
-  }),
+  markFresh: (ids: string[]) =>
+    set((s) => {
+      const next = { ...s.freshConceptIds };
+      ids.forEach((id) => {
+        next[id] = true;
+      });
+      return { freshConceptIds: next };
+    }),
   clearFresh: () => set({ freshConceptIds: {} }),
   clearAskHistory: async () => {
     const { getDb } = await import('./db');

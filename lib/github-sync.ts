@@ -52,9 +52,7 @@ function parseRepoSlug(raw: string): { owner: string; repo: string } {
     cleaned.match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\/|$)/) ||
     cleaned.match(/^([^/]+)\/([^/]+)$/);
   if (!match) {
-    throw new Error(
-      `Invalid GITHUB_REPO: "${raw}" — expected "owner/repo" or a github.com URL`
-    );
+    throw new Error(`Invalid GITHUB_REPO: "${raw}" — expected "owner/repo" or a github.com URL`);
   }
   return { owner: match[1], repo: match[2] };
 }
@@ -74,7 +72,7 @@ export function getGithubConfig(): GithubConfig {
 async function githubFetch(
   url: string,
   cfg: GithubConfig,
-  accept = 'application/vnd.github+json'
+  accept = 'application/vnd.github+json',
 ): Promise<Response> {
   const res = await fetch(url, {
     headers: {
@@ -91,7 +89,7 @@ async function githubFetch(
     throw new Error(
       `GitHub ${res.status} at ${new URL(url).pathname}` +
         (remaining === '0' ? ' (rate limit exhausted)' : '') +
-        (text ? `: ${text.slice(0, 300)}` : '')
+        (text ? `: ${text.slice(0, 300)}` : ''),
     );
   }
   return res;
@@ -102,12 +100,14 @@ async function githubFetch(
  * Uses the git tree API to fetch the entire repository in a single call.
  */
 export async function listMarkdownFiles(
-  cfg: GithubConfig = getGithubConfig()
+  cfg: GithubConfig = getGithubConfig(),
 ): Promise<GithubMarkdownFile[]> {
   // 1. Resolve the branch head commit SHA.
   const refUrl = `${GITHUB_API_BASE}/repos/${cfg.owner}/${cfg.repo}/branches/${encodeURIComponent(cfg.branch)}`;
   const refRes = await githubFetch(refUrl, cfg);
-  const refData = (await refRes.json()) as { commit: { sha: string; commit: { tree: { sha: string } } } };
+  const refData = (await refRes.json()) as {
+    commit: { sha: string; commit: { tree: { sha: string } } };
+  };
   const treeSha = refData.commit.commit.tree.sha;
 
   // 2. Walk the tree recursively (single request, up to 100k entries).
@@ -117,7 +117,7 @@ export async function listMarkdownFiles(
 
   if (treeData.truncated) {
     console.warn(
-      `[github-sync] Tree for ${cfg.owner}/${cfg.repo} was truncated; very large vaults may need pagination.`
+      `[github-sync] Tree for ${cfg.owner}/${cfg.repo} was truncated; very large vaults may need pagination.`,
     );
   }
 
@@ -144,10 +144,10 @@ export async function listMarkdownFiles(
 export async function fetchMarkdownContent(
   path: string,
   cfg: GithubConfig = getGithubConfig(),
-  knownSha?: string
+  knownSha?: string,
 ): Promise<GithubFileContent> {
   const url = `${GITHUB_API_BASE}/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(
-    path
+    path,
   )}?ref=${encodeURIComponent(cfg.branch)}`;
 
   if (knownSha) {

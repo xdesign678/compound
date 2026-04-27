@@ -4,10 +4,7 @@ const RUNTIME_CACHE = 'compound-runtime-v8';
 const IS_LOCAL_DEV = ['localhost', '127.0.0.1', '0.0.0.0'].includes(location.hostname);
 
 // App shell files to precache
-const PRECACHE_URLS = [
-  '/',
-  '/manifest.json',
-];
+const PRECACHE_URLS = ['/', '/manifest.json'];
 
 // Install: precache app shell
 self.addEventListener('install', (event) => {
@@ -15,9 +12,9 @@ self.addEventListener('install', (event) => {
     (IS_LOCAL_DEV
       ? Promise.resolve()
       : caches.open(CACHE_NAME).then((cache) => {
-        return cache.addAll(PRECACHE_URLS);
-      })
-    ).then(() => self.skipWaiting())
+          return cache.addAll(PRECACHE_URLS);
+        })
+    ).then(() => self.skipWaiting()),
   );
 });
 
@@ -25,14 +22,20 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   const currentCaches = IS_LOCAL_DEV ? [] : [CACHE_NAME, RUNTIME_CACHE];
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return cacheNames.filter((name) => name.startsWith('compound-') && !currentCaches.includes(name));
-    }).then((toDelete) => {
-      return Promise.all(toDelete.map((name) => caches.delete(name)));
-    }).then(() => {
-      if (IS_LOCAL_DEV) return self.registration.unregister();
-      return self.clients.claim();
-    })
+    caches
+      .keys()
+      .then((cacheNames) => {
+        return cacheNames.filter(
+          (name) => name.startsWith('compound-') && !currentCaches.includes(name),
+        );
+      })
+      .then((toDelete) => {
+        return Promise.all(toDelete.map((name) => caches.delete(name)));
+      })
+      .then(() => {
+        if (IS_LOCAL_DEV) return self.registration.unregister();
+        return self.clients.claim();
+      }),
   );
 });
 
@@ -57,7 +60,7 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         });
-      })
+      }),
     );
     return;
   }
@@ -72,7 +75,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request).catch(() => {
         return caches.match('/') || caches.match(request);
-      })
+      }),
     );
     return;
   }
@@ -89,7 +92,7 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         });
-      })
+      }),
     );
     return;
   }
@@ -105,6 +108,6 @@ self.addEventListener('fetch', (event) => {
         return response;
       });
       return cached || fetchPromise;
-    })
+    }),
   );
 });

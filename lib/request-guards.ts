@@ -10,7 +10,7 @@ export function enforceContentLength(req: Request, maxBytes: number): NextRespon
 
   return NextResponse.json(
     { error: `Request body is too large. Max ${maxBytes} bytes.` },
-    { status: 413 }
+    { status: 413 },
   );
 }
 
@@ -21,7 +21,7 @@ function clean(value: string | null | undefined): string | undefined {
 
 export function readLlmConfigOverride(
   req: Request,
-  body?: { llmConfig?: LlmConfig }
+  body?: { llmConfig?: LlmConfig },
 ): LlmConfig | undefined {
   const fromHeaders: LlmConfig = {
     apiKey: clean(req.headers.get('x-user-api-key')),

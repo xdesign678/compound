@@ -20,7 +20,7 @@ export function SourcesView() {
 
   const sources = useLiveQuery(
     async () => getDb().sources.orderBy('ingestedAt').reverse().toArray(),
-    []
+    [],
   );
 
   const totalSourceCount = useLiveQuery(async () => getDb().sources.count(), []);
@@ -33,7 +33,7 @@ export function SourcesView() {
       sources.map(async (source) => {
         const count = await db.concepts.where('sources').equals(source.id).count();
         map.set(source.id, count);
-      })
+      }),
     );
     return map;
   }, [sources]);
@@ -42,11 +42,12 @@ export function SourcesView() {
     if (!sources) return [];
     const q = deferredQuery.trim().toLowerCase();
     if (!q) return sources.slice(0, visibleCount);
-    return sources.filter(
-      (source) =>
-        source.title.toLowerCase().includes(q) ||
-        (source.author ?? '').toLowerCase().includes(q)
-    ).slice(0, visibleCount);
+    return sources
+      .filter(
+        (source) =>
+          source.title.toLowerCase().includes(q) || (source.author ?? '').toLowerCase().includes(q),
+      )
+      .slice(0, visibleCount);
   }, [sources, deferredQuery, visibleCount]);
 
   const totalMatches = useMemo(() => {
@@ -55,8 +56,7 @@ export function SourcesView() {
     if (!q) return sources.length;
     return sources.filter(
       (source) =>
-        source.title.toLowerCase().includes(q) ||
-        (source.author ?? '').toLowerCase().includes(q)
+        source.title.toLowerCase().includes(q) || (source.author ?? '').toLowerCase().includes(q),
     ).length;
   }, [sources, deferredQuery]);
 
@@ -93,7 +93,9 @@ export function SourcesView() {
       <div className="view-padding">
         <div className="view-lead">
           <div className="view-lead-kicker">资料档案</div>
-          <p className="view-lead-copy">这里保留你喂给知识库的原始材料。原文不被改写，只被引用和编译。</p>
+          <p className="view-lead-copy">
+            这里保留你喂给知识库的原始材料。原文不被改写，只被引用和编译。
+          </p>
         </div>
         {(totalSourceCount ?? 0) === 0 ? (
           <div className="empty-state empty-state-compact">
@@ -139,10 +141,15 @@ export function SourcesView() {
               </button>
             ))}
             <div className="list-end-hint">
-              <span>已显示 {filteredSources.length} / {totalMatches} 份资料</span>
+              <span>
+                已显示 {filteredSources.length} / {totalMatches} 份资料
+              </span>
             </div>
             {filteredSources.length < totalMatches && (
-              <button className="modal-btn" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
+              <button
+                className="modal-btn"
+                onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+              >
                 加载更多
               </button>
             )}

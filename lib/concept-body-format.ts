@@ -1,5 +1,4 @@
-const BLOCK_MARKDOWN_PATTERN =
-  /(^|\n)(#{1,6}\s|>\s|[-*+]\s|\d+\.\s|```|~~~|\|.+\||---\s*$)/m;
+const BLOCK_MARKDOWN_PATTERN = /(^|\n)(#{1,6}\s|>\s|[-*+]\s|\d+\.\s|```|~~~|\|.+\||---\s*$)/m;
 
 function splitPlainTextIntoSentences(text: string): string[] {
   const normalized = text

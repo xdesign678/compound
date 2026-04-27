@@ -14,7 +14,8 @@ const MAX_BODY_BYTES = 256_000;
 const MAX_BATCH_SIZE = 20;
 
 export async function POST(req: Request) {
-  const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
+  const denied =
+    requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
   try {
@@ -25,14 +26,16 @@ export async function POST(req: Request) {
     if (body.concepts.length > MAX_BATCH_SIZE) {
       return NextResponse.json(
         { error: `Max ${MAX_BATCH_SIZE} concepts per batch` },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const llmConfig = readLlmConfigOverride(req, body);
 
     const conceptList = body.concepts
-      .map((c) => `- [${c.id}] ${c.title} — ${c.summary}\n  正文片段: ${(c.body ?? '').slice(0, 200)}`)
+      .map(
+        (c) => `- [${c.id}] ${c.title} — ${c.summary}\n  正文片段: ${(c.body ?? '').slice(0, 200)}`,
+      )
       .join('\n');
 
     const existingCategories = normalizeCategoryKeys(body.existingCategories ?? []).slice(0, 120);

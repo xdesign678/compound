@@ -24,35 +24,29 @@ export function ActivityLogView() {
   const setFilter = useAppStore((s) => s.setActivityFilter);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const items = useLiveQuery(
-    async () => {
-      const db = getDb();
-      if (filter === 'all') {
-        return db.activity.orderBy('at').reverse().limit(visibleCount).toArray();
-      }
-      return db.activity
-        .where('[type+at]')
-        .between([filter, Dexie.minKey], [filter, Dexie.maxKey])
-        .reverse()
-        .limit(visibleCount)
-        .toArray();
-    },
-    [filter, visibleCount]
-  );
+  const items = useLiveQuery(async () => {
+    const db = getDb();
+    if (filter === 'all') {
+      return db.activity.orderBy('at').reverse().limit(visibleCount).toArray();
+    }
+    return db.activity
+      .where('[type+at]')
+      .between([filter, Dexie.minKey], [filter, Dexie.maxKey])
+      .reverse()
+      .limit(visibleCount)
+      .toArray();
+  }, [filter, visibleCount]);
 
-  const totalCount = useLiveQuery(
-    async () => {
-      const db = getDb();
-      if (filter === 'all') {
-        return db.activity.count();
-      }
-      return db.activity
-        .where('[type+at]')
-        .between([filter, Dexie.minKey], [filter, Dexie.maxKey])
-        .count();
-    },
-    [filter]
-  );
+  const totalCount = useLiveQuery(async () => {
+    const db = getDb();
+    if (filter === 'all') {
+      return db.activity.count();
+    }
+    return db.activity
+      .where('[type+at]')
+      .between([filter, Dexie.minKey], [filter, Dexie.maxKey])
+      .count();
+  }, [filter]);
 
   // Reset pagination when filter changes
   const handleSetFilter = (f: ActivityFilterType) => {
@@ -90,7 +84,9 @@ export function ActivityLogView() {
         <div className="empty-state">加载中...</div>
       ) : items.length === 0 ? (
         <div className="empty-state" style={{ paddingTop: 40 }}>
-          <div className="es-icon"><Icon.Activity /></div>
+          <div className="es-icon">
+            <Icon.Activity />
+          </div>
           <h3>暂无活动记录</h3>
           <p>当你添加资料、提问、或运行健康检查时,AI 的动作会记录在这里。</p>
         </div>
@@ -112,7 +108,7 @@ export function ActivityLogView() {
                         __html: DOMPurify.sanitize(
                           it.title
                             .replace(/<em>/g, '<span class="emphasis">')
-                            .replace(/<\/em>/g, '</span>')
+                            .replace(/<\/em>/g, '</span>'),
                         ),
                       }}
                     />

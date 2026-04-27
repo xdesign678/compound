@@ -16,18 +16,33 @@ export function renderMarkdown(md: string): string {
   // [text](concept:id) → custom span
   html = html.replace(
     /<a href="concept:([^"]+)"[^>]*>([^<]+)<\/a>/g,
-    '<span class="inline-link" data-concept-id="$1">$2</span>'
+    '<span class="inline-link" data-concept-id="$1">$2</span>',
   );
 
   // [CX] citation footnotes → pill
-  html = html.replace(
-    /\[C(\d+)\]/g,
-    '<span class="citation" data-citation-index="$1">C$1</span>'
-  );
+  html = html.replace(/\[C(\d+)\]/g, '<span class="citation" data-citation-index="$1">C$1</span>');
 
   if (typeof window !== 'undefined') {
     html = DOMPurify.sanitize(html, {
-      ALLOWED_TAGS: ['p', 'strong', 'em', 'ul', 'ol', 'li', 'code', 'pre', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'span', 'a', 'br', 'hr'],
+      ALLOWED_TAGS: [
+        'p',
+        'strong',
+        'em',
+        'ul',
+        'ol',
+        'li',
+        'code',
+        'pre',
+        'blockquote',
+        'h1',
+        'h2',
+        'h3',
+        'h4',
+        'span',
+        'a',
+        'br',
+        'hr',
+      ],
       ALLOWED_ATTR: ['class', 'data-concept-id', 'data-citation-index', 'href', 'target'],
     });
   }
@@ -51,7 +66,9 @@ export function formatRelativeTime(ts: number): string {
   return `${Math.floor(diff / (30 * day))} 个月前`;
 }
 
-export function groupActivityByDate<T extends { at: number }>(items: T[]): Array<{ label: string; items: T[] }> {
+export function groupActivityByDate<T extends { at: number }>(
+  items: T[],
+): Array<{ label: string; items: T[] }> {
   const groups = new Map<string, T[]>();
   const now = Date.now();
   const day = 86400000;

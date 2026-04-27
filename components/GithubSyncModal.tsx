@@ -121,7 +121,7 @@ export function GithubSyncModal() {
         setPollIssue(plan.userMessage);
         pollTimerRef.current = setTimeout(
           () => void pollOnce(jobId, plan.nextFailureCount),
-          plan.retryDelayMs
+          plan.retryDelayMs,
         );
         return;
       }
@@ -192,7 +192,9 @@ export function GithubSyncModal() {
           <p className="gh-sync-subtitle">{statusCopy.description}</p>
         </header>
 
-        {(phase === 'idle' || (phase === 'failed' && !job)) && <IdleView onStart={start} error={error} />}
+        {(phase === 'idle' || (phase === 'failed' && !job)) && (
+          <IdleView onStart={start} error={error} />
+        )}
 
         {phase === 'starting' && <StartingView stageItems={stageItems} />}
 
@@ -204,9 +206,7 @@ export function GithubSyncModal() {
                   <p className="gh-sync-panel-kicker">同步阶段</p>
                   <h3>现在进行到哪一步</h3>
                 </div>
-                <div className="gh-sync-badge">
-                  共 {job.total} 个文件
-                </div>
+                <div className="gh-sync-badge">共 {job.total} 个文件</div>
               </div>
               <div className="gh-sync-stage-list" aria-label="同步阶段">
                 {stageItems.map((item, index) => (
@@ -227,7 +227,9 @@ export function GithubSyncModal() {
               <div className="gh-sync-panel-head">
                 <div>
                   <p className="gh-sync-panel-kicker">当前处理文件</p>
-                  <h3>{currentFile.counter ? `当前文件 ${currentFile.counter}` : '正在准备同步内容'}</h3>
+                  <h3>
+                    {currentFile.counter ? `当前文件 ${currentFile.counter}` : '正在准备同步内容'}
+                  </h3>
                 </div>
                 {job.total > 0 && (
                   <div className="gh-sync-mini-stats">
@@ -238,7 +240,9 @@ export function GithubSyncModal() {
               <p className="gh-sync-focus-path" title={currentFile.path ?? job.current ?? ''}>
                 {currentFile.path ?? job.current ?? '服务端正在准备第一批同步内容…'}
               </p>
-              {phase === 'running' && pollIssue && <p className="gh-sync-inline-hint">{pollIssue}</p>}
+              {phase === 'running' && pollIssue && (
+                <p className="gh-sync-inline-hint">{pollIssue}</p>
+              )}
             </section>
 
             <section className="gh-sync-panel gh-sync-progress-card">
@@ -248,8 +252,12 @@ export function GithubSyncModal() {
                   <h3>{progressPct}%</h3>
                 </div>
                 <div className="gh-sync-progress-stats">
-                  <span>成功 <strong>{job.done}</strong></span>
-                  <span>失败 <strong>{job.failed}</strong></span>
+                  <span>
+                    成功 <strong>{job.done}</strong>
+                  </span>
+                  <span>
+                    失败 <strong>{job.failed}</strong>
+                  </span>
                 </div>
               </div>
               <div className="gh-sync-progress-bar" aria-label="同步进度">
@@ -309,7 +317,9 @@ export function GithubSyncModal() {
                               {entry.path}
                             </span>
                           </div>
-                          {entry.message && <p className="gh-sync-timeline-message">{entry.message}</p>}
+                          {entry.message && (
+                            <p className="gh-sync-timeline-message">{entry.message}</p>
+                          )}
                         </div>
                       </div>
                     ))
@@ -451,15 +461,10 @@ function ErrorDetail({ error }: { error: string }) {
       <p className="gh-sync-error-main">{mainMessage}</p>
       {hasDetails && (
         <div className="gh-sync-error-collapse">
-          <button
-            className="gh-sync-error-toggle"
-            onClick={() => setExpanded((v) => !v)}
-          >
+          <button className="gh-sync-error-toggle" onClick={() => setExpanded((v) => !v)}>
             {expanded ? '收起详情' : '查看详情'}
           </button>
-          {expanded && (
-            <pre className="gh-sync-error-pre">{error}</pre>
-          )}
+          {expanded && <pre className="gh-sync-error-pre">{error}</pre>}
         </div>
       )}
     </div>

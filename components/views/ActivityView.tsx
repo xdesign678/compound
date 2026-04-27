@@ -25,7 +25,11 @@ export function ActivityView() {
           aria-atomic="true"
         >
           <div className="activity-inline-status-icon">
-            {lintBanner.tone === 'running' ? <span className="lint-spinner" /> : <Icon.Contradiction />}
+            {lintBanner.tone === 'running' ? (
+              <span className="lint-spinner" />
+            ) : (
+              <Icon.Contradiction />
+            )}
           </div>
           <div className="activity-inline-status-body">
             <div className="activity-inline-status-title">{lintBanner.title}</div>

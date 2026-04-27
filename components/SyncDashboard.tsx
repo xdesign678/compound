@@ -102,7 +102,11 @@ function badgeTone(value: string) {
 }
 
 function Badge({ value }: { value: string }) {
-  return <span className={`ops-badge tone-${badgeTone(value)}`}>{statusText[value] || stageText[value] || value}</span>;
+  return (
+    <span className={`ops-badge tone-${badgeTone(value)}`}>
+      {statusText[value] || stageText[value] || value}
+    </span>
+  );
 }
 
 async function postJson(path: string, body?: unknown) {
@@ -157,7 +161,7 @@ export default function SyncDashboard() {
         setBusy('');
       }
     },
-    [load]
+    [load],
   );
 
   useEffect(() => {
@@ -218,7 +222,9 @@ export default function SyncDashboard() {
             <button
               className="ops-btn ops-actions-overflow"
               disabled={Boolean(busy)}
-              onClick={() => runAction('retry', () => postJson('/api/sync/retry', { runId: run?.id }))}
+              onClick={() =>
+                runAction('retry', () => postJson('/api/sync/retry', { runId: run?.id }))
+              }
             >
               重试失败
             </button>
@@ -232,8 +238,12 @@ export default function SyncDashboard() {
           </div>
           <span className="ops-actions-divider" aria-hidden="true" />
           <div className="ops-actions-group ops-actions-overflow" role="group" aria-label="导航">
-            <Link className="ops-btn" href="/review">审核队列</Link>
-            <Link className="ops-btn subtle" href="/">返回知识库</Link>
+            <Link className="ops-btn" href="/review">
+              审核队列
+            </Link>
+            <Link className="ops-btn subtle" href="/">
+              返回知识库
+            </Link>
           </div>
 
           <div className="ops-more" ref={moreRef}>
@@ -253,7 +263,9 @@ export default function SyncDashboard() {
                   role="menuitem"
                   className="ops-more-item"
                   disabled={Boolean(busy)}
-                  onClick={() => runAction('retry', () => postJson('/api/sync/retry', { runId: run?.id }))}
+                  onClick={() =>
+                    runAction('retry', () => postJson('/api/sync/retry', { runId: run?.id }))
+                  }
                 >
                   重试失败
                 </button>
@@ -266,10 +278,20 @@ export default function SyncDashboard() {
                 >
                   取消
                 </button>
-                <Link className="ops-more-item" role="menuitem" href="/review" onClick={() => setMoreOpen(false)}>
+                <Link
+                  className="ops-more-item"
+                  role="menuitem"
+                  href="/review"
+                  onClick={() => setMoreOpen(false)}
+                >
                   审核队列
                 </Link>
-                <Link className="ops-more-item subtle" role="menuitem" href="/" onClick={() => setMoreOpen(false)}>
+                <Link
+                  className="ops-more-item subtle"
+                  role="menuitem"
+                  href="/"
+                  onClick={() => setMoreOpen(false)}
+                >
                   返回知识库
                 </Link>
               </div>
@@ -289,7 +311,9 @@ export default function SyncDashboard() {
         <div className="ops-stat">
           <span>同步进度</span>
           <strong>{percent}%</strong>
-          <em>完成 {run?.done_files ?? 0} / 变更 {run?.changed_files ?? 0}</em>
+          <em>
+            完成 {run?.done_files ?? 0} / 变更 {run?.changed_files ?? 0}
+          </em>
           {run ? (
             <div className="ops-progress-inline" aria-label={`同步进度 ${percent}%`}>
               <span style={{ width: `${percent}%` }} />
@@ -299,7 +323,9 @@ export default function SyncDashboard() {
         <div className="ops-stat">
           <span>分析队列</span>
           <strong>{asNumber(coverage.analysisQueued)}</strong>
-          <em>失败 {asNumber(coverage.analysisFailed)} · 向量 {asNumber(coverage.chunkEmbeddings)}</em>
+          <em>
+            失败 {asNumber(coverage.analysisFailed)} · 向量 {asNumber(coverage.chunkEmbeddings)}
+          </em>
         </div>
         <div className="ops-stat">
           <span>人工审核</span>
@@ -314,7 +340,9 @@ export default function SyncDashboard() {
             <div className="ops-run-strip-badges">
               <Badge value={run.status} />
               <Badge value={run.stage} />
-              <span className="ops-run-strip-repo">{run.repo ? `${run.repo}@${run.branch || 'main'}` : '本地'}</span>
+              <span className="ops-run-strip-repo">
+                {run.repo ? `${run.repo}@${run.branch || 'main'}` : '本地'}
+              </span>
             </div>
             <button
               type="button"
@@ -327,7 +355,8 @@ export default function SyncDashboard() {
             </button>
           </div>
           <div className="ops-run-strip-meta">
-            新增 {run.created_files} · 更新 {run.updated_files} · 删除 {run.deleted_files} · 跳过 {run.skipped_files} · 失败 {run.failed_files}
+            新增 {run.created_files} · 更新 {run.updated_files} · 删除 {run.deleted_files} · 跳过{' '}
+            {run.skipped_files} · 失败 {run.failed_files}
           </div>
           {runDetailsOpen ? (
             <div className="ops-run-strip-extra">
@@ -388,7 +417,9 @@ export default function SyncDashboard() {
                 <p>{item.error}</p>
               </div>
             ))}
-            {(dashboard?.errorStats ?? []).length === 0 ? <p className="ops-empty">暂无错误。</p> : null}
+            {(dashboard?.errorStats ?? []).length === 0 ? (
+              <p className="ops-empty">暂无错误。</p>
+            ) : null}
           </div>
         </div>
       </section>
@@ -415,7 +446,9 @@ export default function SyncDashboard() {
                 <tr key={item.id}>
                   <td title={item.path}>{item.path}</td>
                   <td>{item.change_type}</td>
-                  <td><Badge value={item.status} /></td>
+                  <td>
+                    <Badge value={item.status} />
+                  </td>
                   <td>{stageText[item.stage] || item.stage}</td>
                   <td>{item.chunks ?? '-'}</td>
                   <td>{(item.concepts_created ?? 0) + (item.concepts_updated ?? 0) || '-'}</td>
@@ -436,7 +469,9 @@ export default function SyncDashboard() {
           {(dashboard?.activeItems ?? []).map((item) => (
             <div className="ops-mobile-card" key={item.id}>
               <div className="ops-mobile-card-header">
-                <span className="ops-mobile-card-path" title={item.path}>{item.path}</span>
+                <span className="ops-mobile-card-path" title={item.path}>
+                  {item.path}
+                </span>
                 <Badge value={item.status} />
               </div>
               <div className="ops-mobile-card-meta">
@@ -452,8 +487,7 @@ export default function SyncDashboard() {
                 )}
                 {(item.concepts_created ?? 0) + (item.concepts_updated ?? 0) > 0 && (
                   <span className="ops-mobile-stat">
-                    <em>概念</em>{' '}
-                    {(item.concepts_created ?? 0) + (item.concepts_updated ?? 0)}
+                    <em>概念</em> {(item.concepts_created ?? 0) + (item.concepts_updated ?? 0)}
                   </span>
                 )}
                 {item.evidence != null && (
@@ -462,9 +496,7 @@ export default function SyncDashboard() {
                   </span>
                 )}
               </div>
-              {item.error ? (
-                <div className="ops-mobile-card-error">{item.error}</div>
-              ) : null}
+              {item.error ? <div className="ops-mobile-card-error">{item.error}</div> : null}
             </div>
           ))}
           {(dashboard?.activeItems ?? []).length === 0 ? (

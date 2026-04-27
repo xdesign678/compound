@@ -15,7 +15,8 @@ const MAX_RAW_CONTENT_CHARS = 100_000;
 const MAX_EXISTING_CONCEPTS = 500;
 
 export async function POST(req: Request) {
-  const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
+  const denied =
+    requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
   try {
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
     if (body.source.rawContent.length > MAX_RAW_CONTENT_CHARS) {
       return NextResponse.json(
         { error: `source.rawContent is too long. Max ${MAX_RAW_CONTENT_CHARS} characters.` },
-        { status: 413 }
+        { status: 413 },
       );
     }
     if (body.existingConcepts !== undefined && !Array.isArray(body.existingConcepts)) {
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
     console.error('[ingest] error:', err instanceof Error ? err.message : String(err));
     return NextResponse.json(
       { error: 'Ingest processing failed. Please check your API configuration.' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

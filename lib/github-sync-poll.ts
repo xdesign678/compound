@@ -38,6 +38,6 @@ function isTransientPollFailure(status: number | undefined, message: string): bo
   }
 
   return /bad gateway|gateway timeout|service unavailable|failed to fetch|fetch failed|networkerror|econnreset/i.test(
-    message
+    message,
   );
 }

@@ -87,7 +87,7 @@ function makeOverlap(previous: string, overlapTokens: number): string {
 
 export function splitMarkdownIntoChunks(
   rawContent: string,
-  options: ChunkOptions = {}
+  options: ChunkOptions = {},
 ): SourceChunkDraft[] {
   const content = normalizeContent(rawContent);
   if (!content) return [];

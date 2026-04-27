@@ -13,13 +13,7 @@ import { normalizeCategoryKeys, normalizeCategoryState } from './category-normal
 import { runIngestLLM } from './ingest-core';
 import { compileWikiArtifactsAfterIngest } from './wiki-compiler';
 import { wikiRepo } from './wiki-db';
-import type {
-  Source,
-  Concept,
-  ActivityLog,
-  SourceType,
-  LlmConfig,
-} from './types';
+import type { Source, Concept, ActivityLog, SourceType, LlmConfig } from './types';
 
 export interface ServerIngestInput {
   title: string;
@@ -49,7 +43,7 @@ export interface ServerIngestResult {
 }
 
 export async function ingestSourceToServerDb(
-  input: ServerIngestInput
+  input: ServerIngestInput,
 ): Promise<ServerIngestResult> {
   const now = Date.now();
   const exactExisting = input.externalKey ? repo.getSourceByExternalKey(input.externalKey) : null;
@@ -73,7 +67,7 @@ export async function ingestSourceToServerDb(
   // 2. Gather existing concepts for LLM context
   const candidateConcepts = repo.findConceptCandidates(
     `${source.title}\n${source.rawContent.slice(0, 4000)}`,
-    320
+    320,
   );
   const existingCategories = normalizeCategoryKeys(repo.listCategoryKeys());
 
@@ -99,7 +93,9 @@ export async function ingestSourceToServerDb(
   const newConceptIds: string[] = [];
   const newConcepts: Concept[] = resp.newConcepts.map((nc) => {
     const id = 'c-' + nanoid(8);
-    const { categories, categoryKeys } = normalizeCategoryState({ categories: nc.categories || [] });
+    const { categories, categoryKeys } = normalizeCategoryState({
+      categories: nc.categories || [],
+    });
     newConceptIds.push(id);
     return {
       id,
@@ -121,7 +117,7 @@ export async function ingestSourceToServerDb(
     new Set([
       ...resp.updatedConcepts.map((upd) => upd.id),
       ...newConcepts.flatMap((concept) => concept.related),
-    ])
+    ]),
   );
   const conceptById = new Map(repo.getConceptsByIds(referencedConceptIds).map((c) => [c.id, c]));
   const updatedConceptIds: string[] = [];
@@ -200,10 +196,12 @@ export async function ingestSourceToServerDb(
     compilerResult = compileWikiArtifactsAfterIngest({
       source,
       createdConcepts: newConcepts,
-      updatedConcepts: updatedConceptDocs.map((next) => {
-        const previous = conceptById.get(next.id);
-        return previous ? { previous, next } : null;
-      }).filter((pair): pair is { previous: Concept; next: Concept } => Boolean(pair)),
+      updatedConcepts: updatedConceptDocs
+        .map((next) => {
+          const previous = conceptById.get(next.id);
+          return previous ? { previous, next } : null;
+        })
+        .filter((pair): pair is { previous: Concept; next: Concept } => Boolean(pair)),
       activitySummary: resp.activitySummary,
     });
 
@@ -212,11 +210,7 @@ export async function ingestSourceToServerDb(
   trx();
 
   const affectedConceptIds = Array.from(
-    new Set([
-      ...newConceptIds,
-      ...updatedConceptIds,
-      ...biDirUpdates.map((update) => update.id),
-    ])
+    new Set([...newConceptIds, ...updatedConceptIds, ...biDirUpdates.map((update) => update.id)]),
   );
 
   return {
@@ -234,9 +228,6 @@ export async function ingestSourceToServerDb(
 function escapeHTML(s: string): string {
   return s.replace(
     /[&<>"']/g,
-    (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
-        c
-      ] as string
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
   );
 }
