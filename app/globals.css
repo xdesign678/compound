@@ -7599,7 +7599,7 @@ button,
     justify-content: space-between;
     gap: 24px;
     padding: 20px 0;
-    border-top: 1px solid var(--border-light);
+    border-top: none;
     flex-wrap: wrap;
   }
   .settings-modal .settings-tool-row:first-child {
@@ -7767,7 +7767,7 @@ button,
     align-items: stretch;
     gap: 10px;
     padding: 16px 0;
-    border-top: 1px solid var(--border-light);
+    border-top: none;
   }
   .settings-modal .settings-tool-row:first-child {
     border-top: none;
