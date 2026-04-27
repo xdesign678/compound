@@ -26,6 +26,7 @@ jobs:
             ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
             ${{ runner.os }}-nextjs-
 
+      - run: npm run validate:agents-md
       - run: npm run typecheck
       - run: npm run test
 
