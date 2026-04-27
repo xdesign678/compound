@@ -373,8 +373,15 @@ button {
   padding: 0;
 }
 
+.tabbar-sidebar [role="tablist"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .tab-item.sidebar {
   flex: none;
+  width: 100%;
   flex-direction: row;
   justify-content: flex-start;
   gap: 12px;
