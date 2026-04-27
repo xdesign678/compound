@@ -6,6 +6,16 @@ export type ActivityFilterType = 'all' | 'ingest' | 'query' | 'lint';
 export type HomeStyle = 'feed' | 'library';
 export type ColorMode = 'light' | 'dark' | 'system';
 
+export type FontSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+
+export const FONT_SIZE_MAP: Record<FontSize, { label: string; px: number }> = {
+  xs: { label: '小', px: 14 },
+  sm: { label: '较小', px: 15 },
+  md: { label: '中', px: 16 },
+  lg: { label: '较大', px: 18 },
+  xl: { label: '大', px: 20 },
+};
+
 interface DetailState {
   type: 'concept' | 'source';
   id: string;
@@ -49,6 +59,7 @@ interface AppState {
   lintBanner: LintBannerState | null;
   homeStyle: HomeStyle;
   colorMode: ColorMode;
+  fontSize: FontSize;
   searchCollapsed: boolean;
   searchFocusNonce: number;
 
@@ -79,6 +90,8 @@ interface AppState {
   hydrateHomeStyle: () => void;
   setColorMode: (mode: ColorMode) => void;
   hydrateColorMode: () => void;
+  setFontSize: (size: FontSize) => void;
+  hydrateFontSize: () => void;
   setSearchCollapsed: (v: boolean) => void;
   triggerSearchFocus: () => void;
 }
@@ -101,6 +114,19 @@ function readStoredColorMode(): ColorMode {
   if (typeof window === 'undefined') return 'light';
   const raw = localStorage.getItem('compound_theme');
   return raw === 'dark' || raw === 'system' ? raw : 'light';
+}
+
+function readStoredFontSize(): FontSize {
+  if (typeof window === 'undefined') return 'md';
+  const raw = localStorage.getItem('compound_font_size');
+  if (raw && raw in FONT_SIZE_MAP) return raw as FontSize;
+  return 'md';
+}
+
+function applyFontSize(size: FontSize) {
+  if (typeof window === 'undefined') return;
+  const px = FONT_SIZE_MAP[size].px;
+  document.documentElement.style.setProperty('--prose-font-size', `${px}px`);
 }
 
 // Module-level toast auto-dismiss timer
@@ -133,6 +159,7 @@ export const useAppStore = create<AppState>((set) => ({
   lintBanner: null,
   homeStyle: readStoredHomeStyle(),
   colorMode: 'light',
+  fontSize: 'md',
   searchCollapsed: false,
   searchFocusNonce: 0,
 
@@ -211,6 +238,16 @@ export const useAppStore = create<AppState>((set) => ({
     const mode = readStoredColorMode();
     applyColorMode(mode);
     set({ colorMode: mode });
+  },
+  setFontSize: (size) => {
+    localStorage.setItem('compound_font_size', size);
+    applyFontSize(size);
+    set({ fontSize: size });
+  },
+  hydrateFontSize: () => {
+    const size = readStoredFontSize();
+    applyFontSize(size);
+    set({ fontSize: size });
   },
   setSearchCollapsed: (v) => set((s) => (s.searchCollapsed === v ? s : { searchCollapsed: v })),
   triggerSearchFocus: () => set((s) => ({ searchFocusNonce: s.searchFocusNonce + 1 })),
