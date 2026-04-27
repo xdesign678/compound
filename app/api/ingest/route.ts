@@ -14,6 +14,17 @@ const MAX_BODY_BYTES = 512_000;
 const MAX_RAW_CONTENT_CHARS = 100_000;
 const MAX_EXISTING_CONCEPTS = 500;
 
+/**
+ * Ingest a raw source document (markdown, link, free text) and return the
+ * extracted/updated concept set. Pipes the payload to the server-side LLM
+ * ingest pipeline (`ingestSourceToServerDb`), which normalises categories,
+ * stores the source row, and merges concepts into the SQLite-backed Wiki.
+ *
+ * Body: `IngestRequest` — `source.rawContent` is required (≤ 100k chars).
+ * Optional `existingConcepts` (≤ 500) hints the LLM about prior concepts.
+ *
+ * Guards: admin token, LLM rate limit, 512KB body cap.
+ */
 export async function POST(req: Request) {
   const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;

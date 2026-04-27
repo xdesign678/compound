@@ -12,6 +12,17 @@ export const maxDuration = 90;
 const MAX_BODY_BYTES = 512_000;
 const MAX_CONCEPTS = 500;
 
+/**
+ * Run an LLM-driven consistency lint over a snapshot of the Wiki concept
+ * index. Produces `findings`: structured issues such as duplicate concepts,
+ * orphaned relations, or category drift. Results are filtered so each
+ * finding only references concept ids that exist in the request.
+ *
+ * Body: `LintRequest` — `concepts: Array<{ id, title, summary, related }>`
+ * (≤ 500). An empty array short-circuits to `{ findings: [] }`.
+ *
+ * Guards: admin token, LLM rate limit, 512KB body cap.
+ */
 export async function POST(req: Request) {
   const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;

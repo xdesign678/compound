@@ -18,6 +18,15 @@ async function verify(req: Request, rawBody: string): Promise<boolean> {
   return safeEqual(sig, expected);
 }
 
+/**
+ * GitHub `push` webhook receiver. Verifies the `x-hub-signature-256` HMAC
+ * against `GITHUB_WEBHOOK_SECRET`, ignores unrelated events, replies to
+ * `ping` events with `{ ok: true }`, and otherwise enqueues a webhook-
+ * triggered sync via `startGithubSync`. Returns the resulting `jobId` and
+ * an `existing` flag indicating whether a job was already running.
+ *
+ * Guards: HMAC SHA-256 signature (no admin token; webhooks are anonymous).
+ */
 export async function POST(req: Request) {
   const rawBody = await req.text();
   if (!(await verify(req, rawBody))) return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });

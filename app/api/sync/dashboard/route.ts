@@ -8,6 +8,13 @@ import { startAnalysisWorker } from '@/lib/analysis-worker';
 export const runtime = 'nodejs';
 export const maxDuration = 10;
 
+/**
+ * Aggregate dashboard payload for the `/sync` page. Starts the analysis
+ * worker on-demand, then returns the live sync observability snapshot
+ * merged with embedding coverage and review-queue metrics.
+ *
+ * Guards: admin token.
+ */
 export async function GET(req: Request) {
   const denied = requireAdmin(req);
   if (denied) return denied;
