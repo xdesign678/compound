@@ -6,8 +6,8 @@
 
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
-- Routes: **27**
-- Handlers (HTTP methods): **31**
+- Routes: **28**
+- Handlers (HTTP methods): **32**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
@@ -24,6 +24,8 @@ This document is generated automatically from the Next.js Route Handlers under `
   - [`/api/ingest`](#api-ingest)
 - **lint**
   - [`/api/lint`](#api-lint)
+- **metrics**
+  - [`/api/metrics`](#api-metrics)
 - **query**
   - [`/api/query`](#api-query)
 - **repair**
@@ -192,6 +194,28 @@ Body: `LintRequest` — `concepts: Array<{ id, title, summary, related }>`
 (<= 500). An empty array short-circuits to `{ findings: [] }`.
 
 Guards: admin token, LLM rate limit, 512KB body cap.
+
+## metrics
+
+### `/api/metrics`
+
+Source: [`app/api/metrics/route.ts`](../app/api/metrics/route.ts)
+
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | 10            |
+| Guards      | `admin-token` |
+
+#### GET
+
+Prometheus-compatible metrics scrape endpoint. Exposes process memory/uptime,
+HTTP request counters and latency histograms, plus sync, analysis,
+review-queue, embedding, and knowledge-base gauges for external monitoring
+systems such as Prometheus, Datadog, New Relic, or CloudWatch agents.
+
+Guards: admin token.
 
 ## query
 

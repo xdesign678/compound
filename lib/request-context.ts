@@ -19,6 +19,7 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { observeHttpRequest } from './observability/prometheus';
 
 export const REQUEST_ID_HEADER = 'x-request-id';
 export const TRACEPARENT_HEADER = 'traceparent';
@@ -200,9 +201,12 @@ export function withRequestTracing<Args extends unknown[], R extends Response>(
 ): (req: Request, ...args: Args) => Promise<Response> {
   return async (req: Request, ...args: Args) => {
     const ctx = extractRequestContextFromHeaders(req.headers);
+    const startedAt = performance.now();
+    let status = 500;
     return runWithRequestContext(ctx, async () => {
       try {
         const response = await handler(req, ...args);
+        status = response.status;
         applyTraceResponseHeaders(response.headers, ctx);
         return response;
       } catch (err) {
@@ -211,8 +215,16 @@ export function withRequestTracing<Args extends unknown[], R extends Response>(
           JSON.stringify({ error: message, requestId: ctx.requestId }),
           { status: 500, headers: { 'content-type': 'application/json' } },
         );
+        status = fallback.status;
         applyTraceResponseHeaders(fallback.headers, ctx);
         return fallback;
+      } finally {
+        observeHttpRequest({
+          method: req.method,
+          route: req.url,
+          status,
+          durationMs: performance.now() - startedAt,
+        });
       }
     });
   };
