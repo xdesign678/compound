@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { CircuitBreakerOpenError, resetCircuitBreakersForTests } from './circuit-breaker';
 import { chat } from './gateway';
 
 async function withEnv<T>(
@@ -125,3 +126,44 @@ test('blocks private or loopback custom api urls', { concurrency: false }, async
     },
   );
 });
+
+test(
+  'opens a circuit after repeated transient gateway failures',
+  { concurrency: false },
+  async () => {
+    resetCircuitBreakersForTests();
+    let fetchCalls = 0;
+
+    await withEnv(
+      {
+        LLM_API_KEY: 'server-key',
+        AI_GATEWAY_API_KEY: undefined,
+        COMPOUND_SKIP_DNS_GUARD: 'true',
+        COMPOUND_LLM_CIRCUIT_FAILURE_THRESHOLD: '2',
+        COMPOUND_LLM_CIRCUIT_RESET_MS: '60000',
+      },
+      async () => {
+        const mockFetch: typeof fetch = async () => {
+          fetchCalls += 1;
+          return new Response('temporary outage', { status: 503 });
+        };
+
+        await withMockFetch(mockFetch, async () => {
+          for (let i = 0; i < 2; i += 1) {
+            await assert.rejects(
+              chat({ messages: [{ role: 'user', content: 'hi' }], maxTokens: 10 }),
+              /Gateway 503/,
+            );
+          }
+
+          await assert.rejects(
+            chat({ messages: [{ role: 'user', content: 'hi' }], maxTokens: 10 }),
+            CircuitBreakerOpenError,
+          );
+        });
+      },
+    );
+
+    assert.equal(fetchCalls, 2);
+  },
+);

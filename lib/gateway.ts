@@ -12,6 +12,7 @@
 
 import { promises as dns } from 'node:dns';
 import net from 'node:net';
+import { CircuitBreakerOpenError, getCircuitBreaker } from './circuit-breaker';
 import { recordModelRun } from './model-runs';
 import { logger } from './logging';
 import { addBreadcrumb, reportError } from './observability/sentry';
@@ -129,6 +130,38 @@ function getDefaultModel(): string {
   return process.env.LLM_MODEL || 'anthropic/claude-sonnet-4.6';
 }
 
+function readPositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+class GatewayResponseError extends Error {
+  readonly status: number;
+
+  constructor(status: number, bodyPreview: string) {
+    super(`Gateway ${status}: ${bodyPreview}`);
+    this.name = 'GatewayResponseError';
+    this.status = status;
+  }
+}
+
+function isTransientGatewayFailure(error: unknown): boolean {
+  if (error instanceof GatewayResponseError) {
+    return error.status === 408 || error.status === 429 || error.status >= 500;
+  }
+  if (error instanceof CircuitBreakerOpenError) return false;
+  return error instanceof Error;
+}
+
+function circuitNameForGateway(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `llm-gateway:${parsed.host}`;
+  } catch {
+    return 'llm-gateway:invalid-url';
+  }
+}
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -213,26 +246,56 @@ export async function chat(opts: ChatOptions): Promise<string> {
 
   const startedAt = Date.now();
   const task = opts.task ?? 'chat';
-  const res = await fetch(gatewayUrl, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      ...buildOutboundTraceHeaders(),
+  const breaker = getCircuitBreaker({
+    name: circuitNameForGateway(gatewayUrl),
+    failureThreshold: readPositiveInt(process.env.COMPOUND_LLM_CIRCUIT_FAILURE_THRESHOLD, 3),
+    resetTimeoutMs: readPositiveInt(process.env.COMPOUND_LLM_CIRCUIT_RESET_MS, 30_000),
+    isFailure: isTransientGatewayFailure,
+    onStateChange: (snapshot) => {
+      logger.warn('gateway.circuit_state_changed', { ...snapshot });
     },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(55_000),
   });
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    recordModelRun({
-      model,
-      task,
-      latencyMs: Date.now() - startedAt,
-      error: `gateway_${res.status}`,
+  let res: Response;
+  try {
+    res = await breaker.execute(async () => {
+      const response = await fetch(gatewayUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          ...buildOutboundTraceHeaders(),
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(55_000),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        recordModelRun({
+          model,
+          task,
+          latencyMs: Date.now() - startedAt,
+          error: `gateway_${response.status}`,
+        });
+        throw new GatewayResponseError(response.status, errText.slice(0, 200));
+      }
+      return response;
     });
-    throw new Error(`Gateway ${res.status}: ${errText.slice(0, 200)}`);
+  } catch (error) {
+    if (error instanceof CircuitBreakerOpenError) {
+      recordModelRun({
+        model,
+        task,
+        latencyMs: Date.now() - startedAt,
+        error: 'circuit_open',
+      });
+      logger.warn('gateway.circuit_open', {
+        service: error.service,
+        retryAfterMs: error.retryAfterMs,
+      });
+    }
+    throw error;
   }
 
   const data = await res.json();

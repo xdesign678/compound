@@ -7,6 +7,8 @@
  */
 import { getServerDb } from './server-db';
 import { wikiRepo, type QueryContext, type SourceChunk } from './wiki-db';
+import { CircuitBreakerOpenError, getCircuitBreaker } from './circuit-breaker';
+import { logger } from './logging';
 
 type Vector = number[];
 
@@ -60,6 +62,38 @@ function embeddingApiUrl(): string {
   if (chatUrl.includes('/chat/completions'))
     return chatUrl.replace('/chat/completions', '/embeddings');
   return 'https://api.openai.com/v1/embeddings';
+}
+
+function readPositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+class EmbeddingResponseError extends Error {
+  readonly status: number;
+
+  constructor(status: number, bodyPreview: string) {
+    super(`Embedding ${status}: ${bodyPreview}`);
+    this.name = 'EmbeddingResponseError';
+    this.status = status;
+  }
+}
+
+function isTransientEmbeddingFailure(error: unknown): boolean {
+  if (error instanceof EmbeddingResponseError) {
+    return error.status === 408 || error.status === 429 || error.status >= 500;
+  }
+  if (error instanceof CircuitBreakerOpenError) return false;
+  return error instanceof Error;
+}
+
+function circuitNameForEmbedding(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `embedding:${parsed.host}`;
+  } catch {
+    return 'embedding:invalid-url';
+  }
 }
 
 function assertPublicHttps(url: string): void {
@@ -119,24 +153,51 @@ async function remoteEmbeddings(texts: string[]): Promise<Vector[] | null> {
   const url = embeddingApiUrl();
   assertPublicHttps(url);
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
+  const breaker = getCircuitBreaker({
+    name: circuitNameForEmbedding(url),
+    failureThreshold: readPositiveInt(process.env.COMPOUND_EMBEDDING_CIRCUIT_FAILURE_THRESHOLD, 3),
+    resetTimeoutMs: readPositiveInt(process.env.COMPOUND_EMBEDDING_CIRCUIT_RESET_MS, 30_000),
+    isFailure: isTransientEmbeddingFailure,
+    onStateChange: (snapshot) => {
+      logger.warn('embedding.circuit_state_changed', { ...snapshot });
     },
-    body: JSON.stringify({
-      model: embeddingModel(),
-      input: texts.map((text) =>
-        text.slice(0, Number(process.env.COMPOUND_EMBEDDING_MAX_CHARS || 8000)),
-      ),
-    }),
-    signal: AbortSignal.timeout(45_000),
   });
-  if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`Embedding ${res.status}: ${err.slice(0, 200)}`);
+
+  let res: Response;
+  try {
+    res = await breaker.execute(async () => {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: embeddingModel(),
+          input: texts.map((text) =>
+            text.slice(0, Number(process.env.COMPOUND_EMBEDDING_MAX_CHARS || 8000)),
+          ),
+        }),
+        signal: AbortSignal.timeout(45_000),
+      });
+
+      if (!response.ok) {
+        const err = await response.text().catch(() => '');
+        throw new EmbeddingResponseError(response.status, err.slice(0, 200));
+      }
+      return response;
+    });
+  } catch (error) {
+    if (error instanceof CircuitBreakerOpenError) {
+      logger.warn('embedding.circuit_open_local_fallback', {
+        service: error.service,
+        retryAfterMs: error.retryAfterMs,
+      });
+      return null;
+    }
+    throw error;
   }
+
   const data = await res.json();
   const vectors = data?.data?.map((item: { embedding?: number[] }) => item.embedding) as
     | number[][]
