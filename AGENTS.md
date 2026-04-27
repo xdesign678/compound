@@ -23,3 +23,8 @@
 - 运行 `npm run build:measure`（即 `node scripts/measure-build.mjs`）来执行 `next build` 并记录耗时、`.next/cache` 命中情况以及 `.next/static` 产物大小。
 - 指标会写入 `tmp/build-metrics.json`（已在 `.gitignore` 中忽略），脚本的退出码与 `next build` 保持一致。
 - 在 GitHub Actions 中，`.next/cache` 通过 `actions/cache@v4` 按 `package-lock.json` 与源码哈希缓存，命中即可加速重复构建；指标文件会作为 `build-metrics` 产物上传，并写入当次 job 的 Step Summary。
+
+## Incident response runbooks
+
+- 事故处理入口在 `runbooks/README.md`。生产 503、访问保护、GitHub 同步卡住、LLM 网关失败、SQLite 持久化异常，先按对应 playbook 排查。
+- 处理事故时先记录用户影响、第一条真实错误、最近配置/部署变化和已执行动作；不要为了恢复速度跳过访问保护或直接改生产 SQLite。

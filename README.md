@@ -91,6 +91,7 @@ docker run --rm -p 3000:3000 \
 - GitHub sync uses a long-running Node process and a SQLite-backed job table. Prefer container deployment over serverless.
 - `/sync` shows run-level progress, file-level status, analysis worker state, retry/cancel controls, and index coverage.
 - `/review` shows low-confidence or large-change review items before they are accepted by a human.
+- Incident response playbooks live in [`runbooks/`](runbooks/). Start there for production 503s, auth lockouts, stuck GitHub sync, LLM gateway failures, and SQLite persistence issues.
 - The service writes SQLite data under `DATA_DIR`.
 - The browser also keeps an IndexedDB cache for fast local reads.
 - User-supplied custom LLM endpoints must use the user’s own API key. The server-owned key is never sent to a user-supplied URL.

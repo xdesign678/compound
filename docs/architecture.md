@@ -183,6 +183,7 @@ flowchart LR
 > - 必须配置 `COMPOUND_ADMIN_TOKEN`（生产环境 middleware 会在缺失时直接返回 503）。
 > - `DATA_DIR` 必须挂到持久卷，否则容器重启会丢失 Wiki。
 > - 容器要长驻运行（不要 serverless），因为同步与分析 worker 是有状态的后台任务。
+> - 线上故障先从 [`runbooks/`](../runbooks/) 选择对应 playbook，再动手恢复。
 
 ## 6. API 路由地图
 
