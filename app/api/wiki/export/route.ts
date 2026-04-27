@@ -39,7 +39,8 @@ export async function GET(req: Request) {
         `资料数：${sources.length}`,
         '',
         ...concepts.map(
-          (concept) => `- [[concepts/${slug(concept.title)}-${concept.id}.md|${concept.title}]] — ${concept.summary}`
+          (concept) =>
+            `- [[concepts/${slug(concept.title)}-${concept.id}.md|${concept.title}]] — ${concept.summary}`,
         ),
       ].join('\n'),
     });
@@ -73,13 +74,17 @@ export async function GET(req: Request) {
       path: 'wiki/graph.json',
       content: JSON.stringify(
         {
-          nodes: concepts.map((concept) => ({ id: concept.id, title: concept.title, summary: concept.summary })),
+          nodes: concepts.map((concept) => ({
+            id: concept.id,
+            title: concept.title,
+            summary: concept.summary,
+          })),
           edges: concepts.flatMap((concept) =>
-            concept.related.map((target) => ({ source: concept.id, target, kind: 'related' }))
+            concept.related.map((target) => ({ source: concept.id, target, kind: 'related' })),
           ),
         },
         null,
-        2
+        2,
       ),
     });
 

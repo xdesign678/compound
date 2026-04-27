@@ -13,7 +13,8 @@ const MAX_BODY_BYTES = 512_000;
 const MAX_CONCEPTS = 500;
 
 export async function POST(req: Request) {
-  const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
+  const denied =
+    requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
   try {
@@ -31,8 +32,9 @@ export async function POST(req: Request) {
     const llmConfig = readLlmConfigOverride(req, body);
 
     const listing = body.concepts
-      .map((c) =>
-        `[${c.id}] ${c.title}\n  summary: ${c.summary}\n  related: ${c.related.join(', ') || '(none)'}`
+      .map(
+        (c) =>
+          `[${c.id}] ${c.title}\n  summary: ${c.summary}\n  related: ${c.related.join(', ') || '(none)'}`,
       )
       .join('\n\n');
 
@@ -67,6 +69,9 @@ ${listing}
     return NextResponse.json(parsed);
   } catch (err) {
     console.error('[lint] error:', err instanceof Error ? err.message : String(err));
-    return NextResponse.json({ error: 'Lint processing failed. Please check your API configuration.' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Lint processing failed. Please check your API configuration.' },
+      { status: 500 },
+    );
   }
 }

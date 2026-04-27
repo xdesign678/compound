@@ -106,7 +106,9 @@ if (pr) {
 
   // WIP / Draft heuristics
   if (/\b(wip|do not merge|dnm)\b/i.test(title)) {
-    warn('Title indicates work-in-progress. Convert to a Draft PR or remove the WIP marker before requesting review.');
+    warn(
+      'Title indicates work-in-progress. Convert to a Draft PR or remove the WIP marker before requesting review.',
+    );
   }
 }
 
@@ -183,7 +185,10 @@ async function runDiffChecks(): Promise<void> {
     const added = diff.added ?? '';
 
     // console.log introductions (skip test files; they sometimes use console for debugging)
-    if (!isTestFile(file) && /^\+.*\bconsole\.(log|debug)\s*\(/m.test('+' + added.replace(/\n/g, '\n+'))) {
+    if (
+      !isTestFile(file) &&
+      /^\+.*\bconsole\.(log|debug)\s*\(/m.test('+' + added.replace(/\n/g, '\n+'))
+    ) {
       consoleLogOffenders.push(file);
     }
 
@@ -237,7 +242,9 @@ async function runDiffChecks(): Promise<void> {
 // Documentation visibility
 // ---------------------------------------------------------------------------
 
-const docsTouched = touched.filter((f) => /^(README\.md|AGENTS\.md|SECURITY\.md|docs\/.+)$/.test(f));
+const docsTouched = touched.filter((f) =>
+  /^(README\.md|AGENTS\.md|SECURITY\.md|docs\/.+)$/.test(f),
+);
 if (docsTouched.length > 0) {
   message(
     `:books: Documentation updated in this PR: ${docsTouched.map((f) => `\`${f}\``).join(', ')}. Thanks for keeping docs in sync!`,
@@ -274,7 +281,11 @@ if (deleted.length > 0) {
 // ---------------------------------------------------------------------------
 
 function emitClean(): void {
-  if (totalChanges > 0 && totalChanges <= BIG_PR_LINE_THRESHOLD && changedSourceFiles.length === 0) {
+  if (
+    totalChanges > 0 &&
+    totalChanges <= BIG_PR_LINE_THRESHOLD &&
+    changedSourceFiles.length === 0
+  ) {
     message(':sparkles: Thanks for the contribution! The PR looks small and focused.');
   } else if (changedSourceFiles.length > 0 && changedTestFiles.length > 0) {
     message(':white_check_mark: Source changes are accompanied by test updates — thank you!');

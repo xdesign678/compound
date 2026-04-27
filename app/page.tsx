@@ -23,17 +23,51 @@ const ViewSkeleton = () => (
   </div>
 );
 
-const IngestModal = dynamic(() => import('@/components/IngestModal').then(m => ({ default: m.IngestModal })), { ssr: false });
-const SettingsDrawer = dynamic(() => import('@/components/SettingsDrawer').then(m => ({ default: m.SettingsDrawer })), { ssr: false });
-const ObsidianImportModal = dynamic(() => import('@/components/ObsidianImportModal').then(m => ({ default: m.ObsidianImportModal })), { ssr: false });
-const GithubSyncModal = dynamic(() => import('@/components/GithubSyncModal').then(m => ({ default: m.GithubSyncModal })), { ssr: false });
-const WikiView = dynamic(() => import('@/components/views/WikiView').then(m => ({ default: m.WikiView })), { ssr: false, loading: ViewSkeleton });
-const LibraryView = dynamic(() => import('@/components/views/LibraryView').then(m => ({ default: m.LibraryView })), { ssr: false, loading: ViewSkeleton });
-const SourcesView = dynamic(() => import('@/components/views/SourcesView').then(m => ({ default: m.SourcesView })), { ssr: false, loading: ViewSkeleton });
-const AskView = dynamic(() => import('@/components/views/AskView').then(m => ({ default: m.AskView })), { ssr: false, loading: ViewSkeleton });
-const ActivityView = dynamic(() => import('@/components/views/ActivityView').then(m => ({ default: m.ActivityView })), { ssr: false, loading: ViewSkeleton });
-const ConceptDetail = dynamic(() => import('@/components/views/ConceptDetail').then(m => ({ default: m.ConceptDetail })), { ssr: false, loading: ViewSkeleton });
-const SourceDetail = dynamic(() => import('@/components/views/SourceDetail').then(m => ({ default: m.SourceDetail })), { ssr: false, loading: ViewSkeleton });
+const IngestModal = dynamic(
+  () => import('@/components/IngestModal').then((m) => ({ default: m.IngestModal })),
+  { ssr: false },
+);
+const SettingsDrawer = dynamic(
+  () => import('@/components/SettingsDrawer').then((m) => ({ default: m.SettingsDrawer })),
+  { ssr: false },
+);
+const ObsidianImportModal = dynamic(
+  () =>
+    import('@/components/ObsidianImportModal').then((m) => ({ default: m.ObsidianImportModal })),
+  { ssr: false },
+);
+const GithubSyncModal = dynamic(
+  () => import('@/components/GithubSyncModal').then((m) => ({ default: m.GithubSyncModal })),
+  { ssr: false },
+);
+const WikiView = dynamic(
+  () => import('@/components/views/WikiView').then((m) => ({ default: m.WikiView })),
+  { ssr: false, loading: ViewSkeleton },
+);
+const LibraryView = dynamic(
+  () => import('@/components/views/LibraryView').then((m) => ({ default: m.LibraryView })),
+  { ssr: false, loading: ViewSkeleton },
+);
+const SourcesView = dynamic(
+  () => import('@/components/views/SourcesView').then((m) => ({ default: m.SourcesView })),
+  { ssr: false, loading: ViewSkeleton },
+);
+const AskView = dynamic(
+  () => import('@/components/views/AskView').then((m) => ({ default: m.AskView })),
+  { ssr: false, loading: ViewSkeleton },
+);
+const ActivityView = dynamic(
+  () => import('@/components/views/ActivityView').then((m) => ({ default: m.ActivityView })),
+  { ssr: false, loading: ViewSkeleton },
+);
+const ConceptDetail = dynamic(
+  () => import('@/components/views/ConceptDetail').then((m) => ({ default: m.ConceptDetail })),
+  { ssr: false, loading: ViewSkeleton },
+);
+const SourceDetail = dynamic(
+  () => import('@/components/views/SourceDetail').then((m) => ({ default: m.SourceDetail })),
+  { ssr: false, loading: ViewSkeleton },
+);
 
 const DESKTOP_MEDIA_QUERY = `(min-width: ${DESKTOP_LAYOUT_MIN_WIDTH}px)`;
 const LIBRARY_DETAIL_TRANSITION_MS = 320;
@@ -85,11 +119,11 @@ export default function Page() {
 
   const conceptCount = useLiveQuery(
     async () => (mounted ? getDb().concepts.count() : undefined),
-    [mounted]
+    [mounted],
   );
   const sourceCount = useLiveQuery(
     async () => (mounted ? getDb().sources.count() : undefined),
-    [mounted]
+    [mounted],
   );
 
   // Auto-seed on first run (no onboarding screen)
@@ -135,11 +169,8 @@ export default function Page() {
   const openGithubSync = useAppStore((s) => s.openGithubSync);
   const showFab = !detail && (tab === 'wiki' || tab === 'sources');
   const inLibraryMode = tab === 'wiki' && homeStyle === 'library';
-  const shouldShowDesktopDetail = isDesktop && !inLibraryMode && (
-    tab === 'wiki' ||
-    tab === 'sources' ||
-    detail !== null
-  );
+  const shouldShowDesktopDetail =
+    isDesktop && !inLibraryMode && (tab === 'wiki' || tab === 'sources' || detail !== null);
   const desktopSummary = ready
     ? `${conceptCount ?? 0} 个概念 · ${sourceCount ?? 0} 份资料`
     : '正在同步本地知识库';
@@ -195,7 +226,11 @@ export default function Page() {
 
   function renderDetail(target = detail) {
     if (!target) return null;
-    return target.type === 'concept' ? <ConceptDetail id={target.id} /> : <SourceDetail id={target.id} />;
+    return target.type === 'concept' ? (
+      <ConceptDetail id={target.id} />
+    ) : (
+      <SourceDetail id={target.id} />
+    );
   }
 
   function renderPrimaryView(scrollRootSelector?: string) {
@@ -212,9 +247,11 @@ export default function Page() {
     }
 
     if (tab === 'wiki') {
-      return homeStyle === 'library'
-        ? <LibraryView scrollRootSelector={scrollRootSelector} />
-        : <WikiView scrollRootSelector={scrollRootSelector} />;
+      return homeStyle === 'library' ? (
+        <LibraryView scrollRootSelector={scrollRootSelector} />
+      ) : (
+        <WikiView scrollRootSelector={scrollRootSelector} />
+      );
     }
     if (tab === 'sources') {
       return <SourcesView />;
@@ -226,15 +263,16 @@ export default function Page() {
   }
 
   function renderDesktopDetailEmpty() {
-    const copy = tab === 'sources'
-      ? {
-          title: '选择一份资料',
-          body: '左侧会保留资料列表，右侧以资料正文为主，头部补充来源信息和相关概念。',
-        }
-      : {
-          title: '选择一个概念',
-          body: '左侧继续浏览概念列表，右侧会展示正文、引用资料和相关概念。',
-        };
+    const copy =
+      tab === 'sources'
+        ? {
+            title: '选择一份资料',
+            body: '左侧会保留资料列表，右侧以资料正文为主，头部补充来源信息和相关概念。',
+          }
+        : {
+            title: '选择一个概念',
+            body: '左侧继续浏览概念列表，右侧会展示正文、引用资料和相关概念。',
+          };
 
     return (
       <div className="desktop-detail-empty">
@@ -274,11 +312,7 @@ export default function Page() {
               >
                 <Icon.Github />
               </button>
-              <Link
-                className="desktop-sidebar-btn icon-only"
-                href="/sync"
-                aria-label="同步控制台"
-              >
+              <Link className="desktop-sidebar-btn icon-only" href="/sync" aria-label="同步控制台">
                 <Icon.Activity />
               </Link>
               <button
@@ -288,7 +322,11 @@ export default function Page() {
               >
                 <Icon.Ingest />
               </button>
-              <button className="desktop-sidebar-btn icon-only" onClick={openSettings} aria-label="打开设置">
+              <button
+                className="desktop-sidebar-btn icon-only"
+                onClick={openSettings}
+                aria-label="打开设置"
+              >
                 <Icon.Settings />
               </button>
             </div>
@@ -331,7 +369,9 @@ export default function Page() {
               aria-label="概念详情"
               onClick={(e) => e.stopPropagation()}
             >
-              <button className="library-detail-modal-close" onClick={back} aria-label="关闭">✕</button>
+              <button className="library-detail-modal-close" onClick={back} aria-label="关闭">
+                ✕
+              </button>
               <div className="library-detail-modal-scroll">
                 {renderDetail(libraryOverlayDetail)}
               </div>
@@ -351,15 +391,19 @@ export default function Page() {
     <div className="app-shell">
       <Toast />
       <SwipeBack />
-      <PullToRefresh onRefresh={async () => {
-        const { pullSnapshotFromCloud } = await import('@/lib/cloud-sync');
-        await pullSnapshotFromCloud();
-        useAppStore.getState().showToast('数据已刷新');
-      }} />
+      <PullToRefresh
+        onRefresh={async () => {
+          const { pullSnapshotFromCloud } = await import('@/lib/cloud-sync');
+          await pullSnapshotFromCloud();
+          useAppStore.getState().showToast('数据已刷新');
+        }}
+      />
       <Header conceptCount={conceptCount ?? 0} sourceCount={sourceCount ?? 0} />
 
       <main className="app-main">
-        {!ready ? renderPrimaryView('.app-main') : detail ? (
+        {!ready ? (
+          renderPrimaryView('.app-main')
+        ) : detail ? (
           <div key={detail.id} className="detail-view">
             {renderDetail()}
           </div>

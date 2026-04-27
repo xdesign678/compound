@@ -11,7 +11,10 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const status = (url.searchParams.get('status') || 'open') as 'open' | 'all';
   const limit = Number(url.searchParams.get('limit') || 100);
-  return NextResponse.json({ items: listReviewItems({ status, limit }), metrics: getReviewMetrics() });
+  return NextResponse.json({
+    items: listReviewItems({ status, limit }),
+    metrics: getReviewMetrics(),
+  });
 }
 
 export async function POST(req: Request) {

@@ -3,7 +3,13 @@ import { getServerDb, repo } from './server-db';
 import { splitMarkdownIntoChunks, type SourceChunkDraft } from './wiki-chunk';
 import type { Concept, Source } from './types';
 
-export type EvidenceKind = 'definition' | 'claim' | 'example' | 'quote' | 'contradiction' | 'support';
+export type EvidenceKind =
+  | 'definition'
+  | 'claim'
+  | 'example'
+  | 'quote'
+  | 'contradiction'
+  | 'support';
 export type RelationKind =
   | 'supports'
   | 'contradicts'
@@ -63,8 +69,8 @@ function extractSearchTerms(text: string, limit = 12): string[] {
         .toLowerCase()
         .split(/[^a-z0-9\u4e00-\u9fff]+/i)
         .map((part) => part.trim())
-        .filter((part) => part.length >= 2)
-    )
+        .filter((part) => part.length >= 2),
+    ),
   ).slice(0, limit);
 }
 
@@ -94,8 +100,8 @@ function termsFromConcept(concept: Concept): string[] {
         .toLowerCase()
         .split(/[^a-z0-9\u4e00-\u9fff]+/i)
         .map((part) => part.trim())
-        .filter((part) => part.length >= 2)
-    )
+        .filter((part) => part.length >= 2),
+    ),
   ).slice(0, 12);
 }
 
@@ -115,7 +121,7 @@ function quoteFromChunk(content: string): string {
 function buildEvidenceDrafts(
   source: Source,
   concept: Concept,
-  chunks: SourceChunk[]
+  chunks: SourceChunk[],
 ): Array<Omit<ConceptEvidence, 'id' | 'createdAt'>> {
   const terms = termsFromConcept(concept);
   const ranked = chunks
@@ -237,7 +243,7 @@ export function ensureWikiCompilerSchema(): void {
     ftsReady = false;
     console.warn(
       '[wiki-db] FTS5 unavailable; falling back to LIKE search:',
-      error instanceof Error ? error.message : String(error)
+      error instanceof Error ? error.message : String(error),
     );
   }
 
@@ -297,7 +303,11 @@ export const wikiRepo = {
     }
   },
 
-  upsertSourceChunks(sourceId: string, drafts: SourceChunkDraft[], now = Date.now()): SourceChunk[] {
+  upsertSourceChunks(
+    sourceId: string,
+    drafts: SourceChunkDraft[],
+    now = Date.now(),
+  ): SourceChunk[] {
     ensureWikiCompilerSchema();
     this.deleteSourceArtifacts(sourceId);
     const db = getServerDb();
@@ -316,7 +326,9 @@ export const wikiRepo = {
         (@id, @source_id, @chunk_index, @heading, @heading_path, @content, @token_count, @content_hash, @created_at, @updated_at)
     `);
     const insertFts = hasFts()
-      ? db.prepare(`INSERT INTO chunk_fts (chunk_id, source_id, heading, content) VALUES (?, ?, ?, ?)`)
+      ? db.prepare(
+          `INSERT INTO chunk_fts (chunk_id, source_id, heading, content) VALUES (?, ?, ?, ?)`,
+        )
       : null;
 
     const runBatch = db.transaction((batch: SourceChunk[]) => {
@@ -355,16 +367,19 @@ export const wikiRepo = {
     const db = getServerDb();
     safeRunFts(() => {
       db.prepare(`DELETE FROM concept_fts WHERE concept_id = ?`).run(concept.id);
-      db.prepare(`INSERT INTO concept_fts (concept_id, title, summary, body) VALUES (?, ?, ?, ?)`).run(
-        concept.id,
-        concept.title,
-        concept.summary,
-        concept.body
-      );
+      db.prepare(
+        `INSERT INTO concept_fts (concept_id, title, summary, body) VALUES (?, ?, ?, ?)`,
+      ).run(concept.id, concept.title, concept.summary, concept.body);
     });
   },
 
-  rebuildAllIndexes(): { sources: number; chunks: number; concepts: number; evidence: number; fts: boolean } {
+  rebuildAllIndexes(): {
+    sources: number;
+    chunks: number;
+    concepts: number;
+    evidence: number;
+    fts: boolean;
+  } {
     ensureWikiCompilerSchema();
     const db = getServerDb();
 
@@ -453,12 +468,14 @@ export const wikiRepo = {
   }): void {
     ensureWikiCompilerSchema();
     getServerDb()
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO concept_versions
           (id, concept_id, version, previous_body, next_body, source_ids, change_summary, created_at)
         VALUES
           (@id, @concept_id, @version, @previous_body, @next_body, @source_ids, @change_summary, @created_at)
-      `)
+      `,
+      )
       .run({
         id: `cv-${nanoid(10)}`,
         concept_id: input.conceptId,
@@ -478,14 +495,16 @@ export const wikiRepo = {
     if (ftsQuery && hasFts()) {
       try {
         const rows = getServerDb()
-          .prepare(`SELECT concept_id FROM concept_fts WHERE concept_fts MATCH ? ORDER BY bm25(concept_fts) LIMIT ?`)
+          .prepare(
+            `SELECT concept_id FROM concept_fts WHERE concept_fts MATCH ? ORDER BY bm25(concept_fts) LIMIT ?`,
+          )
           .all(ftsQuery, normalizedLimit) as Array<{ concept_id: string }>;
         const concepts = repo.getConceptsByIds(rows.map((row) => row.concept_id));
         if (concepts.length > 0) return concepts;
       } catch (error) {
         console.warn(
           '[wiki-db] concept FTS search failed:',
-          error instanceof Error ? error.message : String(error)
+          error instanceof Error ? error.message : String(error),
         );
       }
     }
@@ -499,18 +518,23 @@ export const wikiRepo = {
     if (ftsQuery && hasFts()) {
       try {
         const rows = getServerDb()
-          .prepare(`
+          .prepare(
+            `
             SELECT source_chunks.*
             FROM chunk_fts
             JOIN source_chunks ON source_chunks.id = chunk_fts.chunk_id
             WHERE chunk_fts MATCH ?
             ORDER BY bm25(chunk_fts)
             LIMIT ?
-          `)
+          `,
+          )
           .all(ftsQuery, normalizedLimit) as Array<Record<string, unknown>>;
         if (rows.length > 0) return rows.map(rowToChunk);
       } catch (error) {
-        console.warn('[wiki-db] chunk FTS search failed:', error instanceof Error ? error.message : String(error));
+        console.warn(
+          '[wiki-db] chunk FTS search failed:',
+          error instanceof Error ? error.message : String(error),
+        );
       }
     }
 
@@ -520,7 +544,7 @@ export const wikiRepo = {
     // SQL-level pre-filter with LIKE on heading + substr(content) to avoid
     // loading full content of 500 rows into JS memory.
     const likeClauses = terms.map(
-      () => `(heading LIKE ? COLLATE NOCASE OR content LIKE ? COLLATE NOCASE)`
+      () => `(heading LIKE ? COLLATE NOCASE OR content LIKE ? COLLATE NOCASE)`,
     );
     const likeParams = terms.flatMap((t) => [`%${t}%`, `%${t}%`]);
     const rows = getServerDb()
@@ -531,7 +555,7 @@ export const wikiRepo = {
          FROM source_chunks
          WHERE ${likeClauses.join(' OR ')}
          ORDER BY updated_at DESC
-         LIMIT 100`
+         LIMIT 100`,
       )
       .all(...likeParams) as Array<Record<string, unknown>>;
     return rows
@@ -554,17 +578,22 @@ export const wikiRepo = {
       LIMIT ?
     `);
     for (const id of uniqueIds) {
-      out.push(...((stmt.all(id, limitPerConcept) as Array<Record<string, unknown>>).map(rowToEvidence)));
+      out.push(
+        ...(stmt.all(id, limitPerConcept) as Array<Record<string, unknown>>).map(rowToEvidence),
+      );
     }
     return out;
   },
 
-  searchWikiContext(query: string, options: { conceptLimit?: number; chunkLimit?: number } = {}): QueryContext {
+  searchWikiContext(
+    query: string,
+    options: { conceptLimit?: number; chunkLimit?: number } = {},
+  ): QueryContext {
     const concepts = this.searchConcepts(query, options.conceptLimit ?? 24);
     const chunks = this.searchChunks(query, options.chunkLimit ?? 12);
     const evidence = this.getEvidenceForConcepts(
       concepts.map((concept) => concept.id),
-      2
+      2,
     );
     return {
       concepts: uniqueById(concepts),
@@ -576,7 +605,8 @@ export const wikiRepo = {
   getMetrics(): Record<string, number | boolean> {
     ensureWikiCompilerSchema();
     const db = getServerDb();
-    const scalar = (sql: string) => Number((db.prepare(sql).get() as { count?: number } | undefined)?.count ?? 0);
+    const scalar = (sql: string) =>
+      Number((db.prepare(sql).get() as { count?: number } | undefined)?.count ?? 0);
     return {
       ftsReady: hasFts(),
       sources: scalar(`SELECT COUNT(*) AS count FROM sources`),
@@ -608,7 +638,7 @@ export function formatQueryContextForPrompt(context: QueryContext): string {
     .slice(0, 8)
     .map(
       (chunk, index) =>
-        `${index + 1}. source=${chunk.sourceId} chunk=${chunk.id} heading=${chunk.heading}\n${chunk.content.slice(0, 700)}`
+        `${index + 1}. source=${chunk.sourceId} chunk=${chunk.id} heading=${chunk.heading}\n${chunk.content.slice(0, 700)}`,
     )
     .join('\n\n');
 

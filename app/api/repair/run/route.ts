@@ -2,11 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength } from '@/lib/request-guards';
-import {
-  createRepairRun,
-  startRepairWorker,
-  type RepairFindingInput,
-} from '@/lib/repair-worker';
+import { createRepairRun, startRepairWorker, type RepairFindingInput } from '@/lib/repair-worker';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -18,7 +14,8 @@ interface RepairRunRequest {
 }
 
 export async function POST(req: Request) {
-  const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
+  const denied =
+    requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
   try {

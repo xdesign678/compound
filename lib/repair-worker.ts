@@ -173,11 +173,11 @@ export function createRepairRun(findings: RepairFindingInput[]): CreateRepairRun
   const db = getServerDb();
   const insertRun = db.prepare(
     `INSERT INTO repair_runs (id, status, total, done, failed, started_at, summary)
-     VALUES (?, ?, ?, 0, 0, ?, ?)`
+     VALUES (?, ?, ?, 0, 0, ?, ?)`,
   );
   const insertJob = db.prepare(
     `INSERT INTO repair_jobs (id, run_id, kind, payload_json, status, attempts, updated_at)
-     VALUES (?, ?, ?, ?, 'queued', 0, ?)`
+     VALUES (?, ?, ?, ?, 'queued', 0, ?)`,
   );
 
   const txn = db.transaction(() => {
@@ -198,9 +198,9 @@ export function createRepairRun(findings: RepairFindingInput[]): CreateRepairRun
 
 export function getRepairRunStatus(runId: string): RepairRunStatusResponse | null {
   ensureRepairSchema();
-  const row = getServerDb()
-    .prepare(`SELECT * FROM repair_runs WHERE id = ?`)
-    .get(runId) as RepairRunRow | undefined;
+  const row = getServerDb().prepare(`SELECT * FROM repair_runs WHERE id = ?`).get(runId) as
+    | RepairRunRow
+    | undefined;
   if (!row) return null;
   return {
     id: row.id,
@@ -216,7 +216,9 @@ export function getRepairRunStatus(runId: string): RepairRunStatusResponse | nul
 
 function getRun(runId: string): RepairRunRow | null {
   return (
-    (getServerDb().prepare(`SELECT * FROM repair_runs WHERE id = ?`).get(runId) as RepairRunRow | undefined) ?? null
+    (getServerDb().prepare(`SELECT * FROM repair_runs WHERE id = ?`).get(runId) as
+      | RepairRunRow
+      | undefined) ?? null
   );
 }
 
@@ -233,20 +235,14 @@ function writeSummary(runId: string, summary: RepairSummary): void {
 }
 
 function bumpCounter(runId: string, field: 'done' | 'failed'): void {
-  getServerDb()
-    .prepare(`UPDATE repair_runs SET ${field} = ${field} + 1 WHERE id = ?`)
-    .run(runId);
+  getServerDb().prepare(`UPDATE repair_runs SET ${field} = ${field} + 1 WHERE id = ?`).run(runId);
 }
 
-function markJob(
-  id: string,
-  status: RepairJobStatus,
-  patch: { error?: string | null } = {}
-): void {
+function markJob(id: string, status: RepairJobStatus, patch: { error?: string | null } = {}): void {
   getServerDb()
     .prepare(
       `UPDATE repair_jobs SET status = ?, error = ?, locked_by = NULL, updated_at = ?
-       WHERE id = ?`
+       WHERE id = ?`,
     )
     .run(status, patch.error ?? null, now(), id);
 }
@@ -256,7 +252,7 @@ function claimOneJob(runId: string, usedIds: Set<string>): RepairJobRow | null {
   const db = getServerDb();
   const rows = db
     .prepare(
-      `SELECT * FROM repair_jobs WHERE run_id = ? AND status = 'queued' ORDER BY updated_at ASC`
+      `SELECT * FROM repair_jobs WHERE run_id = ? AND status = 'queued' ORDER BY updated_at ASC`,
     )
     .all(runId) as RepairJobRow[];
 
@@ -268,7 +264,7 @@ function claimOneJob(runId: string, usedIds: Set<string>): RepairJobRow | null {
       .prepare(
         `UPDATE repair_jobs
          SET status = 'running', attempts = attempts + 1, locked_by = ?, updated_at = ?
-         WHERE id = ? AND status = 'queued'`
+         WHERE id = ? AND status = 'queued'`,
       )
       .run(WORKER_ID, now(), row.id);
     if (res.changes > 0) {
@@ -296,7 +292,7 @@ function mergeArrays<T>(a: T[], b: T[]): T[] {
 
 function writeActivity(runId: string, summary: RepairSummary, status: RepairRunStatus): void {
   const touchedIds = Array.from(
-    new Set([...summary.touchedConceptIds, ...summary.deletedConceptIds])
+    new Set([...summary.touchedConceptIds, ...summary.deletedConceptIds]),
   ).slice(0, 40);
   const activity: ActivityLog = {
     id: `a-${nanoid(8)}`,
@@ -392,20 +388,21 @@ async function runMergeJob(runId: string, job: RepairJobRow): Promise<void> {
     });
     const parsed = parseJSON<{ title?: string; summary?: string; body?: string }>(raw);
     if (parsed.title && parsed.title.trim()) mergedTitle = parsed.title.trim().slice(0, 80);
-    if (parsed.summary && parsed.summary.trim()) mergedSummary = parsed.summary.trim().slice(0, 240);
+    if (parsed.summary && parsed.summary.trim())
+      mergedSummary = parsed.summary.trim().slice(0, 240);
     if (parsed.body && parsed.body.trim().length >= 10) mergedBody = parsed.body.trim();
   } catch (err) {
     aiFallback = true;
     console.warn(
       '[repair] merge LLM failed, falling back to mechanical merge:',
-      err instanceof Error ? err.message : String(err)
+      err instanceof Error ? err.message : String(err),
     );
   }
 
   const ts = now();
   const mergedSources = mergeArrays(primary.sources, secondary.sources);
   const mergedRelated = mergeArrays(primary.related, secondary.related).filter(
-    (id) => id !== primary.id && id !== secondary.id
+    (id) => id !== primary.id && id !== secondary.id,
   );
   const mergedCategoryKeysSet = new Set<string>([
     ...(primary.categoryKeys || []),
@@ -481,10 +478,7 @@ async function runOrphanJob(runId: string, job: RepairJobRow): Promise<void> {
       .filter((id) => valid.has(id) && id !== targetId)
       .slice(0, 3);
   } catch (err) {
-    console.warn(
-      '[repair] orphan LLM failed:',
-      err instanceof Error ? err.message : String(err)
-    );
+    console.warn('[repair] orphan LLM failed:', err instanceof Error ? err.message : String(err));
   }
 
   if (relatedIds.length === 0) {
@@ -546,10 +540,7 @@ async function runConflictJob(runId: string, job: RepairJobRow): Promise<void> {
     if (parsed.verdict && parsed.verdict.trim()) verdict = parsed.verdict.trim();
     if (parsed.reasoning && parsed.reasoning.trim()) reasoning = parsed.reasoning.trim();
   } catch (err) {
-    console.warn(
-      '[repair] conflict LLM failed:',
-      err instanceof Error ? err.message : String(err)
-    );
+    console.warn('[repair] conflict LLM failed:', err instanceof Error ? err.message : String(err));
   }
 
   const pair = `[${a.title}](concept:${a.id}) · [${b.title}](concept:${b.id})`;
@@ -647,7 +638,7 @@ export function startRepairWorker(runId: string): void {
       const db = getServerDb();
       db.prepare(`UPDATE repair_runs SET status = 'failed', finished_at = ? WHERE id = ?`).run(
         now(),
-        runId
+        runId,
       );
     })
     .finally(() => {

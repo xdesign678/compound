@@ -15,7 +15,12 @@ import { externalKeyPath } from './github-sync-shared';
 import { repo, type SyncJobRow } from './server-db';
 import { wikiRepo } from './wiki-db';
 import { syncObs, type SyncChangeType } from './sync-observability';
-import { queueGithubIngestJob, startAnalysisWorker, maybeFinishRun, cancelAnalysisJobs } from './analysis-worker';
+import {
+  queueGithubIngestJob,
+  startAnalysisWorker,
+  maybeFinishRun,
+  cancelAnalysisJobs,
+} from './analysis-worker';
 
 const MAX_LOG_ENTRIES = 50;
 const STALE_JOB_MAX_AGE_MS = Number(process.env.COMPOUND_SYNC_STALE_MS || 10 * 60 * 1000);
@@ -84,7 +89,11 @@ function deriveTitle(filePath: string, content: string): string {
   if (fm) {
     const line = fm[1].split(/\r?\n/).find((l) => /^title\s*:/i.test(l));
     if (line) {
-      const v = line.replace(/^title\s*:/i, '').trim().replace(/^["'](.*)["']$/, '$1').trim();
+      const v = line
+        .replace(/^title\s*:/i, '')
+        .trim()
+        .replace(/^["'](.*)["']$/, '$1')
+        .trim();
       if (v) return v;
     }
   }
@@ -93,7 +102,10 @@ function deriveTitle(filePath: string, content: string): string {
   return (filePath.split('/').pop() || filePath).replace(/\.md$/i, '');
 }
 
-async function withRetry<T>(fn: () => Promise<T>, opts: { retries: number; baseDelayMs: number; label: string; runId?: string; path?: string }): Promise<T> {
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  opts: { retries: number; baseDelayMs: number; label: string; runId?: string; path?: string },
+): Promise<T> {
   let last: unknown;
   for (let i = 0; i <= opts.retries; i += 1) {
     try {
@@ -104,7 +116,13 @@ async function withRetry<T>(fn: () => Promise<T>, opts: { retries: number; baseD
       const permanent = /^Invalid API URL/i.test(message) || /\b(401|403|404)\b/.test(message);
       if (permanent || i === opts.retries) break;
       const delay = opts.baseDelayMs * 2 ** i + Math.floor(Math.random() * 250);
-      syncObs.recordEvent({ runId: opts.runId, stage: 'download', path: opts.path, level: 'warn', message: `${opts.label} 失败，${delay}ms 后重试` });
+      syncObs.recordEvent({
+        runId: opts.runId,
+        stage: 'download',
+        path: opts.path,
+        level: 'warn',
+        message: `${opts.label} 失败，${delay}ms 后重试`,
+      });
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
@@ -112,7 +130,8 @@ async function withRetry<T>(fn: () => Promise<T>, opts: { retries: number; baseD
 }
 
 function loadLocalGithubSources(): LocalGithubSource[] {
-  return repo.listGithubExternalKeys()
+  return repo
+    .listGithubExternalKeys()
     .map((row) => ({
       id: row.id,
       externalKey: row.externalKey,
@@ -121,7 +140,6 @@ function loadLocalGithubSources(): LocalGithubSource[] {
     }))
     .filter((row) => Boolean(row.path));
 }
-
 
 function maybeFinishLegacyJob(jobId: string): void {
   const row = repo.getSyncJob(jobId);
@@ -146,7 +164,11 @@ function bumpLegacy(jobId: string, field: 'done' | 'failed', current?: string): 
   });
 }
 
-export function startGithubSync(options: StartGithubSyncOptions = {}): { jobId: string; existing?: boolean; runId?: string } {
+export function startGithubSync(options: StartGithubSyncOptions = {}): {
+  jobId: string;
+  existing?: boolean;
+  runId?: string;
+} {
   const recovered = repo.recoverStaleSyncJobs(STALE_JOB_MAX_AGE_MS);
   if (recovered > 0) console.log(`[github-sync-runner] recovered ${recovered} stale job(s)`);
 
@@ -187,13 +209,27 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
     cfg = getGithubConfig();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    repo.updateSyncJob(jobId, { status: 'failed', error: `GitHub 配置错误：${message}`, finished_at: Date.now() });
+    repo.updateSyncJob(jobId, {
+      status: 'failed',
+      error: `GitHub 配置错误：${message}`,
+      finished_at: Date.now(),
+    });
     return;
   }
   const repoSlug = `${cfg.owner}/${cfg.repo}`;
-  syncObs.startRun({ id: runId, kind: 'github', triggerType: options.triggerType || 'manual', repo: repoSlug, branch: cfg.branch });
+  syncObs.startRun({
+    id: runId,
+    kind: 'github',
+    triggerType: options.triggerType || 'manual',
+    repo: repoSlug,
+    branch: cfg.branch,
+  });
   syncObs.recordEvent({ runId, stage: 'scan', message: `开始扫描 ${repoSlug}@${cfg.branch}` });
-  appendLogByJobId(jobId, { at: Date.now(), path: '仓库扫描', status: 'success', message: '开始扫描远端 Markdown 文件' }, { current: '扫描 GitHub 仓库…' });
+  appendLogByJobId(
+    jobId,
+    { at: Date.now(), path: '仓库扫描', status: 'success', message: '开始扫描远端 Markdown 文件' },
+    { current: '扫描 GitHub 仓库…' },
+  );
 
   let remote: Awaited<ReturnType<typeof listMarkdownFiles>>;
   try {
@@ -201,7 +237,11 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     syncObs.finishRun(runId, 'failed', message);
-    repo.updateSyncJob(jobId, { status: 'failed', error: `GitHub 列表失败：${message}`, finished_at: Date.now() });
+    repo.updateSyncJob(jobId, {
+      status: 'failed',
+      error: `GitHub 列表失败：${message}`,
+      finished_at: Date.now(),
+    });
     return;
   }
 
@@ -212,17 +252,47 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
   for (const f of remote) {
     const local = localByPath.get(f.path);
     if (!local) {
-      plan.push({ itemId: `sri-${nanoid(10)}`, path: f.path, sha: f.sha, externalKey: f.externalKey, action: 'create' });
+      plan.push({
+        itemId: `sri-${nanoid(10)}`,
+        path: f.path,
+        sha: f.sha,
+        externalKey: f.externalKey,
+        action: 'create',
+      });
     } else if (options.force || local.externalKey !== f.externalKey) {
-      plan.push({ itemId: `sri-${nanoid(10)}`, path: f.path, sha: f.sha, oldSha: local.sha, externalKey: f.externalKey, action: 'update', existingSourceId: local.id });
+      plan.push({
+        itemId: `sri-${nanoid(10)}`,
+        path: f.path,
+        sha: f.sha,
+        oldSha: local.sha,
+        externalKey: f.externalKey,
+        action: 'update',
+        existingSourceId: local.id,
+      });
     } else {
-      syncObs.markSourceFileActive({ repo: repoSlug, branch: cfg.branch, path: f.path, sourceId: local.id, externalKey: f.externalKey, blobSha: f.sha, runId });
+      syncObs.markSourceFileActive({
+        repo: repoSlug,
+        branch: cfg.branch,
+        path: f.path,
+        sourceId: local.id,
+        externalKey: f.externalKey,
+        blobSha: f.sha,
+        runId,
+      });
     }
   }
 
   for (const local of localByPath.values()) {
     if (!remoteByPath.has(local.path)) {
-      plan.push({ itemId: `sri-${nanoid(10)}`, path: local.path, sha: null, oldSha: local.sha, externalKey: local.externalKey, action: 'delete', existingSourceId: local.id });
+      plan.push({
+        itemId: `sri-${nanoid(10)}`,
+        path: local.path,
+        sha: null,
+        oldSha: local.sha,
+        externalKey: local.externalKey,
+        action: 'delete',
+        existingSourceId: local.id,
+      });
     }
   }
 
@@ -240,12 +310,26 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
     current: `待处理 ${plan.length} 个文件`,
   });
   repo.updateSyncJob(jobId, { total: plan.length, current: `待处理 ${plan.length} 个文件` });
-  appendLogByJobId(jobId, { at: Date.now(), path: '同步计划', status: 'success', message: `新增 ${created} · 更新 ${updated} · 删除 ${deleted}` });
-  syncObs.recordEvent({ runId, stage: 'diff', level: 'success', message: `计划完成：新增 ${created}，更新 ${updated}，删除 ${deleted}` });
+  appendLogByJobId(jobId, {
+    at: Date.now(),
+    path: '同步计划',
+    status: 'success',
+    message: `新增 ${created} · 更新 ${updated} · 删除 ${deleted}`,
+  });
+  syncObs.recordEvent({
+    runId,
+    stage: 'diff',
+    level: 'success',
+    message: `计划完成：新增 ${created}，更新 ${updated}，删除 ${deleted}`,
+  });
 
   if (plan.length === 0) {
     syncObs.finishRun(runId, 'done');
-    repo.updateSyncJob(jobId, { status: 'done', current: '没有检测到需要同步的文件', finished_at: Date.now() });
+    repo.updateSyncJob(jobId, {
+      status: 'done',
+      current: '没有检测到需要同步的文件',
+      finished_at: Date.now(),
+    });
     return;
   }
 
@@ -271,21 +355,45 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
     });
 
     repo.updateSyncJob(jobId, { current: `[${index + 1}/${plan.length}] ${item.path}` });
-    syncObs.updateRun(runId, { stage: item.action === 'delete' ? 'delete' : 'download', current: item.path });
+    syncObs.updateRun(runId, {
+      stage: item.action === 'delete' ? 'delete' : 'download',
+      current: item.path,
+    });
 
     if (item.action === 'delete') {
       try {
-        syncObs.markSourceFileDeleted({ repo: repoSlug, branch: cfg.branch, path: item.path, runId });
+        syncObs.markSourceFileDeleted({
+          repo: repoSlug,
+          branch: cfg.branch,
+          path: item.path,
+          runId,
+        });
         if (HARD_DELETE_MODE && item.existingSourceId) {
           wikiRepo.deleteSourceArtifacts(item.existingSourceId);
           repo.deleteSource(item.existingSourceId);
         }
-        syncObs.updateRunItem(itemId, { status: 'succeeded', stage: 'complete', finished_at: Date.now() });
+        syncObs.updateRunItem(itemId, {
+          status: 'succeeded',
+          stage: 'complete',
+          finished_at: Date.now(),
+        });
         bumpLegacy(jobId, 'done', `已处理删除：${item.path}`);
-        syncObs.recordEvent({ runId, itemId, stage: 'delete', path: item.path, level: 'success', message: HARD_DELETE_MODE ? '已硬删除本地资料' : '已标记为远端删除' });
+        syncObs.recordEvent({
+          runId,
+          itemId,
+          stage: 'delete',
+          path: item.path,
+          level: 'success',
+          message: HARD_DELETE_MODE ? '已硬删除本地资料' : '已标记为远端删除',
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        syncObs.updateRunItem(itemId, { status: 'failed', stage: 'delete', error: message, finished_at: Date.now() });
+        syncObs.updateRunItem(itemId, {
+          status: 'failed',
+          stage: 'delete',
+          error: message,
+          finished_at: Date.now(),
+        });
         bumpLegacy(jobId, 'failed', `删除失败：${item.path}`);
       }
       maybeFinishRun(runId);
@@ -294,13 +402,16 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
     }
 
     try {
-      const remoteFile = await withRetry(() => fetchMarkdownContent(item.path, cfg, item.sha || undefined), {
-        retries: 2,
-        baseDelayMs: 600,
-        label: `fetch ${item.path}`,
-        runId,
-        path: item.path,
-      });
+      const remoteFile = await withRetry(
+        () => fetchMarkdownContent(item.path, cfg, item.sha || undefined),
+        {
+          retries: 2,
+          baseDelayMs: 600,
+          label: `fetch ${item.path}`,
+          runId,
+          path: item.path,
+        },
+      );
       queueGithubIngestJob({
         runId,
         itemId,
@@ -315,12 +426,30 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
         replaceSourceId: item.existingSourceId ?? null,
       });
       syncObs.updateRunItem(itemId, { status: 'queued', stage: 'ingest', error: null });
-      syncObs.recordEvent({ runId, itemId, stage: 'ingest', path: item.path, message: '已下载并加入分析队列' });
+      syncObs.recordEvent({
+        runId,
+        itemId,
+        stage: 'ingest',
+        path: item.path,
+        message: '已下载并加入分析队列',
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      syncObs.updateRunItem(itemId, { status: 'failed', stage: 'download', error: message, finished_at: Date.now() });
+      syncObs.updateRunItem(itemId, {
+        status: 'failed',
+        stage: 'download',
+        error: message,
+        finished_at: Date.now(),
+      });
       bumpLegacy(jobId, 'failed', `下载失败：${item.path}`);
-      syncObs.recordEvent({ runId, itemId, stage: 'download', path: item.path, level: 'error', message: message.slice(0, 200) });
+      syncObs.recordEvent({
+        runId,
+        itemId,
+        stage: 'download',
+        path: item.path,
+        level: 'error',
+        message: message.slice(0, 200),
+      });
       maybeFinishRun(runId);
       maybeFinishLegacyJob(jobId);
     }

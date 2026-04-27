@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { hapticLight, hapticSuccess } from '@/lib/haptic';
 
-const TRIGGER_DISTANCE = 72;   // px pull to trigger refresh
-const MAX_PULL = 120;          // visual clamp
-const RESISTANCE = 0.45;       // rubber-band feel
+const TRIGGER_DISTANCE = 72; // px pull to trigger refresh
+const MAX_PULL = 120; // visual clamp
+const RESISTANCE = 0.45; // rubber-band feel
 
 interface PullToRefreshProps {
   /** CSS selector for the scroll container (default: .app-main) */
@@ -152,18 +152,40 @@ export function PullToRefresh({
           justifyContent: 'center',
           opacity: refreshing ? 1 : opacity,
           transform: `scale(${refreshing ? 1 : scale})`,
-          transition: pulling
-            ? 'none'
-            : 'opacity 200ms ease, transform 200ms ease',
+          transition: pulling ? 'none' : 'opacity 200ms ease, transform 200ms ease',
           boxShadow: 'var(--shadow-sm)',
         }}
       >
         {refreshing ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56" style={{ transformOrigin: 'center', animation: 'spin 0.8s linear infinite' }} />
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          >
+            <path
+              d="M21 12a9 9 0 1 1-6.219-8.56"
+              style={{ transformOrigin: 'center', animation: 'spin 0.8s linear infinite' }}
+            />
           </svg>
         ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: `rotate(${progress * 180}deg)`, transition: 'transform 60ms linear' }}>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              transform: `rotate(${progress * 180}deg)`,
+              transition: 'transform 60ms linear',
+            }}
+          >
             <polyline points="6 9 12 15 18 9" />
           </svg>
         )}

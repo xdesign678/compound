@@ -21,19 +21,21 @@ test('fetches markdown content with a known sha in a single network request', as
   }) as typeof fetch;
 
   try {
-    const result = await (fetchMarkdownContent as unknown as (
-      path: string,
-      cfg: { owner: string; repo: string; branch: string; token: string },
-      sha: string
-    ) => Promise<{
-      path: string;
-      sha: string;
-      content: string;
-      externalKey: string;
-    }>)(
+    const result = await (
+      fetchMarkdownContent as unknown as (
+        path: string,
+        cfg: { owner: string; repo: string; branch: string; token: string },
+        sha: string,
+      ) => Promise<{
+        path: string;
+        sha: string;
+        content: string;
+        externalKey: string;
+      }>
+    )(
       'notes/test.md',
       { owner: 'demo', repo: 'vault', branch: 'main', token: 'secret' },
-      'sha-123'
+      'sha-123',
     );
 
     assert.equal(calls.length, 1);

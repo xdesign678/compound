@@ -131,9 +131,10 @@ export function HealthView() {
     const orphanPenalty = allFindings.filter((finding) => finding.type === 'orphan').length * 5;
     const stalePenalty = allFindings.filter((finding) => finding.type === 'stale').length * 3;
     const thinPenalty = allFindings.filter((finding) => finding.type === 'thin').length * 2;
-    const lintPenalty = allFindings.filter((finding) =>
-      ['contradiction', 'missing-link', 'duplicate'].includes(finding.type)
-    ).length * 8;
+    const lintPenalty =
+      allFindings.filter((finding) =>
+        ['contradiction', 'missing-link', 'duplicate'].includes(finding.type),
+      ).length * 8;
     return Math.max(0, 100 - orphanPenalty - stalePenalty - thinPenalty - lintPenalty);
   }, [allFindings, conceptCount]);
 
@@ -141,31 +142,28 @@ export function HealthView() {
 
   const fixableCount = useMemo(
     () => allFindings.filter((f) => isFixable(f.type)).length,
-    [allFindings]
+    [allFindings],
   );
 
-  const pollRepairRun = useCallback(
-    async (runId: string): Promise<RepairStatusResponse | null> => {
-      try {
-        const status = await getRepairStatus(runId);
-        setRepairRun(status);
-        return status;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        setRepairError(message);
-        if (/run not found/i.test(message)) {
-          try {
-            localStorage.removeItem(REPAIR_RUN_STORAGE_KEY);
-          } catch {
-            // ignore
-          }
-          setRepairRun(null);
+  const pollRepairRun = useCallback(async (runId: string): Promise<RepairStatusResponse | null> => {
+    try {
+      const status = await getRepairStatus(runId);
+      setRepairRun(status);
+      return status;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setRepairError(message);
+      if (/run not found/i.test(message)) {
+        try {
+          localStorage.removeItem(REPAIR_RUN_STORAGE_KEY);
+        } catch {
+          // ignore
         }
-        return null;
+        setRepairRun(null);
       }
-    },
-    []
-  );
+      return null;
+    }
+  }, []);
 
   const onRepairFinished = useCallback(
     async (status: RepairStatusResponse) => {
@@ -189,7 +187,7 @@ export function HealthView() {
       // Refresh the lint findings so fixed items disappear and remaining ones re-render.
       setLintResult([]);
     },
-    [setLintResult, showToast]
+    [setLintResult, showToast],
   );
 
   // Poll active repair run (also resumes after page refresh).
@@ -273,7 +271,7 @@ export function HealthView() {
         setRepairStarting(false);
       }
     },
-    [repairStarting, showToast]
+    [repairStarting, showToast],
   );
 
   const runLint = useCallback(async () => {
@@ -329,34 +327,52 @@ export function HealthView() {
 
   const findingIcon = (type: Finding['type']) => {
     switch (type) {
-      case 'orphan': return <Icon.Orphan />;
-      case 'stale': return <Icon.Stale />;
-      case 'thin': return <Icon.Thin />;
-      case 'contradiction': return <Icon.Contradiction />;
-      case 'missing-link': return <Icon.Link />;
-      case 'duplicate': return <Icon.Duplicate />;
+      case 'orphan':
+        return <Icon.Orphan />;
+      case 'stale':
+        return <Icon.Stale />;
+      case 'thin':
+        return <Icon.Thin />;
+      case 'contradiction':
+        return <Icon.Contradiction />;
+      case 'missing-link':
+        return <Icon.Link />;
+      case 'duplicate':
+        return <Icon.Duplicate />;
     }
   };
 
   const findingLabel = (type: Finding['type']) => {
     switch (type) {
-      case 'orphan': return '孤岛';
-      case 'stale': return '陈旧';
-      case 'thin': return '单薄';
-      case 'contradiction': return '矛盾';
-      case 'missing-link': return '缺链';
-      case 'duplicate': return '重复';
+      case 'orphan':
+        return '孤岛';
+      case 'stale':
+        return '陈旧';
+      case 'thin':
+        return '单薄';
+      case 'contradiction':
+        return '矛盾';
+      case 'missing-link':
+        return '缺链';
+      case 'duplicate':
+        return '重复';
     }
   };
 
   const findingAction = (finding: Finding) => {
     if (finding.type === 'orphan' || finding.type === 'stale') {
-      return { label: '查看概念', action: () => finding.conceptIds[0] && openConcept(finding.conceptIds[0]) };
+      return {
+        label: '查看概念',
+        action: () => finding.conceptIds[0] && openConcept(finding.conceptIds[0]),
+      };
     }
     if (finding.type === 'thin') {
       return { label: '补充资料', action: () => openModal() };
     }
-    return { label: '查看详情', action: () => finding.conceptIds[0] && openConcept(finding.conceptIds[0]) };
+    return {
+      label: '查看详情',
+      action: () => finding.conceptIds[0] && openConcept(finding.conceptIds[0]),
+    };
   };
 
   if (conceptCount === undefined || sourceCount === undefined) {
@@ -431,7 +447,10 @@ export function HealthView() {
               const fixable = isFixable(finding.type);
               const fixing = Boolean(repairRun && repairRun.status === 'running');
               return (
-                <div key={`${finding.type}-${index}`} className={`finding-item type-${finding.type}`}>
+                <div
+                  key={`${finding.type}-${index}`}
+                  className={`finding-item type-${finding.type}`}
+                >
                   <div className="finding-icon">{findingIcon(finding.type)}</div>
                   <div className="finding-body">
                     <div className="finding-top-row">
@@ -478,9 +497,13 @@ export function HealthView() {
           disabled={lintRunning || Boolean(repairRun && repairRun.status === 'running')}
         >
           {lintRunning ? (
-            <><span className="lint-spinner" /> 检查中...</>
+            <>
+              <span className="lint-spinner" /> 检查中...
+            </>
           ) : (
-            <><Icon.Sparkle /> 运行深度检查</>
+            <>
+              <Icon.Sparkle /> 运行深度检查
+            </>
           )}
         </button>
         <button

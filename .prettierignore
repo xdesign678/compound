@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+.next/
+out/
+build/
+dist/
+
+# Generated / non-source content
+public/workbox-*.js
+public/swe-worker-*.js
+next-env.d.ts
+*.tsbuildinfo
+
+# Lock files (managed by package managers)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Local tooling caches and metrics
+tmp/
+output/
+.codex/
+.serena/
+.verdent/
+.local/
+.playwright-cli/
+.husky/_
+
+# Local planning docs (not deployed)
+docs/plans/
+
+# Data files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

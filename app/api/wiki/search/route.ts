@@ -9,7 +9,11 @@ export async function POST(req: Request) {
   if (denied) return denied;
 
   try {
-    const body = (await req.json()) as { query?: string; conceptLimit?: number; chunkLimit?: number };
+    const body = (await req.json()) as {
+      query?: string;
+      conceptLimit?: number;
+      chunkLimit?: number;
+    };
     const query = body.query?.trim();
     if (!query) {
       return NextResponse.json({ error: 'query is required' }, { status: 400 });

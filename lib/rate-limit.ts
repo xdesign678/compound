@@ -66,7 +66,7 @@ function getClientKey(req: Request): string {
     console.warn(
       '[compound/rate-limit] COMPOUND_TRUST_PROXY is not set to "true". ' +
         'All requests share a single rate-limit bucket ("anon"). ' +
-        'Set COMPOUND_TRUST_PROXY=true behind a trusted reverse proxy to enable per-IP limiting.'
+        'Set COMPOUND_TRUST_PROXY=true behind a trusted reverse proxy to enable per-IP limiting.',
     );
   }
   return 'anon';
@@ -75,7 +75,7 @@ function getClientKey(req: Request): string {
 export function rateLimit(
   req: Request,
   scope: string,
-  options: { limit: number; windowMs: number }
+  options: { limit: number; windowMs: number },
 ): NextResponse | null {
   if (options.limit <= 0) return null;
 
@@ -96,7 +96,7 @@ export function rateLimit(
   const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
   return NextResponse.json(
     { error: 'Too many requests', retryAfter },
-    { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    { status: 429, headers: { 'Retry-After': String(retryAfter) } },
   );
 }
 

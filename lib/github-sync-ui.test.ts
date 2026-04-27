@@ -23,7 +23,7 @@ test('highlights the scan step while repository scan is running', () => {
       ['plan', 'upcoming'],
       ['process', 'upcoming'],
       ['pull', 'upcoming'],
-    ]
+    ],
   );
 });
 
@@ -68,6 +68,6 @@ test('highlights pull stage after server sync is done and local pull is running'
 
   assert.deepEqual(
     items.map((item) => item.status),
-    ['done', 'done', 'done', 'current']
+    ['done', 'done', 'done', 'current'],
   );
 });

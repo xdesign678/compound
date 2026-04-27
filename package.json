@@ -8,15 +8,21 @@
     "build:measure": "node scripts/measure-build.mjs",
     "start": "next start -p ${PORT:-3000} -H 0.0.0.0",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md,mdx,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,json,css,md,mdx,yml,yaml}\"",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit --pretty false",
     "test": "node scripts/run-node-tests.mjs",
-    "check": "npm run typecheck && npm run test && npm run build",
+    "check": "npm run format:check && npm run typecheck && npm run test && npm run build",
     "danger": "danger ci",
     "prepare": "husky"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [
-      "eslint --fix --max-warnings=0"
+      "eslint --fix --max-warnings=0",
+      "prettier --write"
+    ],
+    "*.{json,css,md,mdx,yml,yaml}": [
+      "prettier --write"
     ]
   },
   "dependencies": {
@@ -43,9 +49,11 @@
     "danger": "^12.3.3",
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.5.15",
+    "eslint-config-prettier": "^9.1.0",
     "husky": "^9.1.7",
     "lint-staged": "^15.5.2",
     "postcss": "8.4.49",
+    "prettier": "^3.3.3",
     "tailwindcss": "3.4.15",
     "typescript": "5.6.3"
   },

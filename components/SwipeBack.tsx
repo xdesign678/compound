@@ -4,9 +4,9 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '@/lib/store';
 import { hapticLight, hapticSuccess } from '@/lib/haptic';
 
-const EDGE_WIDTH = 36;       // px from left edge to start (was 24)
-const MIN_DISTANCE = 60;     // px to trigger back
-const MAX_Y_DRIFT = 100;     // px vertical drift tolerance
+const EDGE_WIDTH = 36; // px from left edge to start (was 24)
+const MIN_DISTANCE = 60; // px to trigger back
+const MAX_Y_DRIFT = 100; // px vertical drift tolerance
 
 export function SwipeBack() {
   const back = useAppStore((s) => s.back);
@@ -102,7 +102,16 @@ export function SwipeBack() {
         transform: 'translateX(-100%) translateY(-50%) scale(0.6)',
       }}
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <polyline points="15 18 9 12 15 6" />
       </svg>
     </div>

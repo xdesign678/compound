@@ -70,7 +70,7 @@ export function recordModelRun(record: ModelRunRecord): void {
     const stmt = db.prepare(
       `INSERT INTO model_runs
        (id, job_id, provider, model, task, input_tokens, output_tokens, latency_ms, cost_usd, prompt_hash, output_hash, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     // `error` is folded into `task` with a suffix so we don't need an extra column.
     const task = record.error ? `${record.task}:${record.error}` : record.task;
@@ -86,7 +86,7 @@ export function recordModelRun(record: ModelRunRecord): void {
       record.costUsd ?? null,
       record.promptHash ?? null,
       record.outputHash ?? null,
-      Date.now()
+      Date.now(),
     );
   } catch (err) {
     console.warn('[model-runs] insert failed:', err instanceof Error ? err.message : err);

@@ -31,7 +31,9 @@ export async function fetchCustomModels(): Promise<string[]> {
   });
   if (!res.ok) return [];
   const data = (await res.json()) as { models?: unknown };
-  return Array.isArray(data.models) ? data.models.filter((item): item is string => typeof item === 'string') : [];
+  return Array.isArray(data.models)
+    ? data.models.filter((item): item is string => typeof item === 'string')
+    : [];
 }
 
 export async function rememberCustomModelOnServer(model: string): Promise<string[]> {
@@ -48,7 +50,9 @@ export async function rememberCustomModelOnServer(model: string): Promise<string
   });
   if (!res.ok) return [];
   const data = (await res.json()) as { models?: unknown };
-  return Array.isArray(data.models) ? data.models.filter((item): item is string => typeof item === 'string') : [];
+  return Array.isArray(data.models)
+    ? data.models.filter((item): item is string => typeof item === 'string')
+    : [];
 }
 
 export function modelLabel(model: string): string {

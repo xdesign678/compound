@@ -24,8 +24,7 @@ export function buildSyncStageItems(input: {
 
   return orderedIds.map((id, index) => {
     const activeIndex = orderedIds.indexOf(active);
-    const status =
-      index < activeIndex ? 'done' : index === activeIndex ? 'current' : 'upcoming';
+    const status = index < activeIndex ? 'done' : index === activeIndex ? 'current' : 'upcoming';
 
     return {
       id,
@@ -35,7 +34,10 @@ export function buildSyncStageItems(input: {
   });
 }
 
-export function getCurrentFileDisplay(current: string | null): { counter: string | null; path: string | null } {
+export function getCurrentFileDisplay(current: string | null): {
+  counter: string | null;
+  path: string | null;
+} {
   if (!current) return { counter: null, path: null };
 
   const match = current.match(/^\[(\d+)\/(\d+)\]\s+(.+)$/);

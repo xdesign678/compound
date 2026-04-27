@@ -15,7 +15,13 @@ import { wikiRepo } from './wiki-db';
 import { now } from './utils';
 
 export type SyncRunStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
-export type SyncItemStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'cancelled';
+export type SyncItemStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'skipped'
+  | 'cancelled';
 export type SyncChangeType = 'create' | 'update' | 'delete' | 'rename' | 'skip';
 export type SyncStage =
   | 'queued'
@@ -31,7 +37,14 @@ export type SyncStage =
   | 'delete'
   | 'complete';
 
-export type AnalysisStage = 'chunk' | 'fts' | 'embedding' | 'summarize' | 'concepts' | 'relations' | 'qa_index';
+export type AnalysisStage =
+  | 'chunk'
+  | 'fts'
+  | 'embedding'
+  | 'summarize'
+  | 'concepts'
+  | 'relations'
+  | 'qa_index';
 export type AnalysisJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped';
 
 type JsonObject = Record<string, unknown>;
@@ -166,7 +179,6 @@ function safeCount(sql: string): number {
   }
 }
 
-
 function json(value: JsonObject | undefined): string | null {
   if (!value || Object.keys(value).length === 0) return null;
   return JSON.stringify(value);
@@ -295,7 +307,7 @@ export const syncObs = {
       .prepare(
         `INSERT OR REPLACE INTO sync_runs
          (id, kind, trigger_type, repo, branch, head_sha, status, stage, started_at, heartbeat_at)
-         VALUES (@id, @kind, @trigger_type, @repo, @branch, @head_sha, 'running', 'queued', @started_at, @heartbeat_at)`
+         VALUES (@id, @kind, @trigger_type, @repo, @branch, @head_sha, 'running', 'queued', @started_at, @heartbeat_at)`,
       )
       .run({
         id: input.id,
@@ -329,15 +341,19 @@ export const syncObs = {
       error: string | null;
       finished_at: number | null;
       heartbeat_at: number | null;
-    }>
+    }>,
   ): void {
     ensureSyncObservabilitySchema();
-    const existing = getServerDb().prepare(`SELECT * FROM sync_runs WHERE id = ?`).get(id) as SyncRunRow | undefined;
+    const existing = getServerDb().prepare(`SELECT * FROM sync_runs WHERE id = ?`).get(id) as
+      | SyncRunRow
+      | undefined;
     if (!existing) return;
     const next = {
       ...existing,
       ...patch,
-      heartbeat_at: patch.heartbeat_at ?? (patch.status === 'done' || patch.status === 'failed' ? existing.heartbeat_at : now()),
+      heartbeat_at:
+        patch.heartbeat_at ??
+        (patch.status === 'done' || patch.status === 'failed' ? existing.heartbeat_at : now()),
     };
     getServerDb()
       .prepare(
@@ -359,12 +375,16 @@ export const syncObs = {
           error = @error,
           finished_at = @finished_at,
           heartbeat_at = @heartbeat_at
-         WHERE id = @id`
+         WHERE id = @id`,
       )
       .run(next);
   },
 
-  finishRun(id: string, status: Extract<SyncRunStatus, 'done' | 'failed' | 'cancelled'>, error?: string | null): void {
+  finishRun(
+    id: string,
+    status: Extract<SyncRunStatus, 'done' | 'failed' | 'cancelled'>,
+    error?: string | null,
+  ): void {
     this.updateRun(id, {
       status,
       stage: 'complete',
@@ -393,7 +413,7 @@ export const syncObs = {
           change_type = excluded.change_type,
           status = excluded.status,
           stage = excluded.stage,
-          updated_at = excluded.updated_at`
+          updated_at = excluded.updated_at`,
       )
       .run({
         id,
@@ -425,17 +445,24 @@ export const syncObs = {
       error: string | null;
       started_at: number | null;
       finished_at: number | null;
-    }>
+    }>,
   ): void {
     ensureSyncObservabilitySchema();
-    const row = getServerDb().prepare(`SELECT * FROM sync_run_items WHERE id = ?`).get(id) as SyncRunItemRow | undefined;
+    const row = getServerDb().prepare(`SELECT * FROM sync_run_items WHERE id = ?`).get(id) as
+      | SyncRunItemRow
+      | undefined;
     if (!row) return;
     const next = {
       ...row,
       ...patch,
       updated_at: now(),
       started_at: patch.started_at ?? row.started_at ?? (patch.status === 'running' ? now() : null),
-      finished_at: patch.finished_at ?? row.finished_at ?? (['succeeded', 'failed', 'skipped', 'cancelled'].includes(patch.status ?? '') ? now() : null),
+      finished_at:
+        patch.finished_at ??
+        row.finished_at ??
+        (['succeeded', 'failed', 'skipped', 'cancelled'].includes(patch.status ?? '')
+          ? now()
+          : null),
     };
     getServerDb()
       .prepare(
@@ -452,7 +479,7 @@ export const syncObs = {
           started_at = @started_at,
           finished_at = @finished_at,
           updated_at = @updated_at
-         WHERE id = @id`
+         WHERE id = @id`,
       )
       .run(next);
   },
@@ -470,7 +497,7 @@ export const syncObs = {
     getServerDb()
       .prepare(
         `INSERT INTO sync_events (id, run_id, item_id, at, level, stage, path, message, meta)
-         VALUES (@id, @run_id, @item_id, @at, @level, @stage, @path, @message, @meta)`
+         VALUES (@id, @run_id, @item_id, @at, @level, @stage, @path, @message, @meta)`,
       )
       .run({
         id: `se-${nanoid(10)}`,
@@ -509,7 +536,7 @@ export const syncObs = {
           status = 'active',
           last_seen_at = excluded.last_seen_at,
           deleted_at = NULL,
-          last_sync_run_id = excluded.last_sync_run_id`
+          last_sync_run_id = excluded.last_sync_run_id`,
       )
       .run({
         repo: input.repo,
@@ -524,7 +551,12 @@ export const syncObs = {
       });
   },
 
-  markSourceFileDeleted(input: { repo: string; branch: string; path: string; runId?: string | null }): void {
+  markSourceFileDeleted(input: {
+    repo: string;
+    branch: string;
+    path: string;
+    runId?: string | null;
+  }): void {
     ensureSyncObservabilitySchema();
     const ts = now();
     getServerDb()
@@ -537,7 +569,7 @@ export const syncObs = {
           status = 'deleted',
           deleted_at = COALESCE(source_file_state.deleted_at, excluded.deleted_at),
           last_sync_run_id = excluded.last_sync_run_id,
-          last_seen_at = excluded.last_seen_at`
+          last_seen_at = excluded.last_seen_at`,
       )
       .run({
         repo: input.repo,
@@ -558,7 +590,7 @@ export const syncObs = {
       input.stage,
       input.stageVersion,
       input.model,
-      input.promptVersion
+      input.promptVersion,
     )}`;
     const ts = now();
     getServerDb()
@@ -571,7 +603,7 @@ export const syncObs = {
           source_path = excluded.source_path,
           status = excluded.status,
           updated_at = excluded.updated_at,
-          finished_at = CASE WHEN excluded.status IN ('succeeded', 'failed', 'skipped') THEN excluded.updated_at ELSE analysis_jobs.finished_at END`
+          finished_at = CASE WHEN excluded.status IN ('succeeded', 'failed', 'skipped') THEN excluded.updated_at ELSE analysis_jobs.finished_at END`,
       )
       .run({
         id,
@@ -608,20 +640,28 @@ export const syncObs = {
     const runForDetails = activeRun?.id ?? latestRuns[0]?.id ?? null;
     const activeItems = runForDetails
       ? (db
-          .prepare(`SELECT * FROM sync_run_items WHERE run_id = ? ORDER BY updated_at DESC LIMIT 200`)
+          .prepare(
+            `SELECT * FROM sync_run_items WHERE run_id = ? ORDER BY updated_at DESC LIMIT 200`,
+          )
           .all(runForDetails) as SyncRunItemRow[])
       : [];
     const failedItems = db
-      .prepare(`SELECT * FROM sync_run_items WHERE status = 'failed' ORDER BY updated_at DESC LIMIT 100`)
+      .prepare(
+        `SELECT * FROM sync_run_items WHERE status = 'failed' ORDER BY updated_at DESC LIMIT 100`,
+      )
       .all() as SyncRunItemRow[];
     const events = db
       .prepare(`SELECT * FROM sync_events ORDER BY at DESC LIMIT 80`)
       .all() as SyncEventRow[];
     const itemStats = db
-      .prepare(`SELECT stage, status, COUNT(*) AS count FROM sync_run_items GROUP BY stage, status ORDER BY stage, status`)
+      .prepare(
+        `SELECT stage, status, COUNT(*) AS count FROM sync_run_items GROUP BY stage, status ORDER BY stage, status`,
+      )
       .all() as Array<{ stage: string; status: string; count: number }>;
     const analysisStats = db
-      .prepare(`SELECT stage, status, COUNT(*) AS count FROM analysis_jobs GROUP BY stage, status ORDER BY stage, status`)
+      .prepare(
+        `SELECT stage, status, COUNT(*) AS count FROM analysis_jobs GROUP BY stage, status ORDER BY stage, status`,
+      )
       .all() as Array<{ stage: string; status: string; count: number }>;
     const errorStats = db
       .prepare(
@@ -630,23 +670,37 @@ export const syncObs = {
          WHERE status = 'failed'
          GROUP BY COALESCE(error, '未知错误')
          ORDER BY count DESC, lastAt DESC
-         LIMIT 20`
+         LIMIT 20`,
       )
       .all() as Array<{ error: string; count: number; lastAt: number }>;
 
     const coverage = {
       sources: safeCount(`SELECT COUNT(*) AS count FROM sources`),
-      githubSources: safeCount(`SELECT COUNT(*) AS count FROM sources WHERE external_key LIKE 'github:%'`),
-      activeSourceFiles: safeCount(`SELECT COUNT(*) AS count FROM source_file_state WHERE status = 'active'`),
-      deletedSourceFiles: safeCount(`SELECT COUNT(*) AS count FROM source_file_state WHERE status = 'deleted'`),
+      githubSources: safeCount(
+        `SELECT COUNT(*) AS count FROM sources WHERE external_key LIKE 'github:%'`,
+      ),
+      activeSourceFiles: safeCount(
+        `SELECT COUNT(*) AS count FROM source_file_state WHERE status = 'active'`,
+      ),
+      deletedSourceFiles: safeCount(
+        `SELECT COUNT(*) AS count FROM source_file_state WHERE status = 'deleted'`,
+      ),
       sourceChunks: safeCount(`SELECT COUNT(*) AS count FROM source_chunks`),
-      chunkFtsRows: tableExists('chunk_fts') ? safeCount(`SELECT COUNT(*) AS count FROM chunk_fts`) : 0,
+      chunkFtsRows: tableExists('chunk_fts')
+        ? safeCount(`SELECT COUNT(*) AS count FROM chunk_fts`)
+        : 0,
       concepts: safeCount(`SELECT COUNT(*) AS count FROM concepts`),
       conceptEvidence: safeCount(`SELECT COUNT(*) AS count FROM concept_evidence`),
       conceptVersions: safeCount(`SELECT COUNT(*) AS count FROM concept_versions`),
-      modelRuns: tableExists('model_runs') ? safeCount(`SELECT COUNT(*) AS count FROM model_runs`) : 0,
-      analysisQueued: safeCount(`SELECT COUNT(*) AS count FROM analysis_jobs WHERE status = 'queued'`),
-      analysisFailed: safeCount(`SELECT COUNT(*) AS count FROM analysis_jobs WHERE status = 'failed'`),
+      modelRuns: tableExists('model_runs')
+        ? safeCount(`SELECT COUNT(*) AS count FROM model_runs`)
+        : 0,
+      analysisQueued: safeCount(
+        `SELECT COUNT(*) AS count FROM analysis_jobs WHERE status = 'queued'`,
+      ),
+      analysisFailed: safeCount(
+        `SELECT COUNT(*) AS count FROM analysis_jobs WHERE status = 'failed'`,
+      ),
       ftsReady: Boolean((wikiMetrics as Record<string, unknown>).ftsReady),
     };
 

@@ -55,7 +55,8 @@ interface SourceDetailResponse {
 }
 
 function normalizeSnapshotTimestamp(value: number | string | null | undefined): number | null {
-  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  const parsed =
+    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
   if (!Number.isFinite(parsed) || parsed <= 0) return null;
   return Math.trunc(parsed);
 }
@@ -223,7 +224,7 @@ export async function ensureConceptsHydrated(ids: string[]): Promise<Concept[]> 
         concepts.map((concept) => ({
           ...concept,
           contentStatus: 'full' as const,
-        }))
+        })),
       );
     }
   }

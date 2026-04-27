@@ -13,7 +13,10 @@ export async function POST(req: Request) {
     const result = wikiRepo.rebuildAllIndexes();
     return NextResponse.json({ ok: true, result });
   } catch (error) {
-    console.error('[wiki/rebuild-index] error:', error instanceof Error ? error.message : String(error));
+    console.error(
+      '[wiki/rebuild-index] error:',
+      error instanceof Error ? error.message : String(error),
+    );
     return NextResponse.json({ error: 'Wiki index rebuild failed' }, { status: 500 });
   }
 }

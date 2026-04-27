@@ -109,7 +109,10 @@ let _toastTimer: ReturnType<typeof setTimeout> | null = null;
 function applyColorMode(mode: ColorMode) {
   if (typeof window === 'undefined') return;
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  document.documentElement.classList.toggle('dark', mode === 'dark' || (mode === 'system' && prefersDark));
+  document.documentElement.classList.toggle(
+    'dark',
+    mode === 'dark' || (mode === 'system' && prefersDark),
+  );
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -171,11 +174,14 @@ export const useAppStore = create<AppState>((set) => ({
     }
   },
   hideToast: () => set((s) => ({ toast: { ...s.toast, visible: false } })),
-  markFresh: (ids: string[]) => set((s) => {
-    const next = { ...s.freshConceptIds };
-    ids.forEach(id => { next[id] = true; });
-    return { freshConceptIds: next };
-  }),
+  markFresh: (ids: string[]) =>
+    set((s) => {
+      const next = { ...s.freshConceptIds };
+      ids.forEach((id) => {
+        next[id] = true;
+      });
+      return { freshConceptIds: next };
+    }),
   clearFresh: () => set({ freshConceptIds: {} }),
   clearAskHistory: async () => {
     const { getDb } = await import('./db');

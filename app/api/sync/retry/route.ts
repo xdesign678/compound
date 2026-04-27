@@ -10,9 +10,17 @@ export async function POST(req: Request) {
   const denied = requireAdmin(req);
   if (denied) return denied;
   try {
-    const body = await req.json().catch(() => ({})) as { runId?: string; itemId?: string };
-    const retried = retryAnalysisJobs({ runId: body.runId || undefined, itemId: body.itemId || undefined });
-    syncObs.recordEvent({ runId: body.runId, itemId: body.itemId, stage: 'llm', message: `手动重试 ${retried} 个分析任务` });
+    const body = (await req.json().catch(() => ({}))) as { runId?: string; itemId?: string };
+    const retried = retryAnalysisJobs({
+      runId: body.runId || undefined,
+      itemId: body.itemId || undefined,
+    });
+    syncObs.recordEvent({
+      runId: body.runId,
+      itemId: body.itemId,
+      stage: 'llm',
+      message: `手动重试 ${retried} 个分析任务`,
+    });
     startAnalysisWorker('manual-retry');
     return NextResponse.json({ retried });
   } catch (err) {

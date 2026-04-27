@@ -12,11 +12,11 @@ import { getAdminAuthHeaders } from './admin-auth-client';
 
 export type SyncFileStatus =
   | 'unchanged' // 本地 externalKey 完全匹配（path@sha 一致），跳过
-  | 'pending'   // 待同步（new/updated）
+  | 'pending' // 待同步（new/updated）
   | 'running'
   | 'success'
   | 'failed'
-  | 'skipped';  // 用户取消勾选
+  | 'skipped'; // 用户取消勾选
 
 export type SyncAction = 'create' | 'update';
 
@@ -61,7 +61,9 @@ export async function fetchRemoteFileList(): Promise<ListResponse> {
   const res = await fetch('/api/sync/github/list', { headers: getAdminAuthHeaders() });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`同步失败 (${res.status}): ${text.slice(0, 300) || '请检查 GitHub 环境变量配置'}`);
+    throw new Error(
+      `同步失败 (${res.status}): ${text.slice(0, 300) || '请检查 GitHub 环境变量配置'}`,
+    );
   }
   return (await res.json()) as ListResponse;
 }
@@ -192,7 +194,7 @@ export async function runGithubSyncQueue({
           newConcepts: result.newConceptIds.length,
           updatedConcepts: result.updatedConceptIds.length,
         },
-        result.newConceptIds
+        result.newConceptIds,
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -210,7 +212,11 @@ function deriveTitle(path: string, content: string): string {
   if (fm) {
     const line = fm[1].split(/\r?\n/).find((l) => /^title\s*:/i.test(l));
     if (line) {
-      const v = line.replace(/^title\s*:/i, '').trim().replace(/^["'](.*)["']$/, '$1').trim();
+      const v = line
+        .replace(/^title\s*:/i, '')
+        .trim()
+        .replace(/^["'](.*)["']$/, '$1')
+        .trim();
       if (v) return v;
     }
   }

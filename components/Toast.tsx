@@ -18,11 +18,7 @@ export function Toast() {
       {loading && <div className="spinner" />}
       <span className="toast-text">{displayText}</span>
       {isError && (
-        <button
-          className="toast-close"
-          onClick={hideToast}
-          aria-label="关闭"
-        >
+        <button className="toast-close" onClick={hideToast} aria-label="关闭">
           ×
         </button>
       )}

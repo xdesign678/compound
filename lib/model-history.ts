@@ -25,7 +25,7 @@ function normalizeModel(value: string): string {
 export function rememberCustomModel(
   existingModels: string[],
   model: string,
-  presetValues: ReadonlySet<string> = PRESET_MODEL_VALUES
+  presetValues: ReadonlySet<string> = PRESET_MODEL_VALUES,
 ): string[] {
   const normalized = normalizeModel(model);
   const cleanedExisting = existingModels
@@ -40,9 +40,9 @@ export function rememberCustomModel(
 }
 
 export function listCustomModels(): string[] {
-  const row = getServerDb()
-    .prepare(`SELECT value FROM meta WHERE key = ?`)
-    .get(META_KEY) as { value: string } | undefined;
+  const row = getServerDb().prepare(`SELECT value FROM meta WHERE key = ?`).get(META_KEY) as
+    | { value: string }
+    | undefined;
   return rememberCustomModel(parseModels(row?.value), '');
 }
 

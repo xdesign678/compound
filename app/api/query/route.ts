@@ -60,14 +60,15 @@ async function getServerContext(question: string) {
   } catch (err) {
     console.warn(
       '[query] hybrid search failed, falling back to FTS:',
-      err instanceof Error ? err.message : String(err)
+      err instanceof Error ? err.message : String(err),
     );
     return wikiRepo.searchWikiContext(question, options);
   }
 }
 
 export async function POST(req: Request) {
-  const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
+  const denied =
+    requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
   try {
@@ -132,6 +133,9 @@ export async function POST(req: Request) {
     return NextResponse.json(parsed);
   } catch (err) {
     console.error('[query] error:', err instanceof Error ? err.message : String(err));
-    return NextResponse.json({ error: 'Query processing failed. Please check your API configuration.' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Query processing failed. Please check your API configuration.' },
+      { status: 500 },
+    );
   }
 }

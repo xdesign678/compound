@@ -58,17 +58,30 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
     if (!trimmed) return;
     // First non-empty line → title (strip leading # if any)
     const lines = trimmed.split('\n');
-    const firstIdx = lines.findIndex(l => l.trim());
+    const firstIdx = lines.findIndex((l) => l.trim());
     const rawTitle = lines[firstIdx] ?? '';
     const title = rawTitle.replace(/^#+\s*/, '').trim() || '无标题';
-    const body = lines.slice(firstIdx + 1).join('\n').trim();
+    const body = lines
+      .slice(firstIdx + 1)
+      .join('\n')
+      .trim();
     // Clear draft on successful submit
-    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
     onDone(title, body ? trimmed : trimmed);
   }
 
   function handleCancel() {
-    const hasDraft = (() => { try { return localStorage.getItem(DRAFT_KEY)?.trim(); } catch { return ''; } })();
+    const hasDraft = (() => {
+      try {
+        return localStorage.getItem(DRAFT_KEY)?.trim();
+      } catch {
+        return '';
+      }
+    })();
     if (hasDraft) {
       useAppStore.getState().showToast('草稿已保存，下次打开会自动恢复');
     }
@@ -77,19 +90,24 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
 
   const rendered = useMemo(
     () => (mode === 'preview' ? DOMPurify.sanitize(renderMarkdown(text || '')) : ''),
-    [text, mode]
+    [text, mode],
   );
   const hasContent = text.trim().length > 0;
 
   return (
     <div className="note-editor-overlay">
       <div className="note-editor-header">
-        <button className="note-editor-cancel" onClick={handleCancel}>取消</button>
+        <button className="note-editor-cancel" onClick={handleCancel}>
+          取消
+        </button>
 
         <div className="note-mode-tabs">
           <button
             className={`note-mode-tab ${mode === 'edit' ? 'active' : ''}`}
-            onClick={() => { setMode('edit'); setTimeout(() => textareaRef.current?.focus(), 0); }}
+            onClick={() => {
+              setMode('edit');
+              setTimeout(() => textareaRef.current?.focus(), 0);
+            }}
           >
             编辑
           </button>
@@ -110,11 +128,7 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
         </button>
       </div>
 
-      {draftRestored && (
-        <div className="note-editor-draft-banner">
-          已恢复上次草稿
-        </div>
-      )}
+      {draftRestored && <div className="note-editor-draft-banner">已恢复上次草稿</div>}
 
       <div className="note-editor-scroll">
         {mode === 'edit' ? (
@@ -138,7 +152,11 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
         ) : (
           <div
             className="prose note-preview"
-            dangerouslySetInnerHTML={{ __html: rendered || '<p style="color:var(--text-tertiary);font-style:italic">还没有内容</p>' }}
+            dangerouslySetInnerHTML={{
+              __html:
+                rendered ||
+                '<p style="color:var(--text-tertiary);font-style:italic">还没有内容</p>',
+            }}
           />
         )}
       </div>

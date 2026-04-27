@@ -8,8 +8,8 @@ function termsFromConcept(concept: Concept): string[] {
         .toLowerCase()
         .split(/[^a-z0-9\u4e00-\u9fff]+/i)
         .map((part) => part.trim())
-        .filter((part) => part.length >= 2)
-    )
+        .filter((part) => part.length >= 2),
+    ),
   ).slice(0, 12);
 }
 
@@ -29,7 +29,7 @@ function quoteFromChunk(content: string): string {
 function evidenceForConcept(
   source: Source,
   concept: Concept,
-  chunks: ReturnType<typeof wikiRepo.indexSource>
+  chunks: ReturnType<typeof wikiRepo.indexSource>,
 ): Array<Omit<ConceptEvidence, 'id' | 'createdAt'>> {
   const terms = termsFromConcept(concept);
   const ranked = chunks

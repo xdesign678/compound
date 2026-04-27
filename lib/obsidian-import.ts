@@ -9,23 +9,23 @@ import { ingestSource } from './api-client';
 const MANIFEST_KEY = 'obsidian-import-manifest';
 
 export type FileStatus =
-  | 'pending'    // 未处理
-  | 'duplicate'  // 指纹已存在，跳过
-  | 'running'    // 正在处理
-  | 'success'    // 成功
-  | 'failed'     // 失败
-  | 'skipped';   // 用户取消勾选
+  | 'pending' // 未处理
+  | 'duplicate' // 指纹已存在，跳过
+  | 'running' // 正在处理
+  | 'success' // 成功
+  | 'failed' // 失败
+  | 'skipped'; // 用户取消勾选
 
 export interface ObsidianFile {
-  id: string;              // 会话内临时 id（= fingerprint）
-  path: string;            // 相对路径（webkitRelativePath 或 name）
-  name: string;            // 纯文件名
-  title: string;           // 推导标题：frontmatter.title > 文件名
+  id: string; // 会话内临时 id（= fingerprint）
+  path: string; // 相对路径（webkitRelativePath 或 name）
+  name: string; // 纯文件名
+  title: string; // 推导标题：frontmatter.title > 文件名
   author?: string;
   size: number;
   lastModified: number;
-  fingerprint: string;     // path|size|mtime
-  fileHandle: File;        // 保存 File 对象引用，用到时再读全量
+  fingerprint: string; // path|size|mtime
+  fileHandle: File; // 保存 File 对象引用，用到时再读全量
   status: FileStatus;
   selected: boolean;
   error?: string;
@@ -119,17 +119,17 @@ export function filterObsidianFiles(list: FileList | File[]): File[] {
  */
 export async function readObsidianFile(file: File): Promise<ObsidianFile> {
   const path = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
-  
+
   // 避免内存泄漏：只读前 2048 字节解析 frontmatter
   const slice = file.slice(0, 2048);
   const headText = await slice.text();
   const fm = parseFrontmatter(headText);
-  
+
   const fingerprint = `${path}|${file.size}|${file.lastModified}`;
   const manifest = loadManifest();
   const dup = !!manifest[fingerprint];
   const title = (fm.title || stripMdExtension(file.name)).trim();
-  
+
   return {
     id: fingerprint,
     path,
@@ -178,7 +178,11 @@ export interface RunQueueOptions {
  * 4. 成功写 manifest，失败记录 error
  * 5. 再次回调
  */
-export async function runImportQueue({ files, onUpdate, shouldStop }: RunQueueOptions): Promise<void> {
+export async function runImportQueue({
+  files,
+  onUpdate,
+  shouldStop,
+}: RunQueueOptions): Promise<void> {
   for (const f of files) {
     if (shouldStop()) return;
     if (!f.selected || f.status !== 'pending') continue;
@@ -201,12 +205,15 @@ export async function runImportQueue({ files, onUpdate, shouldStop }: RunQueueOp
         title: running.title,
         importedAt: Date.now(),
       });
-      onUpdate({
-        ...running,
-        status: 'success',
-        newConcepts: result.newConceptIds.length,
-        updatedConcepts: result.updatedConceptIds.length,
-      }, result.newConceptIds);
+      onUpdate(
+        {
+          ...running,
+          status: 'success',
+          newConcepts: result.newConceptIds.length,
+          updatedConcepts: result.updatedConceptIds.length,
+        },
+        result.newConceptIds,
+      );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       onUpdate({

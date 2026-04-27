@@ -18,7 +18,8 @@ const MAX_BODY_BYTES = 8_192;
  * do not have to be URL-encoded by the client.
  */
 export async function POST(req: Request) {
-  const denied = requireAdmin(req) || syncRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
+  const denied =
+    requireAdmin(req) || syncRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
   try {

@@ -20,7 +20,8 @@ async function verify(req: Request, rawBody: string): Promise<boolean> {
 
 export async function POST(req: Request) {
   const rawBody = await req.text();
-  if (!(await verify(req, rawBody))) return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+  if (!(await verify(req, rawBody)))
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
 
   const event = req.headers.get('x-github-event') || '';
   if (event !== 'push' && event !== 'ping') {

@@ -41,14 +41,15 @@ export function pickExistingConceptsForPrompt(input: {
   const { existingConcepts } = input;
   if (existingConcepts.length <= MAX_EXISTING) return existingConcepts;
 
-  const sourceText = `${input.sourceTitle}\n${input.sourceRawContent.slice(0, MAX_RAW)}`.toLowerCase();
+  const sourceText =
+    `${input.sourceTitle}\n${input.sourceRawContent.slice(0, MAX_RAW)}`.toLowerCase();
   const sourceKeywords = Array.from(
     new Set(
       sourceText
         .split(/[^a-z0-9\u4e00-\u9fff]+/i)
         .map((part) => part.trim())
-        .filter((part) => part.length >= 2)
-    )
+        .filter((part) => part.length >= 2),
+    ),
   ).slice(0, 80);
 
   return existingConcepts
@@ -85,9 +86,10 @@ export async function runIngestLLM(input: IngestLLMInput): Promise<IngestRespons
 
   const normalizedExistingCategories = normalizeCategoryKeys(input.existingCategories ?? []);
 
-  const categoryList = normalizedExistingCategories.length > 0
-    ? `\n# 已有分类列表(请优先复用)\n\n${normalizedExistingCategories.join(', ')}\n`
-    : '';
+  const categoryList =
+    normalizedExistingCategories.length > 0
+      ? `\n# 已有分类列表(请优先复用)\n\n${normalizedExistingCategories.join(', ')}\n`
+      : '';
 
   const userPrompt = `# 新资料
 

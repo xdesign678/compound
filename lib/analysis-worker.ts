@@ -69,12 +69,17 @@ interface GithubIngestPayload {
 const WORKER_ID = `worker-${nanoid(8)}`;
 const DEFAULT_STAGE_VERSION = process.env.COMPOUND_ANALYSIS_STAGE_VERSION || 'v2';
 const WORKER_BATCH = Math.max(1, Number(process.env.COMPOUND_ANALYSIS_WORKER_BATCH || 3));
-const WORKER_MAX_LOOPS = Math.max(1, Number(process.env.COMPOUND_ANALYSIS_WORKER_MAX_LOOPS || 1000));
+const WORKER_MAX_LOOPS = Math.max(
+  1,
+  Number(process.env.COMPOUND_ANALYSIS_WORKER_MAX_LOOPS || 1000),
+);
 
 let schemaReady = false;
 
 function tableColumns(table: string): Set<string> {
-  const rows = getServerDb().prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  const rows = getServerDb().prepare(`PRAGMA table_info(${table})`).all() as Array<{
+    name: string;
+  }>;
   return new Set(rows.map((row) => row.name));
 }
 
@@ -167,7 +172,7 @@ export function queueAdvancedAnalysisJob(input: {
          payload_json = excluded.payload_json,
          priority = excluded.priority,
          not_before_at = excluded.not_before_at,
-         updated_at = excluded.updated_at`
+         updated_at = excluded.updated_at`,
     )
     .run({
       id,
@@ -212,7 +217,7 @@ function claimJobs(limit: number): AnalysisJobRow[] {
       `SELECT * FROM analysis_jobs
        WHERE status = 'queued' AND COALESCE(not_before_at, 0) <= ?
        ORDER BY priority DESC, updated_at ASC
-       LIMIT ?`
+       LIMIT ?`,
     )
     .all(now(), limit) as AnalysisJobRow[];
 
@@ -220,23 +225,28 @@ function claimJobs(limit: number): AnalysisJobRow[] {
   const stmt = db.prepare(
     `UPDATE analysis_jobs
      SET status = 'running', locked_at = ?, locked_by = ?, started_at = COALESCE(started_at, ?), updated_at = ?
-     WHERE id = ? AND status = 'queued'`
+     WHERE id = ? AND status = 'queued'`,
   );
   for (const row of rows) {
     const ts = now();
     const res = stmt.run(ts, WORKER_ID, ts, ts, row.id);
-    if (res.changes > 0) claimed.push({ ...row, status: 'running', locked_at: ts, locked_by: WORKER_ID });
+    if (res.changes > 0)
+      claimed.push({ ...row, status: 'running', locked_at: ts, locked_by: WORKER_ID });
   }
   return claimed;
 }
 
-function finishJob(job: AnalysisJobRow, status: Extract<JobStatus, 'succeeded' | 'skipped' | 'cancelled'>, error?: string): void {
+function finishJob(
+  job: AnalysisJobRow,
+  status: Extract<JobStatus, 'succeeded' | 'skipped' | 'cancelled'>,
+  error?: string,
+): void {
   const ts = now();
   getServerDb()
     .prepare(
       `UPDATE analysis_jobs
        SET status = ?, error = ?, finished_at = ?, updated_at = ?, locked_at = NULL, locked_by = NULL
-       WHERE id = ?`
+       WHERE id = ?`,
     )
     .run(status, error ?? null, ts, ts, job.id);
 }
@@ -246,7 +256,9 @@ function failJob(job: AnalysisJobRow, err: unknown): void {
   const attempts = (job.attempts || 0) + 1;
   const maxAttempts = job.max_attempts || 3;
   const terminal = attempts >= maxAttempts;
-  const delay = terminal ? null : Math.min(15 * 60_000, 1000 * 2 ** attempts + Math.floor(Math.random() * 500));
+  const delay = terminal
+    ? null
+    : Math.min(15 * 60_000, 1000 * 2 ** attempts + Math.floor(Math.random() * 500));
   const ts = now();
 
   getServerDb()
@@ -255,9 +267,18 @@ function failJob(job: AnalysisJobRow, err: unknown): void {
        SET status = ?, attempts = ?, error = ?, not_before_at = ?, updated_at = ?,
            finished_at = CASE WHEN ? THEN ? ELSE finished_at END,
            locked_at = NULL, locked_by = NULL
-       WHERE id = ?`
+       WHERE id = ?`,
     )
-    .run(terminal ? 'failed' : 'queued', attempts, message.slice(0, 500), delay ? ts + delay : null, ts, terminal ? 1 : 0, ts, job.id);
+    .run(
+      terminal ? 'failed' : 'queued',
+      attempts,
+      message.slice(0, 500),
+      delay ? ts + delay : null,
+      ts,
+      terminal ? 1 : 0,
+      ts,
+      job.id,
+    );
 
   syncObs.recordEvent({
     runId: job.run_id,
@@ -265,7 +286,9 @@ function failJob(job: AnalysisJobRow, err: unknown): void {
     level: terminal ? 'error' : 'warn',
     stage: job.stage,
     path: job.source_path,
-    message: terminal ? `分析失败：${message.slice(0, 180)}` : `分析失败，稍后重试：${message.slice(0, 180)}`,
+    message: terminal
+      ? `分析失败：${message.slice(0, 180)}`
+      : `分析失败，稍后重试：${message.slice(0, 180)}`,
   });
 
   if (terminal && job.item_id && job.stage === 'github_ingest') {
@@ -298,7 +321,7 @@ function finalizeLegacyIfPossible(runId: string | null): void {
   const pending = getServerDb()
     .prepare(
       `SELECT COUNT(*) AS count FROM sync_run_items
-       WHERE run_id = ? AND status IN ('queued', 'running')`
+       WHERE run_id = ? AND status IN ('queued', 'running')`,
     )
     .get(runId) as { count: number };
   if (pending.count > 0) return;
@@ -307,10 +330,15 @@ function finalizeLegacyIfPossible(runId: string | null): void {
     .prepare(`SELECT COUNT(*) AS count FROM sync_run_items WHERE run_id = ? AND status = 'failed'`)
     .get(runId) as { count: number };
   const jobRows = getServerDb()
-    .prepare(`SELECT payload_json FROM analysis_jobs WHERE run_id = ? AND payload_json IS NOT NULL LIMIT 1`)
+    .prepare(
+      `SELECT payload_json FROM analysis_jobs WHERE run_id = ? AND payload_json IS NOT NULL LIMIT 1`,
+    )
     .all(runId) as Array<{ payload_json: string }>;
   const legacyJobId = jobRows
-    .map((row) => parseJson<GithubIngestPayload>(row.payload_json, {} as GithubIngestPayload).legacyJobId)
+    .map(
+      (row) =>
+        parseJson<GithubIngestPayload>(row.payload_json, {} as GithubIngestPayload).legacyJobId,
+    )
     .find(Boolean);
   if (!legacyJobId) return;
   const row = repo.getSyncJob(legacyJobId);
@@ -326,7 +354,9 @@ function finalizeLegacyIfPossible(runId: string | null): void {
 export function maybeFinishRun(runId: string | null): void {
   if (!runId) return;
   const db = getServerDb();
-  const run = db.prepare(`SELECT * FROM sync_runs WHERE id = ?`).get(runId) as { changed_files: number; status: string } | undefined;
+  const run = db.prepare(`SELECT * FROM sync_runs WHERE id = ?`).get(runId) as
+    | { changed_files: number; status: string }
+    | undefined;
   if (!run || run.status !== 'running') return;
   const stats = db
     .prepare(
@@ -334,7 +364,7 @@ export function maybeFinishRun(runId: string | null): void {
         SUM(CASE WHEN status IN ('succeeded', 'skipped', 'cancelled') THEN 1 ELSE 0 END) AS doneCount,
         SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failedCount,
         COUNT(*) AS totalCount
-       FROM sync_run_items WHERE run_id = ?`
+       FROM sync_run_items WHERE run_id = ?`,
     )
     .get(runId) as { doneCount: number | null; failedCount: number | null; totalCount: number };
   const done = Number(stats.doneCount || 0);
@@ -396,7 +426,10 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
   if (!payload.rawContent || !payload.path || !payload.externalKey) {
     throw new Error('github_ingest payload is incomplete');
   }
-  if (syncObs.getDashboard().activeRun?.id === payload.runId && syncObs.getDashboard().activeRun?.status === 'cancelled') {
+  if (
+    syncObs.getDashboard().activeRun?.id === payload.runId &&
+    syncObs.getDashboard().activeRun?.status === 'cancelled'
+  ) {
     finishJob(job, 'cancelled', 'run cancelled');
     return;
   }
@@ -408,7 +441,13 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
     error: null,
     started_at: now(),
   });
-  syncObs.recordEvent({ runId: payload.runId, itemId: payload.itemId, stage: 'llm', path: payload.path, message: '开始 LLM 摄入与概念更新' });
+  syncObs.recordEvent({
+    runId: payload.runId,
+    itemId: payload.itemId,
+    stage: 'llm',
+    path: payload.path,
+    message: '开始 LLM 摄入与概念更新',
+  });
 
   const result = await ingestSourceToServerDb({
     title: payload.title,
@@ -440,7 +479,10 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
     finished_at: now(),
   });
 
-  if (result.newConceptIds.length + result.updatedConceptIds.length >= Number(process.env.COMPOUND_REVIEW_LARGE_CHANGE_THRESHOLD || 8)) {
+  if (
+    result.newConceptIds.length + result.updatedConceptIds.length >=
+    Number(process.env.COMPOUND_REVIEW_LARGE_CHANGE_THRESHOLD || 8)
+  ) {
     createReviewItem({
       kind: 'large_ingest_change',
       title: `大批量概念变更：${payload.path}`,
@@ -510,13 +552,19 @@ async function processSummarize(job: AnalysisJobRow): Promise<void> {
     maxTokens: 900,
     task: 'source_summarize',
   });
-  const parsed = parseJSON<{ summary?: string; topics?: string[]; entities?: string[]; confidence?: number }>(raw);
-  const confidence = typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : 0.7;
+  const parsed = parseJSON<{
+    summary?: string;
+    topics?: string[];
+    entities?: string[];
+    confidence?: number;
+  }>(raw);
+  const confidence =
+    typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : 0.7;
   getServerDb()
     .prepare(
       `INSERT OR REPLACE INTO source_analysis
         (source_id, source_sha, title, summary, topics, entities, confidence, model, prompt_version, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       source.id,
@@ -528,7 +576,7 @@ async function processSummarize(job: AnalysisJobRow): Promise<void> {
       confidence,
       process.env.LLM_MODEL || null,
       'source-summary-v1',
-      now()
+      now(),
     );
 
   if (confidence < Number(process.env.COMPOUND_REVIEW_CONFIDENCE_THRESHOLD || 0.62)) {
@@ -557,7 +605,13 @@ async function processJob(job: AnalysisJobRow): Promise<void> {
     if (job.stage === 'github_ingest') await processGithubIngest(job);
     else if (job.stage === 'embedding') await processEmbedding(job);
     else if (job.stage === 'summarize') await processSummarize(job);
-    else if (job.stage === 'qa_index' || job.stage === 'chunk' || job.stage === 'fts' || job.stage === 'concepts' || job.stage === 'relations') {
+    else if (
+      job.stage === 'qa_index' ||
+      job.stage === 'chunk' ||
+      job.stage === 'fts' ||
+      job.stage === 'concepts' ||
+      job.stage === 'relations'
+    ) {
       await processQaIndex(job);
     } else {
       finishJob(job, 'skipped', `unknown stage: ${job.stage}`);
@@ -572,7 +626,11 @@ export async function runAnalysisWorkerOnce(): Promise<{ claimed: number; remain
   const jobs = claimJobs(WORKER_BATCH);
   await Promise.all(jobs.map((job) => processJob(job)));
   const remaining = Number(
-    (getServerDb().prepare(`SELECT COUNT(*) AS count FROM analysis_jobs WHERE status = 'queued'`).get() as { count: number }).count || 0
+    (
+      getServerDb()
+        .prepare(`SELECT COUNT(*) AS count FROM analysis_jobs WHERE status = 'queued'`)
+        .get() as { count: number }
+    ).count || 0,
   );
   return { claimed: jobs.length, remaining };
 }
@@ -595,7 +653,9 @@ export function startAnalysisWorker(reason = 'manual'): void {
   })();
 }
 
-export function retryAnalysisJobs(input: { runId?: string | null; itemId?: string | null; failedOnly?: boolean } = {}): number {
+export function retryAnalysisJobs(
+  input: { runId?: string | null; itemId?: string | null; failedOnly?: boolean } = {},
+): number {
   ensureAnalysisWorkerSchema();
   const clauses = [`status IN ('failed', 'cancelled')`];
   const params: unknown[] = [];
@@ -611,14 +671,16 @@ export function retryAnalysisJobs(input: { runId?: string | null; itemId?: strin
     .prepare(
       `UPDATE analysis_jobs
        SET status = 'queued', attempts = 0, error = NULL, not_before_at = ?, finished_at = NULL, updated_at = ?
-       WHERE ${clauses.join(' AND ')}`
+       WHERE ${clauses.join(' AND ')}`,
     )
     .run(now(), now(), ...params);
   startAnalysisWorker('retry');
   return res.changes;
 }
 
-export function cancelAnalysisJobs(input: { runId?: string | null; itemId?: string | null } = {}): number {
+export function cancelAnalysisJobs(
+  input: { runId?: string | null; itemId?: string | null } = {},
+): number {
   ensureAnalysisWorkerSchema();
   const clauses = [`status IN ('queued', 'running')`];
   const params: unknown[] = [];
@@ -634,7 +696,7 @@ export function cancelAnalysisJobs(input: { runId?: string | null; itemId?: stri
     .prepare(
       `UPDATE analysis_jobs
        SET status = 'cancelled', error = 'cancelled by user', finished_at = ?, updated_at = ?, locked_at = NULL, locked_by = NULL
-       WHERE ${clauses.join(' AND ')}`
+       WHERE ${clauses.join(' AND ')}`,
     )
     .run(now(), now(), ...params);
   return res.changes;

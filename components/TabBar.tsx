@@ -20,7 +20,7 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
   const openModal = useAppStore((s) => s.openModal);
   const isSidebar = variant === 'sidebar';
 
-  const renderTab = (t: typeof TABS[number]) => {
+  const renderTab = (t: (typeof TABS)[number]) => {
     const isActive = tab === t.id;
     return (
       <button
@@ -40,9 +40,7 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
   if (isSidebar) {
     return (
       <nav className="tabbar tabbar-sidebar" aria-label="主导航">
-        <div role="tablist">
-          {TABS.map(renderTab)}
-        </div>
+        <div role="tablist">{TABS.map(renderTab)}</div>
       </nav>
     );
   }
@@ -56,12 +54,7 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
         {renderTab(second)}
         {rest.map(renderTab)}
       </div>
-      <button
-        type="button"
-        className="tab-add"
-        aria-label="添加新资料"
-        onClick={openModal}
-      >
+      <button type="button" className="tab-add" aria-label="添加新资料" onClick={openModal}>
         <span className="tab-add-btn">
           <Icon.Plus />
         </span>

@@ -83,7 +83,10 @@ export function ConceptDetail({ id }: { id: string }) {
         这是一页由 AI 根据原始资料持续整理的概念笔记，会随着新材料进入而被补充、改写和串联。
       </p>
       <div className="detail-meta">
-        <span>{isFresh ? '刚更新 · ' : '更新于 '}{formatRelativeTime(concept.updatedAt)}</span>
+        <span>
+          {isFresh ? '刚更新 · ' : '更新于 '}
+          {formatRelativeTime(concept.updatedAt)}
+        </span>
         <span>·</span>
         <span>{concept.sources.length} 份资料</span>
         <span>·</span>
@@ -101,7 +104,9 @@ export function ConceptDetail({ id }: { id: string }) {
         </div>
       ) : hydrateError ? (
         <div className="empty-state empty-state-compact concept-hydrate-error">
-          <div className="concept-hydrate-error-icon" aria-hidden="true">⚠</div>
+          <div className="concept-hydrate-error-icon" aria-hidden="true">
+            ⚠
+          </div>
           <p className="concept-hydrate-error-msg">{hydrateError}</p>
           <button
             className="modal-btn primary empty-state-action"
