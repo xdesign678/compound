@@ -21,8 +21,18 @@ export async function POST(req: Request) {
       stage: 'llm',
       message: `手动重试 ${retried} 个分析任务`,
     });
-    startAnalysisWorker('manual-retry');
-    return NextResponse.json({ retried });
+    const workerInfo = startAnalysisWorker('manual-retry');
+    return NextResponse.json({
+      retried,
+      workerStarted: workerInfo.started,
+      activeWorkers: workerInfo.activeWorkers,
+      queued: workerInfo.queued,
+      recovered: workerInfo.recovered,
+      message:
+        retried > 0
+          ? `已把 ${retried} 个失败任务重新加入队列。${workerInfo.started ? '已启动新的 worker。' : ''}`
+          : '没有需要重试的任务。',
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });

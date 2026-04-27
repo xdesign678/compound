@@ -4,133 +4,68 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
 import { withRequestId } from '@/lib/trace-client';
+import HeartbeatPill from './sync/HeartbeatPill';
+import PipelineStrip from './sync/PipelineStrip';
+import ErrorGroups from './sync/ErrorGroups';
+import CoverageBars from './sync/CoverageBars';
+import FileTable from './sync/FileTable';
+import Sparkline from './sync/Sparkline';
+import { ToastProvider, useToast } from './sync/Toast';
+import {
+  STATUS_TEXT,
+  asNumber,
+  badgeTone,
+  fmtDate,
+  fmtDuration,
+  type Dashboard,
+} from './sync/types';
 
-type SyncRun = {
-  id: string;
-  status: string;
-  stage: string;
-  repo: string | null;
-  branch: string | null;
-  changed_files: number;
-  created_files: number;
-  updated_files: number;
-  deleted_files: number;
-  skipped_files: number;
-  done_files: number;
-  failed_files: number;
-  current: string | null;
-  error: string | null;
-  started_at: number;
-  finished_at: number | null;
-};
-
-type SyncItem = {
-  id: string;
-  path: string;
-  change_type: string;
-  status: string;
-  stage: string;
-  chunks: number | null;
-  concepts_created: number | null;
-  concepts_updated: number | null;
-  evidence: number | null;
-  error: string | null;
-};
-
-type SyncEvent = {
-  id: string;
-  at: number;
-  level: string;
-  stage: string | null;
-  path: string | null;
-  message: string;
-};
-
-type Dashboard = {
-  activeRun: SyncRun | null;
-  latestRuns: SyncRun[];
-  activeItems: SyncItem[];
-  events: SyncEvent[];
-  coverage: Record<string, number | string | boolean>;
-  analysisStats: Array<{ stage: string; status: string; count: number }>;
-  errorStats: Array<{ error: string; count: number; lastAt: number }>;
-};
-
-const statusText: Record<string, string> = {
-  queued: '排队',
-  running: '运行中',
-  done: '完成',
-  failed: '失败',
-  cancelled: '已取消',
-  succeeded: '成功',
-  skipped: '跳过',
-};
-
-const stageText: Record<string, string> = {
-  scan: '扫描',
-  diff: '比对',
-  download: '下载',
-  ingest: '入库',
-  llm: '分析',
-  chunk: '分块',
-  fts: '全文',
-  embedding: '向量',
-  summarize: '摘要',
-  qa_index: '问答索引',
-  delete: '删除',
-  complete: '完成',
-};
-
+const POLL_RUNNING_MS = 2_000;
+const POLL_IDLE_MS = 10_000;
 const EVENTS_PREVIEW = 8;
 
-function fmtDate(value?: number | null) {
-  return value ? new Date(value).toLocaleString() : '-';
-}
+type ApiResult = { message?: string; error?: string } & Record<string, unknown>;
 
-function asNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+async function postJson(path: string, body?: unknown): Promise<ApiResult> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: withRequestId({ ...getAdminAuthHeaders(), 'Content-Type': 'application/json' }),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = (await res.json().catch(() => null)) as ApiResult | null;
+  if (!res.ok) {
+    throw new Error(json?.error || `HTTP ${res.status}`);
+  }
+  return json ?? {};
 }
 
 function progress(done: number, total: number) {
   return total > 0 ? Math.max(0, Math.min(100, Math.round((done / total) * 100))) : 0;
 }
 
-function badgeTone(value: string) {
-  if (['done', 'succeeded', 'success'].includes(value)) return 'good';
-  if (['failed', 'cancelled', 'error'].includes(value)) return 'bad';
-  if (['running', 'queued', 'warn'].includes(value)) return 'warn';
-  return 'neutral';
+function computeThroughput(buckets: { done: number; failed: number }[]): {
+  rate: number;
+  failed: number;
+} {
+  if (buckets.length === 0) return { rate: 0, failed: 0 };
+  // Average of the last 5 buckets (5 minutes).
+  const tail = buckets.slice(-5);
+  const done = tail.reduce((s, b) => s + b.done, 0);
+  const failed = tail.reduce((s, b) => s + b.failed, 0);
+  return { rate: done / Math.max(tail.length, 1), failed };
 }
 
-function Badge({ value }: { value: string }) {
-  return (
-    <span className={`ops-badge tone-${badgeTone(value)}`}>
-      {statusText[value] || stageText[value] || value}
-    </span>
-  );
-}
+type TabKey = 'files' | 'errors' | 'coverage' | 'events';
 
-async function postJson(path: string, body?: unknown) {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: withRequestId({ ...getAdminAuthHeaders(), 'Content-Type': 'application/json' }),
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const json = await res.json().catch(() => null);
-    throw new Error(json?.error || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-export default function SyncDashboard() {
+function DashboardInner() {
+  const toast = useToast();
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [busy, setBusy] = useState('');
-  const [moreOpen, setMoreOpen] = useState(false);
+  const [tab, setTab] = useState<TabKey>('files');
+  const [stageFilter, setStageFilter] = useState<string | null>(null);
+  const [paused, setPaused] = useState(false);
   const [eventsExpanded, setEventsExpanded] = useState(false);
-  const [runDetailsOpen, setRunDetailsOpen] = useState(false);
-  const moreRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -139,62 +74,76 @@ export default function SyncDashboard() {
         cache: 'no-store',
       });
       if (!res.ok) {
-        const json = await res.json().catch(() => null);
+        const json = (await res.json().catch(() => null)) as ApiResult | null;
         throw new Error(json?.error || `HTTP ${res.status}`);
       }
       setDashboard((await res.json()) as Dashboard);
-      setError('');
+      setLoadError('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setLoadError(err instanceof Error ? err.message : String(err));
     }
   }, []);
 
   const runAction = useCallback(
-    async (label: string, fn: () => Promise<unknown>) => {
+    async (
+      label: string,
+      title: string,
+      fn: () => Promise<ApiResult>,
+      successFallback?: string,
+    ) => {
       setBusy(label);
-      setMoreOpen(false);
       try {
-        await fn();
+        const result = await fn();
         await load();
+        const message = result.message || successFallback || `${title}已完成`;
+        toast.push('success', title, message);
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        const message = err instanceof Error ? err.message : String(err);
+        toast.push('error', `${title}失败`, message);
       } finally {
         setBusy('');
       }
     },
-    [load],
+    [load, toast],
   );
 
+  // Adaptive polling: 2s while a run is active, 10s when idle, paused on demand.
   useEffect(() => {
+    if (paused) return;
     void load();
-    const timer = window.setInterval(() => void load(), 2000);
+    const isRunning = dashboard?.activeRun?.status === 'running';
+    const interval = isRunning ? POLL_RUNNING_MS : POLL_IDLE_MS;
+    const timer = window.setInterval(() => void load(), interval);
     return () => window.clearInterval(timer);
-  }, [load]);
-
-  useEffect(() => {
-    if (!moreOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMoreOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [moreOpen]);
+  }, [load, paused, dashboard?.activeRun?.status]);
 
   const run = dashboard?.activeRun ?? dashboard?.latestRuns?.[0] ?? null;
   const coverage = dashboard?.coverage ?? {};
   const doneCount = (run?.done_files ?? 0) + (run?.failed_files ?? 0);
   const percent = run ? progress(doneCount, run.changed_files) : 0;
-  const analysisRows = useMemo(() => dashboard?.analysisStats ?? [], [dashboard]);
   const allEvents = dashboard?.events ?? [];
   const visibleEvents = eventsExpanded ? allEvents : allEvents.slice(0, EVENTS_PREVIEW);
   const hasMoreEvents = allEvents.length > EVENTS_PREVIEW;
+  const errorGroups = dashboard?.errorGroups ?? [];
+  const pipeline = dashboard?.pipeline ?? [];
+  const health = dashboard?.health;
+  const summary = dashboard?.itemSummary;
+  const throughput = useMemo(
+    () => computeThroughput(dashboard?.throughput ?? []),
+    [dashboard?.throughput],
+  );
+  const failedFilesCount = summary?.failed ?? run?.failed_files ?? 0;
+  const queuedFilesCount = summary?.queued ?? 0;
+  const runningFilesCount = summary?.running ?? 0;
+  const failureRate =
+    run && run.changed_files > 0
+      ? ((run.failed_files / run.changed_files) * 100).toFixed(1)
+      : '0.0';
+  const runtimeMs = useMemo(() => {
+    if (!run?.started_at) return null;
+    if (run.status === 'running') return Date.now() - run.started_at;
+    return (run.finished_at ?? run.started_at) - run.started_at;
+  }, [run?.started_at, run?.finished_at, run?.status]);
 
   return (
     <main className="ops-page">
@@ -202,118 +151,112 @@ export default function SyncDashboard() {
         <div className="ops-topbar-meta">
           <div className="ops-kicker">Compound Ops</div>
           <h1>同步控制台</h1>
+          <div className="ops-topbar-status">
+            <HeartbeatPill run={run} health={health} />
+            {run ? (
+              <span className="ops-topbar-meta-line">
+                {run.repo ? `${run.repo}@${run.branch || 'main'}` : '本地'}
+                {runtimeMs != null ? ` · 运行 ${fmtDuration(runtimeMs)}` : ''}
+              </span>
+            ) : (
+              <span className="ops-topbar-meta-line">暂无任务</span>
+            )}
+          </div>
           <p>{run?.current || run?.error || '同步、分析、向量索引和人工审核的实时状态。'}</p>
         </div>
-        <div className="ops-actions">
-          <div className="ops-actions-group" role="group" aria-label="操作">
+
+        <div className="ops-actions ops-actions-v2">
+          <div className="ops-actions-group" role="group" aria-label="主操作">
             <button
+              type="button"
               className="ops-btn primary"
               disabled={Boolean(busy)}
-              onClick={() => runAction('sync', () => postJson('/api/sync/github/run'))}
+              onClick={() => runAction('sync', '立即同步', () => postJson('/api/sync/github/run'))}
+              title="扫描 GitHub 远端仓库并把变更加入分析队列"
             >
-              {busy === 'sync' ? '启动中' : '立即同步'}
+              {busy === 'sync' ? '启动中…' : '立即同步'}
             </button>
             <button
+              type="button"
               className="ops-btn"
               disabled={Boolean(busy)}
-              onClick={() => runAction('worker', () => postJson('/api/sync/worker'))}
+              onClick={() => runAction('worker', '跑分析', () => postJson('/api/sync/worker'))}
+              title="把分析队列里的任务推给 worker，并尝试回收孤儿任务"
             >
-              跑分析
+              {busy === 'worker' ? '启动中…' : '跑分析'}
             </button>
+          </div>
+          <span className="ops-actions-divider" aria-hidden="true" />
+          <div className="ops-actions-group" role="group" aria-label="恢复">
             <button
-              className="ops-btn ops-actions-overflow"
-              disabled={Boolean(busy)}
+              type="button"
+              className="ops-btn good"
+              disabled={Boolean(busy) || failedFilesCount === 0}
               onClick={() =>
-                runAction('retry', () => postJson('/api/sync/retry', { runId: run?.id }))
+                runAction('retry', '重试失败', () =>
+                  postJson('/api/sync/retry', { runId: run?.id }),
+                )
               }
+              title="把 failed/cancelled 的分析任务重新加入队列"
             >
-              重试失败
+              重试失败 {failedFilesCount > 0 ? `· ${failedFilesCount}` : ''}
             </button>
+          </div>
+          <span className="ops-actions-divider" aria-hidden="true" />
+          <div className="ops-actions-group" role="group" aria-label="危险">
             <button
-              className="ops-btn danger ops-actions-overflow"
-              disabled={Boolean(busy)}
-              onClick={() => runAction('cancel', () => postJson('/api/sync/cancel'))}
+              type="button"
+              className="ops-btn danger"
+              disabled={Boolean(busy) || run?.status !== 'running'}
+              onClick={() => runAction('cancel', '取消运行', () => postJson('/api/sync/cancel'))}
+              title="终止当前运行并把所有 in-flight 任务标为 cancelled"
             >
               取消
             </button>
           </div>
           <span className="ops-actions-divider" aria-hidden="true" />
-          <div className="ops-actions-group ops-actions-overflow" role="group" aria-label="导航">
+          <div className="ops-actions-group" role="group" aria-label="导航">
+            <button
+              type="button"
+              className={`ops-btn subtle${paused ? ' active' : ''}`}
+              onClick={() => setPaused((v) => !v)}
+              title={paused ? '当前已暂停轮询' : '点击暂停 2s 轮询'}
+            >
+              {paused ? '已暂停 ●' : '暂停轮询'}
+            </button>
             <Link className="ops-btn" href="/review">
               审核队列
             </Link>
             <Link className="ops-btn subtle" href="/">
-              返回知识库
+              返回
             </Link>
-          </div>
-
-          <div className="ops-more" ref={moreRef}>
-            <button
-              type="button"
-              className="ops-btn ops-more-trigger"
-              aria-haspopup="menu"
-              aria-expanded={moreOpen}
-              onClick={() => setMoreOpen((v) => !v)}
-            >
-              更多 <span aria-hidden="true">▾</span>
-            </button>
-            {moreOpen ? (
-              <div className="ops-more-menu" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="ops-more-item"
-                  disabled={Boolean(busy)}
-                  onClick={() =>
-                    runAction('retry', () => postJson('/api/sync/retry', { runId: run?.id }))
-                  }
-                >
-                  重试失败
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="ops-more-item danger"
-                  disabled={Boolean(busy)}
-                  onClick={() => runAction('cancel', () => postJson('/api/sync/cancel'))}
-                >
-                  取消
-                </button>
-                <Link
-                  className="ops-more-item"
-                  role="menuitem"
-                  href="/review"
-                  onClick={() => setMoreOpen(false)}
-                >
-                  审核队列
-                </Link>
-                <Link
-                  className="ops-more-item subtle"
-                  role="menuitem"
-                  href="/"
-                  onClick={() => setMoreOpen(false)}
-                >
-                  返回知识库
-                </Link>
-              </div>
-            ) : null}
           </div>
         </div>
       </header>
 
-      {error ? <div className="ops-alert">{error}</div> : null}
+      {loadError ? <div className="ops-alert">{loadError}</div> : null}
+      {health?.stalled ? (
+        <div className="ops-alert ops-alert-warn">
+          运行已停滞 {fmtDuration(health.stalledFor)}，建议点「跑分析」唤醒 worker，或检查上游 LLM
+          服务。
+        </div>
+      ) : null}
 
       <section className="ops-stat-grid" aria-label="同步概览">
         <div className="ops-stat">
           <span>当前状态</span>
-          <strong>{run ? statusText[run.status] || run.status : '空闲'}</strong>
-          <em>{run?.repo ? `${run.repo}@${run.branch || 'main'}` : '暂无任务'}</em>
+          <strong>{run ? STATUS_TEXT[run.status] || run.status : '空闲'}</strong>
+          <em>
+            {run?.repo ? `${run.repo}@${run.branch || 'main'}` : '暂无任务'}
+            {runtimeMs != null ? ` · ${fmtDuration(runtimeMs)}` : ''}
+          </em>
         </div>
         <div className="ops-stat">
           <span>同步进度</span>
           <strong>{percent}%</strong>
           <em>
-            完成 {run?.done_files ?? 0} / 变更 {run?.changed_files ?? 0}
+            完成 {run?.done_files ?? 0} · 失败 {run?.failed_files ?? 0} · 排队{' '}
+            {queuedFilesCount + runningFilesCount}
           </em>
           {run ? (
             <div className="ops-progress-inline" aria-label={`同步进度 ${percent}%`}>
@@ -322,216 +265,145 @@ export default function SyncDashboard() {
           ) : null}
         </div>
         <div className="ops-stat">
-          <span>分析队列</span>
-          <strong>{asNumber(coverage.analysisQueued)}</strong>
-          <em>
-            失败 {asNumber(coverage.analysisFailed)} · 向量 {asNumber(coverage.chunkEmbeddings)}
-          </em>
+          <span>通量</span>
+          <strong>
+            {throughput.rate > 0 ? throughput.rate.toFixed(1) : '—'}
+            <small>文件/分钟</small>
+          </strong>
+          <em>近 5 分钟均值 · 失败 {throughput.failed}</em>
+          <Sparkline data={dashboard?.throughput ?? []} />
         </div>
         <div className="ops-stat">
-          <span>人工审核</span>
-          <strong>{asNumber(coverage.reviewOpen)}</strong>
-          <em>已处理 {asNumber(coverage.reviewResolved)}</em>
+          <span>失败率</span>
+          <strong>
+            {failureRate}
+            <small>%</small>
+          </strong>
+          <em>
+            失败 {failedFilesCount} · 待审 {asNumber(coverage.reviewOpen)}
+          </em>
         </div>
       </section>
 
-      {run ? (
-        <section className="ops-panel ops-run-strip">
-          <div className="ops-run-strip-head">
-            <div className="ops-run-strip-badges">
-              <Badge value={run.status} />
-              <Badge value={run.stage} />
-              <span className="ops-run-strip-repo">
-                {run.repo ? `${run.repo}@${run.branch || 'main'}` : '本地'}
-              </span>
-            </div>
-            <button
-              type="button"
-              className="ops-run-toggle"
-              aria-expanded={runDetailsOpen}
-              onClick={() => setRunDetailsOpen((v) => !v)}
-            >
-              {runDetailsOpen ? '收起' : '详细'}
-              <span aria-hidden="true">{runDetailsOpen ? '▴' : '▾'}</span>
-            </button>
+      {pipeline.length > 0 ? (
+        <section className="ops-panel ops-panel-pipeline" aria-label="分析流水线">
+          <div className="ops-panel-head">
+            <h2>分析流水线</h2>
+            <span className="ops-panel-hint">点击阶段可在下方过滤文件</span>
           </div>
-          <div className="ops-run-strip-meta">
-            新增 {run.created_files} · 更新 {run.updated_files} · 删除 {run.deleted_files} · 跳过{' '}
-            {run.skipped_files} · 失败 {run.failed_files}
-          </div>
-          {runDetailsOpen ? (
-            <div className="ops-run-strip-extra">
-              <span>开始 {fmtDate(run.started_at)}</span>
-              <span>结束 {fmtDate(run.finished_at)}</span>
-            </div>
-          ) : null}
+          <PipelineStrip
+            stages={pipeline}
+            selected={stageFilter}
+            onSelect={(s) => {
+              setStageFilter((prev) => (prev === s ? null : s));
+              setTab('files');
+            }}
+          />
         </section>
       ) : null}
 
-      <section className="ops-grid-3">
-        <div className="ops-panel">
-          <h2>索引覆盖</h2>
-          <ul className="ops-kv-list">
-            {[
-              ['GitHub 文档', coverage.githubSources],
-              ['活跃文件', coverage.activeSourceFiles],
-              ['原文分块', coverage.sourceChunks],
-              ['全文索引', coverage.chunkFtsRows],
-              ['向量索引', coverage.chunkEmbeddings],
-              ['证据链', coverage.conceptEvidence],
-              ['模型调用', coverage.modelRuns],
-              ['FTS', coverage.ftsReady ? 'ready' : 'off'],
-            ].map(([label, value]) => (
-              <li className="ops-kv-row" key={String(label)}>
-                <span className="ops-kv-label">{String(label)}</span>
-                <strong className="ops-kv-value">{String(value ?? 0)}</strong>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="ops-panel">
-          <h2>分析阶段</h2>
-          <div className="ops-stack">
-            {analysisRows.map((row) => (
-              <div className="ops-row" key={`${row.stage}-${row.status}`}>
-                <span>{stageText[row.stage] || row.stage}</span>
-                <span>
-                  <Badge value={row.status} />
-                  <strong>{row.count}</strong>
-                </span>
-              </div>
-            ))}
-            {analysisRows.length === 0 ? <p className="ops-empty">暂无分析任务。</p> : null}
-          </div>
-        </div>
-
-        <div className="ops-panel">
-          <h2>错误中心</h2>
-          <div className="ops-stack scroll">
-            {(dashboard?.errorStats ?? []).map((item) => (
-              <div className="ops-error" key={`${item.error}-${item.lastAt}`}>
-                <div>
-                  <strong>{item.count} 个文件</strong>
-                  <span>{fmtDate(item.lastAt)}</span>
-                </div>
-                <p>{item.error}</p>
-              </div>
-            ))}
-            {(dashboard?.errorStats ?? []).length === 0 ? (
-              <p className="ops-empty">暂无错误。</p>
-            ) : null}
-          </div>
-        </div>
-      </section>
-
-      <section className="ops-panel">
-        <h2>文件明细</h2>
-        {/* Desktop table */}
-        <div className="ops-table-wrap ops-table-desktop">
-          <table className="ops-table">
-            <thead>
-              <tr>
-                <th>路径</th>
-                <th>变更</th>
-                <th>状态</th>
-                <th>阶段</th>
-                <th>分块</th>
-                <th>概念</th>
-                <th>证据</th>
-                <th>错误</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(dashboard?.activeItems ?? []).map((item) => (
-                <tr key={item.id}>
-                  <td title={item.path}>{item.path}</td>
-                  <td>{item.change_type}</td>
-                  <td>
-                    <Badge value={item.status} />
-                  </td>
-                  <td>{stageText[item.stage] || item.stage}</td>
-                  <td>{item.chunks ?? '-'}</td>
-                  <td>{(item.concepts_created ?? 0) + (item.concepts_updated ?? 0) || '-'}</td>
-                  <td>{item.evidence ?? '-'}</td>
-                  <td title={item.error || ''}>{item.error || '-'}</td>
-                </tr>
-              ))}
-              {(dashboard?.activeItems ?? []).length === 0 ? (
-                <tr>
-                  <td colSpan={8}>暂无文件任务。</td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-        {/* Mobile cards */}
-        <div className="ops-table-mobile">
-          {(dashboard?.activeItems ?? []).map((item) => (
-            <div className="ops-mobile-card" key={item.id}>
-              <div className="ops-mobile-card-header">
-                <span className="ops-mobile-card-path" title={item.path}>
-                  {item.path}
-                </span>
-                <Badge value={item.status} />
-              </div>
-              <div className="ops-mobile-card-meta">
-                <span>{item.change_type}</span>
-                <span>·</span>
-                <span>{stageText[item.stage] || item.stage}</span>
-              </div>
-              <div className="ops-mobile-card-stats">
-                {item.chunks != null && (
-                  <span className="ops-mobile-stat">
-                    <em>分块</em> {item.chunks}
-                  </span>
-                )}
-                {(item.concepts_created ?? 0) + (item.concepts_updated ?? 0) > 0 && (
-                  <span className="ops-mobile-stat">
-                    <em>概念</em> {(item.concepts_created ?? 0) + (item.concepts_updated ?? 0)}
-                  </span>
-                )}
-                {item.evidence != null && (
-                  <span className="ops-mobile-stat">
-                    <em>证据</em> {item.evidence}
-                  </span>
-                )}
-              </div>
-              {item.error ? <div className="ops-mobile-card-error">{item.error}</div> : null}
-            </div>
+      <section className="ops-panel ops-panel-tabs">
+        <div className="ops-tabbar" role="tablist">
+          {(
+            [
+              { key: 'files', label: `文件明细 · ${dashboard?.activeItems.length ?? 0}` },
+              { key: 'errors', label: `错误分组 · ${errorGroups.length}` },
+              { key: 'coverage', label: '索引覆盖' },
+              { key: 'events', label: `事件流 · ${allEvents.length}` },
+            ] as Array<{ key: TabKey; label: string }>
+          ).map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.key}
+              className={`ops-tab${tab === t.key ? ' active' : ''}`}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label}
+            </button>
           ))}
-          {(dashboard?.activeItems ?? []).length === 0 ? (
-            <p className="ops-empty">暂无文件任务。</p>
+        </div>
+
+        <div className="ops-tab-body" role="tabpanel">
+          {tab === 'files' ? (
+            <FileTable
+              items={dashboard?.activeItems ?? []}
+              stageFilter={stageFilter}
+              onClearStageFilter={() => setStageFilter(null)}
+              busy={Boolean(busy)}
+              onRetryItem={(itemId) =>
+                runAction(
+                  `retry-${itemId}`,
+                  '重试此文件',
+                  () => postJson('/api/sync/retry', { runId: run?.id, itemId }),
+                  '已重新加入分析队列',
+                )
+              }
+            />
+          ) : null}
+
+          {tab === 'errors' ? (
+            <ErrorGroups
+              groups={errorGroups}
+              busy={Boolean(busy)}
+              onRetryAll={() =>
+                runAction('retry-all', '重试失败', () =>
+                  postJson('/api/sync/retry', { runId: run?.id }),
+                )
+              }
+              onRetryItem={(itemId) =>
+                runAction(
+                  `retry-${itemId}`,
+                  '重试此文件',
+                  () => postJson('/api/sync/retry', { runId: run?.id, itemId }),
+                  '已重新加入分析队列',
+                )
+              }
+            />
+          ) : null}
+
+          {tab === 'coverage' ? <CoverageBars coverage={coverage} /> : null}
+
+          {tab === 'events' ? (
+            <div className="ops-timeline">
+              {visibleEvents.map((event) => (
+                <article className="ops-event" key={event.id}>
+                  <div className="ops-event-head">
+                    <span className={`ops-badge tone-${badgeTone(event.level)}`}>
+                      {STATUS_TEXT[event.level] || event.level}
+                    </span>
+                    {event.stage ? (
+                      <span className="ops-badge tone-neutral">{event.stage}</span>
+                    ) : null}
+                    <span>{fmtDate(event.at)}</span>
+                  </div>
+                  {event.path ? <div className="ops-event-path">{event.path}</div> : null}
+                  <p>{event.message}</p>
+                </article>
+              ))}
+              {allEvents.length === 0 ? <p className="ops-empty">暂无事件。</p> : null}
+              {hasMoreEvents ? (
+                <button
+                  type="button"
+                  className="ops-events-toggle"
+                  onClick={() => setEventsExpanded((v) => !v)}
+                >
+                  {eventsExpanded ? '收起' : `展开全部 (${allEvents.length})`}
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </section>
-
-      <section className="ops-panel">
-        <h2>事件时间线</h2>
-        <div className="ops-timeline">
-          {visibleEvents.map((event) => (
-            <article className="ops-event" key={event.id}>
-              <div className="ops-event-head">
-                <Badge value={event.level} />
-                {event.stage ? <Badge value={event.stage} /> : null}
-                <span>{fmtDate(event.at)}</span>
-              </div>
-              {event.path ? <div className="ops-event-path">{event.path}</div> : null}
-              <p>{event.message}</p>
-            </article>
-          ))}
-          {allEvents.length === 0 ? <p className="ops-empty">暂无事件。</p> : null}
-        </div>
-        {hasMoreEvents ? (
-          <button
-            type="button"
-            className="ops-events-toggle"
-            onClick={() => setEventsExpanded((v) => !v)}
-          >
-            {eventsExpanded ? '收起' : `展开全部 (${allEvents.length})`}
-          </button>
-        ) : null}
-      </section>
     </main>
+  );
+}
+
+export default function SyncDashboard() {
+  return (
+    <ToastProvider>
+      <DashboardInner />
+    </ToastProvider>
   );
 }

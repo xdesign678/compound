@@ -9,7 +9,8 @@ export async function POST(req: Request) {
   const denied = requireAdmin(req);
   if (denied) return denied;
   try {
-    return NextResponse.json(cancelGithubSync());
+    const result = cancelGithubSync();
+    return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });

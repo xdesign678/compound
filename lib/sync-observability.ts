@@ -93,6 +93,54 @@ export interface SyncDashboard {
   itemStats: Array<{ stage: string; status: string; count: number }>;
   analysisStats: Array<{ stage: string; status: string; count: number }>;
   errorStats: Array<{ error: string; count: number; lastAt: number }>;
+  pipeline: PipelineStageRow[];
+  errorGroups: ErrorGroupRow[];
+  health: RunHealth;
+  throughput: ThroughputBucket[];
+  itemSummary: Record<SyncItemStatus, number>;
+}
+
+export interface PipelineStageRow {
+  stage: string;
+  label: string;
+  total: number;
+  queued: number;
+  running: number;
+  succeeded: number;
+  failed: number;
+  cancelled: number;
+  skipped: number;
+}
+
+export interface ErrorGroupRow {
+  fingerprint: string;
+  category: 'timeout' | 'github' | 'auth' | 'parse' | 'rate' | 'gateway' | 'unknown';
+  message: string;
+  stage: string | null;
+  count: number;
+  lastAt: number;
+  examples: Array<{ path: string; itemId: string }>;
+  suggestion: string;
+}
+
+export interface RunHealth {
+  startedAt: number | null;
+  finishedAt: number | null;
+  heartbeatAt: number | null;
+  heartbeatAgeMs: number | null;
+  runtimeMs: number | null;
+  stalled: boolean;
+  stalledFor: number;
+  lastEventAt: number | null;
+}
+
+export interface ThroughputBucket {
+  /** Bucket start (epoch ms, 1-minute buckets). */
+  at: number;
+  /** Items finished (succeeded) in this bucket. */
+  done: number;
+  /** Items failed in this bucket. */
+  failed: number;
 }
 
 export interface SyncRunRow {
@@ -176,6 +224,84 @@ function safeCount(sql: string): number {
     return Number(row?.count ?? 0);
   } catch {
     return 0;
+  }
+}
+
+const PIPELINE_STAGES: Array<{ stage: string; label: string }> = [
+  { stage: 'github_ingest', label: '入库' },
+  { stage: 'chunk', label: '分块' },
+  { stage: 'fts', label: '全文索引' },
+  { stage: 'embedding', label: '向量' },
+  { stage: 'summarize', label: '摘要' },
+  { stage: 'concepts', label: '概念' },
+  { stage: 'qa_index', label: '问答索引' },
+];
+
+/**
+ * Bucket the most recent error rows into stable groups by category +
+ * normalized message. We deliberately do this in JS rather than SQL so the
+ * categorization rules can evolve freely.
+ */
+function classifyError(raw: string): {
+  category: ErrorGroupRow['category'];
+  fingerprint: string;
+  suggestion: string;
+} {
+  const text = raw.toLowerCase();
+  if (/timed?\s*out|abortederror|operation was aborted/.test(text)) {
+    return {
+      category: 'timeout',
+      fingerprint: 'timeout',
+      suggestion: '网络/上游超时。检查 LLM 网关或 GitHub API 是否可达，可点击重试。',
+    };
+  }
+  if (/github\s+(404|not found)/.test(text) || /\b404\b.+\/repos\//.test(text)) {
+    return {
+      category: 'github',
+      fingerprint: 'github-404',
+      suggestion: '远端文件未找到，多见于路径含特殊字符或文件已被改名/删除。',
+    };
+  }
+  if (/\b(401|403)\b|unauthorized|forbidden/.test(text)) {
+    return {
+      category: 'auth',
+      fingerprint: 'auth',
+      suggestion: '凭证失效。检查 GITHUB_TOKEN 或 LLM_API_KEY 是否过期。',
+    };
+  }
+  if (/rate\s*limit|x-ratelimit/.test(text)) {
+    return {
+      category: 'rate',
+      fingerprint: 'rate-limit',
+      suggestion: '触发限流。等几分钟再试，或换更高配额的 token。',
+    };
+  }
+  if (/circuit\s+open|gateway_(5\d\d|429)|circuitbreaker/.test(text)) {
+    return {
+      category: 'gateway',
+      fingerprint: 'gateway',
+      suggestion: 'LLM 网关近期连续失败，熔断器打开。等待自动恢复或检查上游。',
+    };
+  }
+  if (/payload is incomplete|invalid json|parse/.test(text)) {
+    return {
+      category: 'parse',
+      fingerprint: 'parse',
+      suggestion: '内部数据结构异常，通常需要看 server log（含 requestId）。',
+    };
+  }
+  return {
+    category: 'unknown',
+    fingerprint: 'unknown',
+    suggestion: '未识别错误。可先重试一次；持续失败请查看事件流。',
+  };
+}
+
+function decodeMaybe(input: string): string {
+  try {
+    return decodeURIComponent(input);
+  } catch {
+    return input;
   }
 }
 
@@ -704,8 +830,195 @@ export const syncObs = {
       ftsReady: Boolean((wikiMetrics as Record<string, unknown>).ftsReady),
     };
 
+    // ---- Pipeline rollup -------------------------------------------------
+    const stageRows = runForDetails
+      ? (db
+          .prepare(
+            `SELECT stage, status, COUNT(*) AS count
+               FROM analysis_jobs
+              WHERE run_id = ?
+              GROUP BY stage, status`,
+          )
+          .all(runForDetails) as Array<{ stage: string; status: string; count: number }>)
+      : (db
+          .prepare(
+            `SELECT stage, status, COUNT(*) AS count
+               FROM analysis_jobs
+              GROUP BY stage, status`,
+          )
+          .all() as Array<{ stage: string; status: string; count: number }>);
+
+    const pipelineMap = new Map<string, PipelineStageRow>();
+    for (const { stage, label } of PIPELINE_STAGES) {
+      pipelineMap.set(stage, {
+        stage,
+        label,
+        total: 0,
+        queued: 0,
+        running: 0,
+        succeeded: 0,
+        failed: 0,
+        cancelled: 0,
+        skipped: 0,
+      });
+    }
+    for (const row of stageRows) {
+      const entry =
+        pipelineMap.get(row.stage) ??
+        ({
+          stage: row.stage,
+          label: row.stage,
+          total: 0,
+          queued: 0,
+          running: 0,
+          succeeded: 0,
+          failed: 0,
+          cancelled: 0,
+          skipped: 0,
+        } as PipelineStageRow);
+      const count = Number(row.count || 0);
+      entry.total += count;
+      const key = row.status as keyof PipelineStageRow;
+      if (key in entry && key !== 'stage' && key !== 'label' && key !== 'total') {
+        (entry as unknown as Record<string, number>)[key] =
+          ((entry as unknown as Record<string, number>)[key] || 0) + count;
+      }
+      pipelineMap.set(row.stage, entry);
+    }
+    const pipeline: PipelineStageRow[] = PIPELINE_STAGES.map(
+      ({ stage }) => pipelineMap.get(stage)!,
+    );
+
+    // ---- Error grouping (decoded + classified) ---------------------------
+    const errorRowsStmt = runForDetails
+      ? db.prepare(
+          `SELECT id, path, error, stage, updated_at FROM sync_run_items
+            WHERE run_id = ? AND status = 'failed' AND error IS NOT NULL
+            ORDER BY updated_at DESC LIMIT 200`,
+        )
+      : db.prepare(
+          `SELECT id, path, error, stage, updated_at FROM sync_run_items
+            WHERE status = 'failed' AND error IS NOT NULL
+            ORDER BY updated_at DESC LIMIT 200`,
+        );
+    const errorRows = (
+      runForDetails ? errorRowsStmt.all(runForDetails) : errorRowsStmt.all()
+    ) as Array<{
+      id: string;
+      path: string;
+      error: string;
+      stage: string | null;
+      updated_at: number;
+    }>;
+    const errorGroupsMap = new Map<string, ErrorGroupRow>();
+    for (const row of errorRows) {
+      const cls = classifyError(row.error);
+      const key = `${cls.fingerprint}::${row.stage ?? ''}`;
+      const decodedPath = decodeMaybe(row.path);
+      let entry = errorGroupsMap.get(key);
+      if (!entry) {
+        entry = {
+          fingerprint: cls.fingerprint,
+          category: cls.category,
+          message: row.error.slice(0, 240),
+          stage: row.stage,
+          count: 0,
+          lastAt: 0,
+          examples: [],
+          suggestion: cls.suggestion,
+        };
+        errorGroupsMap.set(key, entry);
+      }
+      entry.count += 1;
+      entry.lastAt = Math.max(entry.lastAt, Number(row.updated_at) || 0);
+      if (entry.examples.length < 3) {
+        entry.examples.push({ path: decodedPath, itemId: row.id });
+      }
+    }
+    const errorGroups: ErrorGroupRow[] = Array.from(errorGroupsMap.values()).sort(
+      (a, b) => b.count - a.count || b.lastAt - a.lastAt,
+    );
+
+    // ---- Run health ------------------------------------------------------
+    const baseRun = activeRun ?? latestRuns[0] ?? null;
+    const ts = now();
+    const heartbeatAgeMs = baseRun?.heartbeat_at != null ? ts - baseRun.heartbeat_at : null;
+    const lastEventAt = events[0]?.at ?? null;
+    const stalled =
+      baseRun?.status === 'running' && heartbeatAgeMs != null && heartbeatAgeMs > 60_000;
+    const health: RunHealth = {
+      startedAt: baseRun?.started_at ?? null,
+      finishedAt: baseRun?.finished_at ?? null,
+      heartbeatAt: baseRun?.heartbeat_at ?? null,
+      heartbeatAgeMs,
+      runtimeMs: baseRun?.started_at ? (baseRun.finished_at ?? ts) - baseRun.started_at : null,
+      stalled,
+      stalledFor: stalled && heartbeatAgeMs != null ? heartbeatAgeMs : 0,
+      lastEventAt,
+    };
+
+    // ---- Throughput (1-minute buckets, last 30 minutes) ------------------
+    const throughputCutoff = ts - 30 * 60_000;
+    const throughputStmt = runForDetails
+      ? db.prepare(
+          `SELECT
+              (finished_at / 60000) * 60000 AS bucket,
+              SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END) AS done,
+              SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
+            FROM sync_run_items
+            WHERE run_id = ? AND finished_at IS NOT NULL AND finished_at >= ?
+            GROUP BY bucket
+            ORDER BY bucket ASC`,
+        )
+      : db.prepare(
+          `SELECT
+              (finished_at / 60000) * 60000 AS bucket,
+              SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END) AS done,
+              SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
+            FROM sync_run_items
+            WHERE finished_at IS NOT NULL AND finished_at >= ?
+            GROUP BY bucket
+            ORDER BY bucket ASC`,
+        );
+    const throughputRows = (
+      runForDetails
+        ? throughputStmt.all(runForDetails, throughputCutoff)
+        : throughputStmt.all(throughputCutoff)
+    ) as Array<{
+      bucket: number;
+      done: number;
+      failed: number;
+    }>;
+    const throughput: ThroughputBucket[] = throughputRows.map((row) => ({
+      at: Number(row.bucket),
+      done: Number(row.done || 0),
+      failed: Number(row.failed || 0),
+    }));
+
+    // ---- Item summary by status -----------------------------------------
+    const summaryRows = runForDetails
+      ? (db
+          .prepare(
+            `SELECT status, COUNT(*) AS count FROM sync_run_items WHERE run_id = ? GROUP BY status`,
+          )
+          .all(runForDetails) as Array<{ status: string; count: number }>)
+      : ([] as Array<{ status: string; count: number }>);
+    const itemSummary: Record<SyncItemStatus, number> = {
+      queued: 0,
+      running: 0,
+      succeeded: 0,
+      failed: 0,
+      skipped: 0,
+      cancelled: 0,
+    };
+    for (const row of summaryRows) {
+      if (row.status in itemSummary) {
+        itemSummary[row.status as SyncItemStatus] = Number(row.count || 0);
+      }
+    }
+
     return {
-      now: now(),
+      now: ts,
       activeRun: activeRun ?? null,
       latestRuns,
       activeItems,
@@ -715,6 +1028,11 @@ export const syncObs = {
       itemStats,
       analysisStats,
       errorStats,
+      pipeline,
+      errorGroups,
+      health,
+      throughput,
+      itemSummary,
     };
   },
 };

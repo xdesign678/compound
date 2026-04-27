@@ -19,9 +19,23 @@ export const POST = withRequestTracing(async (req: Request) => {
   if (denied) return denied;
 
   try {
-    const { jobId, existing } = startGithubSync();
-    logger.info('sync.github.started', { jobId, existing: !!existing });
-    return NextResponse.json({ jobId, existing: !!existing });
+    const result = startGithubSync();
+    logger.info('sync.github.started', {
+      jobId: result.jobId,
+      existing: !!result.existing,
+      recoveredJobs: result.recoveredJobs ?? 0,
+      recoveredAnalysis: result.recoveredAnalysis ?? 0,
+    });
+    return NextResponse.json({
+      jobId: result.jobId,
+      existing: !!result.existing,
+      recoveredJobs: result.recoveredJobs ?? 0,
+      recoveredAnalysis: result.recoveredAnalysis ?? 0,
+      workerStarted: !!result.workerStarted,
+      message: result.existing
+        ? '已有同步任务在运行，已尝试唤醒后台 worker。'
+        : '已启动新的同步任务。',
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('sync.github.run.failed', { error: message });

@@ -73,8 +73,19 @@ const WORKER_MAX_LOOPS = Math.max(
   1,
   Number(process.env.COMPOUND_ANALYSIS_WORKER_MAX_LOOPS || 1000),
 );
+/**
+ * Lease window: a job that's been `running` longer than this without any
+ * heartbeat is assumed orphaned (server crashed / restarted / OOM'd) and gets
+ * pushed back into the queue. Worker invocations fail fast on hung fetches via
+ * AbortSignal.timeout(55s) inside the gateway, so 3 minutes is a safe ceiling.
+ */
+const LEASE_MS = Math.max(60_000, Number(process.env.COMPOUND_ANALYSIS_LEASE_MS || 3 * 60_000));
+/** Max concurrent worker loops. We use DB lease + in-memory counter combined. */
+const MAX_PARALLEL_WORKERS = Math.max(1, Number(process.env.COMPOUND_ANALYSIS_MAX_WORKERS || 2));
 
 let schemaReady = false;
+let activeWorkerCount = 0;
+const cancelControllers = new Map<string, AbortController>();
 
 function tableColumns(table: string): Set<string> {
   const rows = getServerDb().prepare(`PRAGMA table_info(${table})`).all() as Array<{
@@ -209,6 +220,52 @@ export function queueGithubIngestJob(payload: GithubIngestPayload): string {
   });
 }
 
+/**
+ * Reset jobs that have been `running` past their lease window. These are
+ * orphaned by a crashed worker / process restart. Returning them to `queued`
+ * lets the next worker iteration pick them up automatically.
+ *
+ * Also nudges any `sync_run_items` whose `updated_at` heartbeat went stale —
+ * UI shows "已停滞" without us having to wait for the LLM call to throw.
+ */
+export function recoverStaleAnalysisJobs(): { jobs: number; items: number } {
+  ensureAnalysisWorkerSchema();
+  const ts = now();
+  const cutoff = ts - LEASE_MS;
+  const db = getServerDb();
+  const jobsRes = db
+    .prepare(
+      `UPDATE analysis_jobs
+         SET status = 'queued',
+             locked_at = NULL,
+             locked_by = NULL,
+             attempts = COALESCE(attempts, 0) + 1,
+             error = COALESCE(error, 'lease expired (worker crashed)'),
+             not_before_at = ?,
+             updated_at = ?
+       WHERE status = 'running' AND COALESCE(locked_at, started_at, updated_at) < ?`,
+    )
+    .run(ts, ts, cutoff);
+  const itemsRes = db
+    .prepare(
+      `UPDATE sync_run_items
+         SET status = 'queued',
+             stage = 'queued',
+             error = COALESCE(error, 'lease expired (worker crashed)'),
+             updated_at = ?
+       WHERE status = 'running' AND updated_at < ?`,
+    )
+    .run(ts, cutoff);
+  if (Number(jobsRes.changes) > 0 || Number(itemsRes.changes) > 0) {
+    syncObs.recordEvent({
+      level: 'warn',
+      stage: 'llm',
+      message: `自动回收孤儿任务：analysis_jobs ${jobsRes.changes} · sync_run_items ${itemsRes.changes}`,
+    });
+  }
+  return { jobs: Number(jobsRes.changes ?? 0), items: Number(itemsRes.changes ?? 0) };
+}
+
 function claimJobs(limit: number): AnalysisJobRow[] {
   ensureAnalysisWorkerSchema();
   const db = getServerDb();
@@ -234,6 +291,22 @@ function claimJobs(limit: number): AnalysisJobRow[] {
       claimed.push({ ...row, status: 'running', locked_at: ts, locked_by: WORKER_ID });
   }
   return claimed;
+}
+
+/**
+ * Bump locked_at on a job mid-flight so the lease recovery cycle won't yank it
+ * out from under us. Workers should call this every loop iteration.
+ */
+export function heartbeatJobs(jobIds: string[]): void {
+  if (jobIds.length === 0) return;
+  ensureAnalysisWorkerSchema();
+  const ts = now();
+  const placeholders = jobIds.map(() => '?').join(',');
+  getServerDb()
+    .prepare(
+      `UPDATE analysis_jobs SET locked_at = ?, updated_at = ? WHERE id IN (${placeholders}) AND status = 'running'`,
+    )
+    .run(ts, ts, ...jobIds);
 }
 
 function finishJob(
@@ -426,11 +499,16 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
   if (!payload.rawContent || !payload.path || !payload.externalKey) {
     throw new Error('github_ingest payload is incomplete');
   }
-  if (
-    syncObs.getDashboard().activeRun?.id === payload.runId &&
-    syncObs.getDashboard().activeRun?.status === 'cancelled'
-  ) {
+  if (isRunCancelled(payload.runId)) {
     finishJob(job, 'cancelled', 'run cancelled');
+    if (payload.itemId) {
+      syncObs.updateRunItem(payload.itemId, {
+        status: 'cancelled',
+        stage: 'complete',
+        finished_at: now(),
+        error: 'run cancelled',
+      });
+    }
     return;
   }
 
@@ -621,8 +699,13 @@ async function processJob(job: AnalysisJobRow): Promise<void> {
   }
 }
 
-export async function runAnalysisWorkerOnce(): Promise<{ claimed: number; remaining: number }> {
+export async function runAnalysisWorkerOnce(): Promise<{
+  claimed: number;
+  remaining: number;
+  recovered: number;
+}> {
   ensureAnalysisWorkerSchema();
+  const recovery = recoverStaleAnalysisJobs();
   const jobs = claimJobs(WORKER_BATCH);
   await Promise.all(jobs.map((job) => processJob(job)));
   const remaining = Number(
@@ -632,25 +715,125 @@ export async function runAnalysisWorkerOnce(): Promise<{ claimed: number; remain
         .get() as { count: number }
     ).count || 0,
   );
-  return { claimed: jobs.length, remaining };
+  return { claimed: jobs.length, remaining, recovered: recovery.jobs + recovery.items };
 }
 
-export function startAnalysisWorker(reason = 'manual'): void {
-  const g = globalThis as unknown as { __compoundAnalysisWorker?: Promise<void> };
-  if (g.__compoundAnalysisWorker) return;
+/**
+ * Returned to the API caller so the UI can show a precise toast:
+ * "started a new worker" vs "already 2 workers running" vs "nothing to do".
+ */
+export interface StartAnalysisWorkerResult {
+  started: boolean;
+  reason: string;
+  activeWorkers: number;
+  queued: number;
+  recovered: number;
+}
 
-  g.__compoundAnalysisWorker = (async () => {
-    syncObs.recordEvent({ stage: 'llm', message: `分析 worker 启动：${reason}` });
+export function startAnalysisWorker(reason = 'manual'): StartAnalysisWorkerResult {
+  ensureAnalysisWorkerSchema();
+  // Always attempt recovery — dashboard polls every 2s, so this gives us a
+  // free continuous lease-reaper without spinning a separate timer.
+  const recovery = recoverStaleAnalysisJobs();
+
+  const queued = Number(
+    (
+      getServerDb()
+        .prepare(`SELECT COUNT(*) AS count FROM analysis_jobs WHERE status = 'queued'`)
+        .get() as { count: number }
+    ).count || 0,
+  );
+
+  if (queued === 0) {
+    return {
+      started: false,
+      reason: 'no_queue',
+      activeWorkers: activeWorkerCount,
+      queued,
+      recovered: recovery.jobs + recovery.items,
+    };
+  }
+
+  if (activeWorkerCount >= MAX_PARALLEL_WORKERS) {
+    return {
+      started: false,
+      reason: 'max_workers',
+      activeWorkers: activeWorkerCount,
+      queued,
+      recovered: recovery.jobs + recovery.items,
+    };
+  }
+
+  activeWorkerCount += 1;
+  syncObs.recordEvent({
+    stage: 'llm',
+    message: `分析 worker 启动：${reason}（worker #${activeWorkerCount} · 队列 ${queued}）`,
+  });
+  void (async () => {
     try {
       for (let i = 0; i < WORKER_MAX_LOOPS; i += 1) {
         const result = await runAnalysisWorkerOnce();
         if (result.claimed === 0) break;
       }
     } finally {
-      g.__compoundAnalysisWorker = undefined;
+      activeWorkerCount = Math.max(0, activeWorkerCount - 1);
       syncObs.recordEvent({ stage: 'llm', level: 'success', message: '分析 worker 空闲' });
     }
   })();
+
+  return {
+    started: true,
+    reason,
+    activeWorkers: activeWorkerCount,
+    queued,
+    recovered: recovery.jobs + recovery.items,
+  };
+}
+
+/** How many worker loops are currently in flight in this process. */
+export function getActiveWorkerCount(): number {
+  return activeWorkerCount;
+}
+
+/**
+ * Check both the in-memory abort controller and the persisted run status. The
+ * DB check is the source of truth across worker restarts; the controller lets
+ * in-flight fetches abort as soon as the user clicks cancel.
+ */
+export function isRunCancelled(runId: string | null | undefined): boolean {
+  if (!runId) return false;
+  const ctrl = cancelControllers.get(runId);
+  if (ctrl?.signal.aborted) return true;
+  const row = getServerDb()
+    .prepare(`SELECT status FROM sync_runs WHERE id = ? LIMIT 1`)
+    .get(runId) as { status?: string } | undefined;
+  return row?.status === 'cancelled' || row?.status === 'failed';
+}
+
+/** Register / fetch / release a per-run AbortController for cooperative cancel. */
+export function getRunAbortSignal(runId: string): AbortSignal {
+  let ctrl = cancelControllers.get(runId);
+  if (!ctrl) {
+    ctrl = new AbortController();
+    cancelControllers.set(runId, ctrl);
+  }
+  return ctrl.signal;
+}
+
+export function abortRun(runId: string, reason = 'cancelled by user'): boolean {
+  const ctrl = cancelControllers.get(runId);
+  if (!ctrl) return false;
+  try {
+    ctrl.abort(new Error(reason));
+  } catch {
+    // ignore — already aborted
+  }
+  cancelControllers.delete(runId);
+  return true;
+}
+
+export function clearRunAbort(runId: string): void {
+  cancelControllers.delete(runId);
 }
 
 export function retryAnalysisJobs(
@@ -699,5 +882,25 @@ export function cancelAnalysisJobs(
        WHERE ${clauses.join(' AND ')}`,
     )
     .run(now(), now(), ...params);
+
+  // Also signal in-flight fetches to abort cooperatively.
+  if (input.runId) abortRun(input.runId, 'cancelled by user');
+
+  // Mark stuck run_items as cancelled too so the dashboard stops claiming
+  // those rows are still in flight.
+  if (input.runId) {
+    const ts = now();
+    getServerDb()
+      .prepare(
+        `UPDATE sync_run_items
+            SET status = 'cancelled',
+                stage = 'complete',
+                finished_at = ?,
+                updated_at = ?,
+                error = COALESCE(error, 'cancelled by user')
+          WHERE run_id = ? AND status IN ('queued', 'running')`,
+      )
+      .run(ts, ts, input.runId);
+  }
   return res.changes;
 }

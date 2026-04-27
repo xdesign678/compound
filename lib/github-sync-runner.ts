@@ -12,7 +12,7 @@
 import { nanoid } from 'nanoid';
 import { listMarkdownFiles, fetchMarkdownContent, getGithubConfig } from './github-sync';
 import { externalKeyPath } from './github-sync-shared';
-import { repo, type SyncJobRow } from './server-db';
+import { getServerDb, repo, type SyncJobRow } from './server-db';
 import { wikiRepo } from './wiki-db';
 import { syncObs, type SyncChangeType } from './sync-observability';
 import {
@@ -20,6 +20,9 @@ import {
   startAnalysisWorker,
   maybeFinishRun,
   cancelAnalysisJobs,
+  abortRun,
+  recoverStaleAnalysisJobs,
+  getActiveWorkerCount,
 } from './analysis-worker';
 import { logger } from './logging';
 
@@ -169,12 +172,29 @@ export function startGithubSync(options: StartGithubSyncOptions = {}): {
   jobId: string;
   existing?: boolean;
   runId?: string;
+  recoveredJobs?: number;
+  recoveredAnalysis?: number;
+  workerStarted?: boolean;
 } {
   const recovered = repo.recoverStaleSyncJobs(STALE_JOB_MAX_AGE_MS);
   if (recovered > 0) logger.info('github_sync.stale_jobs_recovered', { recovered });
+  // Always sweep orphaned analysis jobs too — even if there's no active sync
+  // job, this fixes the "9 running but worker died" symptom on the dashboard.
+  const analysisRecovery = recoverStaleAnalysisJobs();
 
   const active = repo.getActiveSyncJob();
-  if (active) return { jobId: active.id, existing: true };
+  if (active) {
+    // Start a worker to drain whatever is left in the queue, but don't spawn a
+    // second sync job — the UI already has a banner telling the user about it.
+    const workerInfo = startAnalysisWorker('existing-job-drain');
+    return {
+      jobId: active.id,
+      existing: true,
+      recoveredJobs: recovered,
+      recoveredAnalysis: analysisRecovery.jobs + analysisRecovery.items,
+      workerStarted: workerInfo.started,
+    };
+  }
 
   const jobId = `job-${nanoid(10)}`;
   const now = Date.now();
@@ -200,7 +220,12 @@ export function startGithubSync(options: StartGithubSyncOptions = {}): {
   g.__activeSyncPromises ??= new Set();
   g.__activeSyncPromises.add(promise);
   void promise.finally(() => g.__activeSyncPromises?.delete(promise));
-  return { jobId };
+  return {
+    jobId,
+    recoveredJobs: recovered,
+    recoveredAnalysis: analysisRecovery.jobs + analysisRecovery.items,
+    workerStarted: false,
+  };
 }
 
 async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions): Promise<void> {
@@ -463,7 +488,12 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
   maybeFinishRun(runId);
 }
 
-export function cancelGithubSync(): { cancelledRuns: number; cancelledJobs: number } {
+export function cancelGithubSync(): {
+  cancelledRuns: number;
+  cancelledJobs: number;
+  cancelledItems: number;
+  message: string;
+} {
   const active = repo.getActiveSyncJob();
   if (active) {
     repo.updateSyncJob(active.id, {
@@ -475,9 +505,52 @@ export function cancelGithubSync(): { cancelledRuns: number; cancelledJobs: numb
   }
   const dashboard = syncObs.getDashboard();
   const runId = dashboard.activeRun?.id ?? null;
-  if (runId) syncObs.finishRun(runId, 'cancelled', '用户取消同步任务');
+  let cancelledItems = 0;
+  if (runId) {
+    syncObs.finishRun(runId, 'cancelled', '用户取消同步任务');
+    abortRun(runId, 'cancelled by user');
+    // Snapshot the count of in-flight items before we cancel them so the UI
+    // can confirm "stopped N files" rather than a vague success message.
+    cancelledItems = Number(
+      (
+        getServerDb()
+          .prepare(
+            `SELECT COUNT(*) AS count FROM sync_run_items WHERE run_id = ? AND status IN ('queued', 'running')`,
+          )
+          .get(runId) as { count: number }
+      ).count || 0,
+    );
+  }
   const cancelledJobs = cancelAnalysisJobs({ runId });
-  return { cancelledRuns: runId ? 1 : 0, cancelledJobs };
+  return {
+    cancelledRuns: runId ? 1 : 0,
+    cancelledJobs,
+    cancelledItems,
+    message: runId
+      ? `已取消运行：${cancelledJobs} 个分析任务、${cancelledItems} 个文件回到 cancelled 状态`
+      : '当前没有正在运行的同步任务',
+  };
+}
+
+/**
+ * Snapshot of a run's pipeline health used by the dashboard. We compute it
+ * here rather than in `syncObs` because we also need the active worker count
+ * (lives in the analysis worker module).
+ */
+export function getRunHealth(runId: string | null | undefined): {
+  heartbeatAgeMs: number | null;
+  stalled: boolean;
+  activeWorkers: number;
+} {
+  if (!runId)
+    return { heartbeatAgeMs: null, stalled: false, activeWorkers: getActiveWorkerCount() };
+  const row = getServerDb()
+    .prepare(`SELECT heartbeat_at FROM sync_runs WHERE id = ? LIMIT 1`)
+    .get(runId) as { heartbeat_at: number | null } | undefined;
+  const heartbeatAgeMs =
+    row?.heartbeat_at != null ? Math.max(0, Date.now() - row.heartbeat_at) : null;
+  const stalled = heartbeatAgeMs != null && heartbeatAgeMs > 60_000;
+  return { heartbeatAgeMs, stalled, activeWorkers: getActiveWorkerCount() };
 }
 
 export interface SyncJobStatus {
