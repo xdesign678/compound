@@ -3545,6 +3545,12 @@ button {
 .settings-segmented-three {
   grid-template-columns: 1fr 1fr 1fr;
 }
+.settings-segmented-five {
+  grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+}
+.settings-tab-content {
+  padding: 4px 0 0;
+}
 .settings-segmented button {
   min-height: 34px;
   border: none;
