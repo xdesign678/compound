@@ -95,6 +95,7 @@ export default function Page() {
   const homeStyle = useAppStore((s) => s.homeStyle);
   const hydrateHomeStyle = useAppStore((s) => s.hydrateHomeStyle);
   const hydrateFontSize = useAppStore((s) => s.hydrateFontSize);
+  const hydrateLineHeight = useAppStore((s) => s.hydrateLineHeight);
 
   // Only render dexie-driven content after client mount to avoid SSR/CSR mismatch
   const [mounted, setMounted] = useState(false);
@@ -106,6 +107,7 @@ export default function Page() {
     setMounted(true);
     hydrateHomeStyle();
     hydrateFontSize();
+    hydrateLineHeight();
     const media = window.matchMedia(DESKTOP_MEDIA_QUERY);
     const syncLayout = () => setIsDesktop(isDesktopWidth(window.innerWidth) && media.matches);
 
@@ -117,7 +119,7 @@ export default function Page() {
       media.removeEventListener('change', syncLayout);
       window.removeEventListener('resize', syncLayout);
     };
-  }, [hydrateHomeStyle, hydrateFontSize]);
+  }, [hydrateHomeStyle, hydrateFontSize, hydrateLineHeight]);
 
   // Browser history support for detail navigation
   useEffect(() => {

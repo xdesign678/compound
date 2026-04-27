@@ -89,6 +89,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     if (fs && fsMap[fs]) {
       document.documentElement.style.setProperty('--prose-font-size', fsMap[fs] + 'px');
     }
+    var lh = localStorage.getItem('compound_line_height');
+    var lhMap = {compact:1.5,standard:1.7,relaxed:1.9};
+    if (lh && lhMap[lh]) {
+      document.documentElement.style.setProperty('--prose-line-height', String(lhMap[lh]));
+    }
   } catch(e) {}
 `,
           }}

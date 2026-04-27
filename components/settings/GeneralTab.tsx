@@ -2,6 +2,7 @@
 
 import { useAppStore, type ColorMode } from '@/lib/store';
 import { FontSizeSelector } from './FontSizeSelector';
+import { LineHeightSelector } from './LineHeightSelector';
 
 export function GeneralTab() {
   const homeStyle = useAppStore((s) => s.homeStyle);
@@ -35,6 +36,14 @@ export function GeneralTab() {
           <div className="settings-card-desc">调整 Wiki 和资料详情页阅读字号</div>
         </div>
         <FontSizeSelector />
+      </div>
+
+      <div className="settings-tool-row settings-tool-row-flat">
+        <div>
+          <div className="settings-tool-title">行间距</div>
+          <div className="settings-card-desc">调整详情页正文行间距</div>
+        </div>
+        <LineHeightSelector />
       </div>
 
       <div className="settings-tool-row settings-tool-row-flat">

@@ -16,6 +16,14 @@ export const FONT_SIZE_MAP: Record<FontSize, { label: string; px: number }> = {
   xl: { label: '大', px: 20 },
 };
 
+export type LineHeight = 'compact' | 'standard' | 'relaxed';
+
+export const LINE_HEIGHT_MAP: Record<LineHeight, { label: string; value: number }> = {
+  compact: { label: '紧凑', value: 1.5 },
+  standard: { label: '标准', value: 1.7 },
+  relaxed: { label: '宽松', value: 1.9 },
+};
+
 interface DetailState {
   type: 'concept' | 'source';
   id: string;
@@ -60,6 +68,7 @@ interface AppState {
   homeStyle: HomeStyle;
   colorMode: ColorMode;
   fontSize: FontSize;
+  lineHeight: LineHeight;
   searchCollapsed: boolean;
   searchFocusNonce: number;
 
@@ -92,6 +101,8 @@ interface AppState {
   hydrateColorMode: () => void;
   setFontSize: (size: FontSize) => void;
   hydrateFontSize: () => void;
+  setLineHeight: (lh: LineHeight) => void;
+  hydrateLineHeight: () => void;
   setSearchCollapsed: (v: boolean) => void;
   triggerSearchFocus: () => void;
 }
@@ -129,6 +140,19 @@ function applyFontSize(size: FontSize) {
   document.documentElement.style.setProperty('--prose-font-size', `${px}px`);
 }
 
+function readStoredLineHeight(): LineHeight {
+  if (typeof window === 'undefined') return 'standard';
+  const raw = localStorage.getItem('compound_line_height');
+  if (raw && raw in LINE_HEIGHT_MAP) return raw as LineHeight;
+  return 'standard';
+}
+
+function applyLineHeight(lh: LineHeight) {
+  if (typeof window === 'undefined') return;
+  const val = LINE_HEIGHT_MAP[lh].value;
+  document.documentElement.style.setProperty('--prose-line-height', String(val));
+}
+
 // Module-level toast auto-dismiss timer
 let _toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -160,6 +184,7 @@ export const useAppStore = create<AppState>((set) => ({
   homeStyle: readStoredHomeStyle(),
   colorMode: 'light',
   fontSize: 'md',
+  lineHeight: 'standard',
   searchCollapsed: false,
   searchFocusNonce: 0,
 
@@ -248,6 +273,16 @@ export const useAppStore = create<AppState>((set) => ({
     const size = readStoredFontSize();
     applyFontSize(size);
     set({ fontSize: size });
+  },
+  setLineHeight: (lh) => {
+    localStorage.setItem('compound_line_height', lh);
+    applyLineHeight(lh);
+    set({ lineHeight: lh });
+  },
+  hydrateLineHeight: () => {
+    const lh = readStoredLineHeight();
+    applyLineHeight(lh);
+    set({ lineHeight: lh });
   },
   setSearchCollapsed: (v) => set((s) => (s.searchCollapsed === v ? s : { searchCollapsed: v })),
   triggerSearchFocus: () => set((s) => ({ searchFocusNonce: s.searchFocusNonce + 1 })),

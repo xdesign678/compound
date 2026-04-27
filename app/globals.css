@@ -21,6 +21,7 @@
   --surface-subtle: var(--bg-hover);
 
   --prose-font-size: 16px;
+  --prose-line-height: 1.7;
 
   --font-sans: var(--font-inter), Inter, system-ui, -apple-system, sans-serif;
   --font-reading:
@@ -859,7 +860,7 @@ button {
 .prose {
   font-family: var(--font-reading);
   font-size: var(--prose-font-size, 16px);
-  line-height: var(--leading-relaxed);
+  line-height: var(--prose-line-height, 1.7);
   color: var(--text-body);
   word-wrap: break-word;
   overflow-wrap: anywhere;
@@ -1375,7 +1376,7 @@ button {
 .source-editor-content {
   font-family: var(--font-reading);
   font-size: var(--prose-font-size, 16px);
-  line-height: var(--leading-relaxed);
+  line-height: var(--prose-line-height, 1.7);
   color: var(--text-body);
   min-height: 46vh;
   cursor: text;
@@ -4490,7 +4491,7 @@ body {
 .msg-ai-body {
   font-family: var(--font-reading);
   font-size: var(--prose-font-size, 16px);
-  line-height: 1.6;
+  line-height: var(--prose-line-height, 1.7);
   color: var(--text-body);
 }
 
