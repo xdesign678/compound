@@ -155,7 +155,11 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
           <button className="modal-btn primary" onClick={loadSeed}>
             确认载入
           </button>
-          <button className="modal-btn" style={{ marginTop: 6 }} onClick={() => setConfirming(null)}>
+          <button
+            className="modal-btn"
+            style={{ marginTop: 6 }}
+            onClick={() => setConfirming(null)}
+          >
             取消
           </button>
         </div>
@@ -164,10 +168,18 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
           <p className="modal-desc" style={{ color: 'var(--brand-clay)' }}>
             确认清空所有资料、概念页、问答记录和活动日志? 本操作不可撤销。
           </p>
-          <button className="modal-btn primary" style={{ background: 'var(--brand-clay)' }} onClick={clearAll}>
+          <button
+            className="modal-btn primary"
+            style={{ background: 'var(--brand-clay)' }}
+            onClick={clearAll}
+          >
             确认清空
           </button>
-          <button className="modal-btn" style={{ marginTop: 6 }} onClick={() => setConfirming(null)}>
+          <button
+            className="modal-btn"
+            style={{ marginTop: 6 }}
+            onClick={() => setConfirming(null)}
+          >
             取消
           </button>
         </div>
@@ -179,10 +191,7 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
           >
             载入示例 Wiki
           </button>
-          <button
-            className="modal-btn danger"
-            onClick={() => setConfirming('clear')}
-          >
+          <button className="modal-btn danger" onClick={() => setConfirming('clear')}>
             清空所有数据
           </button>
         </div>

@@ -39,16 +39,16 @@ tests can be transpiled).
 
 ## Individual commands
 
-| Goal | Command |
-| ---- | ------- |
-| TypeScript only (fast, no emit) | `npm run typecheck` |
-| Node-side unit tests | `npm run test` |
-| ESLint (Next.js core-web-vitals rules) | `npm run lint` |
-| Production build | `npm run build` |
-| Build + performance metrics | `npm run build:measure` |
-| Danger PR review (CI parity) | `npm run danger` |
+| Goal                                   | Command                 |
+| -------------------------------------- | ----------------------- |
+| TypeScript only (fast, no emit)        | `npm run typecheck`     |
+| Node-side unit tests                   | `npm run test`          |
+| ESLint (Next.js core-web-vitals rules) | `npm run lint`          |
+| Production build                       | `npm run build`         |
+| Build + performance metrics            | `npm run build:measure` |
+| Danger PR review (CI parity)           | `npm run danger`        |
 
-ESLint is *not* part of `npm run check`; it is enforced via
+ESLint is _not_ part of `npm run check`; it is enforced via
 `lint-staged` on commit (see `package.json > "lint-staged"`) and in the
 `pr-review.yml` workflow. Run `npm run lint` manually when you change
 many files at once or when you suspect a Husky hook was bypassed.

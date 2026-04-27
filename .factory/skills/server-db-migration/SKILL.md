@@ -47,7 +47,7 @@ if (!hasReviewedAt) {
 }
 ```
 
-Why the probe? `ALTER TABLE ... ADD COLUMN` is *not* idempotent in
+Why the probe? `ALTER TABLE ... ADD COLUMN` is _not_ idempotent in
 SQLite (it errors if the column exists). The probe pattern is what the
 existing migrations use; copy it verbatim.
 
@@ -75,7 +75,7 @@ Always include `IF NOT EXISTS` on both the table and every index.
 with the main table via INSERT/UPDATE triggers. To track a new column:
 
 1. Add the column to the base table (using the probe pattern above).
-2. Drop and recreate the FTS table — this is the *only* allowed
+2. Drop and recreate the FTS table — this is the _only_ allowed
    destructive operation, because FTS data is fully derived:
    ```ts
    db.exec(`DROP TABLE IF EXISTS concepts_fts;`);
@@ -129,5 +129,5 @@ npm run build
 ```
 
 If any step touches the schema, also confirm the migration is a no-op
-on a *second* cold start: run the dev server twice on the same data
+on a _second_ cold start: run the dev server twice on the same data
 directory and ensure no errors are logged the second time.

@@ -60,9 +60,10 @@ function readTraceMeta(req: NextRequest): TraceMeta {
   const requestId = inbound ?? generateRequestId();
   // Cap inbound traceparent length defensively before validation.
   const rawTraceparent = req.headers.get(TRACEPARENT_HEADER);
-  const traceparent = rawTraceparent && rawTraceparent.length <= 128 && isValidTraceparent(rawTraceparent)
-    ? rawTraceparent
-    : null;
+  const traceparent =
+    rawTraceparent && rawTraceparent.length <= 128 && isValidTraceparent(rawTraceparent)
+      ? rawTraceparent
+      : null;
   return { requestId, traceparent, inboundRequestId: inbound };
 }
 
@@ -84,13 +85,8 @@ function nextWithTrace(req: NextRequest, meta: TraceMeta): NextResponse {
   } else {
     forwardedHeaders.delete(TRACEPARENT_HEADER);
   }
-  return withTraceHeaders(
-    NextResponse.next({ request: { headers: forwardedHeaders } }),
-    meta
-  );
+  return withTraceHeaders(NextResponse.next({ request: { headers: forwardedHeaders } }), meta);
 }
-
-
 
 function clean(value: string | undefined): string {
   return value?.replace(/^["'\s]+|["'\s]+$/g, '') ?? '';
@@ -169,7 +165,7 @@ export function middleware(req: NextRequest) {
         new NextResponse('COMPOUND_ADMIN_TOKEN or ADMIN_TOKEN must be configured.', {
           status: 503,
         }),
-        trace
+        trace,
       );
     }
     return nextWithTrace(req, trace);
@@ -182,7 +178,7 @@ export function middleware(req: NextRequest) {
   if (req.nextUrl.pathname.startsWith('/api/')) {
     return withTraceHeaders(
       NextResponse.json({ error: 'Unauthorized', requestId: trace.requestId }, { status: 401 }),
-      trace
+      trace,
     );
   }
 
@@ -193,7 +189,7 @@ export function middleware(req: NextRequest) {
         'WWW-Authenticate': 'Basic realm="Compound", charset="UTF-8"',
       },
     }),
-    trace
+    trace,
   );
 }
 

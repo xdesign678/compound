@@ -89,7 +89,11 @@ export function parseTraceparent(value: string | null | undefined): ParsedTracep
   if (!isHex(traceId, 32) || isAllZero(traceId)) return null;
   if (!isHex(spanId, 16) || isAllZero(spanId)) return null;
   if (!isHex(flags, 2)) return null;
-  return { traceId: traceId.toLowerCase(), spanId: spanId.toLowerCase(), flags: flags.toLowerCase() };
+  return {
+    traceId: traceId.toLowerCase(),
+    spanId: spanId.toLowerCase(),
+    flags: flags.toLowerCase(),
+  };
 }
 
 /** Build a W3C-compliant `traceparent` header string. */
@@ -116,7 +120,8 @@ export function createRequestContext(options: CreateContextOptions = {}): Reques
   const parentSpanId = parsed?.spanId;
   const flags = parsed?.flags ?? '01';
   const requestIdInput = options.requestId?.trim();
-  const requestId = requestIdInput && requestIdInput.length > 0 ? requestIdInput : generateRequestId();
+  const requestId =
+    requestIdInput && requestIdInput.length > 0 ? requestIdInput : generateRequestId();
   return {
     requestId,
     traceId,
@@ -191,7 +196,7 @@ export function buildOutboundTraceHeaders(ctx?: RequestContext): Record<string, 
  * response so clients and observability tooling can stitch the trace.
  */
 export function withRequestTracing<Args extends unknown[], R extends Response>(
-  handler: (req: Request, ...args: Args) => Promise<R> | R
+  handler: (req: Request, ...args: Args) => Promise<R> | R,
 ): (req: Request, ...args: Args) => Promise<Response> {
   return async (req: Request, ...args: Args) => {
     const ctx = extractRequestContextFromHeaders(req.headers);
@@ -204,7 +209,7 @@ export function withRequestTracing<Args extends unknown[], R extends Response>(
         const message = err instanceof Error ? err.message : String(err);
         const fallback = new Response(
           JSON.stringify({ error: message, requestId: ctx.requestId }),
-          { status: 500, headers: { 'content-type': 'application/json' } }
+          { status: 500, headers: { 'content-type': 'application/json' } },
         );
         applyTraceResponseHeaders(fallback.headers, ctx);
         return fallback;

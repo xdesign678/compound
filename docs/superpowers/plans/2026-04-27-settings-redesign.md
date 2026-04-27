@@ -14,23 +14,24 @@
 
 ## 文件结构
 
-| 文件 | 操作 | 职责 |
-|------|------|------|
-| `lib/store.ts` | 修改 | 新增 `FontSize` 类型、`fontSize` 状态、`setFontSize`、`hydrateFontSize`、`FONT_SIZE_MAP` |
-| `app/globals.css` | 修改 | 新增 `--prose-font-size` CSS 变量；`.prose`、`.source-editor-content` 引用该变量 |
-| `app/layout.tsx` | 修改 | `<head>` 防闪烁脚本中增加字号恢复 |
-| `app/page.tsx` | 修改 | 顶层 effect 调用 `hydrateFontSize()` |
-| `components/settings/FontSizeSelector.tsx` | 新建 | 5 档预设按钮组组件 |
-| `components/settings/GeneralTab.tsx` | 新建 | 通用 Tab：颜色模式 + 字号 + 首页样式 |
-| `components/settings/ModelTab.tsx` | 新建 | 模型 Tab：LLM 配置 + 访问保护 |
-| `components/settings/DataTab.tsx` | 新建 | 数据 Tab：Wiki 维护 + 数据管理 |
-| `components/SettingsDrawer.tsx` | 重写 | 壳子：overlay + header + 响应式 Tab 导航 + 渲染当前 Tab |
+| 文件                                       | 操作 | 职责                                                                                     |
+| ------------------------------------------ | ---- | ---------------------------------------------------------------------------------------- |
+| `lib/store.ts`                             | 修改 | 新增 `FontSize` 类型、`fontSize` 状态、`setFontSize`、`hydrateFontSize`、`FONT_SIZE_MAP` |
+| `app/globals.css`                          | 修改 | 新增 `--prose-font-size` CSS 变量；`.prose`、`.source-editor-content` 引用该变量         |
+| `app/layout.tsx`                           | 修改 | `<head>` 防闪烁脚本中增加字号恢复                                                        |
+| `app/page.tsx`                             | 修改 | 顶层 effect 调用 `hydrateFontSize()`                                                     |
+| `components/settings/FontSizeSelector.tsx` | 新建 | 5 档预设按钮组组件                                                                       |
+| `components/settings/GeneralTab.tsx`       | 新建 | 通用 Tab：颜色模式 + 字号 + 首页样式                                                     |
+| `components/settings/ModelTab.tsx`         | 新建 | 模型 Tab：LLM 配置 + 访问保护                                                            |
+| `components/settings/DataTab.tsx`          | 新建 | 数据 Tab：Wiki 维护 + 数据管理                                                           |
+| `components/SettingsDrawer.tsx`            | 重写 | 壳子：overlay + header + 响应式 Tab 导航 + 渲染当前 Tab                                  |
 
 ---
 
 ### Task 1: Zustand store 新增字号状态
 
 **Files:**
+
 - Modify: `lib/store.ts`
 
 - [ ] **Step 1: 在 store.ts 顶部新增 FontSize 类型和映射常量**
@@ -123,6 +124,7 @@ git commit -m "feat(store): add fontSize state with 5 presets and localStorage p
 ### Task 2: CSS 变量和字号样式
 
 **Files:**
+
 - Modify: `app/globals.css`
 
 - [ ] **Step 1: 在 :root 中声明 --prose-font-size 变量**
@@ -147,7 +149,7 @@ git commit -m "feat(store): add fontSize state with 5 presets and localStorage p
 将 `font-size: 17px;` 改为：
 
 ```css
-  font-size: var(--prose-font-size, 16px);
+font-size: var(--prose-font-size, 16px);
 ```
 
 - [ ] **Step 3: 修改 .prose h2、h3、code 用 calc() 基于变量缩放**
@@ -157,19 +159,19 @@ git commit -m "feat(store): add fontSize state with 5 presets and localStorage p
 找到第 944 行附近的 `.prose h2` 规则，将 `font-size: 24px;` 改为：
 
 ```css
-  font-size: calc(var(--prose-font-size, 16px) * 1.5);
+font-size: calc(var(--prose-font-size, 16px) * 1.5);
 ```
 
 找到第 952 行附近的 `.prose h3` 规则，将 `font-size: 18px;` 改为：
 
 ```css
-  font-size: calc(var(--prose-font-size, 16px) * 1.25);
+font-size: calc(var(--prose-font-size, 16px) * 1.25);
 ```
 
 找到第 967 行附近的 `.prose code` 规则，将 `font-size: 13.5px;` 改为：
 
 ```css
-  font-size: calc(var(--prose-font-size, 16px) * 0.875);
+font-size: calc(var(--prose-font-size, 16px) * 0.875);
 ```
 
 - [ ] **Step 4: 修改 .source-editor-content 字号使用 CSS 变量**
@@ -177,7 +179,7 @@ git commit -m "feat(store): add fontSize state with 5 presets and localStorage p
 找到第 1373 行附近的 `.source-editor-content` 规则，将 `font-size: 17px;` 改为：
 
 ```css
-  font-size: var(--prose-font-size, 16px);
+font-size: var(--prose-font-size, 16px);
 ```
 
 - [ ] **Step 5: 修改第 4293 行附近的重复 prose 样式声明**
@@ -196,7 +198,7 @@ git commit -m "feat(store): add fontSize state with 5 presets and localStorage p
 将 `font-size: 17px;` 改为：
 
 ```css
-  font-size: var(--prose-font-size, 16px);
+font-size: var(--prose-font-size, 16px);
 ```
 
 - [ ] **Step 6: 运行构建确认 CSS 无语法错误**
@@ -216,6 +218,7 @@ git commit -m "feat(css): wire prose and editor font-size to --prose-font-size C
 ### Task 3: 防闪烁脚本和初始化
 
 **Files:**
+
 - Modify: `app/layout.tsx`
 - Modify: `app/page.tsx`
 
@@ -236,7 +239,7 @@ git commit -m "feat(css): wire prose and editor font-size to --prose-font-size C
       document.documentElement.style.setProperty('--prose-font-size', fsMap[fs] + 'px');
     }
   } catch(e) {}
-`
+`;
 ```
 
 - [ ] **Step 2: 在 page.tsx 的顶层 effect 中调用 hydrateFontSize**
@@ -252,7 +255,7 @@ const hydrateFontSize = useAppStore((s) => s.hydrateFontSize);
 然后在 `useEffect` 中 `hydrateHomeStyle();` 行后面添加：
 
 ```typescript
-    hydrateFontSize();
+hydrateFontSize();
 ```
 
 并把 `hydrateFontSize` 加入 effect 的依赖数组 `[hydrateHomeStyle, hydrateFontSize]`。
@@ -274,6 +277,7 @@ git commit -m "feat: add font-size FOUC prevention and hydration on mount"
 ### Task 4: FontSizeSelector 组件
 
 **Files:**
+
 - Create: `components/settings/FontSizeSelector.tsx`
 
 - [ ] **Step 1: 创建 components/settings/ 目录**
@@ -338,6 +342,7 @@ git commit -m "feat: create FontSizeSelector preset button group component"
 ### Task 5: GeneralTab 组件
 
 **Files:**
+
 - Create: `components/settings/GeneralTab.tsx`
 
 - [ ] **Step 1: 创建 GeneralTab.tsx**
@@ -426,6 +431,7 @@ git commit -m "feat: create GeneralTab with color mode, font size, and home styl
 ### Task 6: ModelTab 组件
 
 **Files:**
+
 - Create: `components/settings/ModelTab.tsx`
 
 - [ ] **Step 1: 创建 ModelTab.tsx**
@@ -657,6 +663,7 @@ git commit -m "feat: create ModelTab with LLM config and admin token"
 ### Task 7: DataTab 组件
 
 **Files:**
+
 - Create: `components/settings/DataTab.tsx`
 
 - [ ] **Step 1: 创建 DataTab.tsx**
@@ -821,7 +828,11 @@ export function DataTab({ onClose }: { onClose: () => void }) {
           <button className="modal-btn primary" onClick={loadSeed}>
             确认载入
           </button>
-          <button className="modal-btn" style={{ marginTop: 6 }} onClick={() => setConfirming(null)}>
+          <button
+            className="modal-btn"
+            style={{ marginTop: 6 }}
+            onClick={() => setConfirming(null)}
+          >
             取消
           </button>
         </div>
@@ -830,10 +841,18 @@ export function DataTab({ onClose }: { onClose: () => void }) {
           <p className="modal-desc" style={{ color: 'var(--brand-clay)' }}>
             确认清空所有资料、概念页、问答记录和活动日志? 本操作不可撤销。
           </p>
-          <button className="modal-btn primary" style={{ background: 'var(--brand-clay)' }} onClick={clearAll}>
+          <button
+            className="modal-btn primary"
+            style={{ background: 'var(--brand-clay)' }}
+            onClick={clearAll}
+          >
             确认清空
           </button>
-          <button className="modal-btn" style={{ marginTop: 6 }} onClick={() => setConfirming(null)}>
+          <button
+            className="modal-btn"
+            style={{ marginTop: 6 }}
+            onClick={() => setConfirming(null)}
+          >
             取消
           </button>
         </div>
@@ -845,10 +864,7 @@ export function DataTab({ onClose }: { onClose: () => void }) {
           >
             载入示例 Wiki
           </button>
-          <button
-            className="modal-btn danger"
-            onClick={() => setConfirming('clear')}
-          >
+          <button className="modal-btn danger" onClick={() => setConfirming('clear')}>
             清空所有数据
           </button>
         </div>
@@ -861,10 +877,7 @@ function ConceptChip({ id, onClick }: { id: string; onClick: () => void }) {
   const concept = useLiveQuery(async () => getDb().concepts.get(id), [id]);
   if (!concept) return null;
   return (
-    <button
-      onClick={onClick}
-      className="settings-concept-chip"
-    >
+    <button onClick={onClick} className="settings-concept-chip">
       {concept.title}
     </button>
   );
@@ -962,6 +975,7 @@ git commit -m "feat: create DataTab with wiki lint and data management"
 ### Task 8: 重写 SettingsDrawer 壳子（响应式 Tab 导航）
 
 **Files:**
+
 - Rewrite: `components/SettingsDrawer.tsx`
 
 - [ ] **Step 1: 重写 SettingsDrawer.tsx**
@@ -1196,6 +1210,7 @@ git commit -m "feat: rewrite SettingsDrawer with responsive 3-tab layout"
 ### Task 9: 清理和验证
 
 **Files:**
+
 - Review: all modified files
 
 - [ ] **Step 1: 删除 SettingsDrawer.tsx 中已不需要的旧 inline-style 常量 S**

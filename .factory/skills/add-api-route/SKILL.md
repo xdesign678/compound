@@ -20,7 +20,7 @@ the codebase and passes admin auth + the `check` workflow.
 ## Route checklist
 
 1. **File location.** Put the handler at
-   `app/api/<segment>/<sub-segment>/route.ts`. The folder hierarchy *is*
+   `app/api/<segment>/<sub-segment>/route.ts`. The folder hierarchy _is_
    the URL.
 2. **Force the Node.js runtime.** Compound depends on `better-sqlite3`,
    `sharp`, and other native bindings that the Edge runtime cannot load.
@@ -76,18 +76,18 @@ repository call.
 
 ## Method conventions
 
-| HTTP verb | When to use it |
-| --- | --- |
-| `GET` | Read-only, idempotent. Always usable from the browser; do **not** rely on a JSON body. |
-| `POST` | Mutations and any request that needs a JSON body — including search endpoints that take a query payload. |
-| `PUT` / `DELETE` | Avoid; the codebase models updates as `POST` to a sub-path (e.g. `/api/sync/cancel`). |
+| HTTP verb        | When to use it                                                                                           |
+| ---------------- | -------------------------------------------------------------------------------------------------------- |
+| `GET`            | Read-only, idempotent. Always usable from the browser; do **not** rely on a JSON body.                   |
+| `POST`           | Mutations and any request that needs a JSON body — including search endpoints that take a query payload. |
+| `PUT` / `DELETE` | Avoid; the codebase models updates as `POST` to a sub-path (e.g. `/api/sync/cancel`).                    |
 
 ## Auth variations
 
 - **Public endpoint** (rare): omit `requireAdmin`. Keep it read-only and
   return only safe, non-sensitive data.
 - **Webhook endpoint** (e.g. `/api/sync/github/webhook`): verify the
-  shared secret manually with a constant-time compare; do *not* call
+  shared secret manually with a constant-time compare; do _not_ call
   `requireAdmin` since the caller is GitHub.
 - **Cron endpoint** (e.g. `/api/sync/cron/rescan`): check
   `process.env.CRON_SECRET` against an `Authorization: Bearer ...` header.

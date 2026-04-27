@@ -40,20 +40,11 @@ test('parseTraceparent rejects malformed input', () => {
   assert.equal(parseTraceparent(''), null);
   assert.equal(parseTraceparent('not-a-traceparent'), null);
   // wrong version
-  assert.equal(
-    parseTraceparent('01-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01'),
-    null
-  );
+  assert.equal(parseTraceparent('01-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01'), null);
   // all-zero trace id
-  assert.equal(
-    parseTraceparent('00-00000000000000000000000000000000-b7ad6b7169203331-01'),
-    null
-  );
+  assert.equal(parseTraceparent('00-00000000000000000000000000000000-b7ad6b7169203331-01'), null);
   // bad hex
-  assert.equal(
-    parseTraceparent('00-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-b7ad6b7169203331-01'),
-    null
-  );
+  assert.equal(parseTraceparent('00-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-b7ad6b7169203331-01'), null);
 });
 
 test('parseTraceparent accepts a valid traceparent', () => {
@@ -133,7 +124,7 @@ test('applyTraceResponseHeaders writes the trace headers onto the response', () 
   assert.equal(response.headers.get(REQUEST_ID_HEADER), ctx.requestId);
   assert.equal(
     response.headers.get(TRACEPARENT_HEADER),
-    formatTraceparent(ctx.traceId, ctx.spanId, ctx.flags)
+    formatTraceparent(ctx.traceId, ctx.spanId, ctx.flags),
   );
   assert.equal(response.headers.get(TRACESTATE_HEADER), 'foo=bar');
 });
@@ -145,10 +136,7 @@ test('buildOutboundTraceHeaders includes the active trace identifiers', () => {
   });
   const headers = runWithRequestContext(ctx, () => buildOutboundTraceHeaders());
   assert.equal(headers[REQUEST_ID_HEADER], 'req-out');
-  assert.equal(
-    headers[TRACEPARENT_HEADER],
-    formatTraceparent(ctx.traceId, ctx.spanId, ctx.flags)
-  );
+  assert.equal(headers[TRACEPARENT_HEADER], formatTraceparent(ctx.traceId, ctx.spanId, ctx.flags));
 });
 
 test('buildOutboundTraceHeaders returns empty when no context is active', () => {
@@ -173,7 +161,7 @@ test('withRequestTracing wraps successful handlers with trace headers', async ()
         [REQUEST_ID_HEADER]: 'caller-req-id',
         [TRACEPARENT_HEADER]: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
       },
-    })
+    }),
   );
 
   assert.equal(res.status, 200);

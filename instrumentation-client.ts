@@ -16,7 +16,9 @@ const release = process.env.NEXT_PUBLIC_SENTRY_RELEASE;
 const environment =
   process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? 'development';
 
-const tracesSampleRate = Number.parseFloat(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? '0.1');
+const tracesSampleRate = Number.parseFloat(
+  process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? '0.1',
+);
 
 if (dsn) {
   Sentry.init({

@@ -14,8 +14,20 @@ export const maxDuration = 90;
 const MAX_BODY_BYTES = 512_000;
 const MAX_CONCEPTS = 500;
 
+/**
+ * Run an LLM-driven consistency lint over a snapshot of the Wiki concept
+ * index. Produces `findings`: structured issues such as duplicate concepts,
+ * orphaned relations, or category drift. Results are filtered so each
+ * finding only references concept ids that exist in the request.
+ *
+ * Body: `LintRequest` — `concepts: Array<{ id, title, summary, related }>`
+ * (<= 500). An empty array short-circuits to `{ findings: [] }`.
+ *
+ * Guards: admin token, LLM rate limit, 512KB body cap.
+ */
 export const POST = withRequestTracing(async (req: Request) => {
-  const denied = requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
+  const denied =
+    requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
   try {
@@ -33,8 +45,9 @@ export const POST = withRequestTracing(async (req: Request) => {
     const llmConfig = readLlmConfigOverride(req, body);
 
     const listing = body.concepts
-      .map((c) =>
-        `[${c.id}] ${c.title}\n  summary: ${c.summary}\n  related: ${c.related.join(', ') || '(none)'}`
+      .map(
+        (c) =>
+          `[${c.id}] ${c.title}\n  summary: ${c.summary}\n  related: ${c.related.join(', ') || '(none)'}`,
       )
       .join('\n\n');
 
@@ -74,7 +87,7 @@ ${listing}
         error: 'Lint processing failed. Please check your API configuration.',
         requestId: getRequestContext()?.requestId,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 });

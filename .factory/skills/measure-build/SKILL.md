@@ -46,15 +46,15 @@ cat tmp/build-metrics.json | python3 -m json.tool
 
 Notable fields:
 
-| Field | Meaning |
-| --- | --- |
-| `durationMs` | Wall-clock time of `next build`. |
-| `cacheHit` | `true` when `.next/cache` already existed and was non-empty before the build. |
-| `cacheSizeBefore` / `cacheSizeAfter` | Bytes; growth indicates new compiled artefacts. |
-| `staticBytes` | Size of `.next/static` — the user-facing JS/CSS bundle. |
-| `routes` | Best-effort count parsed from the build log's route table. |
-| `next` / `node` | Dependency versions, useful when comparing two runs. |
-| `commit` / `branch` | Filled from `GITHUB_SHA` / `GITHUB_REF_NAME` in CI, otherwise read from `.git/HEAD`. |
+| Field                                | Meaning                                                                              |
+| ------------------------------------ | ------------------------------------------------------------------------------------ |
+| `durationMs`                         | Wall-clock time of `next build`.                                                     |
+| `cacheHit`                           | `true` when `.next/cache` already existed and was non-empty before the build.        |
+| `cacheSizeBefore` / `cacheSizeAfter` | Bytes; growth indicates new compiled artefacts.                                      |
+| `staticBytes`                        | Size of `.next/static` — the user-facing JS/CSS bundle.                              |
+| `routes`                             | Best-effort count parsed from the build log's route table.                           |
+| `next` / `node`                      | Dependency versions, useful when comparing two runs.                                 |
+| `commit` / `branch`                  | Filled from `GITHUB_SHA` / `GITHUB_REF_NAME` in CI, otherwise read from `.git/HEAD`. |
 
 The file is gitignored (see the `tmp/` rule in `.gitignore`).
 
@@ -87,7 +87,7 @@ Look for changes in `durationMs` (>10 % is meaningful) and
   `package-lock.json` + source hashes (see `ci.yml`). A cache miss on
   CI typically explains a 2-3x duration spike — check `cacheHit` in the
   uploaded artifact before blaming code changes.
-- Deleting `.next/` is the most reliable way to test a *cold* build
+- Deleting `.next/` is the most reliable way to test a _cold_ build
   locally:
   ```bash
   rm -rf .next && npm run build:measure

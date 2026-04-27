@@ -27,7 +27,7 @@ export const POST = withRequestTracing(async (req: Request) => {
     logger.error('sync.github.run.failed', { error: message });
     return NextResponse.json(
       { error: message, requestId: getRequestContext()?.requestId },
-      { status: 500 }
+      { status: 500 },
     );
   }
 });

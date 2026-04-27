@@ -23,7 +23,7 @@ The runner in `scripts/run-node-tests.mjs` discovers tests with this
 exact rule:
 
 ```js
-readdirSync(libDir).filter((name) => name.endsWith('.test.ts'))
+readdirSync(libDir).filter((name) => name.endsWith('.test.ts'));
 ```
 
 Therefore:
@@ -49,10 +49,7 @@ test('exampleHelper returns the expected shape on the happy path', () => {
 });
 
 test('exampleHelper rejects empty input', () => {
-  assert.throws(
-    () => exampleHelper({ id: '1', text: '' }),
-    /text must be non-empty/
-  );
+  assert.throws(() => exampleHelper({ id: '1', text: '' }), /text must be non-empty/);
 });
 ```
 

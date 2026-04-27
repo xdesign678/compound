@@ -57,12 +57,12 @@ This document is generated automatically from the Next.js Route Handlers under `
 
 Source: [`app/api/categorize/route.ts`](../app/api/categorize/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 90 |
-| Guards | `admin-token`, `rate-limited`, `content-length-guarded` |
+| Field       | Value                                                   |
+| ----------- | ------------------------------------------------------- |
+| Methods     | `POST`                                                  |
+| Runtime     | `nodejs`                                                |
+| maxDuration | 90                                                      |
+| Guards      | `admin-token`, `rate-limited`, `content-length-guarded` |
 
 #### POST
 
@@ -74,12 +74,12 @@ _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` blo
 
 Source: [`app/api/data/concepts/route.ts`](../app/api/data/concepts/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `GET` |
-| Runtime | `nodejs` |
-| maxDuration | 30 |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | 30            |
+| Guards      | `admin-token` |
 
 #### GET
 
@@ -90,12 +90,12 @@ Returns full concept documents for on-demand hydration.
 
 Source: [`app/api/data/snapshot/route.ts`](../app/api/data/snapshot/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `GET` |
-| Runtime | `nodejs` |
-| maxDuration | 30 |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | 30            |
+| Guards      | `admin-token` |
 
 #### GET
 
@@ -108,12 +108,12 @@ and heavy workflows such as ask / categorize.
 
 Source: [`app/api/data/sources/route.ts`](../app/api/data/sources/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `GET` |
-| Runtime | `nodejs` |
-| maxDuration | 30 |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | 30            |
+| Guards      | `admin-token` |
 
 #### GET
 
@@ -126,12 +126,12 @@ Returns full source documents for on-demand hydration.
 
 Source: [`app/api/health/route.ts`](../app/api/health/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `GET` |
-| Runtime | `nodejs` |
-| maxDuration | _unset_ |
-| Guards | _(none detected)_ |
+| Field       | Value             |
+| ----------- | ----------------- |
+| Methods     | `GET`             |
+| Runtime     | `nodejs`          |
+| maxDuration | _unset_           |
+| Guards      | _(none detected)_ |
 
 #### GET
 
@@ -149,12 +149,12 @@ monitors) can use it as a readiness signal.
 
 Source: [`app/api/ingest/route.ts`](../app/api/ingest/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 90 |
-| Guards | `admin-token`, `rate-limited`, `content-length-guarded` |
+| Field       | Value                                                   |
+| ----------- | ------------------------------------------------------- |
+| Methods     | `POST`                                                  |
+| Runtime     | `nodejs`                                                |
+| maxDuration | 90                                                      |
+| Guards      | `admin-token`, `rate-limited`, `content-length-guarded` |
 
 #### POST
 
@@ -163,8 +163,8 @@ extracted/updated concept set. Pipes the payload to the server-side LLM
 ingest pipeline (`ingestSourceToServerDb`), which normalises categories,
 stores the source row, and merges concepts into the SQLite-backed Wiki.
 
-Body: `IngestRequest` — `source.rawContent` is required (≤ 100k chars).
-Optional `existingConcepts` (≤ 500) hints the LLM about prior concepts.
+Body: `IngestRequest` — `source.rawContent` is required (<= 100k chars).
+Optional `existingConcepts` (<= 500) hints the LLM about prior concepts.
 
 Guards: admin token, LLM rate limit, 512KB body cap.
 
@@ -174,12 +174,12 @@ Guards: admin token, LLM rate limit, 512KB body cap.
 
 Source: [`app/api/lint/route.ts`](../app/api/lint/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 90 |
-| Guards | `admin-token`, `rate-limited`, `content-length-guarded` |
+| Field       | Value                                                   |
+| ----------- | ------------------------------------------------------- |
+| Methods     | `POST`                                                  |
+| Runtime     | `nodejs`                                                |
+| maxDuration | 90                                                      |
+| Guards      | `admin-token`, `rate-limited`, `content-length-guarded` |
 
 #### POST
 
@@ -189,7 +189,7 @@ orphaned relations, or category drift. Results are filtered so each
 finding only references concept ids that exist in the request.
 
 Body: `LintRequest` — `concepts: Array<{ id, title, summary, related }>`
-(≤ 500). An empty array short-circuits to `{ findings: [] }`.
+(<= 500). An empty array short-circuits to `{ findings: [] }`.
 
 Guards: admin token, LLM rate limit, 512KB body cap.
 
@@ -199,12 +199,12 @@ Guards: admin token, LLM rate limit, 512KB body cap.
 
 Source: [`app/api/query/route.ts`](../app/api/query/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 90 |
-| Guards | `admin-token`, `rate-limited`, `content-length-guarded` |
+| Field       | Value                                                   |
+| ----------- | ------------------------------------------------------- |
+| Methods     | `POST`                                                  |
+| Runtime     | `nodejs`                                                |
+| maxDuration | 90                                                      |
+| Guards      | `admin-token`, `rate-limited`, `content-length-guarded` |
 
 #### POST
 
@@ -213,8 +213,8 @@ hybrid retrieval (FTS + embeddings, with FTS-only fallback) to assemble
 a context window from concept pages and source chunks, then asks the LLM
 for a structured JSON response (`QueryResponse`).
 
-Body: `QueryRequest` — `question` is required (≤ 2k chars). Optional
-`concepts` (≤ 500) and `conversationHistory` (last 6 turns are kept).
+Body: `QueryRequest` — `question` is required (<= 2k chars). Optional
+`concepts` (<= 500) and `conversationHistory` (last 6 turns are kept).
 
 Guards: admin token, LLM rate limit, 512KB body cap.
 
@@ -224,12 +224,12 @@ Guards: admin token, LLM rate limit, 512KB body cap.
 
 Source: [`app/api/repair/run/route.ts`](../app/api/repair/run/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 30 |
-| Guards | `admin-token`, `rate-limited`, `content-length-guarded` |
+| Field       | Value                                                   |
+| ----------- | ------------------------------------------------------- |
+| Methods     | `POST`                                                  |
+| Runtime     | `nodejs`                                                |
+| maxDuration | 30                                                      |
+| Guards      | `admin-token`, `rate-limited`, `content-length-guarded` |
 
 #### POST
 
@@ -239,12 +239,12 @@ _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` blo
 
 Source: [`app/api/repair/status/route.ts`](../app/api/repair/status/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `GET` |
-| Runtime | `nodejs` |
-| maxDuration | _unset_ |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | _unset_       |
+| Guards      | `admin-token` |
 
 #### GET
 
@@ -256,12 +256,12 @@ _No JSDoc comment found above the `GET` handler. Add a leading `/** ... */` bloc
 
 Source: [`app/api/review/queue/[id]/route.ts`](../app/api/review/queue/[id]/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 10 |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `POST`        |
+| Runtime     | `nodejs`      |
+| maxDuration | 10            |
+| Guards      | `admin-token` |
 
 #### POST
 
@@ -271,12 +271,12 @@ _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` blo
 
 Source: [`app/api/review/queue/route.ts`](../app/api/review/queue/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `GET`, `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 10 |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`, `POST` |
+| Runtime     | `nodejs`      |
+| maxDuration | 10            |
+| Guards      | `admin-token` |
 
 #### GET
 
@@ -292,12 +292,12 @@ _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` blo
 
 Source: [`app/api/settings/models/route.ts`](../app/api/settings/models/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `GET`, `POST` |
-| Runtime | `nodejs` |
-| maxDuration | _unset_ |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`, `POST` |
+| Runtime     | `nodejs`      |
+| maxDuration | _unset_       |
+| Guards      | `admin-token` |
 
 #### GET
 
@@ -313,12 +313,12 @@ _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` blo
 
 Source: [`app/api/sync/cancel/route.ts`](../app/api/sync/cancel/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 10 |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `POST`        |
+| Runtime     | `nodejs`      |
+| maxDuration | 10            |
+| Guards      | `admin-token` |
 
 #### POST
 
@@ -328,12 +328,12 @@ _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` blo
 
 Source: [`app/api/sync/cron/rescan/route.ts`](../app/api/sync/cron/rescan/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `GET`, `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 30 |
-| Guards | `admin-token`, `cron-token` |
+| Field       | Value                       |
+| ----------- | --------------------------- |
+| Methods     | `GET`, `POST`               |
+| Runtime     | `nodejs`                    |
+| maxDuration | 30                          |
+| Guards      | `admin-token`, `cron-token` |
 
 #### GET
 
@@ -350,12 +350,12 @@ See {@link GET}. POST variant for schedulers that prefer non-idempotent verbs.
 
 Source: [`app/api/sync/dashboard/route.ts`](../app/api/sync/dashboard/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `GET` |
-| Runtime | `nodejs` |
-| maxDuration | 10 |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | 10            |
+| Guards      | `admin-token` |
 
 #### GET
 
@@ -369,12 +369,12 @@ Guards: admin token.
 
 Source: [`app/api/sync/github/content/route.ts`](../app/api/sync/github/content/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 30 |
-| Guards | `admin-token`, `content-length-guarded` |
+| Field       | Value                                   |
+| ----------- | --------------------------------------- |
+| Methods     | `POST`                                  |
+| Runtime     | `nodejs`                                |
+| maxDuration | 30                                      |
+| Guards      | `admin-token`, `content-length-guarded` |
 
 #### POST
 
@@ -389,12 +389,12 @@ do not have to be URL-encoded by the client.
 
 Source: [`app/api/sync/github/list/route.ts`](../app/api/sync/github/list/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `GET` |
-| Runtime | `nodejs` |
-| maxDuration | 30 |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | 30            |
+| Guards      | `admin-token` |
 
 #### GET
 
@@ -406,12 +406,12 @@ The client uses this list to diff against its local Sources and decide what to i
 
 Source: [`app/api/sync/github/run/route.ts`](../app/api/sync/github/run/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 30 |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `POST`        |
+| Runtime     | `nodejs`      |
+| maxDuration | 30            |
+| Guards      | `admin-token` |
 
 #### POST
 
@@ -423,12 +423,12 @@ The actual work runs in the background; client polls `/api/sync/status`.
 
 Source: [`app/api/sync/github/webhook/route.ts`](../app/api/sync/github/webhook/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 30 |
-| Guards | `webhook-signature` |
+| Field       | Value               |
+| ----------- | ------------------- |
+| Methods     | `POST`              |
+| Runtime     | `nodejs`            |
+| maxDuration | 30                  |
+| Guards      | `webhook-signature` |
 
 #### POST
 
@@ -444,12 +444,12 @@ Guards: HMAC SHA-256 signature (no admin token; webhooks are anonymous).
 
 Source: [`app/api/sync/retry/route.ts`](../app/api/sync/retry/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 10 |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `POST`        |
+| Runtime     | `nodejs`      |
+| maxDuration | 10            |
+| Guards      | `admin-token` |
 
 #### POST
 
@@ -459,12 +459,12 @@ _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` blo
 
 Source: [`app/api/sync/status/route.ts`](../app/api/sync/status/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `GET` |
-| Runtime | `nodejs` |
-| maxDuration | 10 |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | 10            |
+| Guards      | `admin-token` |
 
 #### GET
 
@@ -475,12 +475,12 @@ Returns the latest status for a sync job (polled by the client every 1-2s).
 
 Source: [`app/api/sync/worker/route.ts`](../app/api/sync/worker/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `GET`, `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 30 |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`, `POST` |
+| Runtime     | `nodejs`      |
+| maxDuration | 30            |
+| Guards      | `admin-token` |
 
 #### GET
 
@@ -496,12 +496,12 @@ _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` blo
 
 Source: [`app/api/wiki/export/route.ts`](../app/api/wiki/export/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `GET` |
-| Runtime | `nodejs` |
-| maxDuration | 120 |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | 120           |
+| Guards      | `admin-token` |
 
 #### GET
 
@@ -511,12 +511,12 @@ _No JSDoc comment found above the `GET` handler. Add a leading `/** ... */` bloc
 
 Source: [`app/api/wiki/health/route.ts`](../app/api/wiki/health/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `GET` |
-| Runtime | `nodejs` |
-| maxDuration | _unset_ |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | _unset_       |
+| Guards      | `admin-token` |
 
 #### GET
 
@@ -526,12 +526,12 @@ _No JSDoc comment found above the `GET` handler. Add a leading `/** ... */` bloc
 
 Source: [`app/api/wiki/rebuild-index/route.ts`](../app/api/wiki/rebuild-index/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `POST` |
-| Runtime | `nodejs` |
-| maxDuration | 300 |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `POST`        |
+| Runtime     | `nodejs`      |
+| maxDuration | 300           |
+| Guards      | `admin-token` |
 
 #### POST
 
@@ -541,12 +541,12 @@ _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` blo
 
 Source: [`app/api/wiki/search/route.ts`](../app/api/wiki/search/route.ts)
 
-| Field | Value |
-| --- | --- |
-| Methods | `POST` |
-| Runtime | `nodejs` |
-| maxDuration | _unset_ |
-| Guards | `admin-token` |
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `POST`        |
+| Runtime     | `nodejs`      |
+| maxDuration | _unset_       |
+| Guards      | `admin-token` |
 
 #### POST
 

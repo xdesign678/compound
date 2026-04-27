@@ -10,6 +10,13 @@ import { logger } from '@/lib/server-logger';
 export const runtime = 'nodejs';
 export const maxDuration = 10;
 
+/**
+ * Aggregate dashboard payload for the `/sync` page. Starts the analysis
+ * worker on-demand, then returns the live sync observability snapshot
+ * merged with embedding coverage and review-queue metrics.
+ *
+ * Guards: admin token.
+ */
 export const GET = withRequestTracing(async (req: Request) => {
   const denied = requireAdmin(req);
   if (denied) return denied;
@@ -30,7 +37,7 @@ export const GET = withRequestTracing(async (req: Request) => {
     logger.error('sync.dashboard.failed', { error: message });
     return NextResponse.json(
       { error: message, requestId: getRequestContext()?.requestId },
-      { status: 500 }
+      { status: 500 },
     );
   }
 });

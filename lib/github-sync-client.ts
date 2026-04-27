@@ -59,7 +59,9 @@ export interface ListResponse {
  * 调服务端 list 接口，返回仓库所有 md 文件清单。
  */
 export async function fetchRemoteFileList(): Promise<ListResponse> {
-  const res = await fetch('/api/sync/github/list', { headers: withRequestId(getAdminAuthHeaders()) });
+  const res = await fetch('/api/sync/github/list', {
+    headers: withRequestId(getAdminAuthHeaders()),
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(

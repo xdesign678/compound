@@ -375,7 +375,7 @@ button {
   padding: 0;
 }
 
-.tabbar-sidebar [role="tablist"] {
+.tabbar-sidebar [role='tablist'] {
   display: flex;
   flex-direction: column;
   gap: 6px;

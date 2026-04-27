@@ -19,6 +19,7 @@ import { readFileSync, readdirSync, statSync, writeFileSync, existsSync, mkdirSy
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import prettier from 'prettier';
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), '..');
@@ -105,7 +106,10 @@ function cleanJsdocBlock(inner) {
   const lines = inner
     .split('\n')
     .map((l) => l.replace(/^\s*\*\s?/, '').replace(/\s+$/, ''))
-    .filter((_, idx, arr) => !(idx === 0 && arr[idx] === '') && !(idx === arr.length - 1 && arr[idx] === ''));
+    .filter(
+      (_, idx, arr) =>
+        !(idx === 0 && arr[idx] === '') && !(idx === arr.length - 1 && arr[idx] === ''),
+    );
   const text = lines.join('\n').trim();
   return text || null;
 }
@@ -228,7 +232,7 @@ function renderMarkdown(entries) {
   lines.push(
     'This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. ' +
       'It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious ' +
-      'security guards (admin token, rate limit, payload size, webhook signatures).'
+      'security guards (admin token, rate limit, payload size, webhook signatures).',
   );
   lines.push('');
   lines.push(`- Routes: **${totalRoutes}**`);
@@ -253,11 +257,15 @@ function renderMarkdown(entries) {
       lines.push('');
       lines.push(`Source: [\`${e.file}\`](../${e.file})`);
       lines.push('');
-      const methodList = e.handlers.length > 0 ? e.handlers.map((h) => `\`${h.method}\``).join(', ') : '_(no exported HTTP handler detected)_';
+      const methodList =
+        e.handlers.length > 0
+          ? e.handlers.map((h) => `\`${h.method}\``).join(', ')
+          : '_(no exported HTTP handler detected)_';
       const runtime = e.runtime ?? '_default_';
       const maxDuration = e.maxDuration != null ? `${e.maxDuration}` : '_unset_';
       const guardTags = describeGuards(e.guards);
-      const guardLine = guardTags.length > 0 ? guardTags.map((t) => `\`${t}\``).join(', ') : '_(none detected)_';
+      const guardLine =
+        guardTags.length > 0 ? guardTags.map((t) => `\`${t}\``).join(', ') : '_(none detected)_';
 
       lines.push('| Field | Value |');
       lines.push('| --- | --- |');
@@ -280,7 +288,7 @@ function renderMarkdown(entries) {
         } else {
           lines.push(
             `_No JSDoc comment found above the \`${h.method}\` handler. Add a leading \`/** ... */\` block ` +
-              `in \`${e.file}\` to document this endpoint._`
+              `in \`${e.file}\` to document this endpoint._`,
           );
         }
         lines.push('');
@@ -292,13 +300,13 @@ function renderMarkdown(entries) {
   lines.push('');
   lines.push(
     '_This file is regenerated on every CI run. If it is ever out of sync with the route handlers, the ' +
-      '`docs:api:check` step will fail and surface the drift._'
+      '`docs:api:check` step will fail and surface the drift._',
   );
   lines.push('');
   return lines.join('\n');
 }
 
-function main() {
+async function main() {
   const args = new Set(process.argv.slice(2));
   const checkOnly = args.has('--check') || args.has('-c');
 
@@ -309,19 +317,19 @@ function main() {
   }
 
   const entries = files.map(buildRouteEntry);
-  const rendered = renderMarkdown(entries);
+  const rendered = await prettier.format(renderMarkdown(entries), { parser: 'markdown' });
 
   if (checkOnly) {
     if (!existsSync(outPath)) {
       console.error(
-        `[generate-api-docs] ${relPath(outPath)} does not exist. Run \`npm run docs:api\` and commit the file.`
+        `[generate-api-docs] ${relPath(outPath)} does not exist. Run \`npm run docs:api\` and commit the file.`,
       );
       process.exit(1);
     }
     const existing = readFileSync(outPath, 'utf8');
     if (existing !== rendered) {
       console.error(
-        `[generate-api-docs] ${relPath(outPath)} is stale. Run \`npm run docs:api\` and commit the regenerated file.`
+        `[generate-api-docs] ${relPath(outPath)} is stale. Run \`npm run docs:api\` and commit the regenerated file.`,
       );
       // Print a tiny diff hint: count differing lines.
       const a = existing.split('\n');
@@ -332,7 +340,9 @@ function main() {
       console.error(`[generate-api-docs] approximate line drift: ${diffs}`);
       process.exit(1);
     }
-    console.log(`[generate-api-docs] ${relPath(outPath)} is up to date (${entries.length} routes).`);
+    console.log(
+      `[generate-api-docs] ${relPath(outPath)} is up to date (${entries.length} routes).`,
+    );
     return;
   }
 
@@ -341,9 +351,12 @@ function main() {
   console.log(
     `[generate-api-docs] Wrote ${relPath(outPath)} (${entries.length} routes, ${entries.reduce(
       (acc, e) => acc + e.handlers.length,
-      0
-    )} handlers).`
+      0,
+    )} handlers).`,
   );
 }
 
-main();
+main().catch((err) => {
+  console.error(`[generate-api-docs] ${err instanceof Error ? err.message : String(err)}`);
+  process.exit(1);
+});

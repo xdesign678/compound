@@ -101,7 +101,9 @@ function extractCodeSpans(md) {
 const codeSpans = extractCodeSpans(agentsMd);
 
 if (codeSpans.length === 0) {
-  fail('AGENTS.md has no inline code spans; expected at least the build/git commands to be quoted.');
+  fail(
+    'AGENTS.md has no inline code spans; expected at least the build/git commands to be quoted.',
+  );
 }
 
 // 1. Validate `npm run <script>` references.
@@ -134,9 +136,22 @@ function looksLikeUrl(span) {
 function isPathCandidate(span) {
   if (looksLikeShellCommand(span)) return false;
   if (looksLikeUrl(span)) return false;
+  if (/\s/.test(span)) return false; // prose snippets like `/** ... */`, not paths
   if (span.includes('@')) return false; // e.g. actions/cache@v4
   if (/^[\w-]+$/.test(span)) return false; // bare identifiers like `main`
+  if (!span.includes('/') && !span.startsWith('.')) {
+    return existsSync(path.join(repoRoot, span));
+  }
   return span.includes('/') || /\.[a-zA-Z0-9]+$/.test(span);
+}
+
+function globishPathExists(candidate) {
+  const normalized = candidate.replace(/^\.\//, '').replace(/^\/+/, '');
+  if (!/[*?[\]]/.test(normalized)) {
+    return existsSync(path.join(repoRoot, normalized));
+  }
+  const stablePrefix = normalized.split(/[*?[\]]/)[0].replace(/\/+$/, '');
+  return stablePrefix.length === 0 || existsSync(path.join(repoRoot, stablePrefix));
 }
 
 function gitignoreCovers(gitignoreText, candidate) {
@@ -166,8 +181,7 @@ const PATH_ALLOWLIST = new Set([
 for (const span of codeSpans) {
   if (!isPathCandidate(span)) continue;
   if (PATH_ALLOWLIST.has(span)) continue;
-  const abs = path.join(repoRoot, span);
-  if (existsSync(abs)) continue;
+  if (globishPathExists(span)) continue;
   if (gitignoreCovers(gitignore, span)) continue;
   fail(
     `AGENTS.md references path \`${span}\`, but it does not exist in the repo and is not covered by .gitignore. ` +
@@ -178,10 +192,14 @@ for (const span of codeSpans) {
 // 3. Structural invariants tied to AGENTS.md content.
 
 // 3a. build:measure must invoke scripts/measure-build.mjs.
-if (codeSpans.some((s) => s === 'npm run build:measure' || s === 'node scripts/measure-build.mjs')) {
+if (
+  codeSpans.some((s) => s === 'npm run build:measure' || s === 'node scripts/measure-build.mjs')
+) {
   const buildMeasure = scripts['build:measure'];
   if (!buildMeasure) {
-    fail('AGENTS.md describes `npm run build:measure`, but package.json has no `build:measure` script.');
+    fail(
+      'AGENTS.md describes `npm run build:measure`, but package.json has no `build:measure` script.',
+    );
   } else if (!/scripts\/measure-build\.mjs/.test(buildMeasure)) {
     fail(
       `package.json "build:measure" should run scripts/measure-build.mjs, but currently runs: ${buildMeasure}`,
@@ -201,10 +219,14 @@ if (/\bGitHub Actions\b/i.test(agentsMd) || /actions\/cache@v4/.test(agentsMd)) 
       fail('AGENTS.md mentions `actions/cache@v4`, but ci.yml does not use it.');
     }
     if (!/\.next\/cache/.test(ciWorkflow)) {
-      fail('AGENTS.md describes caching `.next/cache` in CI, but ci.yml does not reference that path.');
+      fail(
+        'AGENTS.md describes caching `.next/cache` in CI, but ci.yml does not reference that path.',
+      );
     }
     if (!/package-lock\.json/.test(ciWorkflow)) {
-      fail('AGENTS.md says the cache key includes `package-lock.json`, but ci.yml does not reference it.');
+      fail(
+        'AGENTS.md says the cache key includes `package-lock.json`, but ci.yml does not reference it.',
+      );
     }
     if (/build-metrics/.test(agentsMd) && !/name:\s*build-metrics/.test(ciWorkflow)) {
       fail('AGENTS.md describes a `build-metrics` artifact, but ci.yml does not upload it.');
@@ -218,7 +240,9 @@ if (/\bGitHub Actions\b/i.test(agentsMd) || /actions\/cache@v4/.test(agentsMd)) 
 // 3c. tmp/build-metrics.json should be gitignored, as AGENTS.md claims.
 if (/tmp\/build-metrics\.json/.test(agentsMd)) {
   if (!gitignoreCovers(gitignore, 'tmp/build-metrics.json')) {
-    fail('AGENTS.md states tmp/build-metrics.json is gitignored, but it is not listed in .gitignore.');
+    fail(
+      'AGENTS.md states tmp/build-metrics.json is gitignored, but it is not listed in .gitignore.',
+    );
   }
 }
 
