@@ -58,6 +58,10 @@ screenshots/
 # Build performance metrics produced by scripts/measure-build.mjs
 tmp/build-metrics.json
 
+# Tech debt scanner output (scripts/tech-debt-scan.mjs)
+tmp/tech-debt-report.json
+tmp/tech-debt-report.md
+
 # Local profiling output produced by Clinic.js and Node CPU/heap profiles
 tmp/profiles/
 .local/

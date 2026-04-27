@@ -22,6 +22,7 @@ pnpm-lock.yaml
 tmp/
 output/
 .codex/
+.claude/
 .serena/
 .verdent/
 .local/

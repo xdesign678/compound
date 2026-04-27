@@ -275,7 +275,7 @@ export const Icon = {
   ),
 };
 
-import type { SourceType } from '@/lib/types';
+import type { SourceType } from '../lib/types';
 
 export function SourceTypeIcon({ type }: { type: SourceType }) {
   switch (type) {

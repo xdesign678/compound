@@ -1,44 +1,23 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { nanoid } from 'nanoid';
-import { getDb } from '@/lib/db';
-import { useAppStore } from '@/lib/store';
-import { askWiki, archiveAnswerAsConcept } from '@/lib/api-client';
+import { getDb } from '../../lib/db';
+import { useAppStore } from '../../lib/store';
+import { askWiki, archiveAnswerAsConcept } from '../../lib/api-client';
+import { pickStableConceptTitles } from '../../lib/ask-suggestions';
 import {
   fetchCustomModels,
   getLlmConfig,
   modelLabel,
   PRESET_MODELS,
   saveLlmConfig,
-} from '@/lib/llm-config';
-import { Icon, SourceTypeIcon } from '../Icons';
-import { Prose } from '../Prose';
-import type { AskMessage, LlmConfig, Source, SourceType } from '@/lib/types';
-
-type MentionKind = 'concept' | 'source';
-
-type MentionItem = {
-  id: string;
-  kind: MentionKind;
-  title: string;
-  subtitle: string;
-  type?: SourceType;
-};
-
-type InlineMention = {
-  start: number;
-  end: number;
-  query: string;
-};
-
-type ModelOption = {
-  label: string;
-  value: string;
-  helper?: string;
-};
+} from '../../lib/llm-config';
+import { AskComposer } from '../ask/AskComposer';
+import { AskMessageList } from '../ask/AskMessageList';
+import type { InlineMention, MentionItem, MentionKind, ModelOption } from '../ask/types';
+import type { AskMessage, LlmConfig, Source, SourceType } from '../../lib/types';
 
 const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
   link: '链接',
@@ -69,17 +48,18 @@ export function AskView() {
   const [customModels, setCustomModels] = useState<string[]>([]);
   const [caretPosition, setCaretPosition] = useState(0);
   const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const [conceptTitles, setConceptTitles] = useState<string[]>([]);
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const pickerSearchRef = useRef<HTMLInputElement>(null);
 
   const history = useLiveQuery(async () => getDb().askHistory.orderBy('at').toArray(), []);
-
   const conceptCount = useLiveQuery(async () => getDb().concepts.count(), []);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setLlmConfig(getLlmConfig());
@@ -124,13 +104,6 @@ export function AskView() {
     const id = window.setTimeout(() => pickerSearchRef.current?.focus(), 20);
     return () => window.clearTimeout(id);
   }, [referencePickerOpen, referenceMode]);
-
-  function autoResize() {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
-  }
 
   const inlineMention = useMemo(
     () => detectInlineMention(input, caretPosition),
@@ -216,6 +189,32 @@ export function AskView() {
       cancelled = true;
     };
   }, [inlineMention, selectedMentions]);
+
+  useEffect(() => {
+    getDb()
+      .concepts.orderBy('updatedAt')
+      .reverse()
+      .limit(50)
+      .toArray()
+      .then((concepts) => {
+        setConceptTitles(pickStableConceptTitles(concepts));
+      });
+  }, []);
+
+  const suggestions = useMemo(() => {
+    if ((conceptCount ?? 0) === 0) return [];
+    if (conceptTitles.length > 0) {
+      return conceptTitles.map((title) => `${title}是什么？`);
+    }
+    return ['这个知识库里有什么内容？', '最近添加了哪些资料？', '请总结一下主要概念'];
+  }, [conceptCount, conceptTitles]);
+
+  function autoResize() {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+  }
 
   async function handleSend(overrideText?: string) {
     const text = (overrideText ?? input).trim();
@@ -348,31 +347,10 @@ export function AskView() {
     setModelMenuOpen(false);
   }
 
-  const [conceptTitles, setConceptTitles] = useState<string[]>([]);
-  useEffect(() => {
-    getDb()
-      .concepts.orderBy('updatedAt')
-      .reverse()
-      .limit(50)
-      .toArray()
-      .then((concepts) => {
-        const shuffled = concepts.sort(() => Math.random() - 0.5);
-        setConceptTitles(shuffled.slice(0, 3).map((c) => c.title));
-      });
-  }, []);
-
-  const suggestions = useMemo(() => {
-    if ((conceptCount ?? 0) === 0) return [];
-    if (conceptTitles.length > 0) {
-      return conceptTitles.map((title) => `${title}是什么？`);
-    }
-    return ['这个知识库里有什么内容？', '最近添加了哪些资料？', '请总结一下主要概念'];
-  }, [conceptCount, conceptTitles]);
-
-  const lastAnswerFailed = useMemo(() => {
-    const lastAnswer = [...(history ?? [])].reverse().find((m) => m.role === 'ai');
-    return lastAnswer ? isAskFailureMessage(lastAnswer.text) : false;
-  }, [history]);
+  function restartConversation() {
+    clearAskHistory();
+    setConfirmClear(false);
+  }
 
   return (
     <div className="ask-view">
@@ -386,10 +364,7 @@ export function AskView() {
                 </span>
                 <button
                   className="ask-reset-btn"
-                  onClick={() => {
-                    clearAskHistory();
-                    setConfirmClear(false);
-                  }}
+                  onClick={restartConversation}
                   style={{ background: 'var(--brand-clay)', color: '#fff', marginRight: 4 }}
                 >
                   清空
@@ -406,410 +381,53 @@ export function AskView() {
           </div>
         </div>
       )}
-      <div className="ask-messages" ref={messagesRef}>
-        <div className="ask-stream">
-          {history && history.length === 0 && !loading ? (
-            <div className="ask-empty">
-              <div className="ask-empty-kicker">知识提问</div>
-              <div className="big-icon">
-                <Icon.Sparkle />
-              </div>
-              <h3>从你的 Wiki 问起</h3>
-              <p>
-                答案从已综合的概念页中提取,带引用。好的回答可以归档为新页面。
-                {(conceptCount ?? 0) === 0 && (
-                  <>
-                    <br />
-                    <br />
-                    <strong>Wiki 当前为空</strong>,请先添加一些资料。
-                  </>
-                )}
-              </p>
-              {suggestions.length > 0 && (
-                <div className="suggested-questions">
-                  {suggestions.map((s) => (
-                    <button key={s} className="suggested-q" onClick={() => handleSend(s)}>
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              {lastAnswerFailed && (
-                <div className="ask-recovery-banner">
-                  <div>
-                    <div className="ask-recovery-title">上一次问答没有完成</div>
-                    <div className="ask-recovery-copy">
-                      通常是 API 配置或服务端暂时不可用。可以重新开始，也可以保留记录继续问。
-                    </div>
-                  </div>
-                  <button
-                    className="ask-reset-btn ask-recovery-action"
-                    onClick={() => {
-                      clearAskHistory();
-                      setConfirmClear(false);
-                    }}
-                  >
-                    重新开始
-                  </button>
-                </div>
-              )}
-              {history?.map((m, idx) => {
-                if (m.role === 'user') {
-                  return (
-                    <div key={m.id} className="msg msg-user-row">
-                      <div className="msg-user">{m.text}</div>
-                    </div>
-                  );
-                }
-                const prev = history[idx - 1];
-                const userQ = prev?.role === 'user' ? prev.text : null;
-                const failedAnswer = isAskFailureMessage(m.text);
-                return (
-                  <div key={m.id} className="msg msg-ai-row">
-                    <div className={`msg-ai-card${failedAnswer ? ' ask-failure-card' : ''}`}>
-                      <div className="msg-ai-label">Wiki 答案</div>
-                      {failedAnswer ? (
-                        <div className="ask-failure-copy">
-                          <div className="ask-failure-title">问答暂时没成功</div>
-                          <p>
-                            通常是模型 API
-                            或服务端配置暂时不可用。你可以检查设置里的模型配置，或者稍后重新提问。
-                          </p>
-                        </div>
-                      ) : (
-                        <Prose
-                          markdown={m.text}
-                          citedConceptIds={m.citedConcepts}
-                          className="prose-answer"
-                        />
-                      )}
-                      {!failedAnswer && m.citedConcepts && m.citedConcepts.length > 0 && (
-                        <div className="msg-sources">
-                          <div className="ms-label">基于概念页</div>
-                          <CitedList ids={m.citedConcepts} onClick={openConcept} />
-                        </div>
-                      )}
-                      {!failedAnswer &&
-                        m.citedConcepts &&
-                        m.citedConcepts.length > 0 &&
-                        (m.savedAsConceptId ? (
-                          <button className="save-as-page" disabled>
-                            <Icon.Save />
-                            已归档为 Wiki 页面
-                          </button>
-                        ) : (
-                          <button
-                            className="save-as-page"
-                            disabled={archiving === m.id}
-                            onClick={() => handleArchive(m, userQ)}
-                          >
-                            <Icon.Save />
-                            {archiving === m.id ? '归档中...' : '归档为新页面'}
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                );
-              })}
-              {loading && (
-                <div className="msg msg-ai-row">
-                  <div className="msg-ai-card loading">
-                    <div className="msg-ai-label loading">Wiki 思考中</div>
-                    <div className="msg-ai-body">正在从 {conceptCount} 个概念页中综合...</div>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-      <div className="ask-input-bar">
-        <div className="ask-input-inner">
-          <div
-            className={`ask-composer-card${referencePickerOpen || modelMenuOpen || showInlinePanel ? ' is-engaged' : ''}${input.trim() ? ' has-input' : ''}`}
-            ref={composerRef}
-          >
-            {selectedMentions.length > 0 && (
-              <div className="ask-mentions-row">
-                {selectedMentions.map((item) => (
-                  <button
-                    key={`${item.kind}-${item.id}`}
-                    className={`ask-mention-chip ${item.kind === 'source' ? 'is-source' : ''}`}
-                    onClick={() => removeMention(item)}
-                    title="移除引用"
-                  >
-                    <span className="ask-mention-chip-kind">
-                      {item.kind === 'concept' ? '@概念' : '@文件'}
-                    </span>
-                    <span className="ask-mention-chip-title">{item.title}</span>
-                    <span className="ask-mention-chip-close">×</span>
-                  </button>
-                ))}
-              </div>
-            )}
 
-            {referencePickerOpen &&
-              mounted &&
-              createPortal(
-                <>
-                  <div
-                    className="ask-flyout-backdrop"
-                    onClick={() => setReferencePickerOpen(false)}
-                    aria-hidden="true"
-                  />
-                  <div className="ask-flyout ask-reference-flyout">
-                    <div className="ask-flyout-header">
-                      <div className="ask-flyout-title">添加引用</div>
-                      <div className="ask-segmented">
-                        <button
-                          className={`ask-segmented-btn${referenceMode === 'concept' ? ' active' : ''}`}
-                          onClick={() => setReferenceMode('concept')}
-                        >
-                          引用概念
-                        </button>
-                        <button
-                          className={`ask-segmented-btn${referenceMode === 'source' ? ' active' : ''}`}
-                          onClick={() => setReferenceMode('source')}
-                        >
-                          引用文件
-                        </button>
-                      </div>
-                    </div>
-                    <div className="ask-flyout-search">
-                      <Icon.Search />
-                      <input
-                        ref={pickerSearchRef}
-                        value={pickerSearch}
-                        onChange={(e) => setPickerSearch(e.target.value)}
-                        placeholder={
-                          referenceMode === 'concept' ? '搜索概念页...' : '搜索资料或文件...'
-                        }
-                      />
-                    </div>
-                    <MentionResults
-                      items={pickerResults}
-                      emptyLabel={
-                        referenceMode === 'concept' ? '没有找到匹配的概念页' : '没有找到匹配的资料'
-                      }
-                      onSelect={(item) => handleSelectMention(item, 'picker')}
-                    />
-                  </div>
-                </>,
-                document.body,
-              )}
+      <AskMessageList
+        history={history}
+        loading={loading}
+        conceptCount={conceptCount}
+        suggestions={suggestions}
+        archiving={archiving}
+        messagesRef={messagesRef}
+        onSendSuggestion={handleSend}
+        onRestart={restartConversation}
+        onArchive={handleArchive}
+        onOpenConcept={openConcept}
+      />
 
-            {modelMenuOpen &&
-              mounted &&
-              createPortal(
-                <>
-                  <div
-                    className="ask-flyout-backdrop"
-                    onClick={() => setModelMenuOpen(false)}
-                    aria-hidden="true"
-                  />
-                  <div className="ask-flyout ask-model-flyout">
-                    <div className="ask-flyout-title">切换模型</div>
-                    <div className="ask-model-list">
-                      {modelOptions.map((item) => {
-                        const active = llmConfig.model === item.value;
-                        return (
-                          <button
-                            key={item.value}
-                            className={`ask-model-option${active ? ' active' : ''}`}
-                            onClick={() => selectModel(item.value)}
-                          >
-                            <span className="ask-model-option-copy">
-                              <span className="ask-model-option-label">{item.label}</span>
-                              {item.helper && (
-                                <span className="ask-model-option-helper">{item.helper}</span>
-                              )}
-                            </span>
-                            <span className="ask-model-option-check">{active ? '✓' : ''}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </>,
-                document.body,
-              )}
-
-            {showInlinePanel && (
-              <div className="ask-flyout ask-inline-flyout">
-                <div className="ask-inline-tip">输入 `@` 可以直接搜索概念或文件</div>
-                <MentionResults
-                  items={inlineResults}
-                  emptyLabel="没有找到可引用内容"
-                  onSelect={(item) => handleSelectMention(item, 'inline')}
-                />
-              </div>
-            )}
-
-            <textarea
-              ref={textareaRef}
-              className="ask-textarea"
-              placeholder="问点什么... 输入 @ 引用概念或资料"
-              rows={1}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                setCaretPosition(e.target.selectionStart);
-                autoResize();
-              }}
-              onClick={(e) => setCaretPosition((e.target as HTMLTextAreaElement).selectionStart)}
-              onKeyUp={(e) => setCaretPosition((e.target as HTMLTextAreaElement).selectionStart)}
-              onSelect={(e) => setCaretPosition((e.target as HTMLTextAreaElement).selectionStart)}
-              onKeyDown={(e) => {
-                const preferredMention = showInlinePanel ? inlineResults[0] : null;
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (preferredMention) {
-                    handleSelectMention(preferredMention, 'inline');
-                    return;
-                  }
-                  handleSend();
-                  return;
-                }
-
-                if (e.key === 'Backspace' && input.length === 0 && selectedMentions.length > 0) {
-                  e.preventDefault();
-                  setSelectedMentions((prev) => prev.slice(0, -1));
-                  return;
-                }
-
-                if (e.key === 'Escape') {
-                  setReferencePickerOpen(false);
-                  setModelMenuOpen(false);
-                }
-              }}
-              disabled={loading}
-            />
-
-            <div className="ask-composer-toolbar">
-              <div className="ask-composer-actions">
-                <button
-                  className={`ask-tool-btn${referencePickerOpen ? ' active' : ''}`}
-                  onClick={toggleReferencePicker}
-                  type="button"
-                >
-                  <span className="ask-tool-btn-leading">@</span>
-                  <span>引用概念</span>
-                </button>
-                <button
-                  className={`ask-tool-btn ask-model-btn${modelMenuOpen ? ' active' : ''}`}
-                  onClick={() => {
-                    setReferencePickerOpen(false);
-                    setModelMenuOpen((prev) => !prev);
-                  }}
-                  type="button"
-                >
-                  <span>模型 · {currentModelLabel}</span>
-                </button>
-              </div>
-
-              <div className="ask-composer-submit">
-                <div className="ask-composer-hint">Enter 发送 / Shift+Enter 换行</div>
-                <button
-                  className="ask-send-btn"
-                  onClick={() => handleSend()}
-                  disabled={!input.trim() || loading}
-                  aria-label="发送问题"
-                  title="发送问题"
-                >
-                  <Icon.Send />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <AskComposer
+        input={input}
+        setInput={setInput}
+        loading={loading}
+        selectedMentions={selectedMentions}
+        setSelectedMentions={setSelectedMentions}
+        referencePickerOpen={referencePickerOpen}
+        setReferencePickerOpen={setReferencePickerOpen}
+        referenceMode={referenceMode}
+        setReferenceMode={setReferenceMode}
+        pickerSearch={pickerSearch}
+        setPickerSearch={setPickerSearch}
+        pickerResults={pickerResults}
+        inlineResults={inlineResults}
+        modelMenuOpen={modelMenuOpen}
+        setModelMenuOpen={setModelMenuOpen}
+        llmConfig={llmConfig}
+        mounted={mounted}
+        showInlinePanel={showInlinePanel}
+        currentModelLabel={currentModelLabel}
+        modelOptions={modelOptions}
+        textareaRef={textareaRef}
+        composerRef={composerRef}
+        pickerSearchRef={pickerSearchRef}
+        autoResize={autoResize}
+        setCaretPosition={setCaretPosition}
+        onSelectMention={handleSelectMention}
+        onRemoveMention={removeMention}
+        onToggleReferencePicker={toggleReferencePicker}
+        onSelectModel={selectModel}
+        onSend={handleSend}
+      />
     </div>
-  );
-}
-
-function isAskFailureMessage(text: string) {
-  const normalized = text.trim();
-  return normalized.includes('问答失败') || normalized.includes('/api/query failed');
-}
-
-function MentionResults({
-  items,
-  emptyLabel,
-  onSelect,
-}: {
-  items: MentionItem[];
-  emptyLabel: string;
-  onSelect: (item: MentionItem) => void;
-}) {
-  if (items.length === 0) {
-    return <div className="ask-flyout-empty">{emptyLabel}</div>;
-  }
-
-  const conceptItems = items.filter((item) => item.kind === 'concept');
-  const sourceItems = items.filter((item) => item.kind === 'source');
-
-  return (
-    <div className="ask-reference-list">
-      {conceptItems.length > 0 && (
-        <div className="ask-reference-group">
-          <div className="ask-reference-group-label">概念页</div>
-          {conceptItems.map((item) => (
-            <MentionRow key={`${item.kind}-${item.id}`} item={item} onSelect={onSelect} />
-          ))}
-        </div>
-      )}
-
-      {sourceItems.length > 0 && (
-        <div className="ask-reference-group">
-          <div className="ask-reference-group-label">资料文件</div>
-          {sourceItems.map((item) => (
-            <MentionRow key={`${item.kind}-${item.id}`} item={item} onSelect={onSelect} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MentionRow({
-  item,
-  onSelect,
-}: {
-  item: MentionItem;
-  onSelect: (item: MentionItem) => void;
-}) {
-  return (
-    <button className="ask-reference-item" onClick={() => onSelect(item)}>
-      <span className="ask-reference-item-icon">
-        {item.kind === 'concept' ? <Icon.Wiki /> : <SourceTypeIcon type={item.type ?? 'file'} />}
-      </span>
-      <span className="ask-reference-item-copy">
-        <span className="ask-reference-item-title">{item.title}</span>
-        <span className="ask-reference-item-subtitle">{item.subtitle}</span>
-      </span>
-    </button>
-  );
-}
-
-function CitedList({ ids, onClick }: { ids: string[]; onClick: (id: string) => void }) {
-  const concepts = useLiveQuery(async () => {
-    const db = getDb();
-    const items = await Promise.all(ids.map((id) => db.concepts.get(id)));
-    return items.filter(Boolean);
-  }, [ids.join(',')]);
-
-  if (!concepts) return null;
-  return (
-    <>
-      {concepts.map((c) => (
-        <button key={c!.id} className="ms-item" onClick={() => onClick(c!.id)}>
-          {c!.title}
-        </button>
-      ))}
-    </>
   );
 }
 

@@ -12,6 +12,53 @@
     "output/"
   ],
   "rules": {
+    "import/no-restricted-paths": [
+      "error",
+      {
+        "zones": [
+          {
+            "target": [
+              "./components/**",
+              "./app/page.tsx",
+              "./app/layout.tsx",
+              "./app/global-error.tsx",
+              "./app/review/**",
+              "./app/sync/**"
+            ],
+            "from": [
+              "./lib/server-db.*",
+              "./lib/server-auth.*",
+              "./lib/server-ingest.*",
+              "./lib/server-logger.*",
+              "./lib/gateway.*",
+              "./lib/embedding.*",
+              "./lib/repair-worker.*",
+              "./lib/rate-limit.*",
+              "./lib/request-guards.*",
+              "./lib/request-context.*",
+              "./lib/review-queue.*",
+              "./lib/analysis-worker.*",
+              "./lib/model-runs.*",
+              "./lib/wiki-db.*",
+              "./lib/wiki-chunk.*",
+              "./lib/wiki-compiler.*",
+              "./lib/sync-observability.*",
+              "./lib/github-sync-runner.*",
+              "./lib/github-sync.*",
+              "./lib/observability/**",
+              "./lib/logging.*",
+              "./lib/circuit-breaker.*"
+            ],
+            "message": "Server-only modules (Node.js APIs: better-sqlite3, node:fs, node:crypto, process.env, etc.) must not be imported from client-side code. Use app/api/ routes as the interface layer."
+          },
+          {
+            "target": ["./app/api/**"],
+            "from": ["./lib/db.ts", "./lib/store.ts"],
+            "message": "Client-side DB (Dexie/IDB) and Zustand store must not be imported from server API routes. Use lib/server-db.ts (better-sqlite3) for server-side data access."
+          }
+        ]
+      }
+    ],
     "@typescript-eslint/naming-convention": [
       "error",
       {

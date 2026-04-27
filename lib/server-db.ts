@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { normalizeCategoryState } from './category-normalization';
+import { instrumentDatabase } from './observability/query-analyzer';
 import type {
   Source,
   Concept,
@@ -56,6 +57,10 @@ function getHolder(): Holder {
   db.pragma('busy_timeout = 3000');
 
   runMigrations(db);
+  // After migrations finish, install the query analyzer so every prepared
+  // statement records its fingerprint, duration, and error state into the
+  // active query scope. Disabled by setting COMPOUND_DISABLE_QUERY_ANALYZER=1.
+  instrumentDatabase(db);
 
   const holder: Holder = { db, path: dbPath };
   g[globalKey] = holder;
@@ -407,6 +412,14 @@ function mapRowsById<T extends { id: string }>(rows: T[]): Map<string, T> {
   return new Map(rows.map((row) => [row.id, row]));
 }
 
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, '\\$&');
+}
+
+function jsonArrayValueLikePattern(value: string): string {
+  return `%${escapeLikePattern(JSON.stringify(value))}%`;
+}
+
 function rowToActivity(r: ActivityRow): ActivityLog {
   return {
     id: r.id,
@@ -594,8 +607,8 @@ export const repo = {
     if (!oldSourceId || !newSourceId || oldSourceId === newSourceId) return 0;
 
     const rows = getServerDb()
-      .prepare(`SELECT * FROM concepts WHERE sources LIKE ?`)
-      .all(`%\"${oldSourceId}\"%`) as ConceptRow[];
+      .prepare(`SELECT * FROM concepts WHERE sources LIKE ? ESCAPE '\\'`)
+      .all(jsonArrayValueLikePattern(oldSourceId)) as ConceptRow[];
 
     let changed = 0;
     for (const row of rows) {
@@ -672,8 +685,8 @@ export const repo = {
   replaceRelatedId(oldId: string, newId: string | null, updatedAt = Date.now()): number {
     if (!oldId) return 0;
     const rows = getServerDb()
-      .prepare(`SELECT * FROM concepts WHERE related LIKE ?`)
-      .all(`%\"${oldId}\"%`) as ConceptRow[];
+      .prepare(`SELECT * FROM concepts WHERE related LIKE ? ESCAPE '\\'`)
+      .all(jsonArrayValueLikePattern(oldId)) as ConceptRow[];
     let changed = 0;
     for (const row of rows) {
       const concept = rowToConcept(row);

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,10 +12,11 @@ const coverageRawDir = path.join(coverageDir, 'v8');
 const coverageSummaryPath = path.join(coverageDir, 'coverage-summary.json');
 const coverageMarkdownPath = path.join(coverageDir, 'coverage-summary.md');
 const coverageEnabled = process.argv.includes('--coverage');
-const testFiles = readdirSync(libDir)
-  .filter((name) => name.endsWith('.test.ts'))
-  .sort()
-  .map((name) => path.join('lib', name));
+const componentDir = path.join(root, 'components');
+const testFiles = [
+  ...collectTestFiles(libDir).filter((file) => file.endsWith('.test.ts')),
+  ...collectTestFiles(componentDir).filter((file) => file.endsWith('.test.tsx')),
+].sort();
 const sourceFiles = coverageEnabled
   ? readdirSync(libDir)
       .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
@@ -52,6 +53,8 @@ const tsc = spawnSync(
     'es2022',
     '--lib',
     'es2022,dom',
+    '--jsx',
+    'react-jsx',
     '--esModuleInterop',
     '--skipLibCheck',
     ...sourceFiles,
@@ -67,7 +70,9 @@ if (tsc.status !== 0) {
   process.exit(tsc.status ?? 1);
 }
 
-const compiledTests = testFiles.map((file) => path.join(outDir, file.replace(/\.ts$/, '.js')));
+const compiledTests = testFiles.map((file) =>
+  path.join(outDir, file.replace(/\.(ts|tsx)$/, '.js')),
+);
 const nodeArgs = ['--test'];
 if (coverageEnabled) {
   nodeArgs.push(
@@ -98,6 +103,22 @@ if (coverageEnabled) {
 }
 
 process.exit(0);
+
+function collectTestFiles(dir) {
+  if (!existsSync(dir)) return [];
+  const result = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const absolute = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      result.push(...collectTestFiles(absolute));
+      continue;
+    }
+    if (entry.name.endsWith('.test.ts') || entry.name.endsWith('.test.tsx')) {
+      result.push(path.relative(root, absolute));
+    }
+  }
+  return result;
+}
 
 function writeCoverageSummary(sourceFiles) {
   const compiledSources = sourceFiles.map((file) =>

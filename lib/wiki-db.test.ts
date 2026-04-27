@@ -55,6 +55,92 @@ test('replaceSourceIdInConcepts 会把旧 source 引用替换成新 source', asy
   });
 });
 
+test('replaceSourceIdInConcepts 能处理需要 JSON 和 LIKE 转义的 source id', async (t) => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'compound-server-db-'));
+  const previousDataDir = process.env.DATA_DIR;
+
+  process.env.DATA_DIR = tempDir;
+  closeServerDbGlobal();
+
+  const { repo } = await import('./server-db');
+
+  const now = Date.now();
+  repo.upsertConcept({
+    id: 'c-escaped-source',
+    title: '特殊资料引用',
+    summary: '特殊资料引用摘要',
+    body: '特殊资料引用正文',
+    sources: ['s-"old_%', 's-other'],
+    related: [],
+    createdAt: now,
+    updatedAt: now,
+    version: 1,
+    categories: [],
+    categoryKeys: [],
+  });
+
+  const touchedAt = now + 1000;
+  const changed = repo.replaceSourceIdInConcepts('s-"old_%', 's-new', touchedAt);
+  const concept = repo.getConcept('c-escaped-source');
+
+  assert.equal(changed, 1);
+  assert.deepEqual(concept?.sources, ['s-new', 's-other']);
+  assert.equal(concept?.updatedAt, touchedAt);
+
+  t.after(() => {
+    closeServerDbGlobal();
+    if (previousDataDir === undefined) {
+      delete process.env.DATA_DIR;
+    } else {
+      process.env.DATA_DIR = previousDataDir;
+    }
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+});
+
+test('replaceRelatedId 能处理需要 JSON 和 LIKE 转义的 related id', async (t) => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'compound-server-db-'));
+  const previousDataDir = process.env.DATA_DIR;
+
+  process.env.DATA_DIR = tempDir;
+  closeServerDbGlobal();
+
+  const { repo } = await import('./server-db');
+
+  const now = Date.now();
+  repo.upsertConcept({
+    id: 'c-escaped-related',
+    title: '特殊关联',
+    summary: '特殊关联摘要',
+    body: '特殊关联正文',
+    sources: [],
+    related: ['c-"old_%', 'c-other'],
+    createdAt: now,
+    updatedAt: now,
+    version: 1,
+    categories: [],
+    categoryKeys: [],
+  });
+
+  const touchedAt = now + 1000;
+  const changed = repo.replaceRelatedId('c-"old_%', 'c-new', touchedAt);
+  const concept = repo.getConcept('c-escaped-related');
+
+  assert.equal(changed, 1);
+  assert.deepEqual(concept?.related, ['c-new', 'c-other']);
+  assert.equal(concept?.updatedAt, touchedAt);
+
+  t.after(() => {
+    closeServerDbGlobal();
+    if (previousDataDir === undefined) {
+      delete process.env.DATA_DIR;
+    } else {
+      process.env.DATA_DIR = previousDataDir;
+    }
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+});
+
 test('rebuildAllIndexes 会从现有资料回填 chunk 和 evidence', async (t) => {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), 'compound-wiki-db-'));
   const previousDataDir = process.env.DATA_DIR;
