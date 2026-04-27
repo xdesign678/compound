@@ -407,6 +407,14 @@ function mapRowsById<T extends { id: string }>(rows: T[]): Map<string, T> {
   return new Map(rows.map((row) => [row.id, row]));
 }
 
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, '\\$&');
+}
+
+function jsonArrayValueLikePattern(value: string): string {
+  return `%${escapeLikePattern(JSON.stringify(value))}%`;
+}
+
 function rowToActivity(r: ActivityRow): ActivityLog {
   return {
     id: r.id,
@@ -594,8 +602,8 @@ export const repo = {
     if (!oldSourceId || !newSourceId || oldSourceId === newSourceId) return 0;
 
     const rows = getServerDb()
-      .prepare(`SELECT * FROM concepts WHERE sources LIKE ?`)
-      .all(`%\"${oldSourceId}\"%`) as ConceptRow[];
+      .prepare(`SELECT * FROM concepts WHERE sources LIKE ? ESCAPE '\\'`)
+      .all(jsonArrayValueLikePattern(oldSourceId)) as ConceptRow[];
 
     let changed = 0;
     for (const row of rows) {
@@ -672,8 +680,8 @@ export const repo = {
   replaceRelatedId(oldId: string, newId: string | null, updatedAt = Date.now()): number {
     if (!oldId) return 0;
     const rows = getServerDb()
-      .prepare(`SELECT * FROM concepts WHERE related LIKE ?`)
-      .all(`%\"${oldId}\"%`) as ConceptRow[];
+      .prepare(`SELECT * FROM concepts WHERE related LIKE ? ESCAPE '\\'`)
+      .all(jsonArrayValueLikePattern(oldId)) as ConceptRow[];
     let changed = 0;
     for (const row of rows) {
       const concept = rowToConcept(row);
