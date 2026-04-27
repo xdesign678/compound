@@ -20,6 +20,8 @@
   --border: var(--border-default);
   --surface-subtle: var(--bg-hover);
 
+  --prose-font-size: 16px;
+
   --font-sans: var(--font-inter), Inter, system-ui, -apple-system, sans-serif;
   --font-reading:
     var(--font-lora), var(--font-noto-serif-sc), 'Noto Serif SC', Georgia, 'Times New Roman', serif;
@@ -856,7 +858,7 @@ button {
 }
 .prose {
   font-family: var(--font-reading);
-  font-size: 17px;
+  font-size: var(--prose-font-size, 16px);
   line-height: var(--leading-relaxed);
   color: var(--text-body);
   word-wrap: break-word;
@@ -943,7 +945,7 @@ button {
 }
 .prose h2 {
   font-family: var(--font-sans);
-  font-size: 24px;
+  font-size: calc(var(--prose-font-size, 16px) * 1.5);
   font-weight: 600;
   color: var(--text-primary);
   margin: 64px 0 32px;
@@ -951,7 +953,7 @@ button {
 }
 .prose h3 {
   font-family: var(--font-sans);
-  font-size: 18px;
+  font-size: calc(var(--prose-font-size, 16px) * 1.25);
   font-weight: 600;
   color: var(--text-primary);
   margin: 40px 0 16px;
@@ -966,7 +968,7 @@ button {
 }
 .prose code {
   font-family: var(--font-mono);
-  font-size: 13.5px;
+  font-size: calc(var(--prose-font-size, 16px) * 0.875);
   background: var(--bg-muted);
   padding: 2px 7px;
   border-radius: 6px;
@@ -1372,7 +1374,7 @@ button {
 }
 .source-editor-content {
   font-family: var(--font-reading);
-  font-size: 17px;
+  font-size: var(--prose-font-size, 16px);
   line-height: var(--leading-relaxed);
   color: var(--text-body);
   min-height: 46vh;
@@ -4295,7 +4297,7 @@ body {
 .msg-user,
 .msg-ai-body {
   font-family: var(--font-reading);
-  font-size: 17px;
+  font-size: var(--prose-font-size, 16px);
   line-height: 1.6;
   color: var(--text-body);
 }
