@@ -26,6 +26,13 @@ X-Compound-Admin-Token: <token>
 
 The Settings drawer also has a local “访问保护” field for saving the same token in the current browser.
 
+## Architecture
+
+For a deep dive on services, data flow, external dependencies and background
+workers, see [`docs/architecture.md`](docs/architecture.md). It includes
+Mermaid diagrams for the system overview, GitHub sync pipeline, query flow,
+review/repair loop, and deployment topology.
+
 ## Local development
 
 ```bash
