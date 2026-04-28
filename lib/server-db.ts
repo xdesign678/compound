@@ -188,7 +188,7 @@ function runMigrations(db: DB): void {
  * Schema revision identifies the normalization routine. Bump this string when
  * `normalizeCategoryState` rules change and we need to re-run on every row.
  */
-const CATEGORY_NORMALIZATION_REVISION = '2025-01-categories-v1';
+const CATEGORY_NORMALIZATION_REVISION = '2026-04-categories-v2';
 
 function runCategoryNormalizationIfNeeded(db: DB): void {
   const row = db

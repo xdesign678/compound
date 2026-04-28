@@ -98,6 +98,26 @@ export class CompoundDB extends Dexie {
             }),
         ]);
       });
+    this.version(8)
+      .stores({
+        sources: 'id, ingestedAt, type, externalKey',
+        concepts: 'id, updatedAt, createdAt, *sources, *related, *categoryKeys',
+        activity: 'id, at, type, [type+at]',
+        askHistory: 'id, at',
+      })
+      .upgrade((tx) => {
+        return tx
+          .table('concepts')
+          .toCollection()
+          .modify((concept) => {
+            const normalized = normalizeCategoryState({
+              categories: concept.categories || [],
+              categoryKeys: concept.categoryKeys || [],
+            });
+            concept.categories = normalized.categories;
+            concept.categoryKeys = normalized.categoryKeys;
+          });
+      });
   }
 }
 
