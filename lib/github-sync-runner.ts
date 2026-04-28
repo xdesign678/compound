@@ -29,6 +29,10 @@ import { logger } from './logging';
 const MAX_LOG_ENTRIES = 50;
 const STALE_JOB_MAX_AGE_MS = Number(process.env.COMPOUND_SYNC_STALE_MS || 10 * 60 * 1000);
 const HARD_DELETE_MODE = process.env.COMPOUND_GITHUB_DELETE_MODE === 'hard';
+const DOWNLOAD_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.COMPOUND_GITHUB_DOWNLOAD_CONCURRENCY || 4),
+);
 
 interface LogEntry {
   at: number;
@@ -359,15 +363,8 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
     return;
   }
 
-  for (const [index, item] of plan.entries()) {
-    const legacy = repo.getSyncJob(jobId);
-    if (!legacy || legacy.status !== 'running') {
-      syncObs.finishRun(runId, 'cancelled', 'legacy job stopped');
-      cancelAnalysisJobs({ runId });
-      return;
-    }
-
-    const itemId = syncObs.upsertRunItem({
+  for (const item of plan) {
+    syncObs.upsertRunItem({
       id: item.itemId,
       runId,
       path: item.path,
@@ -379,6 +376,21 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
       status: 'queued',
       stage: item.action === 'delete' ? 'delete' : 'download',
     });
+  }
+
+  let cancelled = false;
+  let nextIndex = 0;
+
+  const processPlanItem = async (item: PlanItem, index: number): Promise<void> => {
+    const legacy = repo.getSyncJob(jobId);
+    if (!legacy || legacy.status !== 'running') {
+      if (!cancelled) {
+        cancelled = true;
+        syncObs.finishRun(runId, 'cancelled', 'legacy job stopped');
+        cancelAnalysisJobs({ runId });
+      }
+      return;
+    }
 
     repo.updateSyncJob(jobId, { current: `[${index + 1}/${plan.length}] ${item.path}` });
     syncObs.updateRun(runId, {
@@ -398,7 +410,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
           wikiRepo.deleteSourceArtifacts(item.existingSourceId);
           repo.deleteSource(item.existingSourceId);
         }
-        syncObs.updateRunItem(itemId, {
+        syncObs.updateRunItem(item.itemId, {
           status: 'succeeded',
           stage: 'complete',
           finished_at: Date.now(),
@@ -406,7 +418,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
         bumpLegacy(jobId, 'done', `已处理删除：${item.path}`);
         syncObs.recordEvent({
           runId,
-          itemId,
+          itemId: item.itemId,
           stage: 'delete',
           path: item.path,
           level: 'success',
@@ -414,7 +426,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        syncObs.updateRunItem(itemId, {
+        syncObs.updateRunItem(item.itemId, {
           status: 'failed',
           stage: 'delete',
           error: message,
@@ -424,7 +436,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
       }
       maybeFinishRun(runId);
       maybeFinishLegacyJob(jobId);
-      continue;
+      return;
     }
 
     try {
@@ -438,9 +450,10 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
           path: item.path,
         },
       );
+      if (cancelled) return;
       queueGithubIngestJob({
         runId,
-        itemId,
+        itemId: item.itemId,
         legacyJobId: jobId,
         repoSlug,
         branch: cfg.branch,
@@ -451,17 +464,18 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
         rawContent: remoteFile.content,
         replaceSourceId: item.existingSourceId ?? null,
       });
-      syncObs.updateRunItem(itemId, { status: 'queued', stage: 'ingest', error: null });
+      syncObs.updateRunItem(item.itemId, { status: 'queued', stage: 'ingest', error: null });
       syncObs.recordEvent({
         runId,
-        itemId,
+        itemId: item.itemId,
         stage: 'ingest',
         path: item.path,
         message: '已下载并加入分析队列',
       });
+      startAnalysisWorker('github-sync-stream');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      syncObs.updateRunItem(itemId, {
+      syncObs.updateRunItem(item.itemId, {
         status: 'failed',
         stage: 'download',
         error: message,
@@ -470,7 +484,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
       bumpLegacy(jobId, 'failed', `下载失败：${item.path}`);
       syncObs.recordEvent({
         runId,
-        itemId,
+        itemId: item.itemId,
         stage: 'download',
         path: item.path,
         level: 'error',
@@ -479,6 +493,25 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
       maybeFinishRun(runId);
       maybeFinishLegacyJob(jobId);
     }
+  };
+
+  const processQueue = async (): Promise<void> => {
+    while (!cancelled) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= plan.length) return;
+      const item = plan[index];
+      if (!item) return;
+      await processPlanItem(item, index);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(DOWNLOAD_CONCURRENCY, plan.length) }, () => processQueue()),
+  );
+
+  if (cancelled) {
+    return;
   }
 
   maybeFinishLegacyJob(jobId);

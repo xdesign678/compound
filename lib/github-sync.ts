@@ -47,6 +47,10 @@ export interface GithubFileContent {
 const GITHUB_API_BASE = 'https://api.github.com';
 const DEFAULT_BRANCH = 'main';
 
+function encodeContentPath(path: string): string {
+  return path.split('/').map(encodeURIComponent).join('/');
+}
+
 function parseRepoSlug(raw: string): { owner: string; repo: string } {
   const cleaned = raw.trim().replace(/\.git$/, '');
   // Support full URLs: https://github.com/owner/repo
@@ -151,7 +155,7 @@ export async function fetchMarkdownContent(
   cfg: GithubConfig = getGithubConfig(),
   knownSha?: string,
 ): Promise<GithubFileContent> {
-  const url = `${GITHUB_API_BASE}/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(
+  const url = `${GITHUB_API_BASE}/repos/${cfg.owner}/${cfg.repo}/contents/${encodeContentPath(
     path,
   )}?ref=${encodeURIComponent(cfg.branch)}`;
 
