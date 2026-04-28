@@ -1,17 +1,48 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type CSSProperties } from 'react';
 import {
   fetchCustomModels,
   getLlmConfig,
   modelLabel,
   PRESET_MODELS,
   rememberCustomModelOnServer,
+  removeCustomModelOnServer,
   saveLlmConfig,
 } from '@/lib/llm-config';
 import { clearAdminToken, getAdminToken, saveAdminToken } from '@/lib/admin-auth-client';
 import type { LlmConfig } from '@/lib/types';
 import { Icon } from '../Icons';
+
+const MODEL_CHIP_STYLE: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  paddingRight: 6,
+};
+
+const MODEL_CHIP_LABEL_STYLE: CSSProperties = {
+  border: 0,
+  background: 'transparent',
+  color: 'inherit',
+  font: 'inherit',
+  cursor: 'pointer',
+  padding: '0 2px 0 0',
+};
+
+const MODEL_CHIP_DELETE_STYLE: CSSProperties = {
+  width: 22,
+  height: 22,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: 0,
+  borderRadius: 999,
+  background: 'transparent',
+  color: 'inherit',
+  cursor: 'pointer',
+  padding: 0,
+};
 
 export function ModelTab() {
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
@@ -49,6 +80,19 @@ export function ModelTab() {
     }
     setLlmSaved(true);
     safeTimeout(() => setLlmSaved(false), 2000);
+  }
+
+  async function removeCustomModel(model: string) {
+    const models = await removeCustomModelOnServer(model).catch(() =>
+      customModels.filter((item) => item !== model),
+    );
+    setCustomModels(models);
+    setLlmConfig((config) => {
+      if (config.model !== model) return config;
+      const next = { ...config, model: '' };
+      saveLlmConfig(next);
+      return next;
+    });
   }
 
   function saveAdmin() {
@@ -91,7 +135,7 @@ export function ModelTab() {
         </label>
 
         <div className="settings-preset-row">
-          {[...PRESET_MODELS.map((item) => item.value), ...customModels].map((model) => (
+          {PRESET_MODELS.map((item) => item.value).map((model) => (
             <button
               key={model}
               className={`settings-preset${llmConfig.model === model ? ' active' : ''}`}
@@ -100,6 +144,31 @@ export function ModelTab() {
             >
               {modelLabel(model)}
             </button>
+          ))}
+          {customModels.map((model) => (
+            <span
+              key={model}
+              className={`settings-preset${llmConfig.model === model ? ' active' : ''}`}
+              style={MODEL_CHIP_STYLE}
+              title={model}
+            >
+              <button
+                type="button"
+                style={MODEL_CHIP_LABEL_STYLE}
+                onClick={() => setLlmConfig((c) => ({ ...c, model }))}
+              >
+                {modelLabel(model)}
+              </button>
+              <button
+                type="button"
+                style={MODEL_CHIP_DELETE_STYLE}
+                aria-label={`删除模型 ${modelLabel(model)}`}
+                title="删除"
+                onClick={() => void removeCustomModel(model)}
+              >
+                <Icon.Trash />
+              </button>
+            </span>
           ))}
         </div>
 

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { listCustomModels, saveCustomModel } from '@/lib/model-history';
+import { listCustomModels, removeCustomModel, saveCustomModel } from '@/lib/model-history';
 import { requireAdmin } from '@/lib/server-auth';
 
 export const runtime = 'nodejs';
@@ -28,4 +28,23 @@ export async function POST(req: Request) {
       : '';
 
   return NextResponse.json({ models: saveCustomModel(model) });
+}
+
+export async function DELETE(req: Request) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    body = {};
+  }
+
+  const model =
+    typeof (body as { model?: unknown }).model === 'string'
+      ? (body as { model: string }).model
+      : '';
+
+  return NextResponse.json({ models: removeCustomModel(model) });
 }

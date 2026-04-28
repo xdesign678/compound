@@ -39,6 +39,17 @@ export function rememberCustomModel(
   return Array.from(new Set([normalized, ...cleanedExisting])).slice(0, MAX_CUSTOM_MODELS);
 }
 
+export function forgetCustomModel(
+  existingModels: string[],
+  model: string,
+  presetValues: ReadonlySet<string> = PRESET_MODEL_VALUES,
+): string[] {
+  const normalized = normalizeModel(model);
+  return rememberCustomModel(existingModels, '', presetValues).filter(
+    (item) => item !== normalized,
+  );
+}
+
 export function listCustomModels(): string[] {
   const row = getServerDb().prepare(`SELECT value FROM meta WHERE key = ?`).get(META_KEY) as
     | { value: string }
@@ -48,6 +59,14 @@ export function listCustomModels(): string[] {
 
 export function saveCustomModel(model: string): string[] {
   const next = rememberCustomModel(listCustomModels(), model);
+  getServerDb()
+    .prepare(`INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)`)
+    .run(META_KEY, JSON.stringify(next));
+  return next;
+}
+
+export function removeCustomModel(model: string): string[] {
+  const next = forgetCustomModel(listCustomModels(), model);
   getServerDb()
     .prepare(`INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)`)
     .run(META_KEY, JSON.stringify(next));

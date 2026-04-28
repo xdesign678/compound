@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { rememberCustomModel } from './model-history';
+import { forgetCustomModel, rememberCustomModel } from './model-history';
 
 const presetValues = new Set(['anthropic/claude-sonnet-4.6', 'openai/gpt-4o']);
 
@@ -33,4 +33,11 @@ test('rememberCustomModel keeps only recent custom models', () => {
   assert.equal(remembered.length, 20);
   assert.equal(remembered[0], 'provider/latest');
   assert.equal(remembered.at(-1), 'provider/model-18');
+});
+
+test('forgetCustomModel removes one normalized custom model', () => {
+  const existing = ['deepseek/deepseek-r1', 'xai/grok-4'];
+  assert.deepEqual(forgetCustomModel(existing, '  deepseek/deepseek-r1  ', presetValues), [
+    'xai/grok-4',
+  ]);
 });

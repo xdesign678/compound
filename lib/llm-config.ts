@@ -56,6 +56,25 @@ export async function rememberCustomModelOnServer(model: string): Promise<string
     : [];
 }
 
+export async function removeCustomModelOnServer(model: string): Promise<string[]> {
+  const trimmed = model.trim();
+  if (!trimmed || PRESET_MODELS.some((item) => item.value === trimmed)) return fetchCustomModels();
+
+  const res = await fetch('/api/settings/models', {
+    method: 'DELETE',
+    headers: withRequestId({
+      'Content-Type': 'application/json',
+      ...getAdminAuthHeaders(),
+    }),
+    body: JSON.stringify({ model: trimmed }),
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { models?: unknown };
+  return Array.isArray(data.models)
+    ? data.models.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
 export function modelLabel(model: string): string {
   const preset = PRESET_MODELS.find((item) => item.value === model);
   if (preset) return preset.label;
