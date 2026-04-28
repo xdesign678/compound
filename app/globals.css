@@ -899,9 +899,51 @@ button {
 }
 .concept-body-prose {
   text-wrap: pretty;
+  hanging-punctuation: allow-end last;
+  -webkit-hyphens: auto;
+  hyphens: auto;
 }
 .concept-body-prose > *:last-child {
   margin-bottom: 0;
+}
+.concept-body-prose p,
+.concept-body-prose li {
+  text-align: justify;
+  text-justify: inter-ideograph;
+  text-justify: inter-character;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.concept-body-prose p {
+  margin: 0 0 22px;
+  line-height: 1.85;
+  letter-spacing: 0.01em;
+}
+.concept-body-prose ul,
+.concept-body-prose ol {
+  padding-left: 24px;
+  margin: 0 0 22px;
+}
+.concept-body-prose li {
+  margin-bottom: 10px;
+  line-height: 1.85;
+  letter-spacing: 0.01em;
+}
+.concept-body-prose li::marker {
+  color: var(--text-tertiary);
+}
+.concept-body-prose blockquote {
+  margin: 28px 0;
+  padding: 4px 0 4px 22px;
+  border-left: 2px solid var(--border-section);
+  color: var(--text-secondary);
+}
+.concept-body-prose blockquote p {
+  margin-bottom: 8px;
+}
+.concept-body-prose h2,
+.concept-body-prose h3 {
+  text-wrap: balance;
 }
 
 /* ConceptDetail skeleton loading */
