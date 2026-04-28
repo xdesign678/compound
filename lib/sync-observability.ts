@@ -89,7 +89,7 @@ export interface SyncDashboard {
   activeItems: SyncRunItemRow[];
   failedItems: SyncRunItemRow[];
   events: SyncEventRow[];
-  coverage: Record<string, number | boolean>;
+  coverage: Record<string, number | string | boolean>;
   itemStats: Array<{ stage: string; status: string; count: number }>;
   analysisStats: Array<{ stage: string; status: string; count: number }>;
   errorStats: Array<{ error: string; count: number; lastAt: number }>;

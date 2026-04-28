@@ -4,6 +4,7 @@ import { syncObs } from '@/lib/sync-observability';
 import { getEmbeddingMetrics } from '@/lib/embedding';
 import { getReviewMetrics } from '@/lib/review-queue';
 import { startAnalysisWorker } from '@/lib/analysis-worker';
+import { deriveStory } from '@/lib/sync-narrative';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
 import { logger } from '@/lib/server-logger';
 
@@ -13,7 +14,9 @@ export const maxDuration = 10;
 /**
  * Aggregate dashboard payload for the `/sync` page. Starts the analysis
  * worker on-demand, then returns the live sync observability snapshot
- * merged with embedding coverage and review-queue metrics.
+ * merged with embedding coverage and review-queue metrics, plus the
+ * `story` block (narrative / phases / health / lastRun) used by the
+ * V3 console for a single-glance summary.
  *
  * Guards: admin token.
  */
@@ -24,14 +27,16 @@ export const GET = withRequestTracing(async (req: Request) => {
   try {
     startAnalysisWorker('dashboard-poll');
     const dashboard = syncObs.getDashboard();
-    return NextResponse.json({
+    const merged = {
       ...dashboard,
       coverage: {
         ...dashboard.coverage,
         ...getEmbeddingMetrics(),
         ...getReviewMetrics(),
       },
-    });
+    };
+    const story = deriveStory(merged);
+    return NextResponse.json({ ...merged, story });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('sync.dashboard.failed', { error: message });

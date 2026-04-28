@@ -99,6 +99,70 @@ export interface ThroughputBucket {
   failed: number;
 }
 
+export type NarrativeNextAction = 'sync' | 'wait' | 'retry' | 'review' | 'cancel';
+export type NarrativeTone = 'idle' | 'running' | 'error' | 'stalled' | 'done' | 'review';
+
+export interface SyncNarrative {
+  headline: string;
+  subline: string;
+  nextAction: NarrativeNextAction;
+  tone: NarrativeTone;
+}
+
+export type PhaseKey = 'fetch' | 'analyze' | 'publish';
+export type PhaseStatus = 'pending' | 'running' | 'done' | 'failed';
+
+export interface PhaseInfo {
+  key: PhaseKey;
+  label: string;
+  description: string;
+  status: PhaseStatus;
+  done: number;
+  total: number;
+  failed: number;
+  running: number;
+  queued: number;
+  rawStages: PipelineStage[];
+}
+
+export interface SyncPhases {
+  fetch: PhaseInfo;
+  analyze: PhaseInfo;
+  publish: PhaseInfo;
+}
+
+export type HealthScore = 'healthy' | 'warning' | 'critical';
+
+export interface HealthDetail {
+  label: string;
+  value: string;
+  tone: 'good' | 'warn' | 'bad' | 'neutral';
+}
+
+export interface SyncHealth {
+  score: HealthScore;
+  summary: string;
+  details: HealthDetail[];
+}
+
+export interface LastRunSnapshot {
+  finishedAt: number;
+  ageMs: number;
+  durationMs: number | null;
+  conceptsDelta: number;
+  filesProcessed: number;
+  status: string;
+  repo: string | null;
+  branch: string | null;
+}
+
+export interface DashboardStory {
+  narrative: SyncNarrative;
+  phases: SyncPhases;
+  health: SyncHealth;
+  lastRun: LastRunSnapshot | null;
+}
+
 export interface Dashboard {
   now?: number;
   activeRun: SyncRun | null;
@@ -113,6 +177,7 @@ export interface Dashboard {
   health: RunHealth;
   throughput: ThroughputBucket[];
   itemSummary: Record<SyncItemStatus, number>;
+  story?: DashboardStory;
 }
 
 export const STATUS_TEXT: Record<string, string> = {

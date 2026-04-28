@@ -6,8 +6,8 @@
 
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
-- Routes: **28**
-- Handlers (HTTP methods): **32**
+- Routes: **29**
+- Handlers (HTTP methods): **33**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
@@ -45,6 +45,7 @@ This document is generated automatically from the Next.js Route Handlers under `
   - [`/api/sync/github/run`](#api-sync-github-run)
   - [`/api/sync/github/webhook`](#api-sync-github-webhook)
   - [`/api/sync/retry`](#api-sync-retry)
+  - [`/api/sync/run`](#api-sync-run)
   - [`/api/sync/status`](#api-sync-status)
   - [`/api/sync/worker`](#api-sync-worker)
 - **wiki**
@@ -385,7 +386,9 @@ Source: [`app/api/sync/dashboard/route.ts`](../app/api/sync/dashboard/route.ts)
 
 Aggregate dashboard payload for the `/sync` page. Starts the analysis
 worker on-demand, then returns the live sync observability snapshot
-merged with embedding coverage and review-queue metrics.
+merged with embedding coverage and review-queue metrics, plus the
+`story` block (narrative / phases / health / lastRun) used by the
+V3 console for a single-glance summary.
 
 Guards: admin token.
 
@@ -478,6 +481,35 @@ Source: [`app/api/sync/retry/route.ts`](../app/api/sync/retry/route.ts)
 #### POST
 
 _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` block in `app/api/sync/retry/route.ts` to document this endpoint._
+
+### `/api/sync/run`
+
+Source: [`app/api/sync/run/route.ts`](../app/api/sync/run/route.ts)
+
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `POST`        |
+| Runtime     | `nodejs`      |
+| maxDuration | 30            |
+| Guards      | `admin-token` |
+
+#### POST
+
+POST /api/sync/run
+
+One-button entrypoint used by the V3 console. Delegates to the existing
+primitives so the user does not have to choose between "sync" / "worker" /
+"retry":
+
+1. start a new GitHub sync run (or wake the existing one)
+2. retry any previously failed analysis jobs
+3. wake the analysis worker
+
+The legacy `/api/sync/github/run`, `/api/sync/worker`, and `/api/sync/retry`
+routes stay around so the advanced drawer can still trigger them
+individually.
+
+Guards: admin token + sync rate-limit.
 
 ### `/api/sync/status`
 
