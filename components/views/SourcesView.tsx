@@ -1,6 +1,14 @@
 'use client';
 
-import { useEffect, useState, useDeferredValue, useMemo } from 'react';
+import {
+  useEffect,
+  useState,
+  useDeferredValue,
+  useMemo,
+  useCallback,
+  useRef,
+  useLayoutEffect,
+} from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
@@ -8,15 +16,31 @@ import { formatRelativeTime } from '@/lib/format';
 import { Icon, SourceTypeIcon } from '../Icons';
 
 const PAGE_SIZE = 50;
+const SCROLL_ROOT_SELECTOR = '.app-main';
 
 export function SourcesView() {
   const openSource = useAppStore((s) => s.openSource);
   const openModal = useAppStore((s) => s.openModal);
   const detail = useAppStore((s) => s.detail);
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [query, setQuery] = useState('');
+
+  const query = useAppStore((s) => s.sourcesState.query);
+  const visibleCount = useAppStore((s) => s.sourcesState.visibleCount);
+  const setSourcesState = useAppStore((s) => s.setSourcesState);
+
+  const setQuery = useCallback((v: string) => setSourcesState({ query: v }), [setSourcesState]);
+  const setVisibleCount = useCallback(
+    (updater: number | ((count: number) => number)) => {
+      const current = useAppStore.getState().sourcesState.visibleCount;
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      setSourcesState({ visibleCount: next });
+    },
+    [setSourcesState],
+  );
+
   const deferredQuery = useDeferredValue(query);
   const [scrolled, setScrolled] = useState(false);
+  const filterResetSkipRef = useRef(true);
+  const scrollRestoredRef = useRef(false);
 
   const sources = useLiveQuery(
     async () => getDb().sources.orderBy('ingestedAt').reverse().toArray(),
@@ -61,17 +85,53 @@ export function SourcesView() {
   }, [sources, deferredQuery]);
 
   useEffect(() => {
+    if (filterResetSkipRef.current) {
+      filterResetSkipRef.current = false;
+      return;
+    }
     setVisibleCount(PAGE_SIZE);
-  }, [deferredQuery]);
+  }, [deferredQuery, setVisibleCount]);
 
   useEffect(() => {
-    const main = document.querySelector('.app-main') as HTMLElement | null;
+    const main = document.querySelector(SCROLL_ROOT_SELECTOR) as HTMLElement | null;
     if (!main) return;
-    const onScroll = () => setScrolled(main.scrollTop > 4);
+    let raf = 0;
+    let pendingY: number | null = null;
+    const flush = () => {
+      raf = 0;
+      if (pendingY !== null) {
+        useAppStore.getState().setSourcesState({ scrollTop: pendingY });
+        pendingY = null;
+      }
+    };
+    const onScroll = () => {
+      const y = main.scrollTop;
+      setScrolled(y > 4);
+      pendingY = y;
+      if (!raf) raf = requestAnimationFrame(flush);
+    };
     onScroll();
-    main.addEventListener('scroll', onScroll);
-    return () => main.removeEventListener('scroll', onScroll);
+    main.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      main.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+      if (pendingY !== null) {
+        useAppStore.getState().setSourcesState({ scrollTop: pendingY });
+      }
+    };
   }, []);
+
+  useLayoutEffect(() => {
+    if (scrollRestoredRef.current) return;
+    if (!sources) return;
+    const main = document.querySelector(SCROLL_ROOT_SELECTOR) as HTMLElement | null;
+    if (!main) return;
+    scrollRestoredRef.current = true;
+    const saved = useAppStore.getState().sourcesState.scrollTop;
+    if (saved > 0) {
+      main.scrollTop = saved;
+    }
+  }, [sources]);
 
   if (!sources) return <div className="empty-state">加载中...</div>;
 

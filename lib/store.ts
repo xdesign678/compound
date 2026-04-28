@@ -68,6 +68,20 @@ const DEFAULT_LIBRARY_STATE: LibraryUIState = {
   scrollTop: 0,
 };
 
+export interface SourcesUIState {
+  query: string;
+  visibleCount: number;
+  scrollTop: number;
+}
+
+const DEFAULT_SOURCES_VISIBLE_COUNT = 50;
+
+const DEFAULT_SOURCES_STATE: SourcesUIState = {
+  query: '',
+  visibleCount: DEFAULT_SOURCES_VISIBLE_COUNT,
+  scrollTop: 0,
+};
+
 interface AppState {
   tab: TabId;
   detail: DetailState | null;
@@ -92,6 +106,7 @@ interface AppState {
   searchCollapsed: boolean;
   searchFocusNonce: number;
   libraryState: LibraryUIState;
+  sourcesState: SourcesUIState;
 
   setTab: (t: TabId) => void;
   openConcept: (id: string) => void;
@@ -128,6 +143,8 @@ interface AppState {
   triggerSearchFocus: () => void;
   setLibraryState: (patch: Partial<LibraryUIState>) => void;
   resetLibraryState: () => void;
+  setSourcesState: (patch: Partial<SourcesUIState>) => void;
+  resetSourcesState: () => void;
 }
 
 function readStoredLintTimestamp() {
@@ -211,6 +228,7 @@ export const useAppStore = create<AppState>((set) => ({
   searchCollapsed: false,
   searchFocusNonce: 0,
   libraryState: { ...DEFAULT_LIBRARY_STATE },
+  sourcesState: { ...DEFAULT_SOURCES_STATE },
 
   setTab: (t) => set({ tab: t, detail: null }),
   openConcept: (id) => {
@@ -312,4 +330,6 @@ export const useAppStore = create<AppState>((set) => ({
   triggerSearchFocus: () => set((s) => ({ searchFocusNonce: s.searchFocusNonce + 1 })),
   setLibraryState: (patch) => set((s) => ({ libraryState: { ...s.libraryState, ...patch } })),
   resetLibraryState: () => set({ libraryState: { ...DEFAULT_LIBRARY_STATE } }),
+  setSourcesState: (patch) => set((s) => ({ sourcesState: { ...s.sourcesState, ...patch } })),
+  resetSourcesState: () => set({ sourcesState: { ...DEFAULT_SOURCES_STATE } }),
 }));
