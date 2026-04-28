@@ -320,6 +320,26 @@ export function SourceDetail({ id }: { id: string }) {
             </a>
           </div>
         )}
+        {generatedCount > 0 && (
+          <div className="source-hero-related">
+            <div className="source-hero-related-title">
+              关联概念
+              <span className="source-aside-count">{generatedCount}</span>
+            </div>
+            <div className="source-hero-related-chips">
+              {generatedItems.map((concept) => (
+                <button
+                  key={concept.id}
+                  className="related-chip source-aside-chip"
+                  onClick={() => openConcept(concept.id)}
+                  type="button"
+                >
+                  {concept.title}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </header>
 
       <div className="source-layout">
@@ -430,27 +450,6 @@ export function SourceDetail({ id }: { id: string }) {
         </section>
 
         <aside className="source-layout-aside">
-          {generatedCount > 0 && (
-            <section className="source-aside-section">
-              <div className="source-aside-title">
-                关联概念
-                <span className="source-aside-count">{generatedCount}</span>
-              </div>
-              <div className="source-aside-chips">
-                {generatedItems.map((concept) => (
-                  <button
-                    key={concept.id}
-                    className="related-chip source-aside-chip"
-                    onClick={() => openConcept(concept.id)}
-                    type="button"
-                  >
-                    {concept.title}
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-
           <section className="source-aside-section">
             <div className="source-aside-title">摄入记录</div>
             <ul className="source-aside-log">

@@ -8,10 +8,43 @@ marked.setOptions({
 
 /**
  * Render markdown → HTML, and transform [text](concept:id) into clickable spans
- * that our UI wires to navigation. Also handles [CX] citation footnotes.
+ * that our UI wires to navigation. Also handles [CX] citation footnotes,
+ * Obsidian-style [[wiki-links]] and `tags: [a, b, c]` frontmatter chips.
  */
 export function renderMarkdown(md: string): string {
-  let html = marked.parse(md || '', { async: false }) as string;
+  let source = md || '';
+
+  // 1) Pre-extract Obsidian wiki-links so marked won't mangle them.
+  const wikiLinks: Array<{ target: string; alias: string }> = [];
+  source = source.replace(
+    /\[\[([^\[\]\n|]+?)(?:\|([^\[\]\n]+))?\]\]/g,
+    (_match, target: string, alias?: string) => {
+      const idx = wikiLinks.length;
+      wikiLinks.push({
+        target: target.trim(),
+        alias: (alias ?? target).trim(),
+      });
+      return `\u0000WIKILINK${idx}\u0000`;
+    },
+  );
+
+  // 2) Pre-extract `tags: [a, b, c]` lines as chip rows.
+  const tagBlocks: string[][] = [];
+  source = source.replace(
+    /(^|\n)[\t ]*tags?\s*:\s*\[([^\]\n]*)\][\t ]*(?=\n|$)/gi,
+    (_match, lead: string, list: string) => {
+      const tags = list
+        .split(/[,，]/)
+        .map((t) => t.replace(/^["'](.*)["']$/, '$1').trim())
+        .filter(Boolean);
+      if (tags.length === 0) return _match;
+      const idx = tagBlocks.length;
+      tagBlocks.push(tags);
+      return `${lead}\u0000TAGS${idx}\u0000`;
+    },
+  );
+
+  let html = marked.parse(source, { async: false }) as string;
 
   // [text](concept:id) → custom span
   html = html.replace(
@@ -21,6 +54,22 @@ export function renderMarkdown(md: string): string {
 
   // [CX] citation footnotes → pill
   html = html.replace(/\[C(\d+)\]/g, '<span class="citation" data-citation-index="$1">C$1</span>');
+
+  // Restore wiki-link placeholders → clickable spans.
+  html = html.replace(/\u0000WIKILINK(\d+)\u0000/g, (_match, idx: string) => {
+    const item = wikiLinks[Number(idx)];
+    if (!item) return '';
+    return `<span class="wikilink" data-wikilink="${escapeHTML(item.target)}" role="link" tabindex="0">${escapeHTML(item.alias)}</span>`;
+  });
+
+  // Restore tag-row placeholders → chip lists. Strip surrounding <p> if marked
+  // wrapped the placeholder in a paragraph on its own.
+  html = html.replace(/<p>\s*\u0000TAGS(\d+)\u0000\s*<\/p>/g, (_match, idx: string) =>
+    renderTagsRow(tagBlocks[Number(idx)] ?? []),
+  );
+  html = html.replace(/\u0000TAGS(\d+)\u0000/g, (_match, idx: string) =>
+    renderTagsRow(tagBlocks[Number(idx)] ?? []),
+  );
 
   if (typeof window !== 'undefined') {
     html = DOMPurify.sanitize(html, {
@@ -43,11 +92,26 @@ export function renderMarkdown(md: string): string {
         'br',
         'hr',
       ],
-      ALLOWED_ATTR: ['class', 'data-concept-id', 'data-citation-index', 'href', 'target'],
+      ALLOWED_ATTR: [
+        'class',
+        'data-concept-id',
+        'data-citation-index',
+        'data-wikilink',
+        'href',
+        'target',
+        'role',
+        'tabindex',
+      ],
     });
   }
 
   return html;
+}
+
+function renderTagsRow(tags: string[]): string {
+  if (tags.length === 0) return '';
+  const chips = tags.map((t) => `<span class="content-tag">${escapeHTML(t)}</span>`).join('');
+  return `<span class="content-tags">${chips}</span>`;
 }
 
 export function formatRelativeTime(ts: number): string {

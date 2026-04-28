@@ -4,6 +4,21 @@ import { useEffect, useRef } from 'react';
 import DOMPurify from 'dompurify';
 import { renderMarkdown } from '@/lib/format';
 import { useAppStore } from '@/lib/store';
+import { getDb } from '@/lib/db';
+
+async function resolveWikiLink(
+  title: string,
+): Promise<{ kind: 'source' | 'concept'; id: string } | null> {
+  if (!title) return null;
+  const trimmed = title.trim();
+  if (!trimmed) return null;
+  const db = getDb();
+  const source = await db.sources.filter((s) => s.title === trimmed).first();
+  if (source) return { kind: 'source', id: source.id };
+  const concept = await db.concepts.filter((c) => c.title === trimmed).first();
+  if (concept) return { kind: 'concept', id: concept.id };
+  return null;
+}
 
 /**
  * Renders markdown and wires up inline concept links / citation pills
@@ -20,6 +35,8 @@ export function Prose({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const openConcept = useAppStore((s) => s.openConcept);
+  const openSource = useAppStore((s) => s.openSource);
+  const showToast = useAppStore((s) => s.showToast);
 
   useEffect(() => {
     const el = ref.current;
@@ -30,6 +47,19 @@ export function Prose({
       if (conceptEl) {
         const id = conceptEl.dataset.conceptId;
         if (id) openConcept(id);
+        return;
+      }
+      const wikiEl = target.closest('[data-wikilink]') as HTMLElement | null;
+      if (wikiEl) {
+        const title = wikiEl.dataset.wikilink || '';
+        void resolveWikiLink(title).then((hit) => {
+          if (!hit) {
+            showToast(`未找到 "${title}"`, false, true);
+            return;
+          }
+          if (hit.kind === 'source') openSource(hit.id);
+          else openConcept(hit.id);
+        });
         return;
       }
       const citEl = target.closest('[data-citation-index]') as HTMLElement | null;
@@ -45,7 +75,11 @@ export function Prose({
     const keydownHandler = (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ') {
         const target = e.target as HTMLElement;
-        if (target.closest('[data-concept-id]') || target.closest('[data-citation-index]')) {
+        if (
+          target.closest('[data-concept-id]') ||
+          target.closest('[data-citation-index]') ||
+          target.closest('[data-wikilink]')
+        ) {
           e.preventDefault();
           activate(target);
         }
@@ -55,7 +89,9 @@ export function Prose({
     el.addEventListener('click', clickHandler);
     el.addEventListener('keydown', keydownHandler);
 
-    el.querySelectorAll<HTMLElement>('[data-concept-id], [data-citation-index]').forEach((node) => {
+    el.querySelectorAll<HTMLElement>(
+      '[data-concept-id], [data-citation-index], [data-wikilink]',
+    ).forEach((node) => {
       node.setAttribute('role', 'link');
       node.setAttribute('tabindex', '0');
     });
@@ -64,7 +100,7 @@ export function Prose({
       el.removeEventListener('click', clickHandler);
       el.removeEventListener('keydown', keydownHandler);
     };
-  }, [openConcept, citedConceptIds, markdown]);
+  }, [openConcept, openSource, showToast, citedConceptIds, markdown]);
 
   return (
     <div
