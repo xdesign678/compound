@@ -47,6 +47,16 @@ export interface GithubFileContent {
 const GITHUB_API_BASE = 'https://api.github.com';
 const DEFAULT_BRANCH = 'main';
 
+function readPositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+const GITHUB_FETCH_TIMEOUT_MS = readPositiveInt(
+  process.env.COMPOUND_GITHUB_FETCH_TIMEOUT_MS,
+  30_000,
+);
+
 function encodeContentPath(path: string): string {
   return path.split('/').map(encodeURIComponent).join('/');
 }
@@ -88,7 +98,7 @@ async function githubFetch(
       'User-Agent': 'compound-sync/1.0',
       ...buildOutboundTraceHeaders(),
     },
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');

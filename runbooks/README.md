@@ -43,6 +43,7 @@ starts with impact, signals to check, and a safe recovery path.
 | [Production 503 or auth lockout](production-503-auth.md) | The app returns 503 in production, the login prompt is confusing, or protected API calls fail.     |
 | [GitHub sync stuck or failing](github-sync-stuck.md)     | `/sync` is red, a job never finishes, GitHub returns 401/403/429, or files do not appear.          |
 | [LLM gateway degraded](llm-gateway-degraded.md)          | Ingest, analysis, repair, or Q&A fails because the model endpoint is unavailable or misconfigured. |
+| [LLM uniform timeouts](llm-timeout-uniform.md)           | ≥5 文件以同样秒数 timeout 失败（高置信度的配置/模型问题，非网络抖动）。                            |
 | [SQLite data persistence](data-persistence.md)           | Data disappears after deploys, writes fail, or `DATA_DIR` / volume configuration is suspect.       |
 | [N+1 query detection](n-plus-one-queries.md)             | A `db.n_plus_one_detected` log fires or per-route SQL counters spike unexpectedly.                 |
 

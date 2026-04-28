@@ -11,8 +11,9 @@ import ActiveFilesList from './sync/ActiveFilesList';
 import IssueCenter from './sync/IssueCenter';
 import HealthLine from './sync/HealthLine';
 import AdvancedDrawer from './sync/AdvancedDrawer';
+import SyncDiagnosticsBanner from './sync/SyncDiagnosticsBanner';
 import { ToastProvider, useToast } from './sync/Toast';
-import { fmtDuration, type Dashboard } from './sync/types';
+import { fmtDuration, type Dashboard, type DiagnosticActionId } from './sync/types';
 
 const POLL_RUNNING_MS = 2_000;
 const POLL_IDLE_MS = 10_000;
@@ -141,6 +142,47 @@ function DashboardInner() {
     router.push('/review');
   }, [router]);
 
+  const handleDiagnosticAction = useCallback(
+    (id: DiagnosticActionId, _diagnosticId: string) => {
+      switch (id) {
+        case 'switch-fast-model':
+          toast.push(
+            'info',
+            '切换模型',
+            '把 LLM_MODEL 改成 openai/gpt-4o-mini 后重启服务即可。Settings → 访问保护下方的「LLM 配置」也能临时覆盖。',
+          );
+          router.push('/settings');
+          return;
+        case 'open-env':
+          toast.push(
+            'info',
+            '环境变量自查',
+            '查 COMPOUND_LLM_TIMEOUT_MS / LLM_MODEL / LLM_API_KEY；详细参考 .env.example。',
+          );
+          return;
+        case 'skip-failed':
+          void runAction(
+            'skip-failed',
+            '跳过失败文件',
+            () => postJson('/api/sync/cancel', { skipFailed: true }),
+            '已把失败文件标记为永久失败，跳过后续重试',
+          );
+          return;
+        case 'retry-all':
+          void runAction('retry-all', '全部重试', () =>
+            postJson('/api/sync/retry', { runId: run?.id }),
+          );
+          return;
+        case 'open-runbook':
+          // href links handle this case; fallthrough is fine
+          return;
+        default:
+          return;
+      }
+    },
+    [router, runAction, run?.id, toast],
+  );
+
   return (
     <main className="sync-v2-page">
       <div className="sync-v2-topnav">
@@ -169,6 +211,12 @@ function DashboardInner() {
           运行已停滞 {fmtDuration(stalledFor)}。点「立即同步」唤醒 worker，或检查上游 LLM 服务。
         </div>
       ) : null}
+
+      <SyncDiagnosticsBanner
+        diagnostics={story?.diagnostics ?? []}
+        busy={Boolean(busy)}
+        onAction={handleDiagnosticAction}
+      />
 
       <HeroStatus
         story={story}

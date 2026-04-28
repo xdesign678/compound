@@ -3553,6 +3553,39 @@ button {
   background: rgba(201, 100, 66, 0.12);
   color: var(--brand-clay);
 }
+.settings-model-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-right: 6px;
+}
+.settings-model-chip > button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.settings-model-chip > button:first-child {
+  padding: 0 2px 0 0;
+}
+.settings-model-chip-delete {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--text-tertiary);
+}
+.settings-model-chip-delete svg {
+  width: 13px;
+  height: 13px;
+}
+.settings-model-chip-delete:hover {
+  background: rgba(201, 100, 66, 0.12);
+  color: var(--brand-clay);
+}
 .settings-advanced-block {
   padding-top: 2px;
 }
@@ -9101,6 +9134,110 @@ button,
   background: var(--ops-state-warn-soft);
   color: var(--ops-state-warn);
   border-color: var(--ops-state-warn);
+}
+
+/* ---------- Smart diagnostics banner ---------- */
+.sync-v2-diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sync-v2-diag {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 20px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  border-left: 3px solid var(--ops-state-warn);
+  background: var(--ops-state-warn-soft);
+  font-family: var(--font-reading, Lora, serif);
+  line-height: 1.6;
+}
+
+.sync-v2-diag.sev-critical {
+  border-left-color: var(--ops-state-error);
+  background: var(--ops-state-error-soft);
+}
+
+.sync-v2-diag.sev-info {
+  border-left-color: var(--ops-state-info);
+  background: var(--ops-state-info-soft);
+}
+
+.sync-v2-diag-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sync-v2-diag-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sync-v2-diag-head h3 {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text-primary);
+}
+
+.sync-v2-diag-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: 4px;
+  background: var(--bg-card, #fefdfb);
+  color: var(--ops-state-warn);
+  border: 1px solid currentColor;
+}
+
+.sync-v2-diag-tag.sev-critical {
+  color: var(--ops-state-error);
+}
+
+.sync-v2-diag-tag.sev-info {
+  color: var(--ops-state-info);
+}
+
+.sync-v2-diag p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-primary);
+  opacity: 0.92;
+}
+
+.sync-v2-diag-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.sync-v2-diag-actions a.sync-v2-btn {
+  text-decoration: none;
+}
+
+@media (max-width: 720px) {
+  .sync-v2-diag {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+  .sync-v2-diag-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 /* ---------- Hero ---------- */

@@ -135,7 +135,121 @@ function readPositiveInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
-const LLM_TIMEOUT_MS = readPositiveInt(process.env.COMPOUND_LLM_TIMEOUT_MS, 120_000);
+function readBool(value: string | undefined, fallback: boolean): boolean {
+  if (value == null) return fallback;
+  return /^(1|true|yes|on)$/i.test(value.trim());
+}
+
+/**
+ * Total wall-clock timeout for a non-streaming LLM call. Reasoning models that
+ * spend tens of seconds on internal thinking before emitting visible content
+ * get an extra `LLM_REASONING_EXTRA_MS` on top.
+ *
+ * Default raised from 120s → 180s (2026-04 incident: OpenRouter free-tier
+ * reasoning models routinely take 60–120s on heavy ingest prompts; the old
+ * 120s ceiling produced uniform timeouts on long batches).
+ */
+const LLM_TIMEOUT_MS = readPositiveInt(process.env.COMPOUND_LLM_TIMEOUT_MS, 180_000);
+const LLM_REASONING_EXTRA_MS = readPositiveInt(process.env.COMPOUND_LLM_REASONING_EXTRA_MS, 60_000);
+
+/**
+ * Streaming idle timeout: abort the request if no SSE chunk arrives for this
+ * long. Far smaller than the wall-clock cap because once tokens start flowing
+ * a healthy model emits at least one chunk every few seconds.
+ */
+const LLM_STREAM_IDLE_MS = readPositiveInt(process.env.COMPOUND_LLM_STREAM_IDLE_MS, 45_000);
+
+/**
+ * Force-on / force-off streaming for reasoning models. Default = on, because
+ * streaming converts "model thinks for 90s in silence then maybe times out"
+ * into "we see a keepalive every few seconds and can wait the full budget".
+ */
+const LLM_STREAM_REASONING = readBool(process.env.COMPOUND_LLM_STREAM_REASONING, true);
+
+/**
+ * After this many consecutive `gateway timeout` errors against the same
+ * model, automatically fall back to `COMPOUND_LLM_FALLBACK_MODEL` for the
+ * NEXT call so the run can finish on a faster model. The counter resets to 0
+ * on the first success.
+ *
+ * Set to 0 to disable auto-fallback entirely.
+ */
+const LLM_AUTO_FALLBACK_AFTER = readPositiveInt(process.env.COMPOUND_LLM_AUTO_FALLBACK_AFTER, 3);
+const LLM_FALLBACK_MODEL =
+  (process.env.COMPOUND_LLM_FALLBACK_MODEL || '').trim() || 'openai/gpt-4o-mini';
+
+/**
+ * Detect "reasoning" / "thinking" model families. These models burn a large
+ * chunk of the token budget on internal reasoning BEFORE emitting visible
+ * content, so they need: bigger max_tokens floor, no `response_format:json`,
+ * longer wall-clock timeout, and ideally streaming mode.
+ *
+ * Covered:
+ *   - OpenAI o1 / o3 / o-mini
+ *   - DeepSeek R1, R1-Lite
+ *   - DeepSeek V3 / V4 reasoning variants (V3 onwards uses MoE + thinking)
+ *   - MiniMax M2 / M2.x
+ *   - Xiaomi MiMo (mimo-* / xiaomi-mimo-*)
+ *   - Anthropic Claude *thinking*
+ *   - Generic "*-reasoner" / "*-thinking" suffixed models
+ */
+export function isReasoningModel(model: string | null | undefined): boolean {
+  if (!model) return false;
+  const normalized = model.toLowerCase();
+  return (
+    /(?:^|[\/\-])o[1-9](?:[\.\-]|$)/.test(normalized) || // o1, o3-mini, o4
+    /(?:^|[\/\-])r[1-9](?:[\.\-]|$)/.test(normalized) || // r1, r1-lite, r2
+    /thinking|reasoner/.test(normalized) ||
+    /deepseek[\/\-]?(?:v[3-9]|r[1-9])/.test(normalized) || // deepseek-v3+, deepseek-r1+
+    /minimax[\/\-]?m[2-9]/.test(normalized) || // minimax-m2 / m2.5
+    /(?:^|[\/\-])m[2-9](?:[\.\-]|$)/.test(normalized) || // bare m2 / m2.5
+    /mimo/.test(normalized) // xiaomi mimo
+  );
+}
+
+/**
+ * Module-scope counter of consecutive timeout failures keyed by model. Lives
+ * for the lifetime of the Node process — fine because we want fallback to
+ * activate quickly within a single batch and reset across deploys.
+ */
+const consecutiveTimeoutsByModel = new Map<string, number>();
+
+function recordTimeoutForModel(model: string): number {
+  const next = (consecutiveTimeoutsByModel.get(model) ?? 0) + 1;
+  consecutiveTimeoutsByModel.set(model, next);
+  return next;
+}
+
+function clearTimeoutsForModel(model: string): void {
+  if (consecutiveTimeoutsByModel.has(model)) {
+    consecutiveTimeoutsByModel.set(model, 0);
+  }
+}
+
+/** Exported for diagnostics endpoint / unit tests. */
+export function getModelFailureSnapshot(): Array<{ model: string; consecutiveTimeouts: number }> {
+  return Array.from(consecutiveTimeoutsByModel.entries())
+    .filter(([, count]) => count > 0)
+    .map(([model, consecutiveTimeouts]) => ({ model, consecutiveTimeouts }));
+}
+
+function shouldAutoFallback(model: string): boolean {
+  if (LLM_AUTO_FALLBACK_AFTER <= 0) return false;
+  if (model === LLM_FALLBACK_MODEL) return false;
+  return (consecutiveTimeoutsByModel.get(model) ?? 0) >= LLM_AUTO_FALLBACK_AFTER;
+}
+
+function isAbortTimeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const text = `${error.name}|${error.message}`.toLowerCase();
+  return (
+    text.includes('timeouterror') ||
+    text.includes('operation was aborted') ||
+    text.includes('the user aborted') ||
+    error.name === 'TimeoutError' ||
+    error.name === 'AbortError'
+  );
+}
 
 class GatewayResponseError extends Error {
   readonly status: number;
@@ -184,6 +298,71 @@ export interface ChatOptions {
   llmConfig?: LlmConfigOverride;
   /** Short label identifying the pipeline stage for cost/telemetry (e.g. 'extract', 'synth'). */
   task?: string;
+  /**
+   * Force streaming on/off. Default: streaming auto-enabled for reasoning
+   * models (controlled by COMPOUND_LLM_STREAM_REASONING). Set explicitly to
+   * `false` to opt out (e.g. for tests that want a deterministic full body).
+   */
+  stream?: boolean;
+}
+
+/**
+ * Drain an OpenAI-compatible SSE stream into a single string. Resets the
+ * idle-timeout AbortController on every chunk so a slowly-thinking reasoning
+ * model can stream tokens for many minutes without tripping the timeout, as
+ * long as it keeps emitting something.
+ *
+ * Returns the concatenated `delta.content` plus the final `finish_reason`
+ * and `usage` block (when present) for telemetry parity with non-streamed
+ * responses.
+ */
+async function drainSSEStream(
+  body: ReadableStream<Uint8Array>,
+  resetIdle: () => void,
+): Promise<{ content: string; finishReason: string | null; usage: Record<string, unknown> }> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+  let content = '';
+  let finishReason: string | null = null;
+  let usage: Record<string, unknown> = {};
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      resetIdle();
+      buffer += decoder.decode(value, { stream: true });
+      // SSE separator is double newline; tolerate \r\n\r\n too.
+      const events = buffer.split(/\r?\n\r?\n/);
+      buffer = events.pop() ?? '';
+      for (const evt of events) {
+        const lines = evt.split(/\r?\n/);
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          const data = line.slice(5).trim();
+          if (!data || data === '[DONE]') continue;
+          try {
+            const json = JSON.parse(data);
+            const choice = json?.choices?.[0];
+            const deltaContent = choice?.delta?.content;
+            if (typeof deltaContent === 'string') content += deltaContent;
+            if (choice?.finish_reason) finishReason = choice.finish_reason;
+            if (json?.usage && typeof json.usage === 'object') {
+              usage = { ...usage, ...(json.usage as Record<string, unknown>) };
+            }
+          } catch {
+            // Some providers (OpenRouter free tier) intersperse comment frames
+            // like `: OPENROUTER PROCESSING`. Safely ignored.
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return { content, finishReason, usage };
 }
 
 export async function chat(opts: ChatOptions): Promise<string> {
@@ -219,17 +398,29 @@ export async function chat(opts: ChatOptions): Promise<string> {
     throw new Error('LLM_API_KEY (or AI_GATEWAY_API_KEY) not set');
   }
 
-  const model = opts.llmConfig?.model || opts.model || getDefaultModel();
+  const requestedModel = opts.llmConfig?.model || opts.model || getDefaultModel();
 
-  // Reasoning models (MiniMax M2.x, OpenAI o1, DeepSeek-R1, Claude thinking) burn
-  // a large chunk of the token budget on internal reasoning BEFORE emitting the
-  // visible content. A small max_tokens truncates them mid-thought, so `content`
-  // comes back null. They also often reject/ignore `response_format: json_object`.
-  const isReasoningModel = /o1|r1|thinking|m2\.|reasoner/i.test(model);
+  // Auto-fallback: if recent calls to this model have all timed out, switch
+  // to a known-fast fallback for THIS call so the batch can finish.
+  const useFallback = shouldAutoFallback(requestedModel);
+  const model = useFallback ? LLM_FALLBACK_MODEL : requestedModel;
+  if (useFallback) {
+    logger.warn('gateway.auto_fallback', {
+      requestedModel,
+      fallbackModel: model,
+      reason: 'consecutive_timeouts',
+      threshold: LLM_AUTO_FALLBACK_AFTER,
+    });
+  }
+
+  const reasoning = isReasoningModel(model);
 
   // Raise the floor for reasoning models so the visible answer actually gets emitted.
   const requestedMaxTokens = opts.maxTokens ?? 4000;
-  const maxTokens = isReasoningModel ? Math.max(requestedMaxTokens, 2000) : requestedMaxTokens;
+  const maxTokens = reasoning ? Math.max(requestedMaxTokens, 2000) : requestedMaxTokens;
+
+  // Pick streaming mode: explicit override → user value, else auto-on for reasoning.
+  const wantStream = opts.stream ?? (reasoning && LLM_STREAM_REASONING);
 
   const body: Record<string, unknown> = {
     model,
@@ -238,9 +429,14 @@ export async function chat(opts: ChatOptions): Promise<string> {
     max_tokens: maxTokens,
   };
 
+  if (wantStream) {
+    body.stream = true;
+    body.stream_options = { include_usage: true };
+  }
+
   // Only attach structured-output constraint for models that reliably support it.
-  // MiniMax & other reasoning models tend to 403 / misbehave with json_object.
-  if (opts.responseFormat === 'json_object' && !isReasoningModel) {
+  // MiniMax / DeepSeek-R / MiMo etc. tend to 403 / misbehave with json_object.
+  if (opts.responseFormat === 'json_object' && !reasoning) {
     body.response_format = { type: 'json_object' };
   }
 
@@ -258,31 +454,79 @@ export async function chat(opts: ChatOptions): Promise<string> {
     },
   });
 
+  // Compute effective wall-clock budget. Reasoning models get extra time;
+  // streaming mode also relies on per-chunk idle reset, so the total ceiling
+  // is mostly a safety net.
+  const wallClockTimeout = reasoning ? LLM_TIMEOUT_MS + LLM_REASONING_EXTRA_MS : LLM_TIMEOUT_MS;
+
+  let streamedContent: string | null = null;
+  let streamedFinishReason: string | null = null;
+  let streamedUsage: Record<string, unknown> = {};
+
   let res: Response;
   try {
     res = await breaker.execute(async () => {
-      const response = await fetch(gatewayUrl, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          ...buildOutboundTraceHeaders(),
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
-      });
+      // Build an AbortController with both wall-clock cap and per-chunk idle
+      // reset for streaming mode.
+      const controller = new AbortController();
+      const wallTimer = setTimeout(() => {
+        controller.abort(
+          new DOMException(
+            `LLM call exceeded wall-clock budget (${wallClockTimeout}ms, model=${model})`,
+            'TimeoutError',
+          ),
+        );
+      }, wallClockTimeout);
 
-      if (!response.ok) {
-        const errText = await response.text().catch(() => '');
-        recordModelRun({
-          model,
-          task,
-          latencyMs: Date.now() - startedAt,
-          error: `gateway_${response.status}`,
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+      const armIdle = () => {
+        if (!wantStream) return;
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          controller.abort(
+            new DOMException(
+              `LLM stream stalled (no chunk for ${LLM_STREAM_IDLE_MS}ms, model=${model})`,
+              'TimeoutError',
+            ),
+          );
+        }, LLM_STREAM_IDLE_MS);
+      };
+      armIdle();
+
+      try {
+        const response = await fetch(gatewayUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            ...buildOutboundTraceHeaders(),
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
         });
-        throw new GatewayResponseError(response.status, errText.slice(0, 200));
+
+        if (!response.ok) {
+          const errText = await response.text().catch(() => '');
+          recordModelRun({
+            model,
+            task,
+            latencyMs: Date.now() - startedAt,
+            error: `gateway_${response.status}`,
+          });
+          throw new GatewayResponseError(response.status, errText.slice(0, 200));
+        }
+
+        if (wantStream && response.body) {
+          const drained = await drainSSEStream(response.body, armIdle);
+          streamedContent = drained.content;
+          streamedFinishReason = drained.finishReason;
+          streamedUsage = drained.usage;
+        }
+        return response;
+      } finally {
+        clearTimeout(wallTimer);
+        if (idleTimer) clearTimeout(idleTimer);
       }
-      return response;
     });
   } catch (error) {
     if (error instanceof CircuitBreakerOpenError) {
@@ -296,17 +540,53 @@ export async function chat(opts: ChatOptions): Promise<string> {
         service: error.service,
         retryAfterMs: error.retryAfterMs,
       });
+    } else if (isAbortTimeoutError(error)) {
+      const consecutive = recordTimeoutForModel(requestedModel);
+      recordModelRun({
+        model,
+        task,
+        latencyMs: Date.now() - startedAt,
+        error: 'gateway_timeout',
+      });
+      logger.warn('gateway.timeout', {
+        model,
+        requestedModel,
+        consecutiveTimeouts: consecutive,
+        wallClockTimeoutMs: wallClockTimeout,
+        streamIdleMs: wantStream ? LLM_STREAM_IDLE_MS : null,
+        streamMode: wantStream,
+        reasoning,
+      });
     }
     throw error;
   }
 
-  const data = await res.json();
-  const choice = data?.choices?.[0];
-  const content = choice?.message?.content;
-  const finishReason = choice?.finish_reason;
-  const usage = data?.usage ?? {};
+  let content: string | null;
+  let finishReason: string | null;
+  let usage: Record<string, unknown>;
+  let nonStreamData: unknown = null;
+
+  if (wantStream) {
+    content = streamedContent;
+    finishReason = streamedFinishReason;
+    usage = streamedUsage;
+  } else {
+    nonStreamData = await res.json();
+    const choice = (
+      nonStreamData as {
+        choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+      }
+    )?.choices?.[0];
+    content = choice?.message?.content ?? null;
+    finishReason = choice?.finish_reason ?? null;
+    usage = ((nonStreamData as { usage?: Record<string, unknown> })?.usage ?? {}) as Record<
+      string,
+      unknown
+    >;
+  }
 
   if (typeof content === 'string' && content.length > 0) {
+    clearTimeoutsForModel(requestedModel);
     recordModelRun({
       model,
       task,
@@ -338,7 +618,9 @@ export async function chat(opts: ChatOptions): Promise<string> {
     latencyMs: Date.now() - startedAt,
     error: 'unexpected_shape',
   });
-  const preview = JSON.stringify(data).slice(0, 600);
+  const preview = wantStream
+    ? `[stream] finish_reason=${finishReason ?? 'null'} content_length=${(streamedContent ?? '').length}`
+    : JSON.stringify(nonStreamData ?? {}).slice(0, 600);
   throw new Error(`Unexpected gateway response shape. Body preview: ${preview}`);
 }
 

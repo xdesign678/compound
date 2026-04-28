@@ -8,10 +8,12 @@
  */
 
 import type {
+  ErrorGroupRow,
   PipelineStageRow,
   RunHealth,
   SyncDashboard,
   SyncItemStatus,
+  SyncRunItemRow,
   SyncRunRow,
 } from './sync-observability';
 
@@ -339,18 +341,191 @@ export function deriveLastRun(
   };
 }
 
+export type DiagnosticSeverity = 'info' | 'warning' | 'critical';
+export type DiagnosticActionId =
+  | 'open-env'
+  | 'switch-fast-model'
+  | 'skip-failed'
+  | 'retry-all'
+  | 'open-runbook';
+
+export interface DiagnosticAction {
+  id: DiagnosticActionId;
+  label: string;
+  /** Optional href for actions that open a URL or runbook. */
+  href?: string;
+  /** Whether the UI should highlight this as the recommended action. */
+  primary?: boolean;
+}
+
+export interface SyncDiagnostic {
+  id: string;
+  severity: DiagnosticSeverity;
+  title: string;
+  detail: string;
+  actions: DiagnosticAction[];
+  /** Number of items that triggered this diagnostic. */
+  affectedCount: number;
+}
+
 export interface DashboardStory {
   narrative: SyncNarrative;
   phases: SyncPhases;
   health: SyncHealth;
   lastRun: LastRunSnapshot | null;
+  diagnostics: SyncDiagnostic[];
+}
+
+/**
+ * "Uniform timeout" pattern: ≥5 failed items in the same run share the same
+ * AbortSignal-style timeout error AND their failure durations cluster within
+ * a tight band (±5s). This is almost always a configuration issue (the
+ * `COMPOUND_LLM_TIMEOUT_MS` env is too low) or a model-selection issue
+ * (everyone hits the same wall because the model is too slow).
+ *
+ * The naïve `category: 'timeout'` from sync-observability flags one big
+ * group; we go further and detect that the timeouts are *uniform* (same
+ * duration), which is a strong fingerprint for env / model misconfig vs.
+ * occasional upstream flakiness.
+ */
+export function detectUniformTimeoutPattern(
+  failedItems: SyncRunItemRow[],
+  errorGroups: ErrorGroupRow[],
+): {
+  uniform: boolean;
+  count: number;
+  durationsMs: number[];
+  representativeDurationSec: number | null;
+  representativeMessage: string | null;
+} {
+  const timeoutItems = failedItems.filter((item) => {
+    if (!item.error) return false;
+    const text = item.error.toLowerCase();
+    return (
+      text.includes('operation was aborted') ||
+      text.includes('timeouterror') ||
+      text.includes('llm call exceeded wall-clock') ||
+      text.includes('stream stalled')
+    );
+  });
+
+  if (timeoutItems.length < 5) {
+    return {
+      uniform: false,
+      count: timeoutItems.length,
+      durationsMs: [],
+      representativeDurationSec: null,
+      representativeMessage: null,
+    };
+  }
+
+  const durationsMs = timeoutItems
+    .map((item) =>
+      item.started_at && item.finished_at ? item.finished_at - item.started_at : null,
+    )
+    .filter((d): d is number => d != null && d > 0);
+
+  // Are durations clustered? Spread = max - min must be ≤ 8 seconds for the
+  // group to count as uniform.
+  let uniform = false;
+  let representativeDurationSec: number | null = null;
+  if (durationsMs.length >= 5) {
+    const min = Math.min(...durationsMs);
+    const max = Math.max(...durationsMs);
+    if (max - min <= 8_000) {
+      uniform = true;
+      const median = durationsMs.slice().sort((a, b) => a - b)[Math.floor(durationsMs.length / 2)];
+      representativeDurationSec = Math.round(median / 1000);
+    }
+  } else if (timeoutItems.length >= 5) {
+    // Even without timing data, ≥5 timeouts in one batch hints at a uniform issue.
+    // Promote based on errorGroups: the timeout group should be ≥5.
+    const tg = errorGroups.find((g) => g.category === 'timeout');
+    if (tg && tg.count >= 5) uniform = true;
+  }
+
+  return {
+    uniform,
+    count: timeoutItems.length,
+    durationsMs,
+    representativeDurationSec,
+    representativeMessage: timeoutItems[0]?.error?.slice(0, 200) ?? null,
+  };
+}
+
+export function deriveDiagnostics(input: {
+  failedItems: SyncRunItemRow[];
+  errorGroups: ErrorGroupRow[];
+  itemSummary: Record<SyncItemStatus, number>;
+}): SyncDiagnostic[] {
+  const out: SyncDiagnostic[] = [];
+
+  const timeoutPattern = detectUniformTimeoutPattern(input.failedItems, input.errorGroups);
+  if (timeoutPattern.uniform) {
+    const durationCopy = timeoutPattern.representativeDurationSec
+      ? `全部在第 ${timeoutPattern.representativeDurationSec} 秒被中断`
+      : '失败时长高度一致';
+    out.push({
+      id: 'uniform-timeout',
+      severity: 'critical',
+      title: `${timeoutPattern.count} 个文件以同样方式超时`,
+      detail:
+        `${durationCopy}。这通常不是网络问题，而是 LLM 总时长 ` +
+        `(COMPOUND_LLM_TIMEOUT_MS) 设得过短，或当前模型在你的 prompt 体积下太慢。` +
+        `推荐先把 timeout 提到 ≥180000ms，或临时切换到 gpt-4o-mini 让队列尽快清空。`,
+      affectedCount: timeoutPattern.count,
+      actions: [
+        {
+          id: 'switch-fast-model',
+          label: '换 gpt-4o-mini',
+          primary: true,
+        },
+        {
+          id: 'open-env',
+          label: '查看 env 变量',
+        },
+        {
+          id: 'open-runbook',
+          label: '阅读 runbook',
+          href: '/runbooks/llm-timeout-uniform.md',
+        },
+        {
+          id: 'skip-failed',
+          label: '跳过这批文件',
+        },
+      ],
+    });
+  } else if (timeoutPattern.count >= 3) {
+    out.push({
+      id: 'scattered-timeout',
+      severity: 'warning',
+      title: `${timeoutPattern.count} 个文件零散超时`,
+      detail:
+        '失败的耗时不一致，可能是模型偶发慢响应或网络抖动。可以先点重试；' +
+        '若反复出现，再考虑提高 timeout 或换模型。',
+      affectedCount: timeoutPattern.count,
+      actions: [
+        { id: 'retry-all', label: '全部重试', primary: true },
+        { id: 'open-runbook', label: '阅读 runbook', href: '/runbooks/llm-gateway-degraded.md' },
+      ],
+    });
+  }
+
+  return out;
 }
 
 /** End-to-end derivation: takes a Dashboard payload and returns the story. */
 export function deriveStory(
   dashboard: Pick<
     SyncDashboard,
-    'activeRun' | 'latestRuns' | 'pipeline' | 'health' | 'errorGroups' | 'coverage' | 'itemSummary'
+    | 'activeRun'
+    | 'latestRuns'
+    | 'pipeline'
+    | 'health'
+    | 'errorGroups'
+    | 'coverage'
+    | 'itemSummary'
+    | 'failedItems'
   >,
   reference = Date.now(),
 ): DashboardStory {
@@ -374,5 +549,10 @@ export function deriveStory(
     errorGroupCount,
     itemSummary: dashboard.itemSummary,
   });
-  return { narrative, phases, health, lastRun };
+  const diagnostics = deriveDiagnostics({
+    failedItems: dashboard.failedItems ?? [],
+    errorGroups: dashboard.errorGroups,
+    itemSummary: dashboard.itemSummary,
+  });
+  return { narrative, phases, health, lastRun, diagnostics };
 }

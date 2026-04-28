@@ -156,11 +156,36 @@ export interface LastRunSnapshot {
   branch: string | null;
 }
 
+export type DiagnosticSeverity = 'info' | 'warning' | 'critical';
+export type DiagnosticActionId =
+  | 'open-env'
+  | 'switch-fast-model'
+  | 'skip-failed'
+  | 'retry-all'
+  | 'open-runbook';
+
+export interface DiagnosticAction {
+  id: DiagnosticActionId;
+  label: string;
+  href?: string;
+  primary?: boolean;
+}
+
+export interface SyncDiagnostic {
+  id: string;
+  severity: DiagnosticSeverity;
+  title: string;
+  detail: string;
+  actions: DiagnosticAction[];
+  affectedCount: number;
+}
+
 export interface DashboardStory {
   narrative: SyncNarrative;
   phases: SyncPhases;
   health: SyncHealth;
   lastRun: LastRunSnapshot | null;
+  diagnostics: SyncDiagnostic[];
 }
 
 export interface Dashboard {

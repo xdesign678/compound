@@ -3,13 +3,61 @@ import assert from 'node:assert/strict';
 
 import {
   bucketPhases,
+  deriveDiagnostics,
   deriveHealth,
   deriveLastRun,
   deriveNarrative,
   deriveStory,
+  detectUniformTimeoutPattern,
   formatAge,
 } from './sync-narrative';
-import type { PipelineStageRow, RunHealth, SyncRunRow } from './sync-observability';
+import type {
+  ErrorGroupRow,
+  PipelineStageRow,
+  RunHealth,
+  SyncRunItemRow,
+  SyncRunRow,
+} from './sync-observability';
+
+function makeFailedItem(parts: Partial<SyncRunItemRow> = {}): SyncRunItemRow {
+  const base = Date.now();
+  return {
+    id: `it-${Math.random().toString(36).slice(2, 8)}`,
+    run_id: 'run-1',
+    path: 'a.md',
+    old_sha: null,
+    new_sha: null,
+    external_key: null,
+    source_id: null,
+    change_type: 'update',
+    status: 'failed',
+    stage: 'llm',
+    attempts: 1,
+    chunks: null,
+    concepts_created: null,
+    concepts_updated: null,
+    evidence: null,
+    error: 'The operation was aborted due to timeout',
+    started_at: base - 55_000,
+    finished_at: base,
+    updated_at: base,
+    ...parts,
+  };
+}
+
+function makeErrorGroup(parts: Partial<ErrorGroupRow> = {}): ErrorGroupRow {
+  return {
+    fingerprint: 'timeout',
+    category: 'timeout',
+    message: 'The operation was aborted due to timeout',
+    stage: 'llm',
+    count: 5,
+    lastAt: Date.now(),
+    examples: [],
+    suggestion: 'fix it',
+    ...parts,
+  };
+}
 
 function pipelineRow(stage: string, parts: Partial<PipelineStageRow> = {}): PipelineStageRow {
   return {
@@ -279,6 +327,7 @@ test('deriveStory wires everything together', () => {
         ftsReady: true,
       },
       itemSummary: { queued: 0, running: 0, succeeded: 5, failed: 0, skipped: 0, cancelled: 0 },
+      failedItems: [],
     },
     ref,
   );
@@ -287,4 +336,73 @@ test('deriveStory wires everything together', () => {
   assert.equal(story.phases.fetch.status, 'done');
   assert.equal(story.health.score, 'healthy');
   assert.ok(story.lastRun);
+  assert.deepEqual(story.diagnostics, []);
+});
+
+test('detectUniformTimeoutPattern flags 16 files at 55s', () => {
+  const base = Date.now();
+  const failed: SyncRunItemRow[] = Array.from({ length: 16 }, (_, i) =>
+    makeFailedItem({
+      id: `it-${i}`,
+      started_at: base - 55_500 + i * 80, // tight cluster around 55s ± few hundred ms
+      finished_at: base,
+      error: 'The operation was aborted due to timeout',
+    }),
+  );
+  const result = detectUniformTimeoutPattern(failed, [makeErrorGroup({ count: 16 })]);
+  assert.equal(result.uniform, true);
+  assert.equal(result.count, 16);
+  assert.ok(result.representativeDurationSec);
+  assert.ok(result.representativeDurationSec! >= 54 && result.representativeDurationSec! <= 56);
+});
+
+test('detectUniformTimeoutPattern marks scattered failures as non-uniform', () => {
+  const base = Date.now();
+  const failed: SyncRunItemRow[] = [
+    makeFailedItem({ started_at: base - 30_000, finished_at: base }),
+    makeFailedItem({ started_at: base - 80_000, finished_at: base }),
+    makeFailedItem({ started_at: base - 12_000, finished_at: base }),
+    makeFailedItem({ started_at: base - 60_000, finished_at: base }),
+    makeFailedItem({ started_at: base - 5_000, finished_at: base }),
+  ];
+  const result = detectUniformTimeoutPattern(failed, [makeErrorGroup({ count: 5 })]);
+  assert.equal(result.uniform, false);
+  assert.equal(result.count, 5);
+});
+
+test('detectUniformTimeoutPattern ignores non-timeout errors', () => {
+  const failed: SyncRunItemRow[] = Array.from({ length: 8 }, () =>
+    makeFailedItem({ error: 'GitHub 404 not found' }),
+  );
+  const result = detectUniformTimeoutPattern(failed, []);
+  assert.equal(result.uniform, false);
+  assert.equal(result.count, 0);
+});
+
+test('deriveDiagnostics produces critical banner for uniform timeout', () => {
+  const base = Date.now();
+  const failed: SyncRunItemRow[] = Array.from({ length: 6 }, () =>
+    makeFailedItem({
+      started_at: base - 55_000,
+      finished_at: base,
+    }),
+  );
+  const diags = deriveDiagnostics({
+    failedItems: failed,
+    errorGroups: [makeErrorGroup({ count: 6 })],
+    itemSummary: { queued: 0, running: 0, succeeded: 0, failed: 6, skipped: 0, cancelled: 0 },
+  });
+  assert.equal(diags.length, 1);
+  assert.equal(diags[0].severity, 'critical');
+  assert.equal(diags[0].id, 'uniform-timeout');
+  assert.ok(diags[0].actions.find((a) => a.id === 'switch-fast-model'));
+});
+
+test('deriveDiagnostics returns empty for healthy run', () => {
+  const diags = deriveDiagnostics({
+    failedItems: [],
+    errorGroups: [],
+    itemSummary: { queued: 0, running: 0, succeeded: 5, failed: 0, skipped: 0, cancelled: 0 },
+  });
+  assert.deepEqual(diags, []);
 });

@@ -69,6 +69,8 @@ function readPositiveInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
+const EMBEDDING_TIMEOUT_MS = readPositiveInt(process.env.COMPOUND_EMBEDDING_TIMEOUT_MS, 60_000);
+
 class EmbeddingResponseError extends Error {
   readonly status: number;
 
@@ -178,7 +180,7 @@ async function remoteEmbeddings(texts: string[]): Promise<Vector[] | null> {
             text.slice(0, Number(process.env.COMPOUND_EMBEDDING_MAX_CHARS || 8000)),
           ),
         }),
-        signal: AbortSignal.timeout(45_000),
+        signal: AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
       });
 
       if (!response.ok) {

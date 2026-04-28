@@ -77,9 +77,11 @@ const WORKER_MAX_LOOPS = Math.max(
  * Lease window: a job that's been `running` longer than this without any
  * heartbeat is assumed orphaned (server crashed / restarted / OOM'd) and gets
  * pushed back into the queue. Worker invocations fail fast on hung fetches via
- * AbortSignal.timeout(55s) inside the gateway, so 3 minutes is a safe ceiling.
+ * `AbortSignal.timeout(LLM_TIMEOUT_MS)` inside the gateway (default 180s,
+ * +60s for reasoning models), so the lease floor must comfortably exceed
+ * that. 5 minutes is a safe ceiling.
  */
-const LEASE_MS = Math.max(60_000, Number(process.env.COMPOUND_ANALYSIS_LEASE_MS || 3 * 60_000));
+const LEASE_MS = Math.max(60_000, Number(process.env.COMPOUND_ANALYSIS_LEASE_MS || 5 * 60_000));
 /** Max concurrent worker loops. We use DB lease + in-memory counter combined. */
 const MAX_PARALLEL_WORKERS = Math.max(1, Number(process.env.COMPOUND_ANALYSIS_MAX_WORKERS || 2));
 

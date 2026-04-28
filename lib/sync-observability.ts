@@ -248,11 +248,27 @@ function classifyError(raw: string): {
   suggestion: string;
 } {
   const text = raw.toLowerCase();
+  if (/llm call exceeded wall-clock|wall-clock budget/.test(text)) {
+    return {
+      category: 'timeout',
+      fingerprint: 'timeout-wallclock',
+      suggestion: 'LLM 调用达到总时长上限。提高 COMPOUND_LLM_TIMEOUT_MS 或换一个更快的模型。',
+    };
+  }
+  if (/stream stalled|no chunk for/.test(text)) {
+    return {
+      category: 'timeout',
+      fingerprint: 'timeout-stream-idle',
+      suggestion:
+        'Streaming 模式下模型停止吐字超过 idle 阈值。可能是上游网关阻塞，或模型本身陷入死循环。',
+    };
+  }
   if (/timed?\s*out|abortederror|operation was aborted/.test(text)) {
     return {
       category: 'timeout',
       fingerprint: 'timeout',
-      suggestion: '网络/上游超时。检查 LLM 网关或 GitHub API 是否可达，可点击重试。',
+      suggestion:
+        '网络/上游超时。如多个文件同时撞同一秒数，多半是 COMPOUND_LLM_TIMEOUT_MS 设得过短。',
     };
   }
   if (/github\s+(404|not found)/.test(text) || /\b404\b.+\/repos\//.test(text)) {
