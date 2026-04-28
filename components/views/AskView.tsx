@@ -8,11 +8,12 @@ import { useAppStore } from '../../lib/store';
 import { askWiki, archiveAnswerAsConcept } from '../../lib/api-client';
 import { pickStableConceptTitles } from '../../lib/ask-suggestions';
 import {
-  fetchCustomModels,
+  fetchModelSettings,
   getLlmConfig,
   modelLabel,
   PRESET_MODELS,
   saveLlmConfig,
+  saveSelectedModelOnServer,
 } from '../../lib/llm-config';
 import { AskComposer } from '../ask/AskComposer';
 import { AskMessageList } from '../ask/AskMessageList';
@@ -46,6 +47,7 @@ export function AskView() {
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
   const [customModels, setCustomModels] = useState<string[]>([]);
+  const [hiddenPresetModels, setHiddenPresetModels] = useState<string[]>([]);
   const [caretPosition, setCaretPosition] = useState(0);
   const [mounted, setMounted] = useState(false);
   const [conceptTitles, setConceptTitles] = useState<string[]>([]);
@@ -62,10 +64,18 @@ export function AskView() {
   }, []);
 
   useEffect(() => {
-    setLlmConfig(getLlmConfig());
-    void fetchCustomModels()
-      .then(setCustomModels)
-      .catch(() => setCustomModels([]));
+    const localConfig = getLlmConfig();
+    setLlmConfig(localConfig);
+    void fetchModelSettings()
+      .then((settings) => {
+        setCustomModels(settings.models);
+        setHiddenPresetModels(settings.hiddenPresetModels);
+        setLlmConfig({ ...localConfig, model: settings.selectedModel });
+      })
+      .catch(() => {
+        setCustomModels([]);
+        setHiddenPresetModels([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -118,7 +128,7 @@ export function AskView() {
         value: '',
         helper: '跟随当前服务端配置',
       },
-      ...PRESET_MODELS.map((item) => ({
+      ...PRESET_MODELS.filter((item) => !hiddenPresetModels.includes(item.value)).map((item) => ({
         label: item.label,
         value: item.value,
         helper: item.value,
@@ -139,7 +149,7 @@ export function AskView() {
     }
 
     return options;
-  }, [customModels, llmConfig.model]);
+  }, [customModels, hiddenPresetModels, llmConfig.model]);
 
   const currentModelLabel = useMemo(() => {
     const current = llmConfig.model?.trim();
@@ -344,6 +354,10 @@ export function AskView() {
     const nextConfig = { ...llmConfig, model: model || undefined };
     saveLlmConfig(nextConfig);
     setLlmConfig(nextConfig);
+    void saveSelectedModelOnServer(model).then((settings) => {
+      setCustomModels(settings.models);
+      setHiddenPresetModels(settings.hiddenPresetModels);
+    });
     setModelMenuOpen(false);
   }
 
