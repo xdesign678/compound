@@ -3,6 +3,7 @@
 import type { RefObject } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '../../lib/db';
+import { formatConceptBodyForDisplay } from '../../lib/concept-body-format';
 import type { AskMessage } from '../../lib/types';
 import { Icon } from '../Icons';
 import { Prose } from '../Prose';
@@ -86,7 +87,7 @@ export function AskMessageList({
                       </div>
                     ) : (
                       <Prose
-                        markdown={message.text}
+                        markdown={formatConceptBodyForDisplay(message.text)}
                         citedConceptIds={message.citedConcepts}
                         className="prose-answer"
                       />

@@ -2051,9 +2051,42 @@ button {
 .prose-answer {
   font-size: 16px;
   line-height: var(--leading-body);
+  text-wrap: pretty;
+  hanging-punctuation: allow-end last;
 }
-.prose-answer p:last-child {
+.prose-answer p,
+.prose-answer li {
+  text-align: justify;
+  text-justify: inter-ideograph;
+  text-justify: inter-character;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  letter-spacing: 0.01em;
+}
+.prose-answer p {
+  margin: 0 0 18px;
+  line-height: 1.82;
+}
+.prose-answer ul,
+.prose-answer ol {
+  margin: 0 0 18px;
+  padding-left: 22px;
+}
+.prose-answer li {
+  margin-bottom: 8px;
+  line-height: 1.82;
+}
+.prose-answer li::marker {
+  color: var(--text-tertiary);
+}
+.prose-answer p:last-child,
+.prose-answer ul:last-child,
+.prose-answer ol:last-child {
   margin-bottom: 0;
+}
+.prose-answer h2,
+.prose-answer h3 {
+  text-wrap: balance;
 }
 .msg-ai-body p {
   margin: 0 0 10px;
@@ -4905,11 +4938,17 @@ button,
     border-radius: 16px 16px 4px 16px;
   }
 
-  /* AI 回答区域（全局已把卡片设为透明）：压缩字号与行距 */
+  /* AI 回答区域（全局已把卡片设为透明）：阅读字号与行距 */
   .prose-answer,
   .msg-ai-body {
     font-size: 15.5px !important;
-    line-height: 1.62 !important;
+    line-height: 1.78 !important;
+  }
+  .prose-answer p {
+    margin-bottom: 14px;
+  }
+  .prose-answer p:last-child {
+    margin-bottom: 0;
   }
 
   .msg-ai-label {
