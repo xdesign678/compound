@@ -68,7 +68,7 @@ interface GithubIngestPayload {
 
 const WORKER_ID = `worker-${nanoid(8)}`;
 const DEFAULT_STAGE_VERSION = process.env.COMPOUND_ANALYSIS_STAGE_VERSION || 'v2';
-const WORKER_BATCH = Math.max(1, Number(process.env.COMPOUND_ANALYSIS_WORKER_BATCH || 3));
+const WORKER_BATCH = Math.max(1, Number(process.env.COMPOUND_ANALYSIS_WORKER_BATCH || 1));
 const WORKER_MAX_LOOPS = Math.max(
   1,
   Number(process.env.COMPOUND_ANALYSIS_WORKER_MAX_LOOPS || 1000),
@@ -376,6 +376,34 @@ function failJob(job: AnalysisJobRow, err: unknown): void {
   }
 }
 
+function failJobPermanently(job: AnalysisJobRow, message: string): void {
+  const ts = now();
+  const attempts = job.max_attempts || 1;
+  getServerDb()
+    .prepare(
+      `UPDATE analysis_jobs
+       SET status = 'failed',
+           attempts = ?,
+           error = ?,
+           not_before_at = NULL,
+           finished_at = ?,
+           updated_at = ?,
+           locked_at = NULL,
+           locked_by = NULL
+       WHERE id = ?`,
+    )
+    .run(attempts, message.slice(0, 500), ts, ts, job.id);
+
+  syncObs.recordEvent({
+    runId: job.run_id,
+    itemId: job.item_id,
+    level: 'error',
+    stage: job.stage,
+    path: job.source_path,
+    message: message.slice(0, 180),
+  });
+}
+
 function incrementLegacy(job: AnalysisJobRow, outcome: 'done' | 'failed'): void {
   const payload = parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload);
   const legacyJobId = payload.legacyJobId;
@@ -496,8 +524,34 @@ function queuePostIngestJobs(input: {
 
 async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
   const payload = parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload);
-  if (!payload.rawContent || !payload.path || !payload.externalKey) {
-    throw new Error('github_ingest payload is incomplete');
+  if (typeof payload.rawContent !== 'string' || !payload.path || !payload.externalKey) {
+    const message = 'GitHub 分析任务缺少文件内容，请重新同步该文件。';
+    failJobPermanently(job, message);
+    if (job.item_id) {
+      syncObs.updateRunItem(job.item_id, {
+        status: 'failed',
+        stage: 'llm',
+        error: message,
+        finished_at: now(),
+      });
+    }
+    incrementLegacy(job, 'failed');
+    maybeFinishRun(job.run_id || null);
+    return;
+  }
+  if (payload.rawContent.trim().length === 0) {
+    finishJob(job, 'skipped', 'empty markdown file');
+    if (payload.itemId) {
+      syncObs.updateRunItem(payload.itemId, {
+        status: 'skipped',
+        stage: 'complete',
+        finished_at: now(),
+        error: '空 Markdown 文件，已跳过分析',
+      });
+    }
+    incrementLegacy(job, 'done');
+    maybeFinishRun(payload.runId);
+    return;
   }
   if (isRunCancelled(payload.runId)) {
     finishJob(job, 'cancelled', 'run cancelled');
@@ -840,7 +894,10 @@ export function retryAnalysisJobs(
   input: { runId?: string | null; itemId?: string | null; failedOnly?: boolean } = {},
 ): number {
   ensureAnalysisWorkerSchema();
-  const clauses = [`status IN ('failed', 'cancelled')`];
+  const clauses = [
+    `status IN ('failed', 'cancelled')`,
+    `NOT (stage = 'github_ingest' AND COALESCE(payload_json, '') = '')`,
+  ];
   const params: unknown[] = [];
   if (input.runId) {
     clauses.push(`run_id = ?`);

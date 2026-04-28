@@ -8,9 +8,9 @@ import { logger } from '@/lib/server-logger';
 import type { IngestRequest } from '@/lib/types';
 
 export const runtime = 'nodejs';
-// LLM gateway uses a 55s signal timeout; give the route ~35s of headroom for
-// retries, JSON parse, DB writes, and network latency.
-export const maxDuration = 90;
+// The LLM gateway timeout is configurable and defaults to 120s; give the route
+// headroom for JSON parse, DB writes, and network latency.
+export const maxDuration = 150;
 
 const MAX_BODY_BYTES = 512_000;
 const MAX_RAW_CONTENT_CHARS = 100_000;

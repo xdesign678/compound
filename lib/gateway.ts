@@ -135,6 +135,8 @@ function readPositiveInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
+const LLM_TIMEOUT_MS = readPositiveInt(process.env.COMPOUND_LLM_TIMEOUT_MS, 120_000);
+
 class GatewayResponseError extends Error {
   readonly status: number;
 
@@ -267,7 +269,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
           ...buildOutboundTraceHeaders(),
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(55_000),
+        signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
       });
 
       if (!response.ok) {

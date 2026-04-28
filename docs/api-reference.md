@@ -155,7 +155,7 @@ Source: [`app/api/ingest/route.ts`](../app/api/ingest/route.ts)
 | ----------- | ------------------------------------------------------- |
 | Methods     | `POST`                                                  |
 | Runtime     | `nodejs`                                                |
-| maxDuration | 90                                                      |
+| maxDuration | 150                                                     |
 | Guards      | `admin-token`, `rate-limited`, `content-length-guarded` |
 
 #### POST
