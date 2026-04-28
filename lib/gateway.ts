@@ -168,15 +168,57 @@ const LLM_STREAM_REASONING = readBool(process.env.COMPOUND_LLM_STREAM_REASONING,
 
 /**
  * After this many consecutive `gateway timeout` errors against the same
- * model, automatically fall back to `COMPOUND_LLM_FALLBACK_MODEL` for the
- * NEXT call so the run can finish on a faster model. The counter resets to 0
- * on the first success.
+ * model, the next call rotates to the *next* model in the configured fallback
+ * list. The counter resets to 0 on the first success.
  *
- * Set to 0 to disable auto-fallback entirely.
+ * Set `COMPOUND_LLM_AUTO_FALLBACK_AFTER=0` to disable auto-fallback entirely.
  */
 const LLM_AUTO_FALLBACK_AFTER = readPositiveInt(process.env.COMPOUND_LLM_AUTO_FALLBACK_AFTER, 3);
-const LLM_FALLBACK_MODEL =
+
+/**
+ * Comma-separated rotation list of fallback models. When the active model has
+ * crossed the consecutive-timeout threshold, the gateway picks the next entry
+ * that ISN'T currently above the threshold, falling back to
+ * `COMPOUND_LLM_FALLBACK_MODEL` (single value, legacy) only if the list is
+ * empty.
+ *
+ * Example for an OpenRouter setup with several reasoning models:
+ *   COMPOUND_LLM_FALLBACK_MODELS=mimo-v2.5-pro,deepseek-v4-flash,deepseek-v4-pro,mimo-v2.5
+ *
+ * The legacy single-value `COMPOUND_LLM_FALLBACK_MODEL` is honored as the
+ * trailing safety net (e.g. `openai/gpt-4o-mini`) so a deployment without the
+ * new list still degrades gracefully.
+ */
+function parseModelList(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(/[,\n]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+const LLM_FALLBACK_MODELS = parseModelList(process.env.COMPOUND_LLM_FALLBACK_MODELS);
+const LLM_FALLBACK_MODEL_LEGACY =
   (process.env.COMPOUND_LLM_FALLBACK_MODEL || '').trim() || 'openai/gpt-4o-mini';
+
+/**
+ * Build the effective fallback rotation: user-configured list + legacy single
+ * value as a final safety net. De-duplicated, preserves order.
+ */
+function buildFallbackRotation(): string[] {
+  const seen = new Set<string>();
+  const rotation: string[] = [];
+  for (const m of LLM_FALLBACK_MODELS) {
+    if (!seen.has(m)) {
+      seen.add(m);
+      rotation.push(m);
+    }
+  }
+  if (LLM_FALLBACK_MODEL_LEGACY && !seen.has(LLM_FALLBACK_MODEL_LEGACY)) {
+    rotation.push(LLM_FALLBACK_MODEL_LEGACY);
+  }
+  return rotation;
+}
 
 /**
  * Detect "reasoning" / "thinking" model families. These models burn a large
@@ -233,10 +275,35 @@ export function getModelFailureSnapshot(): Array<{ model: string; consecutiveTim
     .map(([model, consecutiveTimeouts]) => ({ model, consecutiveTimeouts }));
 }
 
-function shouldAutoFallback(model: string): boolean {
-  if (LLM_AUTO_FALLBACK_AFTER <= 0) return false;
-  if (model === LLM_FALLBACK_MODEL) return false;
-  return (consecutiveTimeoutsByModel.get(model) ?? 0) >= LLM_AUTO_FALLBACK_AFTER;
+/**
+ * Decide whether the gateway should swap models for the next call.
+ *
+ * Returns the model to use:
+ *   - `model` itself when no fallback is needed (counter below threshold).
+ *   - The next entry in the rotation that hasn't itself crossed the
+ *     threshold yet, when the active model is over budget.
+ *   - `null` when every candidate has already failed → caller proceeds with
+ *     the original model and surfaces the failure to the user.
+ *
+ * Rotation order: user list (in order) → legacy single fallback. The active
+ * model is skipped to avoid degenerate same-model retries.
+ */
+function pickFallbackModel(activeModel: string): string | null {
+  if (LLM_AUTO_FALLBACK_AFTER <= 0) return null;
+  const overBudget = (consecutiveTimeoutsByModel.get(activeModel) ?? 0) >= LLM_AUTO_FALLBACK_AFTER;
+  if (!overBudget) return null;
+
+  const rotation = buildFallbackRotation();
+  for (const candidate of rotation) {
+    if (candidate === activeModel) continue;
+    const candidateFailures = consecutiveTimeoutsByModel.get(candidate) ?? 0;
+    if (candidateFailures < LLM_AUTO_FALLBACK_AFTER) {
+      return candidate;
+    }
+  }
+  // Every fallback is also exhausted — let the active model fail loudly so
+  // the diagnostics banner can prompt the operator to fix configuration.
+  return null;
 }
 
 function isAbortTimeoutError(error: unknown): boolean {
@@ -400,16 +467,17 @@ export async function chat(opts: ChatOptions): Promise<string> {
 
   const requestedModel = opts.llmConfig?.model || opts.model || getDefaultModel();
 
-  // Auto-fallback: if recent calls to this model have all timed out, switch
-  // to a known-fast fallback for THIS call so the batch can finish.
-  const useFallback = shouldAutoFallback(requestedModel);
-  const model = useFallback ? LLM_FALLBACK_MODEL : requestedModel;
-  if (useFallback) {
+  // Auto-fallback: if recent calls to this model have all timed out, rotate
+  // to the next model in the configured list so the batch can keep moving.
+  const fallbackChoice = pickFallbackModel(requestedModel);
+  const model = fallbackChoice ?? requestedModel;
+  if (fallbackChoice) {
     logger.warn('gateway.auto_fallback', {
       requestedModel,
       fallbackModel: model,
       reason: 'consecutive_timeouts',
       threshold: LLM_AUTO_FALLBACK_AFTER,
+      rotationSize: buildFallbackRotation().length,
     });
   }
 

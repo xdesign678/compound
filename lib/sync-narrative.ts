@@ -472,12 +472,13 @@ export function deriveDiagnostics(input: {
       detail:
         `${durationCopy}。这通常不是网络问题，而是 LLM 总时长 ` +
         `(COMPOUND_LLM_TIMEOUT_MS) 设得过短，或当前模型在你的 prompt 体积下太慢。` +
-        `推荐先把 timeout 提到 ≥180000ms，或临时切换到 gpt-4o-mini 让队列尽快清空。`,
+        `推荐先把 timeout 提到 ≥180000ms，或在 Settings 切换到一个更快的模型（` +
+        `gateway 同时会按 COMPOUND_LLM_FALLBACK_MODELS 顺序自动轮询，避免再被同一个模型拖死）。`,
       affectedCount: timeoutPattern.count,
       actions: [
         {
           id: 'switch-fast-model',
-          label: '换 gpt-4o-mini',
+          label: '切换主模型',
           primary: true,
         },
         {

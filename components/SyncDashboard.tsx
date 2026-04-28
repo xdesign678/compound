@@ -148,8 +148,8 @@ function DashboardInner() {
         case 'switch-fast-model':
           toast.push(
             'info',
-            '切换模型',
-            '把 LLM_MODEL 改成 openai/gpt-4o-mini 后重启服务即可。Settings → 访问保护下方的「LLM 配置」也能临时覆盖。',
+            '切换主模型',
+            '在 Settings 选一个更快的主模型；gateway 会按 COMPOUND_LLM_FALLBACK_MODELS 列表顺序自动轮询，连续撞墙的模型会被自动跳过。',
           );
           router.push('/settings');
           return;

@@ -66,10 +66,13 @@ Use this when `/sync` 显示一批文件全部以**完全相同的秒数**（如
      COMPOUND_LLM_REASONING_EXTRA_MS=60000
      COMPOUND_LLM_STREAM_REASONING=true
      COMPOUND_LLM_AUTO_FALLBACK_AFTER=3
+     # 多模型轮询：连续撞墙时按顺序切下一个，每个模型独立计数
+     COMPOUND_LLM_FALLBACK_MODELS=mimo-v2.5-pro,deepseek-v4-flash,deepseek-v4-pro,mimo-v2.5
+     # 兜底单模型（列表全部撞墙才会用到）
      COMPOUND_LLM_FALLBACK_MODEL=openai/gpt-4o-mini
      ```
-   - 这样即使你回到慢模型，连续 3 次撞墙后会自动降级一次给 fallback 跑完，避免整批
-     都失败。
+   - 这样即使主力模型连续撞墙 3 次，下一次会自动切换到列表里下一个还没撞墙的模型，
+     避免整批都被同一个慢模型拖死。所有候选都失败时，才会用 `FALLBACK_MODEL` 兜底。
 
 3. **应用层修复**：
    - 如果模型必须用 reasoning 类，开启 streaming：`COMPOUND_LLM_STREAM_REASONING=true`
