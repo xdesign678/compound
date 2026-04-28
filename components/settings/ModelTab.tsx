@@ -2,15 +2,15 @@
 
 import { useState, useEffect, useRef, useCallback, type CSSProperties } from 'react';
 import {
-  fetchCustomModels,
-  getHiddenPresetModels,
+  fetchModelSettings,
   getLlmConfig,
-  hidePresetModel,
+  hidePresetModelOnServer,
   modelLabel,
   PRESET_MODELS,
   rememberCustomModelOnServer,
   removeCustomModelOnServer,
   saveLlmConfig,
+  saveSelectedModelOnServer,
 } from '@/lib/llm-config';
 import { clearAdminToken, getAdminToken, saveAdminToken } from '@/lib/admin-auth-client';
 import type { LlmConfig } from '@/lib/types';
@@ -67,12 +67,19 @@ export function ModelTab() {
 
   useEffect(() => {
     const timers = timersRef.current;
-    setLlmConfig(getLlmConfig());
-    setHiddenPresetModels(getHiddenPresetModels());
+    const localConfig = getLlmConfig();
+    setLlmConfig(localConfig);
     setAdminToken(getAdminToken());
-    void fetchCustomModels()
-      .then(setCustomModels)
-      .catch(() => setCustomModels([]));
+    void fetchModelSettings()
+      .then((settings) => {
+        setCustomModels(settings.models);
+        setHiddenPresetModels(settings.hiddenPresetModels);
+        setLlmConfig({ ...localConfig, model: settings.selectedModel });
+      })
+      .catch(() => {
+        setCustomModels([]);
+        setHiddenPresetModels([]);
+      });
     return () => {
       timers.forEach(clearTimeout);
     };
@@ -84,6 +91,11 @@ export function ModelTab() {
     if (model) {
       const models = await rememberCustomModelOnServer(model).catch(() => customModels);
       setCustomModels(models);
+    }
+    const settings = await saveSelectedModelOnServer(model || '').catch(() => null);
+    if (settings) {
+      setCustomModels(settings.models);
+      setHiddenPresetModels(settings.hiddenPresetModels);
     }
     setLlmSaved(true);
     safeTimeout(() => setLlmSaved(false), 2000);
@@ -102,14 +114,21 @@ export function ModelTab() {
     });
   }
 
-  function removePresetModel(model: string) {
-    setHiddenPresetModels(hidePresetModel(model));
-    setLlmConfig((config) => {
+  async function removePresetModel(model: string) {
+    const settings = await hidePresetModelOnServer(model).catch(() => null);
+    if (settings) {
+      setCustomModels(settings.models);
+      setHiddenPresetModels(settings.hiddenPresetModels);
+    } else {
+      setHiddenPresetModels((models) => Array.from(new Set([...models, model])));
+    }
+    const nextConfig = (() => {
+      const config = llmConfig;
       if (config.model !== model) return config;
-      const next = { ...config, model: '' };
-      saveLlmConfig(next);
-      return next;
-    });
+      return { ...config, model: '' };
+    })();
+    setLlmConfig(nextConfig);
+    saveLlmConfig(nextConfig);
   }
 
   function saveAdmin() {
@@ -173,7 +192,7 @@ export function ModelTab() {
                   style={MODEL_CHIP_DELETE_STYLE}
                   aria-label={`删除模型 ${modelLabel(model)}`}
                   title="删除"
-                  onClick={() => removePresetModel(model)}
+                  onClick={() => void removePresetModel(model)}
                 >
                   ×
                 </button>

@@ -1,11 +1,15 @@
 import { PRESET_MODELS } from './llm-config';
 import { getServerDb } from './server-db';
 
-const META_KEY = 'custom_model_history';
+const CUSTOM_MODELS_META_KEY = 'custom_model_history';
+const HIDDEN_PRESETS_META_KEY = 'hidden_preset_models';
+const SELECTED_MODEL_META_KEY = 'selected_llm_model';
 const MAX_CUSTOM_MODELS = 20;
 const MAX_MODEL_LENGTH = 160;
 
-export const PRESET_MODEL_VALUES = new Set(PRESET_MODELS.map((item) => item.value));
+export const PRESET_MODEL_VALUES: ReadonlySet<string> = new Set(
+  PRESET_MODELS.map((item) => item.value),
+);
 
 function parseModels(value: string | null | undefined): string[] {
   if (!value) return [];
@@ -50,25 +54,69 @@ export function forgetCustomModel(
   );
 }
 
-export function listCustomModels(): string[] {
-  const row = getServerDb().prepare(`SELECT value FROM meta WHERE key = ?`).get(META_KEY) as
+function readMetaValue(key: string): string | undefined {
+  const row = getServerDb().prepare(`SELECT value FROM meta WHERE key = ?`).get(key) as
     | { value: string }
     | undefined;
-  return rememberCustomModel(parseModels(row?.value), '');
+  return row?.value;
+}
+
+function writeMetaValue(key: string, value: unknown): void {
+  getServerDb()
+    .prepare(`INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)`)
+    .run(key, typeof value === 'string' ? value : JSON.stringify(value));
+}
+
+export function listCustomModels(): string[] {
+  return rememberCustomModel(parseModels(readMetaValue(CUSTOM_MODELS_META_KEY)), '');
 }
 
 export function saveCustomModel(model: string): string[] {
   const next = rememberCustomModel(listCustomModels(), model);
-  getServerDb()
-    .prepare(`INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)`)
-    .run(META_KEY, JSON.stringify(next));
+  writeMetaValue(CUSTOM_MODELS_META_KEY, next);
   return next;
 }
 
 export function removeCustomModel(model: string): string[] {
+  const normalized = normalizeModel(model);
   const next = forgetCustomModel(listCustomModels(), model);
-  getServerDb()
-    .prepare(`INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)`)
-    .run(META_KEY, JSON.stringify(next));
+  writeMetaValue(CUSTOM_MODELS_META_KEY, next);
+  if (getSelectedModel() === normalized) {
+    saveSelectedModel('');
+  }
+  return next;
+}
+
+export function listHiddenPresetModels(): string[] {
+  return Array.from(
+    new Set(
+      parseModels(readMetaValue(HIDDEN_PRESETS_META_KEY)).filter((item) =>
+        PRESET_MODEL_VALUES.has(item),
+      ),
+    ),
+  );
+}
+
+export function hidePresetModel(model: string): string[] {
+  const normalized = normalizeModel(model);
+  if (!PRESET_MODEL_VALUES.has(normalized)) return listHiddenPresetModels();
+
+  const next = Array.from(new Set([...listHiddenPresetModels(), normalized]));
+  writeMetaValue(HIDDEN_PRESETS_META_KEY, next);
+  if (getSelectedModel() === normalized) {
+    saveSelectedModel('');
+  }
+  return next;
+}
+
+export function getSelectedModel(): string {
+  const model = normalizeModel(readMetaValue(SELECTED_MODEL_META_KEY) || '');
+  return model.length <= MAX_MODEL_LENGTH ? model : '';
+}
+
+export function saveSelectedModel(model: string): string {
+  const normalized = normalizeModel(model);
+  const next = normalized.length <= MAX_MODEL_LENGTH ? normalized : '';
+  writeMetaValue(SELECTED_MODEL_META_KEY, next);
   return next;
 }

@@ -7,7 +7,7 @@
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
 - Routes: **29**
-- Handlers (HTTP methods): **34**
+- Handlers (HTTP methods): **35**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
@@ -317,24 +317,30 @@ _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` blo
 
 Source: [`app/api/settings/models/route.ts`](../app/api/settings/models/route.ts)
 
-| Field       | Value                   |
-| ----------- | ----------------------- |
-| Methods     | `GET`, `POST`, `DELETE` |
-| Runtime     | `nodejs`                |
-| maxDuration | _unset_                 |
-| Guards      | `admin-token`           |
+| Field       | Value                            |
+| ----------- | -------------------------------- |
+| Methods     | `GET`, `POST`, `PATCH`, `DELETE` |
+| Runtime     | `nodejs`                         |
+| maxDuration | _unset_                          |
+| Guards      | `admin-token`                    |
 
 #### GET
 
-_No JSDoc comment found above the `GET` handler. Add a leading `/** ... */` block in `app/api/settings/models/route.ts` to document this endpoint._
+Return the cloud-backed model settings: custom model shortcuts, hidden preset
+shortcuts, and the selected model override.
 
 #### POST
 
-_No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` block in `app/api/settings/models/route.ts` to document this endpoint._
+Remember a custom model shortcut in the shared server-side settings history.
+
+#### PATCH
+
+Update shared model preferences, including the selected model or a hidden
+preset shortcut.
 
 #### DELETE
 
-_No JSDoc comment found above the `DELETE` handler. Add a leading `/** ... */` block in `app/api/settings/models/route.ts` to document this endpoint._
+Remove a custom model shortcut from the shared server-side settings history.
 
 ## sync
 
