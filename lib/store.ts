@@ -48,6 +48,26 @@ export interface LintFinding {
   conceptIds: string[];
 }
 
+export interface LibraryUIState {
+  query: string;
+  selectedPrimary: string | null;
+  selectedSecondary: string | null;
+  visibleCount: number;
+  showAllSecondaries: boolean;
+  scrollTop: number;
+}
+
+const DEFAULT_LIBRARY_VISIBLE_COUNT = 60;
+
+const DEFAULT_LIBRARY_STATE: LibraryUIState = {
+  query: '',
+  selectedPrimary: null,
+  selectedSecondary: null,
+  visibleCount: DEFAULT_LIBRARY_VISIBLE_COUNT,
+  showAllSecondaries: false,
+  scrollTop: 0,
+};
+
 interface AppState {
   tab: TabId;
   detail: DetailState | null;
@@ -71,6 +91,7 @@ interface AppState {
   lineHeight: LineHeight;
   searchCollapsed: boolean;
   searchFocusNonce: number;
+  libraryState: LibraryUIState;
 
   setTab: (t: TabId) => void;
   openConcept: (id: string) => void;
@@ -105,6 +126,8 @@ interface AppState {
   hydrateLineHeight: () => void;
   setSearchCollapsed: (v: boolean) => void;
   triggerSearchFocus: () => void;
+  setLibraryState: (patch: Partial<LibraryUIState>) => void;
+  resetLibraryState: () => void;
 }
 
 function readStoredLintTimestamp() {
@@ -187,6 +210,7 @@ export const useAppStore = create<AppState>((set) => ({
   lineHeight: 'standard',
   searchCollapsed: false,
   searchFocusNonce: 0,
+  libraryState: { ...DEFAULT_LIBRARY_STATE },
 
   setTab: (t) => set({ tab: t, detail: null }),
   openConcept: (id) => {
@@ -286,4 +310,6 @@ export const useAppStore = create<AppState>((set) => ({
   },
   setSearchCollapsed: (v) => set((s) => (s.searchCollapsed === v ? s : { searchCollapsed: v })),
   triggerSearchFocus: () => set((s) => ({ searchFocusNonce: s.searchFocusNonce + 1 })),
+  setLibraryState: (patch) => set((s) => ({ libraryState: { ...s.libraryState, ...patch } })),
+  resetLibraryState: () => set({ libraryState: { ...DEFAULT_LIBRARY_STATE } }),
 }));

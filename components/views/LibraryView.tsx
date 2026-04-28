@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useDeferredValue, useCallback, useRef } from 'react';
+import { useState, useMemo, useEffect, useDeferredValue, useCallback, useRef, useLayoutEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -92,39 +92,97 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   const searchFocusNonce = useAppStore((s) => s.searchFocusNonce);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
+  const query = useAppStore((s) => s.libraryState.query);
+  const selectedPrimary = useAppStore((s) => s.libraryState.selectedPrimary);
+  const selectedSecondary = useAppStore((s) => s.libraryState.selectedSecondary);
+  const visibleCount = useAppStore((s) => s.libraryState.visibleCount);
+  const showAllSecondaries = useAppStore((s) => s.libraryState.showAllSecondaries);
+  const setLibraryState = useAppStore((s) => s.setLibraryState);
+
+  const setQuery = useCallback((v: string) => setLibraryState({ query: v }), [setLibraryState]);
+  const setSelectedPrimary = useCallback(
+    (v: string | null) => setLibraryState({ selectedPrimary: v }),
+    [setLibraryState]
+  );
+  const setSelectedSecondary = useCallback(
+    (v: string | null) => setLibraryState({ selectedSecondary: v }),
+    [setLibraryState]
+  );
+  const setVisibleCount = useCallback(
+    (updater: number | ((count: number) => number)) => {
+      const current = useAppStore.getState().libraryState.visibleCount;
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      setLibraryState({ visibleCount: next });
+    },
+    [setLibraryState]
+  );
+  const setShowAllSecondaries = useCallback(
+    (updater: boolean | ((v: boolean) => boolean)) => {
+      const current = useAppStore.getState().libraryState.showAllSecondaries;
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      setLibraryState({ showAllSecondaries: next });
+    },
+    [setLibraryState]
+  );
+
   const concepts = useLiveQuery(
     async () => getDb().concepts.orderBy('updatedAt').reverse().toArray(),
     [],
   );
 
-  const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
-  const [selectedPrimary, setSelectedPrimary] = useState<string | null>(null);
-  const [selectedSecondary, setSelectedSecondary] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [primaryRailState, setPrimaryRailState] = useState({
     canScrollLeft: false,
     canScrollRight: false,
   });
   const primaryRailRef = useRef<HTMLDivElement | null>(null);
+  const filterResetSkipRef = useRef(true);
+  const scrollRestoredRef = useRef(false);
 
   useEffect(() => {
     const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
     if (!main) return;
+    let raf = 0;
+    let pendingY: number | null = null;
+    const flush = () => {
+      raf = 0;
+      if (pendingY !== null) {
+        useAppStore.getState().setLibraryState({ scrollTop: pendingY });
+        pendingY = null;
+      }
+    };
     const onScroll = () => {
       const y = main.scrollTop;
       setScrolled(y > 4);
       setSearchCollapsed(y > 40);
+      pendingY = y;
+      if (!raf) raf = requestAnimationFrame(flush);
     };
     onScroll();
     main.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       main.removeEventListener('scroll', onScroll);
       setSearchCollapsed(false);
+      if (raf) cancelAnimationFrame(raf);
+      if (pendingY !== null) {
+        useAppStore.getState().setLibraryState({ scrollTop: pendingY });
+      }
     };
   }, [scrollRootSelector, setSearchCollapsed]);
+
+  useLayoutEffect(() => {
+    if (scrollRestoredRef.current) return;
+    if (!concepts) return;
+    const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
+    if (!main) return;
+    scrollRestoredRef.current = true;
+    const saved = useAppStore.getState().libraryState.scrollTop;
+    if (saved > 0) {
+      main.scrollTop = saved;
+    }
+  }, [concepts, scrollRootSelector]);
 
   useEffect(() => {
     if (searchFocusNonce === 0) return;
@@ -133,8 +191,12 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   }, [searchFocusNonce]);
 
   useEffect(() => {
+    if (filterResetSkipRef.current) {
+      filterResetSkipRef.current = false;
+      return;
+    }
     setVisibleCount(PAGE_SIZE);
-  }, [deferredQuery, selectedPrimary, selectedSecondary]);
+  }, [deferredQuery, selectedPrimary, selectedSecondary, setVisibleCount]);
 
   const syncPrimaryRailState = useCallback(() => {
     const rail = primaryRailRef.current;
@@ -185,7 +247,6 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
     return categoryTree.find((t) => t.primary === selectedPrimary) ?? null;
   }, [categoryTree, selectedPrimary]);
 
-  const [showAllSecondaries, setShowAllSecondaries] = useState(false);
   const SECONDARY_INITIAL_COUNT = 8;
 
   const visibleSecondaries = useMemo(() => {
