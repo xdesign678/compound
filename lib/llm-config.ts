@@ -3,6 +3,7 @@ import { getAdminAuthHeaders } from './admin-auth-client';
 import { withRequestId } from './trace-client';
 
 const STORAGE_KEY = 'compound_llm_config';
+const HIDDEN_PRESET_MODELS_KEY = 'compound_hidden_preset_models';
 
 export const PRESET_MODELS = [
   { label: 'Claude Sonnet 4.6', value: 'anthropic/claude-sonnet-4.6' },
@@ -24,6 +25,31 @@ export function getLlmConfig(): LlmConfig {
 export function saveLlmConfig(config: LlmConfig): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+}
+
+export function getHiddenPresetModels(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(HIDDEN_PRESET_MODELS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    const presetValues: ReadonlySet<string> = new Set(PRESET_MODELS.map((item) => item.value));
+    return parsed.filter(
+      (item): item is string => typeof item === 'string' && presetValues.has(item),
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function hidePresetModel(model: string): string[] {
+  if (typeof window === 'undefined') return [];
+  const presetValues: ReadonlySet<string> = new Set(PRESET_MODELS.map((item) => item.value));
+  if (!presetValues.has(model)) return getHiddenPresetModels();
+
+  const next = Array.from(new Set([...getHiddenPresetModels(), model]));
+  localStorage.setItem(HIDDEN_PRESET_MODELS_KEY, JSON.stringify(next));
+  return next;
 }
 
 export async function fetchCustomModels(): Promise<string[]> {

@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef, useCallback, type CSSProperties } from 'react';
 import {
   fetchCustomModels,
+  getHiddenPresetModels,
   getLlmConfig,
+  hidePresetModel,
   modelLabel,
   PRESET_MODELS,
   rememberCustomModelOnServer,
@@ -31,8 +33,8 @@ const MODEL_CHIP_LABEL_STYLE: CSSProperties = {
 };
 
 const MODEL_CHIP_DELETE_STYLE: CSSProperties = {
-  width: 22,
-  height: 22,
+  width: 16,
+  height: 16,
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -41,12 +43,16 @@ const MODEL_CHIP_DELETE_STYLE: CSSProperties = {
   background: 'transparent',
   color: 'inherit',
   cursor: 'pointer',
+  fontSize: 13,
+  lineHeight: 1,
+  opacity: 0.62,
   padding: 0,
 };
 
 export function ModelTab() {
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
   const [customModels, setCustomModels] = useState<string[]>([]);
+  const [hiddenPresetModels, setHiddenPresetModels] = useState<string[]>([]);
   const [llmAdvancedExpanded, setLlmAdvancedExpanded] = useState(false);
   const [llmSaved, setLlmSaved] = useState(false);
   const [adminToken, setAdminToken] = useState('');
@@ -62,6 +68,7 @@ export function ModelTab() {
   useEffect(() => {
     const timers = timersRef.current;
     setLlmConfig(getLlmConfig());
+    setHiddenPresetModels(getHiddenPresetModels());
     setAdminToken(getAdminToken());
     void fetchCustomModels()
       .then(setCustomModels)
@@ -87,6 +94,16 @@ export function ModelTab() {
       customModels.filter((item) => item !== model),
     );
     setCustomModels(models);
+    setLlmConfig((config) => {
+      if (config.model !== model) return config;
+      const next = { ...config, model: '' };
+      saveLlmConfig(next);
+      return next;
+    });
+  }
+
+  function removePresetModel(model: string) {
+    setHiddenPresetModels(hidePresetModel(model));
     setLlmConfig((config) => {
       if (config.model !== model) return config;
       const next = { ...config, model: '' };
@@ -135,16 +152,33 @@ export function ModelTab() {
         </label>
 
         <div className="settings-preset-row">
-          {PRESET_MODELS.map((item) => item.value).map((model) => (
-            <button
-              key={model}
-              className={`settings-preset${llmConfig.model === model ? ' active' : ''}`}
-              title={model}
-              onClick={() => setLlmConfig((c) => ({ ...c, model }))}
-            >
-              {modelLabel(model)}
-            </button>
-          ))}
+          {PRESET_MODELS.map((item) => item.value)
+            .filter((model) => !hiddenPresetModels.includes(model))
+            .map((model) => (
+              <span
+                key={model}
+                className={`settings-preset${llmConfig.model === model ? ' active' : ''}`}
+                style={MODEL_CHIP_STYLE}
+                title={model}
+              >
+                <button
+                  type="button"
+                  style={MODEL_CHIP_LABEL_STYLE}
+                  onClick={() => setLlmConfig((c) => ({ ...c, model }))}
+                >
+                  {modelLabel(model)}
+                </button>
+                <button
+                  type="button"
+                  style={MODEL_CHIP_DELETE_STYLE}
+                  aria-label={`删除模型 ${modelLabel(model)}`}
+                  title="删除"
+                  onClick={() => removePresetModel(model)}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
           {customModels.map((model) => (
             <span
               key={model}
@@ -166,7 +200,7 @@ export function ModelTab() {
                 title="删除"
                 onClick={() => void removeCustomModel(model)}
               >
-                <Icon.Trash />
+                ×
               </button>
             </span>
           ))}
