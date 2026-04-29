@@ -28,6 +28,7 @@ import type {
 } from './types';
 
 const DEFAULT_DATA_DIR = path.resolve(process.cwd(), 'data');
+const MIN_DIRECT_TITLE_MENTION_LENGTH = 2;
 
 function resolveDbPath(): string {
   const dir = process.env.DATA_DIR?.trim() || DEFAULT_DATA_DIR;
@@ -420,6 +421,42 @@ function jsonArrayValueLikePattern(value: string): string {
   return `%${escapeLikePattern(JSON.stringify(value))}%`;
 }
 
+function normalizeSearchText(value: string | undefined): string {
+  return (value || '').trim().toLowerCase();
+}
+
+function mergeConceptCandidateLists(groups: Concept[][], limit: number): Concept[] {
+  const seen = new Set<string>();
+  const out: Concept[] = [];
+  for (const group of groups) {
+    for (const concept of group) {
+      if (seen.has(concept.id)) continue;
+      seen.add(concept.id);
+      out.push(concept);
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
+}
+
+function findDirectTitleMentionConcepts(searchText: string, limit: number): Concept[] {
+  const normalizedSearchText = normalizeSearchText(searchText);
+  if (normalizedSearchText.length === 0) return [];
+
+  const rows = getServerDb()
+    .prepare(
+      `SELECT ${selectConceptColumns(true)}
+       FROM concepts
+       WHERE length(trim(title)) >= ?
+         AND instr(?, lower(title)) > 0
+       ORDER BY length(title) DESC, updated_at DESC
+       LIMIT ?`,
+    )
+    .all(MIN_DIRECT_TITLE_MENTION_LENGTH, normalizedSearchText, limit) as ConceptRow[];
+
+  return rows.map((row) => rowToConcept(row, 'partial'));
+}
+
 function rowToActivity(r: ActivityRow): ActivityLog {
   return {
     id: r.id,
@@ -707,6 +744,7 @@ export const repo = {
 
   findConceptCandidates(searchText: string, limit: number = 240): Concept[] {
     const normalizedLimit = Math.max(1, Math.trunc(limit));
+    const directMatches = findDirectTitleMentionConcepts(searchText, normalizedLimit);
     const keywords = Array.from(
       new Set(
         searchText
@@ -718,6 +756,7 @@ export const repo = {
     ).slice(0, 12);
 
     if (keywords.length === 0) {
+      if (directMatches.length > 0) return directMatches;
       return repo.listConcepts({ summariesOnly: true, limit: normalizedLimit });
     }
 
@@ -735,15 +774,16 @@ export const repo = {
             ftsRows.map((r) => r.concept_id),
             { summariesOnly: true },
           );
-          if (matched.length >= Math.min(normalizedLimit, 80)) {
-            return matched;
+          const candidates = mergeConceptCandidateLists([directMatches, matched], normalizedLimit);
+          if (candidates.length >= Math.min(normalizedLimit, 80)) {
+            return candidates;
           }
           // Pad with recent concepts when FTS results are insufficient
-          const existingIds = new Set(matched.map((c) => c.id));
+          const existingIds = new Set(candidates.map((c) => c.id));
           const fallback = repo
             .listConcepts({ summariesOnly: true, limit: normalizedLimit * 2 })
             .filter((c) => !existingIds.has(c.id));
-          return [...matched, ...fallback].slice(0, normalizedLimit);
+          return mergeConceptCandidateLists([candidates, fallback], normalizedLimit);
         }
       } catch {
         // concept_fts table missing or FTS5 unavailable – fall through to LIKE
@@ -767,11 +807,12 @@ export const repo = {
       .all(...queryParams, normalizedLimit) as ConceptRow[];
 
     const matched = matchedRows.map((row) => rowToConcept(row, 'partial'));
-    if (matched.length >= Math.min(normalizedLimit, 80)) {
-      return matched;
+    const candidates = mergeConceptCandidateLists([directMatches, matched], normalizedLimit);
+    if (candidates.length >= Math.min(normalizedLimit, 80)) {
+      return candidates;
     }
 
-    const existingIds = new Set(matched.map((concept) => concept.id));
+    const existingIds = new Set(candidates.map((concept) => concept.id));
     const fallback = repo
       .listConcepts({
         summariesOnly: true,
@@ -779,7 +820,7 @@ export const repo = {
       })
       .filter((concept) => !existingIds.has(concept.id));
 
-    return [...matched, ...fallback].slice(0, normalizedLimit);
+    return mergeConceptCandidateLists([candidates, fallback], normalizedLimit);
   },
 
   // ---- activity --------------------------------------------------

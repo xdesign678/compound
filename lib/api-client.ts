@@ -22,6 +22,7 @@ import type {
 
 const CLIENT_CANDIDATE_LIMIT = 320;
 const QUERY_CANDIDATE_LIMIT = 50;
+const MIN_DIRECT_TITLE_MENTION_LENGTH = 2;
 
 function extractSearchTerms(text: string): string[] {
   return Array.from(
@@ -35,33 +36,55 @@ function extractSearchTerms(text: string): string[] {
   ).slice(0, 12);
 }
 
+function normalizeSearchText(text: string | undefined): string {
+  return (text || '').trim().toLowerCase();
+}
+
+function isDirectTitleMention(title: string | undefined, searchText: string): boolean {
+  const normalizedTitle = normalizeSearchText(title);
+  return (
+    normalizedTitle.length >= MIN_DIRECT_TITLE_MENTION_LENGTH &&
+    normalizeSearchText(searchText).includes(normalizedTitle)
+  );
+}
+
 async function findClientConceptCandidates(
   searchText: string,
   limit: number = CLIENT_CANDIDATE_LIMIT,
 ): Promise<Concept[]> {
   const db = getDb();
   const keywords = extractSearchTerms(searchText);
-  const collection = db.concepts.orderBy('updatedAt').reverse();
+  const collection = () => db.concepts.orderBy('updatedAt').reverse();
 
   if (keywords.length === 0) {
-    return collection.limit(limit).toArray();
+    return collection().limit(limit).toArray();
   }
 
-  const matched = await collection
+  const directMatches = await collection()
+    .filter((concept) => isDirectTitleMention(concept.title, searchText))
+    .limit(limit)
+    .toArray();
+  const directIds = new Set(directMatches.map((concept) => concept.id));
+
+  const matched = await collection()
     .filter((concept) => {
+      if (directIds.has(concept.id)) return false;
       const haystack = `${concept.title}\n${concept.summary}`.toLowerCase();
       return keywords.some((keyword) => haystack.includes(keyword));
     })
     .limit(limit)
     .toArray();
+  const candidates = [...directMatches, ...matched].slice(0, limit);
 
-  if (matched.length >= Math.min(limit, 80)) {
-    return matched;
+  if (candidates.length >= Math.min(limit, 80)) {
+    return candidates;
   }
 
-  const fallback = await collection.limit(limit * 2).toArray();
-  const seen = new Set(matched.map((concept) => concept.id));
-  return [...matched, ...fallback.filter((concept) => !seen.has(concept.id))].slice(0, limit);
+  const fallback = await collection()
+    .limit(limit * 2)
+    .toArray();
+  const seen = new Set(candidates.map((concept) => concept.id));
+  return [...candidates, ...fallback.filter((concept) => !seen.has(concept.id))].slice(0, limit);
 }
 
 async function addBidirectionalLinks(

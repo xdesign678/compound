@@ -141,6 +141,61 @@ test('replaceRelatedId 能处理需要 JSON 和 LIKE 转义的 related id', asyn
   });
 });
 
+test('findConceptCandidates 会优先命中嵌在中文问题里的概念标题', async (t) => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'compound-server-db-'));
+  const previousDataDir = process.env.DATA_DIR;
+
+  process.env.DATA_DIR = tempDir;
+  closeServerDbGlobal();
+
+  const { repo } = await import('./server-db');
+
+  const now = Date.now();
+  repo.upsertConcept({
+    id: 'c-embodied-cognition',
+    title: '具身认知',
+    summary: '身体的感觉运动系统不是认知的旁观者，而是积极参与者。',
+    body: '具身认知强调身体、感知运动系统和环境共同塑造认知。',
+    sources: [],
+    related: [],
+    createdAt: now - 10_000,
+    updatedAt: now - 10_000,
+    version: 1,
+    categories: [],
+    categoryKeys: [],
+  });
+
+  for (let i = 0; i < 5; i++) {
+    repo.upsertConcept({
+      id: `c-unrelated-${i}`,
+      title: `无关概念 ${i}`,
+      summary: '这个概念只是用来占据最近更新候选。',
+      body: '无关正文。',
+      sources: [],
+      related: [],
+      createdAt: now + i,
+      updatedAt: now + i,
+      version: 1,
+      categories: [],
+      categoryKeys: [],
+    });
+  }
+
+  const candidates = repo.findConceptCandidates('具身认知相关解释', 3);
+
+  assert.equal(candidates[0]?.id, 'c-embodied-cognition');
+
+  t.after(() => {
+    closeServerDbGlobal();
+    if (previousDataDir === undefined) {
+      delete process.env.DATA_DIR;
+    } else {
+      process.env.DATA_DIR = previousDataDir;
+    }
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+});
+
 test('rebuildAllIndexes 会从现有资料回填 chunk 和 evidence', async (t) => {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), 'compound-wiki-db-'));
   const previousDataDir = process.env.DATA_DIR;
