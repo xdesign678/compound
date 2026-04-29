@@ -8,8 +8,17 @@ import { hasConceptBodyContent } from '@/lib/content-status';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
+import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
+import type { ConceptVersion } from '@/lib/types';
 import { SourceTypeIcon } from '../Icons';
 import { Prose } from '../Prose';
+
+type VersionDialogState = {
+  open: boolean;
+  loading: boolean;
+  error: string | null;
+  versions: ConceptVersion[];
+};
 
 export function ConceptDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
@@ -19,6 +28,12 @@ export function ConceptDetail({ id }: { id: string }) {
   const [hydrateError, setHydrateError] = useState<string | null>(null);
   const [hydrateAttempt, setHydrateAttempt] = useState(0);
   const [retrying, setRetrying] = useState(false);
+  const [versionDialog, setVersionDialog] = useState<VersionDialogState>({
+    open: false,
+    loading: false,
+    error: null,
+    versions: [],
+  });
   const retryTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const concept = useLiveQuery(async () => getDb().concepts.get(id), [id]);
@@ -56,6 +71,12 @@ export function ConceptDetail({ id }: { id: string }) {
     setHydrateError(null);
     setHydrating(false);
     setRetrying(false);
+    setVersionDialog({
+      open: false,
+      loading: false,
+      error: null,
+      versions: [],
+    });
   }, [id]);
 
   useEffect(() => {
@@ -71,6 +92,43 @@ export function ConceptDetail({ id }: { id: string }) {
   if (!concept) return <div className="empty-state">未找到概念</div>;
 
   const isFresh = freshIds[concept.id];
+  const currentVersion = versionDialog.versions.find((item) => item.version === concept.version);
+  const canInspectVersion = concept.version > 1;
+
+  async function openVersionDialog() {
+    setVersionDialog((state) => ({
+      ...state,
+      open: true,
+      loading: state.versions.length === 0,
+      error: null,
+    }));
+    if (versionDialog.versions.length > 0) return;
+
+    try {
+      const res = await fetch(`/api/data/concepts/${encodeURIComponent(id)}/versions`, {
+        headers: getAdminAuthHeaders(),
+      });
+      if (!res.ok) throw new Error('读取失败');
+      const data = (await res.json()) as { versions?: ConceptVersion[] };
+      setVersionDialog({
+        open: true,
+        loading: false,
+        error: null,
+        versions: data.versions ?? [],
+      });
+    } catch {
+      setVersionDialog({
+        open: true,
+        loading: false,
+        error: '暂时读不到这次改动记录，请稍后再试。',
+        versions: [],
+      });
+    }
+  }
+
+  function closeVersionDialog() {
+    setVersionDialog((state) => ({ ...state, open: false }));
+  }
 
   return (
     <article className="concept-detail">
@@ -163,10 +221,21 @@ export function ConceptDetail({ id }: { id: string }) {
 
       <div className="detail-section">
         <h3>AI 编辑记录</h3>
-        <div className="edit-log-item">
-          <span className="time">{formatRelativeTime(concept.updatedAt)}</span>
-          <span>当前版本 v{concept.version}</span>
-        </div>
+        {canInspectVersion ? (
+          <button
+            className="edit-log-item edit-log-button"
+            type="button"
+            onClick={openVersionDialog}
+          >
+            <span className="time">{formatRelativeTime(concept.updatedAt)}</span>
+            <span>当前版本 v{concept.version}</span>
+          </button>
+        ) : (
+          <div className="edit-log-item">
+            <span className="time">{formatRelativeTime(concept.updatedAt)}</span>
+            <span>当前版本 v{concept.version}</span>
+          </div>
+        )}
         {concept.createdAt !== concept.updatedAt && (
           <div className="edit-log-item">
             <span className="time">{formatRelativeTime(concept.createdAt)}</span>
@@ -174,6 +243,51 @@ export function ConceptDetail({ id }: { id: string }) {
           </div>
         )}
       </div>
+
+      {versionDialog.open && (
+        <div className="modal-overlay visible" onClick={closeVersionDialog}>
+          <div
+            className="modal concept-version-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="concept-version-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-handle" />
+            <div className="concept-version-head">
+              <div>
+                <div className="settings-kicker">AI 编辑记录</div>
+                <h3 id="concept-version-title">当前版本 v{concept.version}</h3>
+              </div>
+              <button className="settings-close-btn" type="button" onClick={closeVersionDialog}>
+                关闭
+              </button>
+            </div>
+
+            {versionDialog.loading ? (
+              <p className="modal-desc">正在读取这次改动...</p>
+            ) : versionDialog.error ? (
+              <p className="modal-desc">{versionDialog.error}</p>
+            ) : currentVersion ? (
+              <div className="concept-version-detail">
+                <p className="concept-version-summary">{currentVersion.changeSummary}</p>
+                <dl className="concept-version-meta">
+                  <div>
+                    <dt>更新时间</dt>
+                    <dd>{formatRelativeTime(currentVersion.createdAt)}</dd>
+                  </div>
+                  <div>
+                    <dt>关联资料</dt>
+                    <dd>{currentVersion.sourceIds.length} 份</dd>
+                  </div>
+                </dl>
+              </div>
+            ) : (
+              <p className="modal-desc">这版还没有详细改动记录。</p>
+            )}
+          </div>
+        </div>
+      )}
     </article>
   );
 }

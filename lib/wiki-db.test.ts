@@ -258,3 +258,47 @@ Alpha example shows how the idea works in practice.`,
     rmSync(tempDir, { recursive: true, force: true });
   });
 });
+
+test('getConceptVersions 按版本倒序返回 AI 编辑记录', async (t) => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'compound-wiki-db-'));
+  const previousDataDir = process.env.DATA_DIR;
+
+  process.env.DATA_DIR = tempDir;
+  closeServerDbGlobal();
+
+  const { wikiRepo } = await import('./wiki-db');
+
+  wikiRepo.recordConceptVersion({
+    conceptId: 'c-history',
+    version: 1,
+    nextBody: '第一版',
+    sourceIds: ['s-1'],
+    changeSummary: '首次创建。',
+  });
+  wikiRepo.recordConceptVersion({
+    conceptId: 'c-history',
+    version: 2,
+    previousBody: '第一版',
+    nextBody: '第二版',
+    sourceIds: ['s-2'],
+    changeSummary: '补充第二版内容。',
+  });
+
+  const versions = wikiRepo.getConceptVersions('c-history');
+
+  assert.equal(versions.length, 2);
+  assert.equal(versions[0].version, 2);
+  assert.equal(versions[0].changeSummary, '补充第二版内容。');
+  assert.deepEqual(versions[0].sourceIds, ['s-2']);
+  assert.equal(versions[1].version, 1);
+
+  t.after(() => {
+    closeServerDbGlobal();
+    if (previousDataDir === undefined) {
+      delete process.env.DATA_DIR;
+    } else {
+      process.env.DATA_DIR = previousDataDir;
+    }
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+});

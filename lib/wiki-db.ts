@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid';
 import { logger } from './logging';
 import { getServerDb, repo } from './server-db';
 import { splitMarkdownIntoChunks, type SourceChunkDraft } from './wiki-chunk';
-import type { Concept, Source } from './types';
+import type { Concept, ConceptVersion, Source } from './types';
 
 export type EvidenceKind =
   | 'definition'
@@ -48,6 +48,7 @@ export interface QueryContext {
 
 let migrationsReady = false;
 let ftsReady: boolean | null = null;
+let migrationsDb: unknown = null;
 
 function json<T>(value: T): string {
   return JSON.stringify(value ?? null);
@@ -121,6 +122,19 @@ function quoteFromChunk(content: string): string {
     .slice(0, 360);
 }
 
+function rowToConceptVersion(row: Record<string, unknown>): ConceptVersion {
+  return {
+    id: String(row.id),
+    conceptId: String(row.concept_id),
+    version: Number(row.version),
+    previousBody: row.previous_body ? String(row.previous_body) : undefined,
+    nextBody: String(row.next_body),
+    sourceIds: parseJsonArray<string>(String(row.source_ids ?? '[]')),
+    changeSummary: String(row.change_summary),
+    createdAt: Number(row.created_at),
+  };
+}
+
 function buildEvidenceDrafts(
   source: Source,
   concept: Concept,
@@ -145,8 +159,8 @@ function buildEvidenceDrafts(
 }
 
 export function ensureWikiCompilerSchema(): void {
-  if (migrationsReady) return;
   const db = getServerDb();
+  if (migrationsReady && migrationsDb === db) return;
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS source_chunks (
@@ -251,6 +265,7 @@ export function ensureWikiCompilerSchema(): void {
   }
 
   migrationsReady = true;
+  migrationsDb = db;
 }
 
 function rowToChunk(row: Record<string, unknown>): SourceChunk {
@@ -489,6 +504,21 @@ export const wikiRepo = {
         change_summary: input.changeSummary,
         created_at: Date.now(),
       });
+  },
+
+  getConceptVersions(conceptId: string): ConceptVersion[] {
+    ensureWikiCompilerSchema();
+    const rows = getServerDb()
+      .prepare(
+        `
+        SELECT id, concept_id, version, previous_body, next_body, source_ids, change_summary, created_at
+        FROM concept_versions
+        WHERE concept_id = ?
+        ORDER BY version DESC, created_at DESC
+      `,
+      )
+      .all(conceptId) as Array<Record<string, unknown>>;
+    return rows.map(rowToConceptVersion);
   },
 
   searchConcepts(query: string, limit = 24): Concept[] {

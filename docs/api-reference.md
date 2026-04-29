@@ -6,8 +6,8 @@
 
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
-- Routes: **29**
-- Handlers (HTTP methods): **35**
+- Routes: **30**
+- Handlers (HTTP methods): **36**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
@@ -15,6 +15,7 @@ This document is generated automatically from the Next.js Route Handlers under `
 - **categorize**
   - [`/api/categorize`](#api-categorize)
 - **data**
+  - [`/api/data/concepts/{id}/versions`](#api-data-concepts--id--versions)
   - [`/api/data/concepts`](#api-data-concepts)
   - [`/api/data/snapshot`](#api-data-snapshot)
   - [`/api/data/sources`](#api-data-sources)
@@ -72,6 +73,22 @@ Source: [`app/api/categorize/route.ts`](../app/api/categorize/route.ts)
 _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` block in `app/api/categorize/route.ts` to document this endpoint._
 
 ## data
+
+### `/api/data/concepts/{id}/versions`
+
+Source: [`app/api/data/concepts/[id]/versions/route.ts`](../app/api/data/concepts/[id]/versions/route.ts)
+
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | 30            |
+| Guards      | `admin-token` |
+
+#### GET
+
+GET /api/data/concepts/:id/versions
+Returns AI-maintained edit history for a concept.
 
 ### `/api/data/concepts`
 

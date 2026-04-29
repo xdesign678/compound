@@ -1,6 +1,14 @@
 'use client';
 
-import { useState, useMemo, useEffect, useDeferredValue, useCallback, useRef, useLayoutEffect } from 'react';
+import {
+  useState,
+  useMemo,
+  useEffect,
+  useDeferredValue,
+  useCallback,
+  useRef,
+  useLayoutEffect,
+} from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -102,11 +110,11 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   const setQuery = useCallback((v: string) => setLibraryState({ query: v }), [setLibraryState]);
   const setSelectedPrimary = useCallback(
     (v: string | null) => setLibraryState({ selectedPrimary: v }),
-    [setLibraryState]
+    [setLibraryState],
   );
   const setSelectedSecondary = useCallback(
     (v: string | null) => setLibraryState({ selectedSecondary: v }),
-    [setLibraryState]
+    [setLibraryState],
   );
   const setVisibleCount = useCallback(
     (updater: number | ((count: number) => number)) => {
@@ -114,7 +122,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
       const next = typeof updater === 'function' ? updater(current) : updater;
       setLibraryState({ visibleCount: next });
     },
-    [setLibraryState]
+    [setLibraryState],
   );
   const setShowAllSecondaries = useCallback(
     (updater: boolean | ((v: boolean) => boolean)) => {
@@ -122,7 +130,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
       const next = typeof updater === 'function' ? updater(current) : updater;
       setLibraryState({ showAllSecondaries: next });
     },
-    [setLibraryState]
+    [setLibraryState],
   );
 
   const concepts = useLiveQuery(

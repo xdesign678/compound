@@ -41,6 +41,17 @@ export interface Concept {
   categoryKeys: string[];
 }
 
+export interface ConceptVersion {
+  id: string;
+  conceptId: string;
+  version: number;
+  previousBody?: string;
+  nextBody: string;
+  sourceIds: string[];
+  changeSummary: string;
+  createdAt: number;
+}
+
 export type ActivityType = 'ingest' | 'query' | 'lint';
 
 export interface ActivityLog {
