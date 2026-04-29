@@ -6,14 +6,16 @@
 
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
-- Routes: **30**
-- Handlers (HTTP methods): **36**
+- Routes: **31**
+- Handlers (HTTP methods): **37**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
 
 - **categorize**
   - [`/api/categorize`](#api-categorize)
+- **concepts**
+  - [`/api/concepts/from-selection`](#api-concepts-from-selection)
 - **data**
   - [`/api/data/concepts/{id}/versions`](#api-data-concepts--id--versions)
   - [`/api/data/concepts`](#api-data-concepts)
@@ -71,6 +73,34 @@ Source: [`app/api/categorize/route.ts`](../app/api/categorize/route.ts)
 #### POST
 
 _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` block in `app/api/categorize/route.ts` to document this endpoint._
+
+## concepts
+
+### `/api/concepts/from-selection`
+
+Source: [`app/api/concepts/from-selection/route.ts`](../app/api/concepts/from-selection/route.ts)
+
+| Field       | Value                                                   |
+| ----------- | ------------------------------------------------------- |
+| Methods     | `POST`                                                  |
+| Runtime     | `nodejs`                                                |
+| maxDuration | 90                                                      |
+| Guards      | `admin-token`, `rate-limited`, `content-length-guarded` |
+
+#### POST
+
+Create a brand-new Wiki concept page from a free-form text selection. The
+selection (typically grabbed from another concept page in the UI) is fed to
+the LLM together with a candidate list of related Wiki concepts so it can
+synthesise a focused note that links back into the existing graph.
+
+Body: `SelectionWikiRequest` — `selection` is required (>= 6, <= 4k chars).
+Optional `sourceConceptId` (the page the snippet came from) is added as the
+first related link; `contextTitle` adds extra grounding. The response mirrors
+the persisted concept and any concepts that received bidirectional updates,
+mirroring the shape produced by `/api/ingest`.
+
+Guards: admin token, LLM rate limit, 256KB body cap.
 
 ## data
 

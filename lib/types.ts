@@ -129,6 +129,23 @@ export interface PersistedIngestResponse {
   };
 }
 
+export interface SelectionWikiRequest {
+  selection: string;
+  /** 用户当前所在概念页 id；新概念会与之建立 related 关联。 */
+  sourceConceptId?: string;
+  /** 当前概念页标题，作为额外上下文。 */
+  contextTitle?: string;
+  llmConfig?: LlmConfig;
+}
+
+export interface SelectionWikiResponse {
+  status: 'created' | 'duplicate';
+  conceptId: string;
+  /** 受影响（新建 / 双向链接更新）的全部概念，便于客户端镜像写入 Dexie。 */
+  concepts: Concept[];
+  activity: ActivityLog;
+}
+
 export interface QueryRequest {
   question: string;
   concepts: Array<{ id: string; title: string; summary: string; body?: string }>;

@@ -17,6 +17,8 @@ import type {
   LintResponse,
   CategorizeRequest,
   CategorizeResponse,
+  SelectionWikiRequest,
+  SelectionWikiResponse,
   SourceType,
 } from './types';
 
@@ -284,6 +286,41 @@ export async function askWiki(
   };
 
   return postJSON<QueryResponse>('/api/query', req);
+}
+
+/**
+ * Create a new wiki concept from a free-form text selection. The server
+ * runs the LLM with related-concept context and persists the new concept,
+ * we mirror the result into Dexie so the page is immediately visible.
+ */
+export async function createWikiFromSelection(input: {
+  selection: string;
+  sourceConceptId?: string;
+  contextTitle?: string;
+}): Promise<SelectionWikiResponse> {
+  const req: SelectionWikiRequest = {
+    selection: input.selection,
+    sourceConceptId: input.sourceConceptId,
+    contextTitle: input.contextTitle,
+  };
+  const resp = await postJSON<SelectionWikiResponse>('/api/concepts/from-selection', req);
+
+  if (resp.concepts.length > 0) {
+    const db = getDb();
+    await db.transaction('rw', db.concepts, async () => {
+      await db.concepts.bulkPut(
+        resp.concepts.map((concept) => ({
+          ...concept,
+          contentStatus: 'full' as const,
+        })),
+      );
+    });
+  }
+  if (resp.activity) {
+    await getDb().activity.put(resp.activity);
+  }
+
+  return resp;
 }
 
 export async function archiveAnswerAsConcept(

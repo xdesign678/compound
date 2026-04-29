@@ -979,6 +979,67 @@ button {
   }
 }
 
+/* ConceptDetail selection popover — appears above a text selection in the body
+   so the reader can spin a brand-new concept page from that snippet. */
+.selection-popover {
+  position: absolute;
+  z-index: 60;
+  transform: translate(-50%, -100%);
+  pointer-events: auto;
+  animation: selection-popover-in 140ms var(--motion-ease-emphasized) both;
+}
+.selection-popover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--bg-button);
+  color: var(--text-on-button);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+.selection-popover-btn:hover:not(:disabled) {
+  background: var(--bg-button-hover);
+  transform: translateY(-1px);
+}
+.selection-popover-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.selection-popover-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--brand-clay);
+  color: var(--text-on-button);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+}
+@keyframes selection-popover-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-100% + 6px));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -100%);
+  }
+}
+
 /* ConceptDetail hydrate error */
 .concept-hydrate-error {
   text-align: center;

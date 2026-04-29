@@ -9,6 +9,7 @@ import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
+import { createWikiFromSelection } from '@/lib/api-client';
 import type { ConceptVersion } from '@/lib/types';
 import { SourceTypeIcon } from '../Icons';
 import { Prose } from '../Prose';
@@ -20,9 +21,22 @@ type VersionDialogState = {
   versions: ConceptVersion[];
 };
 
+type SelectionPopoverState = {
+  visible: boolean;
+  /** viewport-relative anchor — popover positions itself absolutely against window. */
+  top: number;
+  left: number;
+  text: string;
+};
+
+const MIN_SELECTION_CHARS = 6;
+const MAX_SELECTION_CHARS = 4_000;
+
 export function ConceptDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
   const openSource = useAppStore((s) => s.openSource);
+  const showToast = useAppStore((s) => s.showToast);
+  const markFresh = useAppStore((s) => s.markFresh);
   const freshIds = useAppStore((s) => s.freshConceptIds);
   const [, setHydrating] = useState(false);
   const [hydrateError, setHydrateError] = useState<string | null>(null);
@@ -34,7 +48,15 @@ export function ConceptDetail({ id }: { id: string }) {
     error: null,
     versions: [],
   });
+  const [selectionPopover, setSelectionPopover] = useState<SelectionPopoverState>({
+    visible: false,
+    top: 0,
+    left: 0,
+    text: '',
+  });
+  const [creatingFromSelection, setCreatingFromSelection] = useState(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const bodyShellRef = useRef<HTMLDivElement>(null);
 
   const concept = useLiveQuery(async () => getDb().concepts.get(id), [id]);
   const sources = useLiveQuery(async () => {
@@ -77,7 +99,112 @@ export function ConceptDetail({ id }: { id: string }) {
       error: null,
       versions: [],
     });
+    setSelectionPopover({ visible: false, top: 0, left: 0, text: '' });
   }, [id]);
+
+  const dismissSelectionPopover = useCallback(() => {
+    setSelectionPopover((state) => (state.visible ? { ...state, visible: false } : state));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const updateFromSelection = () => {
+      if (creatingFromSelection) return;
+      const shell = bodyShellRef.current;
+      if (!shell) return;
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+        dismissSelectionPopover();
+        return;
+      }
+      const range = sel.getRangeAt(0);
+      const anchor = range.commonAncestorContainer;
+      const anchorEl = anchor.nodeType === 1 ? (anchor as Element) : anchor.parentElement;
+      if (!anchorEl || !shell.contains(anchorEl)) {
+        dismissSelectionPopover();
+        return;
+      }
+      const text = sel.toString().trim();
+      if (text.length < MIN_SELECTION_CHARS || text.length > MAX_SELECTION_CHARS) {
+        dismissSelectionPopover();
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      if (!rect || (rect.width === 0 && rect.height === 0)) {
+        dismissSelectionPopover();
+        return;
+      }
+      setSelectionPopover({
+        visible: true,
+        top: rect.top + window.scrollY - 8,
+        left: rect.left + window.scrollX + rect.width / 2,
+        text,
+      });
+    };
+
+    const handlePointerUp = () => {
+      window.setTimeout(updateFromSelection, 10);
+    };
+    const handleSelectionChange = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed) {
+        dismissSelectionPopover();
+      }
+    };
+    const handleScroll = () => dismissSelectionPopover();
+
+    document.addEventListener('mouseup', handlePointerUp);
+    document.addEventListener('touchend', handlePointerUp);
+    document.addEventListener('selectionchange', handleSelectionChange);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleScroll);
+
+    return () => {
+      document.removeEventListener('mouseup', handlePointerUp);
+      document.removeEventListener('touchend', handlePointerUp);
+      document.removeEventListener('selectionchange', handleSelectionChange);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [creatingFromSelection, dismissSelectionPopover]);
+
+  const handleCreateFromSelection = useCallback(async () => {
+    if (creatingFromSelection) return;
+    const text = selectionPopover.text.trim();
+    if (!text) return;
+    setCreatingFromSelection(true);
+    setSelectionPopover((state) => ({ ...state, visible: false }));
+    showToast('正在为选段建页…', true);
+    try {
+      const resp = await createWikiFromSelection({
+        selection: text,
+        sourceConceptId: id,
+        contextTitle: concept?.title,
+      });
+      if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
+      if (resp.status === 'duplicate') {
+        showToast('已有等价概念，已为你打开');
+      } else {
+        markFresh([resp.conceptId]);
+        showToast('已为选段创建概念');
+      }
+      openConcept(resp.conceptId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '创建失败';
+      showToast(message, false, true);
+    } finally {
+      setCreatingFromSelection(false);
+    }
+  }, [
+    concept?.title,
+    creatingFromSelection,
+    id,
+    markFresh,
+    openConcept,
+    selectionPopover.text,
+    showToast,
+  ]);
 
   useEffect(() => {
     if (!concept || hasFullBody) return;
@@ -151,7 +278,7 @@ export function ConceptDetail({ id }: { id: string }) {
       </div>
 
       {hasFullBody ? (
-        <div className="concept-body-shell">
+        <div className="concept-body-shell" ref={bodyShellRef}>
           <Prose
             markdown={formatConceptBodyForDisplay(concept.body)}
             className="concept-body-prose"
@@ -243,6 +370,30 @@ export function ConceptDetail({ id }: { id: string }) {
           </div>
         )}
       </div>
+
+      {selectionPopover.visible && (
+        <div
+          className="selection-popover"
+          style={{ top: `${selectionPopover.top}px`, left: `${selectionPopover.left}px` }}
+          onMouseDown={(event) => event.preventDefault()}
+        >
+          <button
+            type="button"
+            className="selection-popover-btn"
+            disabled={creatingFromSelection}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void handleCreateFromSelection();
+            }}
+          >
+            <span className="selection-popover-icon" aria-hidden="true">
+              +
+            </span>
+            为这段创建 Wiki
+          </button>
+        </div>
+      )}
 
       {versionDialog.open && (
         <div className="modal-overlay visible" onClick={closeVersionDialog}>
