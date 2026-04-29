@@ -321,7 +321,7 @@ export default function Page() {
           <aside className="desktop-sidebar">
             <div className="desktop-brand">
               <div className="desktop-brand-kicker">Compound</div>
-              <div className="desktop-brand-title">Karpathy 知识库</div>
+              <div className="desktop-brand-title">X WIKI</div>
               <div className="desktop-brand-meta">{desktopSummary}</div>
             </div>
 
