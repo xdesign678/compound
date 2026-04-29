@@ -916,7 +916,7 @@ button {
 }
 .concept-body-prose p {
   margin: 0 0 22px;
-  line-height: 1.85;
+  line-height: var(--prose-line-height, 1.85);
   letter-spacing: 0.01em;
 }
 .concept-body-prose ul,
@@ -926,7 +926,7 @@ button {
 }
 .concept-body-prose li {
   margin-bottom: 10px;
-  line-height: 1.85;
+  line-height: var(--prose-line-height, 1.85);
   letter-spacing: 0.01em;
 }
 .concept-body-prose li::marker {
@@ -1662,7 +1662,7 @@ button {
 }
 .source-editor-content p {
   margin: 0 0 22px;
-  line-height: 1.85;
+  line-height: var(--prose-line-height, 1.85);
   letter-spacing: 0.01em;
   text-align: justify;
   text-justify: inter-character;
@@ -1670,7 +1670,7 @@ button {
   overflow-wrap: anywhere;
 }
 .source-editor-content li {
-  line-height: 1.85;
+  line-height: var(--prose-line-height, 1.85);
   letter-spacing: 0.01em;
   margin-bottom: 10px;
 }
@@ -2199,8 +2199,8 @@ button {
   color: var(--text-body);
 }
 .prose-answer {
-  font-size: 16px;
-  line-height: var(--leading-body);
+  font-size: var(--prose-font-size, 16px);
+  line-height: var(--prose-line-height, 1.85);
   text-wrap: pretty;
   hanging-punctuation: allow-end last;
 }
@@ -2215,7 +2215,7 @@ button {
 }
 .prose-answer p {
   margin: 0 0 22px;
-  line-height: 1.85;
+  line-height: var(--prose-line-height, 1.85);
 }
 .prose-answer ul,
 .prose-answer ol {
@@ -2224,7 +2224,7 @@ button {
 }
 .prose-answer li {
   margin-bottom: 10px;
-  line-height: 1.85;
+  line-height: var(--prose-line-height, 1.85);
 }
 .prose-answer li::marker {
   color: var(--text-tertiary);
@@ -5091,8 +5091,8 @@ button,
   /* AI 回答区域（全局已把卡片设为透明）：阅读字号与行距 */
   .prose-answer,
   .msg-ai-body {
-    font-size: 15.5px !important;
-    line-height: 1.82 !important;
+    font-size: var(--prose-font-size, 15.5px);
+    line-height: var(--prose-line-height, 1.82);
   }
   .prose-answer p {
     margin-bottom: 16px;
