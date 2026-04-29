@@ -1660,6 +1660,29 @@ button {
 .source-editor-content > *:last-child {
   margin-bottom: 0;
 }
+.source-editor-content p {
+  margin: 0 0 22px;
+  line-height: 1.85;
+  letter-spacing: 0.01em;
+  text-align: justify;
+  text-justify: inter-character;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.source-editor-content li {
+  line-height: 1.85;
+  letter-spacing: 0.01em;
+  margin-bottom: 10px;
+}
+.source-editor-content li::marker {
+  color: var(--text-tertiary);
+}
+.source-editor-content blockquote {
+  margin: 28px 0;
+  padding: 4px 0 4px 22px;
+  border-left: 2px solid var(--border-section);
+  color: var(--text-secondary);
+}
 
 /* Aside: related concepts, log, source link */
 .source-layout-aside {
@@ -2191,8 +2214,8 @@ button {
   letter-spacing: 0.01em;
 }
 .prose-answer p {
-  margin: 0 0 18px;
-  line-height: 1.82;
+  margin: 0 0 22px;
+  line-height: 1.85;
 }
 .prose-answer ul,
 .prose-answer ol {
@@ -2200,8 +2223,8 @@ button {
   padding-left: 22px;
 }
 .prose-answer li {
-  margin-bottom: 8px;
-  line-height: 1.82;
+  margin-bottom: 10px;
+  line-height: 1.85;
 }
 .prose-answer li::marker {
   color: var(--text-tertiary);
@@ -5069,10 +5092,10 @@ button,
   .prose-answer,
   .msg-ai-body {
     font-size: 15.5px !important;
-    line-height: 1.78 !important;
+    line-height: 1.82 !important;
   }
   .prose-answer p {
-    margin-bottom: 14px;
+    margin-bottom: 16px;
   }
   .prose-answer p:last-child {
     margin-bottom: 0;

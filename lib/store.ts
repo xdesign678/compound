@@ -16,12 +16,14 @@ export const FONT_SIZE_MAP: Record<FontSize, { label: string; px: number }> = {
   xl: { label: '大', px: 20 },
 };
 
-export type LineHeight = 'compact' | 'standard' | 'relaxed';
+export type LineHeight = 'compact' | 'snug' | 'standard' | 'relaxed' | 'loose';
 
 export const LINE_HEIGHT_MAP: Record<LineHeight, { label: string; value: number }> = {
-  compact: { label: '紧凑', value: 1.5 },
-  standard: { label: '标准', value: 1.7 },
-  relaxed: { label: '宽松', value: 1.9 },
+  compact:  { label: '紧凑', value: 1.5  },
+  snug:     { label: '偏紧', value: 1.65 },
+  standard: { label: '标准', value: 1.75 },
+  relaxed:  { label: '宽松', value: 1.85 },
+  loose:    { label: '舒展', value: 2.0  },
 };
 
 interface DetailState {

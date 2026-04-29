@@ -2,14 +2,14 @@
 
 import { useAppStore, LINE_HEIGHT_MAP, type LineHeight } from '@/lib/store';
 
-const LINE_HEIGHTS: LineHeight[] = ['compact', 'standard', 'relaxed'];
+const LINE_HEIGHTS: LineHeight[] = ['compact', 'snug', 'standard', 'relaxed', 'loose'];
 
 export function LineHeightSelector() {
   const lineHeight = useAppStore((s) => s.lineHeight);
   const setLineHeight = useAppStore((s) => s.setLineHeight);
 
   return (
-    <div className="settings-segmented settings-segmented-three">
+    <div className="settings-segmented settings-segmented-five">
       {LINE_HEIGHTS.map((lh) => (
         <button
           key={lh}
