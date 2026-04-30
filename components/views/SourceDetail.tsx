@@ -154,6 +154,28 @@ function formatSourceHost(url: string): string {
   }
 }
 
+/**
+ * 如果渲染出来的 HTML 第一个块级元素是 h1，且文本与页头标题一致，
+ * 就给它打上 `.source-title-echo` class，由 CSS 隐藏（保留 DOM，
+ * 不破坏 rawContent 数据完整性）。
+ */
+function markLeadingTitleEcho(html: string, title: string): string {
+  if (typeof window === 'undefined') return html;
+  const trimmed = title.trim();
+  if (!trimmed) return html;
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+  const root = doc.body.firstElementChild;
+  if (!root) return html;
+  const firstElement = root.firstElementChild;
+  if (firstElement && firstElement.tagName === 'H1') {
+    const text = (firstElement.textContent || '').trim();
+    if (text === trimmed) {
+      firstElement.classList.add('source-title-echo');
+    }
+  }
+  return root.innerHTML;
+}
+
 export function SourceDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -161,7 +183,11 @@ export function SourceDetail({ id }: { id: string }) {
   const [draftContent, setDraftContent] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [isEditorFocused, setIsEditorFocused] = useState(false);
+  const [bubble, setBubble] = useState<{
+    visible: boolean;
+    top: number;
+    left: number;
+  }>({ visible: false, top: 0, left: 0 });
 
   const source = useLiveQuery(async () => getDb().sources.get(id), [id]);
   const generated = useLiveQuery(
@@ -198,7 +224,7 @@ export function SourceDetail({ id }: { id: string }) {
     if (!editorRef.current || !source || !hasFullContent || isDirty) return;
     const nextMarkdown = source.rawContent;
     if (renderedContentRef.current === nextMarkdown) return;
-    editorRef.current.innerHTML = renderMarkdown(nextMarkdown);
+    editorRef.current.innerHTML = markLeadingTitleEcho(renderMarkdown(nextMarkdown), source.title);
     renderedContentRef.current = nextMarkdown;
   }, [hasFullContent, isDirty, source]);
 
@@ -230,13 +256,16 @@ export function SourceDetail({ id }: { id: string }) {
   const handleResetDraft = useCallback(() => {
     const originalContent = source?.rawContent ?? '';
     if (editorRef.current) {
-      editorRef.current.innerHTML = renderMarkdown(originalContent);
+      editorRef.current.innerHTML = markLeadingTitleEcho(
+        renderMarkdown(originalContent),
+        source?.title ?? '',
+      );
     }
     renderedContentRef.current = originalContent;
     setDraftContent(originalContent);
     setIsDirty(false);
     setSaveStatus('idle');
-  }, [source?.rawContent]);
+  }, [source?.rawContent, source?.title]);
 
   const canEdit = hasFullContent;
   const canSave = canEdit && isDirty && saveStatus !== 'saving';
@@ -275,6 +304,42 @@ export function SourceDetail({ id }: { id: string }) {
     return () => window.removeEventListener('keydown', handler);
   }, [canEdit, handleSave]);
 
+  // 选区气泡：仅在编辑器内、非空选区时出现
+  useEffect(() => {
+    if (!canEdit) return;
+    const updateBubble = () => {
+      const selection = window.getSelection();
+      const editor = editorRef.current;
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !editor) {
+        setBubble((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+        return;
+      }
+      const range = selection.getRangeAt(0);
+      if (!editor.contains(range.commonAncestorContainer)) {
+        setBubble((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      if (!rect || (rect.width === 0 && rect.height === 0)) {
+        setBubble((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+        return;
+      }
+      setBubble({
+        visible: true,
+        top: rect.top - 8,
+        left: rect.left + rect.width / 2,
+      });
+    };
+    document.addEventListener('selectionchange', updateBubble);
+    window.addEventListener('scroll', updateBubble, true);
+    window.addEventListener('resize', updateBubble);
+    return () => {
+      document.removeEventListener('selectionchange', updateBubble);
+      window.removeEventListener('scroll', updateBubble, true);
+      window.removeEventListener('resize', updateBubble);
+    };
+  }, [canEdit]);
+
   if (!source) return <div className="empty-state">未找到资料</div>;
 
   const generatedCount = generated?.length ?? 0;
@@ -283,8 +348,6 @@ export function SourceDetail({ id }: { id: string }) {
   const wordCount = displayMarkdown.length;
   const readingMinutes = wordCount > 0 ? Math.max(1, Math.round(wordCount / 400)) : 0;
   const sourceHost = source.url ? formatSourceHost(source.url) : null;
-  const showToolbarActions = isDirty || saveStatus !== 'idle';
-  const barVisible = hasFullContent && (isEditorFocused || showToolbarActions);
 
   const handleFormat = (command: string, value?: string) => (event: React.MouseEvent) => {
     event.preventDefault();
@@ -294,38 +357,47 @@ export function SourceDetail({ id }: { id: string }) {
   return (
     <article className="concept-detail source-detail-page">
       <header className="source-hero">
-        <div className="source-hero-kicker-row">
-          <span className="detail-kicker">资料档案</span>
+        <div className="source-hero-kicker">
+          <span>资料档案</span>
+          <span className="source-hero-kicker-dot" aria-hidden="true">
+            ·
+          </span>
+          <span>{formatRelativeTime(source.ingestedAt)}摄入</span>
+          {generatedCount > 0 && (
+            <>
+              <span className="source-hero-kicker-dot" aria-hidden="true">
+                ·
+              </span>
+              <span>已生成 {generatedCount} 个概念</span>
+            </>
+          )}
           {!hasFullContent && <span className="detail-status">加载中</span>}
         </div>
+
         <h1>{source.title}</h1>
+
         <div className="source-hero-meta">
           {source.author && <span>{source.author}</span>}
-          <span>{formatRelativeTime(source.ingestedAt)}</span>
           {wordCount > 0 && <span>{wordCount.toLocaleString()} 字</span>}
           {readingMinutes > 0 && <span>约 {readingMinutes} 分钟</span>}
-        </div>
-        {source.url && (
-          <div className="source-hero-actions">
+          {source.url && sourceHost && (
             <a
               href={source.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="source-hero-link"
+              className="source-hero-meta-link"
             >
-              访问原文
-              <span aria-hidden="true" className="source-hero-link-arrow">
+              {sourceHost}
+              <span aria-hidden="true" className="source-hero-meta-link-arrow">
                 ↗
               </span>
             </a>
-          </div>
-        )}
+          )}
+        </div>
+
         {generatedCount > 0 && (
           <div className="source-hero-related">
-            <div className="source-hero-related-title">
-              关联概念
-              <span className="source-aside-count">{generatedCount}</span>
-            </div>
+            <div className="source-hero-related-title">关联概念</div>
             <div className="source-hero-related-chips">
               {generatedItems.map((concept) => (
                 <button
@@ -340,148 +412,131 @@ export function SourceDetail({ id }: { id: string }) {
             </div>
           </div>
         )}
+
+        <hr className="source-hero-divider" aria-hidden="true" />
       </header>
 
-      <div className="source-layout">
-        <section className="source-layout-main">
-          <div
-            className="source-editor-bar"
-            data-visible={barVisible ? 'true' : 'false'}
-            aria-label="正文格式工具"
-          >
-            <div className="source-editor-bar-format">
-              <button
-                type="button"
-                className="source-editor-bar-btn"
-                onMouseDown={handleFormat('formatBlock', '<p>')}
-              >
-                正文
-              </button>
-              <button
-                type="button"
-                className="source-editor-bar-btn"
-                onMouseDown={handleFormat('formatBlock', '<h2>')}
-              >
-                标题
-              </button>
-              <button
-                type="button"
-                className="source-editor-bar-btn source-editor-bar-btn-bold"
-                onMouseDown={handleFormat('bold')}
-              >
-                B
-              </button>
-              <button
-                type="button"
-                className="source-editor-bar-btn source-editor-bar-btn-italic"
-                onMouseDown={handleFormat('italic')}
-              >
-                I
-              </button>
-              <button
-                type="button"
-                className="source-editor-bar-btn"
-                onMouseDown={handleFormat('insertUnorderedList')}
-              >
-                列表
-              </button>
-              <button
-                type="button"
-                className="source-editor-bar-btn"
-                onMouseDown={handleFormat('formatBlock', '<blockquote>')}
-              >
-                引用
-              </button>
-            </div>
-            <div className="source-editor-bar-status">
-              {isDirty && (
-                <>
-                  <button
-                    className="source-editor-bar-action"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={handleResetDraft}
-                    type="button"
-                  >
-                    还原
-                  </button>
-                  <button
-                    className="source-editor-bar-action primary"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={handleSave}
-                    disabled={!canSave}
-                    type="button"
-                  >
-                    保存
-                  </button>
-                </>
-              )}
-              {saveStatus !== 'idle' && (
-                <span className={`source-editor-bar-indicator ${saveStatus}`}>
-                  <span className="source-editor-bar-dot" aria-hidden="true" />
-                  {saveStatus === 'saving' && '保存中'}
-                  {saveStatus === 'saved' && '已保存'}
-                  {saveStatus === 'error' && '保存失败'}
-                </span>
-              )}
-            </div>
+      <section className="source-layout-main">
+        {!hasFullContent ? (
+          <div className="empty-state empty-state-compact">原文加载中...</div>
+        ) : (
+          <div className="source-editor-shell">
+            <div
+              ref={editorRef}
+              className="prose source-editor-content note-editor-content"
+              contentEditable={canEdit}
+              suppressContentEditableWarning
+              data-placeholder="直接在这里整理这份资料…"
+              onInput={syncDraftFromEditor}
+              onBlur={() => {
+                if (!isDirty) return;
+                void handleSave();
+              }}
+              aria-label="资料正文所见即所得编辑器"
+            />
           </div>
+        )}
+      </section>
 
-          {!hasFullContent ? (
-            <div className="empty-state empty-state-compact">原文加载中...</div>
-          ) : (
-            <div className="source-editor-shell">
-              <div
-                ref={editorRef}
-                className="prose source-editor-content note-editor-content"
-                contentEditable={canEdit}
-                suppressContentEditableWarning
-                data-placeholder="直接在这里整理这份资料…"
-                onInput={syncDraftFromEditor}
-                onFocus={() => setIsEditorFocused(true)}
-                onBlur={() => {
-                  setIsEditorFocused(false);
-                  if (!isDirty) return;
-                  void handleSave();
-                }}
-                aria-label="资料正文所见即所得编辑器"
-              />
-            </div>
-          )}
-        </section>
+      {bubble.visible && (
+        <div
+          className="source-selection-bubble"
+          role="toolbar"
+          aria-label="文本格式"
+          style={{
+            top: `${bubble.top}px`,
+            left: `${bubble.left}px`,
+          }}
+          onMouseDown={(event) => event.preventDefault()}
+        >
+          <button
+            type="button"
+            className="source-selection-bubble-btn"
+            onMouseDown={handleFormat('bold')}
+            aria-label="加粗"
+          >
+            <strong>B</strong>
+          </button>
+          <button
+            type="button"
+            className="source-selection-bubble-btn"
+            onMouseDown={handleFormat('italic')}
+            aria-label="斜体"
+          >
+            <em>I</em>
+          </button>
+          <span className="source-selection-bubble-divider" aria-hidden="true" />
+          <button
+            type="button"
+            className="source-selection-bubble-btn"
+            onMouseDown={handleFormat('formatBlock', '<h2>')}
+            aria-label="标题"
+          >
+            H
+          </button>
+          <button
+            type="button"
+            className="source-selection-bubble-btn"
+            onMouseDown={handleFormat('insertUnorderedList')}
+            aria-label="列表"
+          >
+            ☰
+          </button>
+          <button
+            type="button"
+            className="source-selection-bubble-btn"
+            onMouseDown={handleFormat('formatBlock', '<blockquote>')}
+            aria-label="引用"
+          >
+            ❞
+          </button>
+        </div>
+      )}
 
-        <aside className="source-layout-aside">
-          <section className="source-aside-section">
-            <div className="source-aside-title">摄入记录</div>
-            <ul className="source-aside-log">
-              <li>
-                <span className="source-aside-log-time">
-                  {formatRelativeTime(source.ingestedAt)}
-                </span>
-                <span className="source-aside-log-text">
-                  资料摄入完成，生成 {generatedCount} 个相关概念
-                </span>
-              </li>
-            </ul>
-          </section>
-
-          {source.url && sourceHost && (
-            <section className="source-aside-section">
-              <div className="source-aside-title">资料来源</div>
-              <a
-                href={source.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="source-aside-link"
+      {(isDirty || saveStatus !== 'idle') && (
+        <div className="source-save-indicator" role="status" aria-live="polite">
+          {isDirty && saveStatus === 'idle' && (
+            <>
+              <button
+                className="source-save-indicator-action"
+                onClick={handleResetDraft}
+                type="button"
               >
-                <span className="source-aside-link-host">{sourceHost}</span>
-                <span aria-hidden="true" className="source-aside-link-arrow">
-                  ↗
-                </span>
-              </a>
-            </section>
+                还原
+              </button>
+              <button
+                className="source-save-indicator-action primary"
+                onClick={handleSave}
+                disabled={!canSave}
+                type="button"
+              >
+                保存
+              </button>
+            </>
           )}
-        </aside>
-      </div>
+          {saveStatus === 'saving' && (
+            <span className="source-save-indicator-text saving">
+              <span className="source-save-indicator-dot" aria-hidden="true" />
+              保存中…
+            </span>
+          )}
+          {saveStatus === 'saved' && (
+            <span className="source-save-indicator-text saved">
+              <span className="source-save-indicator-dot" aria-hidden="true" />
+              已保存
+            </span>
+          )}
+          {saveStatus === 'error' && (
+            <span className="source-save-indicator-text error">
+              <span className="source-save-indicator-dot" aria-hidden="true" />
+              保存失败
+              <button className="source-save-indicator-action" onClick={handleSave} type="button">
+                重试
+              </button>
+            </span>
+          )}
+        </div>
+      )}
     </article>
   );
 }
