@@ -339,11 +339,6 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
         </div>
       </div>
 
-      <div className="view-lead">
-        <div className="view-lead-kicker">知识库</div>
-        <p className="view-lead-copy">按领域分类浏览你的知识卡片。</p>
-      </div>
-
       {uncategorizedCount > 0 && (
         <div className="library-categorize-banner">
           <span>有 {uncategorizedCount} 条未分类内容</span>

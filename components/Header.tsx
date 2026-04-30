@@ -52,11 +52,6 @@ export function Header(props: HeaderProps) {
           <Icon.Back />
           <span>返回</span>
         </button>
-        <div className="header-actions">
-          <button className="icon-btn" onClick={openSettings} aria-label="设置">
-            <Icon.Settings />
-          </button>
-        </div>
       </header>
     );
   }
