@@ -38,7 +38,7 @@ export function Header(props: HeaderProps) {
   const searchCollapsed = useAppStore((s) => s.searchCollapsed);
   const triggerSearchFocus = useAppStore((s) => s.triggerSearchFocus);
 
-  const showSearchIcon = !detail && tab === 'wiki' && searchCollapsed;
+  const showSearchIcon = !detail && (tab === 'wiki' || tab === 'sources') && searchCollapsed;
   const handleExpandSearch = () => {
     const main = document.querySelector('.app-main') as HTMLElement | null;
     if (main) main.scrollTo({ top: 0, behavior: 'smooth' });

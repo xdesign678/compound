@@ -33,6 +33,9 @@ export function SourcesView() {
   const openSource = useAppStore((s) => s.openSource);
   const openModal = useAppStore((s) => s.openModal);
   const detail = useAppStore((s) => s.detail);
+  const setSearchCollapsed = useAppStore((s) => s.setSearchCollapsed);
+  const searchFocusNonce = useAppStore((s) => s.searchFocusNonce);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const query = useAppStore((s) => s.sourcesState.query);
   const visibleCount = useAppStore((s) => s.sourcesState.visibleCount);
@@ -115,6 +118,7 @@ export function SourcesView() {
     const onScroll = () => {
       const y = main.scrollTop;
       setScrolled(y > 4);
+      setSearchCollapsed(y > 40);
       pendingY = y;
       if (!raf) raf = requestAnimationFrame(flush);
     };
@@ -122,12 +126,13 @@ export function SourcesView() {
     main.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       main.removeEventListener('scroll', onScroll);
+      setSearchCollapsed(false);
       if (raf) cancelAnimationFrame(raf);
       if (pendingY !== null) {
         useAppStore.getState().setSourcesState({ scrollTop: pendingY });
       }
     };
-  }, []);
+  }, [setSearchCollapsed]);
 
   // Restore the list scroll only once after Dexie has finished hydrating the source list.
   useLayoutEffect(() => {
@@ -142,21 +147,30 @@ export function SourcesView() {
     }
   }, [sources]);
 
+  useEffect(() => {
+    if (searchFocusNonce === 0) return;
+    const id = window.setTimeout(() => searchInputRef.current?.focus(), 240);
+    return () => window.clearTimeout(id);
+  }, [searchFocusNonce]);
+
   if (!sources) return <div className="empty-state">加载中...</div>;
 
   return (
     <>
-      <div className={`search-bar ${scrolled ? 'scrolled' : ''}`}>
-        <div className="search-label">按标题或作者搜索资料</div>
-        <div className="search-wrap">
-          <Icon.Search />
-          <input
-            className="search-input"
-            placeholder="搜索标题、作者..."
-            aria-label="搜索资料"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+      <div className={`search-bar-slot${scrolled ? ' is-collapsed' : ''}`}>
+        <div className={`search-bar ${scrolled ? 'scrolled' : ''}`}>
+          <div className="search-label">按标题或作者搜索资料</div>
+          <div className="search-wrap">
+            <Icon.Search />
+            <input
+              ref={searchInputRef}
+              className="search-input"
+              placeholder="搜索标题、作者..."
+              aria-label="搜索资料"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
         </div>
       </div>
       <div className="view-padding">
