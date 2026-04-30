@@ -121,7 +121,7 @@ export function AskMessageList({
                           </button>
                         ))}
                       <button
-                        className="ask-reset-btn ask-new-chat-btn ask-answer-new-btn"
+                        className="save-as-page"
                         type="button"
                         onClick={() => void onRestart()}
                         disabled={loading}
