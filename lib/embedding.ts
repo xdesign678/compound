@@ -222,6 +222,26 @@ async function embedTexts(
   };
 }
 
+/**
+ * Returns the configured embedding mode without actually calling the API.
+ *
+ * - "remote": a real embedding endpoint is configured (e.g. text-embedding-3-small)
+ * - "local-hash": no real endpoint; we'd fall back to deterministic local hashing
+ *   which has NO semantic meaning. Vector reranking should be skipped in this
+ *   mode to avoid polluting good FTS results with random scores.
+ * - "disabled": explicitly turned off by env (`COMPOUND_EMBEDDING_PROVIDER=local`)
+ */
+export function getEmbeddingMode(): 'remote' | 'local-hash' | 'disabled' {
+  if (process.env.COMPOUND_EMBEDDING_PROVIDER === 'local') return 'disabled';
+  const explicit =
+    Boolean(clean(process.env.COMPOUND_EMBEDDING_API_KEY)) ||
+    Boolean(clean(process.env.COMPOUND_EMBEDDING_API_URL)) ||
+    process.env.COMPOUND_EMBEDDING_PROVIDER === 'remote';
+  if (!explicit) return 'local-hash';
+  if (!embeddingApiKey()) return 'local-hash';
+  return 'remote';
+}
+
 function rowToChunk(row: Record<string, unknown>): SourceChunk {
   return {
     id: String(row.id),
@@ -330,6 +350,13 @@ export async function hybridSearchWikiContext(
     options.chunkLimit ?? Number(process.env.COMPOUND_QUERY_CONTEXT_CHUNK_LIMIT || 12);
 
   const base = wikiRepo.searchWikiContext(query, { conceptLimit, chunkLimit });
+
+  // Without a real embedding endpoint, the local hashing "vectors" carry no
+  // semantic signal. Re-ranking by them only hurts FTS results, so skip the
+  // vector path entirely and rely on FTS / lexical retrieval.
+  if (getEmbeddingMode() !== 'remote') {
+    return base;
+  }
 
   // --- FTS pre-filter: narrow vector scan to relevant chunks ---
   const ftsChunkIds = getFtsChunkIds(query, 200);

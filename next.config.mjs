@@ -41,8 +41,9 @@ const nextConfig = {
   // traces. The Sentry plugin (withSentryConfig) automatically uploads and
   // then deletes them from the public bundle when an auth token is present.
   productionBrowserSourceMaps: true,
-  // better-sqlite3 is a native module — keep it external so webpack doesn't try to bundle it.
-  serverExternalPackages: ['better-sqlite3'],
+  // Native / Rust-binding modules — keep external so webpack doesn't try to
+  // bundle their `.node` artifacts.
+  serverExternalPackages: ['better-sqlite3', '@node-rs/jieba'],
   experimental: {
     serverActions: { allowedOrigins },
     // Tree-shake & on-demand compile imports from large icon/util packages so

@@ -173,7 +173,8 @@ export function ensureWikiCompilerSchema(): void {
       token_count INTEGER NOT NULL,
       content_hash TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
+      updated_at INTEGER NOT NULL,
+      contextual_prefix TEXT
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_source_chunks_source_index ON source_chunks(source_id, chunk_index);
     CREATE INDEX IF NOT EXISTS idx_source_chunks_source ON source_chunks(source_id);
@@ -264,6 +265,18 @@ export function ensureWikiCompilerSchema(): void {
     });
   }
 
+  // Best-effort additive migration for older DBs that pre-date contextual_prefix.
+  try {
+    const cols = db.prepare(`PRAGMA table_info(source_chunks)`).all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === 'contextual_prefix')) {
+      db.exec(`ALTER TABLE source_chunks ADD COLUMN contextual_prefix TEXT`);
+    }
+  } catch (error) {
+    logger.warn('wiki.contextual_prefix_migration_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   migrationsReady = true;
   migrationsDb = db;
 }
@@ -280,6 +293,7 @@ function rowToChunk(row: Record<string, unknown>): SourceChunk {
     contentHash: String(row.content_hash),
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
+    contextualPrefix: row.contextual_prefix ? String(row.contextual_prefix) : undefined,
   };
 }
 
@@ -339,9 +353,9 @@ export const wikiRepo = {
 
     const insert = db.prepare(`
       INSERT INTO source_chunks
-        (id, source_id, chunk_index, heading, heading_path, content, token_count, content_hash, created_at, updated_at)
+        (id, source_id, chunk_index, heading, heading_path, content, token_count, content_hash, created_at, updated_at, contextual_prefix)
       VALUES
-        (@id, @source_id, @chunk_index, @heading, @heading_path, @content, @token_count, @content_hash, @created_at, @updated_at)
+        (@id, @source_id, @chunk_index, @heading, @heading_path, @content, @token_count, @content_hash, @created_at, @updated_at, @contextual_prefix)
     `);
     const insertFts = hasFts()
       ? db.prepare(
@@ -362,8 +376,14 @@ export const wikiRepo = {
           content_hash: row.contentHash,
           created_at: row.createdAt,
           updated_at: row.updatedAt,
+          contextual_prefix: row.contextualPrefix ?? null,
         });
-        insertFts?.run(row.id, row.sourceId, row.heading, row.content);
+        // Index contextual_prefix in chunk_fts so retrieval can match terms that
+        // only appear in the situating prefix (Anthropic Contextual BM25).
+        const ftsContent = row.contextualPrefix
+          ? `${row.contextualPrefix}\n\n${row.content}`
+          : row.content;
+        insertFts?.run(row.id, row.sourceId, row.heading, ftsContent);
       }
     });
     runBatch(rows);
@@ -377,6 +397,56 @@ export const wikiRepo = {
       overlapTokens: Number(process.env.COMPOUND_CHUNK_OVERLAP_TOKENS || 120),
     });
     return this.upsertSourceChunks(source.id, chunks, Date.now());
+  },
+
+  /**
+   * Patch existing chunks with Anthropic-style contextual prefixes generated
+   * out-of-band. Updates both `source_chunks.contextual_prefix` and the
+   * `chunk_fts` row so retrieval can match against the prefix text.
+   *
+   * No-op when the FTS extension is unavailable (still updates the column).
+   */
+  applyContextualPrefixes(updates: Array<{ chunkId: string; prefix: string }>): void {
+    ensureWikiCompilerSchema();
+    if (updates.length === 0) return;
+    const db = getServerDb();
+
+    const updateChunk = db.prepare(
+      `UPDATE source_chunks SET contextual_prefix = ?, updated_at = ? WHERE id = ?`,
+    );
+    const selectChunk = db.prepare(
+      `SELECT source_id, heading, content FROM source_chunks WHERE id = ?`,
+    );
+    const deleteFts = hasFts() ? db.prepare(`DELETE FROM chunk_fts WHERE chunk_id = ?`) : null;
+    const insertFts = hasFts()
+      ? db.prepare(
+          `INSERT INTO chunk_fts (chunk_id, source_id, heading, content) VALUES (?, ?, ?, ?)`,
+        )
+      : null;
+
+    const now = Date.now();
+    const trx = db.transaction(() => {
+      for (const update of updates) {
+        if (!update.prefix?.trim()) continue;
+        updateChunk.run(update.prefix, now, update.chunkId);
+        if (deleteFts && insertFts) {
+          const row = selectChunk.get(update.chunkId) as
+            | { source_id: string; heading: string; content: string }
+            | undefined;
+          if (!row) continue;
+          safeRunFts(() => {
+            deleteFts.run(update.chunkId);
+            insertFts.run(
+              update.chunkId,
+              row.source_id,
+              row.heading,
+              `${update.prefix}\n\n${row.content}`,
+            );
+          });
+        }
+      }
+    });
+    trx();
   },
 
   indexConcept(concept: Concept): void {

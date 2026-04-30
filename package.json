@@ -41,6 +41,7 @@
     ]
   },
   "dependencies": {
+    "@node-rs/jieba": "^2.0.1",
     "@sentry/nextjs": "^8.55.1",
     "better-sqlite3": "^12.9.0",
     "dexie": "4.4.2",

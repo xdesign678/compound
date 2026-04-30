@@ -280,10 +280,16 @@ Source: [`app/api/query/route.ts`](../app/api/query/route.ts)
 
 #### POST
 
-Answer a natural-language question against the user's Wiki. Performs
-hybrid retrieval (FTS + embeddings, with FTS-only fallback) to assemble
-a context window from concept pages and source chunks, then asks the LLM
-for a structured JSON response (`QueryResponse`).
+Answer a natural-language question against the user's Wiki using a
+production-grade RAG pipeline:
+
+1. history-aware query rewrite
+2. hybrid retrieval (FTS5 BM25 + vector when configured)
+3. concept graph 1-hop expansion via `concept_relations`
+4. Reciprocal Rank Fusion across all retrievers
+5. LLM-as-reranker → top-K
+6. answer synthesis with citations
+7. citation faithfulness check
 
 Body: `QueryRequest` — `question` is required (<= 2k chars). Optional
 `concepts` (<= 500) and `conversationHistory` (last 6 turns are kept).

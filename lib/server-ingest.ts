@@ -14,6 +14,8 @@ import { runIngestLLM } from './ingest-core';
 import { compileWikiArtifactsAfterIngest } from './wiki-compiler';
 import { wikiRepo } from './wiki-db';
 import { escapeHTML } from './format';
+import { contextualizeChunk } from './contextual-chunk';
+import { logger } from './server-logger';
 import type { Source, Concept, ActivityLog, SourceType, LlmConfig } from './types';
 
 export interface ServerIngestInput {
@@ -214,6 +216,24 @@ export async function ingestSourceToServerDb(
     new Set([...newConceptIds, ...updatedConceptIds, ...biDirUpdates.map((update) => update.id)]),
   );
 
+  // Anthropic-style Contextual Retrieval: enrich each freshly-indexed chunk
+  // with a 50–100 字 situating prefix that is also indexed into chunk_fts.
+  // Runs out-of-band (after the main transaction) so failures here never
+  // jeopardize concept/source writes; controlled by COMPOUND_CONTEXTUAL_RETRIEVAL.
+  if (process.env.COMPOUND_CONTEXTUAL_RETRIEVAL !== 'off') {
+    try {
+      await runContextualizationForSource({
+        source,
+        llmConfig: input.llmConfig,
+      });
+    } catch (error) {
+      logger.warn('ingest.contextualization_failed', {
+        sourceId: source.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   return {
     sourceId: source.id,
     newConceptIds,
@@ -224,4 +244,48 @@ export async function ingestSourceToServerDb(
     activity,
     compiler: compilerResult,
   };
+}
+
+const CONTEXTUALIZATION_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.COMPOUND_CONTEXTUALIZATION_CONCURRENCY || 2),
+);
+
+async function runContextualizationForSource(opts: {
+  source: Source;
+  llmConfig?: LlmConfig;
+}): Promise<void> {
+  const chunks = getServerDb()
+    .prepare(
+      `SELECT id, content FROM source_chunks
+       WHERE source_id = ? AND (contextual_prefix IS NULL OR contextual_prefix = '')
+       ORDER BY chunk_index ASC`,
+    )
+    .all(opts.source.id) as Array<{ id: string; content: string }>;
+  if (chunks.length === 0) return;
+
+  const updates: Array<{ chunkId: string; prefix: string }> = [];
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < chunks.length) {
+      const idx = cursor;
+      cursor += 1;
+      const chunk = chunks[idx];
+      const prefix = await contextualizeChunk({
+        fullDocument: opts.source.rawContent,
+        documentTitle: opts.source.title,
+        chunk: chunk.content,
+        llmConfig: opts.llmConfig,
+      });
+      if (prefix) {
+        updates.push({ chunkId: chunk.id, prefix });
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(CONTEXTUALIZATION_CONCURRENCY, chunks.length) }, () => worker()),
+  );
+  if (updates.length > 0) {
+    wikiRepo.applyContextualPrefixes(updates);
+  }
 }

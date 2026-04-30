@@ -159,6 +159,17 @@ export interface QueryResponse {
   archivable: boolean;
   suggestedTitle?: string;
   suggestedSummary?: string;
+  /**
+   * The history-aware rewrite the retriever used (only set when it differs
+   * from the original question). Surfaced for UX/diagnostics only — clients
+   * don't need to consume it.
+   */
+  rewrittenQuestion?: string;
+  /**
+   * "remote-emb": real embedding endpoint live. "fts-only": no embedding
+   * configured, retrieval is BM25 + graph only. Surfaced in health probe.
+   */
+  retrievalMode?: 'remote-emb' | 'fts-only' | 'local-hash';
 }
 
 export interface LintRequest {
