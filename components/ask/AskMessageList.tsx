@@ -12,6 +12,7 @@ import { AskEmptyState } from './AskEmptyState';
 export function AskMessageList({
   history,
   loading,
+  streamingText,
   conceptCount,
   suggestions,
   archiving,
@@ -23,6 +24,7 @@ export function AskMessageList({
 }: {
   history: AskMessage[] | undefined;
   loading: boolean;
+  streamingText: string;
   conceptCount: number | undefined;
   suggestions: string[];
   archiving: string | null;
@@ -131,11 +133,38 @@ export function AskMessageList({
                         <span>新对话</span>
                       </button>
                     </div>
+                    {!failedAnswer &&
+                      message.suggestedQuestions &&
+                      message.suggestedQuestions.length > 0 && (
+                        <div className="msg-follow-ups">
+                          <div className="msg-follow-ups-label">你可能还想问</div>
+                          {message.suggestedQuestions.map((q) => (
+                            <button
+                              key={q}
+                              className="msg-follow-up-q"
+                              onClick={() => void onSendSuggestion(q)}
+                            >
+                              {q}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                   </div>
                 </div>
               );
             })}
-            {loading && (
+            {loading && streamingText && (
+              <div className="msg msg-ai-row">
+                <div className="msg-ai-card">
+                  <div className="msg-ai-label loading">Wiki 答案</div>
+                  <Prose
+                    markdown={formatConceptBodyForDisplay(streamingText)}
+                    className="prose-answer"
+                  />
+                </div>
+              </div>
+            )}
+            {loading && !streamingText && (
               <div className="msg msg-ai-row">
                 <div className="msg-ai-card loading">
                   <div className="msg-ai-label loading">Wiki 思考中</div>

@@ -5,7 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { nanoid } from 'nanoid';
 import { getDb } from '../../lib/db';
 import { useAppStore } from '../../lib/store';
-import { askWiki, archiveAnswerAsConcept } from '../../lib/api-client';
+import { askWikiStream, archiveAnswerAsConcept } from '../../lib/api-client';
 import { pickStableConceptTitles } from '../../lib/ask-suggestions';
 import {
   fetchModelSettings,
@@ -50,6 +50,7 @@ export function AskView() {
   const [caretPosition, setCaretPosition] = useState(0);
   const [mounted, setMounted] = useState(false);
   const [conceptTitles, setConceptTitles] = useState<string[]>([]);
+  const [streamingText, setStreamingText] = useState('');
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
@@ -248,9 +249,16 @@ export function AskView() {
     setModelMenuOpen(false);
     autoResize();
     setLoading(true);
+    setStreamingText('');
 
     try {
-      const resp = await askWiki(finalText, [...recentHistory, { role: 'user', text: finalText }]);
+      const resp = await askWikiStream(
+        finalText,
+        [...recentHistory, { role: 'user', text: finalText }],
+        (delta) => {
+          setStreamingText((prev) => prev + delta);
+        },
+      );
 
       const aiMsg: AskMessage = {
         id: 'm-' + nanoid(8),
@@ -259,6 +267,7 @@ export function AskView() {
         citedConcepts: resp.citedConceptIds,
         suggestedTitle: resp.archivable ? resp.suggestedTitle : undefined,
         suggestedSummary: resp.archivable ? resp.suggestedSummary : undefined,
+        suggestedQuestions: resp.suggestedQuestions?.length ? resp.suggestedQuestions : undefined,
         at: Date.now(),
       };
       await db.askHistory.put(aiMsg);
@@ -272,6 +281,7 @@ export function AskView() {
       });
     } finally {
       setLoading(false);
+      setStreamingText('');
       requestAnimationFrame(() => textareaRef.current?.focus());
     }
   }
@@ -378,6 +388,7 @@ export function AskView() {
       <AskMessageList
         history={history}
         loading={loading}
+        streamingText={streamingText}
         conceptCount={conceptCount}
         suggestions={suggestions}
         archiving={archiving}

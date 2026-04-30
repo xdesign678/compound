@@ -73,6 +73,7 @@ export interface AskMessage {
   savedAsConceptId?: string;
   suggestedTitle?: string;
   suggestedSummary?: string;
+  suggestedQuestions?: string[];
   at: number;
 }
 
@@ -159,6 +160,8 @@ export interface QueryResponse {
   archivable: boolean;
   suggestedTitle?: string;
   suggestedSummary?: string;
+  /** Follow-up questions the user might be interested in. */
+  suggestedQuestions?: string[];
   /**
    * The history-aware rewrite the retriever used (only set when it differs
    * from the original question). Surfaced for UX/diagnostics only — clients

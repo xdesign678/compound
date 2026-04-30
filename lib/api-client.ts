@@ -288,6 +288,138 @@ export async function askWiki(
   return postJSON<QueryResponse>('/api/query', req);
 }
 
+/** Streaming variant of askWiki. Calls onDelta for each text fragment, then resolves with the full response. */
+export async function askWikiStream(
+  question: string,
+  history: Array<{ role: 'user' | 'ai'; text: string }>,
+  onDelta: (text: string) => void,
+): Promise<QueryResponse> {
+  const db = getDb();
+  const conceptsToSend = await findClientConceptCandidates(question, QUERY_CANDIDATE_LIMIT);
+
+  const hydrated = await ensureConceptsHydrated(conceptsToSend.map((concept) => concept.id));
+  const hydratedMap = new Map(hydrated.map((concept) => [concept.id, concept]));
+
+  const req: QueryRequest = {
+    question,
+    concepts: conceptsToSend.map((c) => {
+      const full = hydratedMap.get(c.id) ?? c;
+      return {
+        id: c.id,
+        title: c.title,
+        summary: c.summary,
+        body: full.body,
+      };
+    }),
+    conversationHistory: history,
+  };
+
+  const llmConfig = getLlmConfig();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+    'X-Request-ID': generateClientRequestId(),
+    ...getAdminAuthHeaders(),
+  };
+  if (llmConfig.apiKey) headers['X-User-Api-Key'] = llmConfig.apiKey;
+  if (llmConfig.apiUrl) headers['X-User-Api-Url'] = llmConfig.apiUrl;
+  if (llmConfig.model) headers['X-User-Model'] = llmConfig.model;
+
+  const hasConfig = !!(llmConfig.apiKey || llmConfig.model || llmConfig.apiUrl);
+  const payload = hasConfig ? { ...req, llmConfig } : req;
+
+  let res: Response;
+  try {
+    res = await fetch('/api/query', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new Error('网络连接失败');
+  }
+
+  if (!res.ok) {
+    if (res.status === 429) throw new Error('请求过于频繁，请稍后重试');
+    if (res.status === 401 || res.status === 403) throw new Error('认证失败，请检查配置');
+    if (res.status >= 500) throw new Error('服务暂时不可用，请稍后重试');
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 200) || `请求失败 (${res.status})`);
+  }
+
+  // Fallback: if the server didn't return SSE (e.g. older deployment),
+  // parse as regular JSON.
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('text/event-stream')) {
+    const json = (await res.json()) as QueryResponse;
+    onDelta(json.answer || '(无回答)');
+    return json;
+  }
+
+  // Parse SSE stream
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+  let answer = '';
+  let doneData: Record<string, unknown> = {};
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split(/\n\n/);
+      buffer = events.pop() ?? '';
+
+      for (const evt of events) {
+        let eventType = '';
+        let eventData = '';
+        for (const line of evt.split('\n')) {
+          if (line.startsWith('event:')) eventType = line.slice(6).trim();
+          else if (line.startsWith('data:')) eventData = line.slice(5);
+        }
+        if (!eventData) continue;
+
+        if (eventType === 'delta') {
+          try {
+            const parsed = JSON.parse(eventData) as { text: string };
+            answer += parsed.text;
+            onDelta(parsed.text);
+          } catch {
+            // skip malformed delta
+          }
+        } else if (eventType === 'done') {
+          try {
+            doneData = JSON.parse(eventData) as Record<string, unknown>;
+          } catch {
+            // skip
+          }
+        } else if (eventType === 'error') {
+          try {
+            const errPayload = JSON.parse(eventData) as { error: string };
+            throw new Error(errPayload.error || 'Query processing failed');
+          } catch (e) {
+            if (e instanceof Error && e.message !== 'Query processing failed') throw e;
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return {
+    answer: answer || '(无回答)',
+    citedConceptIds: (doneData.citedConceptIds as string[]) || [],
+    archivable: Boolean(doneData.archivable),
+    suggestedTitle: doneData.suggestedTitle as string | undefined,
+    suggestedSummary: doneData.suggestedSummary as string | undefined,
+    suggestedQuestions: doneData.suggestedQuestions as string[] | undefined,
+    rewrittenQuestion: doneData.rewrittenQuestion as string | undefined,
+    retrievalMode: doneData.retrievalMode as QueryResponse['retrievalMode'],
+  };
+}
+
 /**
  * Create a new wiki concept from a free-form text selection. The server
  * runs the LLM with related-concept context and persists the new concept,

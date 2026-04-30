@@ -72,7 +72,8 @@ export const QUERY_SYSTEM_PROMPT = `你是 Compound 的 Wiki 查询引擎。遵�
   "citedConceptIds": ["concept-id-1", "concept-id-2"],
   "archivable": true | false,
   "suggestedTitle": "如果 archivable=true,给一个简洁的概念标题",
-  "suggestedSummary": "如果 archivable=true,给一句话摘要"
+  "suggestedSummary": "如果 archivable=true,给一句话摘要",
+  "suggestedQuestions": ["基于当前回答,用户可能感兴趣的 2-3 个追问,每个 20 字内,中文"]
 }
 
 # archivable 判定

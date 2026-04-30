@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { chat, parseJSON } from '@/lib/gateway';
+import { chat, parseJSON, isReasoningModel } from '@/lib/gateway';
 import { QUERY_SYSTEM_PROMPT } from '@/lib/prompts';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
@@ -226,11 +226,17 @@ async function runRetrievalPipeline(opts: {
  * 3. concept graph 1-hop expansion via `concept_relations`
  * 4. Reciprocal Rank Fusion across all retrievers
  * 5. LLM-as-reranker → top-K
- * 6. answer synthesis with citations
+ * 6. answer synthesis with citations (streaming when client opts in)
  * 7. citation faithfulness check
  *
  * Body: `QueryRequest` — `question` is required (<= 2k chars). Optional
  * `concepts` (<= 500) and `conversationHistory` (last 6 turns are kept).
+ *
+ * Streaming: when the request includes `Accept: text/event-stream` the
+ * response is an SSE stream. The stream emits:
+ *   - `event: delta`  — incremental answer text fragments
+ *   - `event: done`   — final JSON payload with citations, suggestedQuestions, etc.
+ * Otherwise a regular JSON response is returned (backward compatible).
  *
  * Guards: admin token, LLM rate limit, 512KB body cap.
  */
@@ -238,6 +244,8 @@ export const POST = withRequestTracing(async (req: Request) => {
   const denied =
     requireAdmin(req) || llmRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
+
+  const wantStream = req.headers.get('accept') === 'text/event-stream';
 
   try {
     const body = (await req.json()) as QueryRequest;
@@ -287,6 +295,115 @@ export const POST = withRequestTracing(async (req: Request) => {
       historyBlock ? `# 最近对话\n\n${historyBlock}\n\n---\n\n` : ''
     }# 当前问题\n\n${question}\n\n${retrieval.rewrittenQuestion !== question ? `# 改写后的检索 query\n\n${retrieval.rewrittenQuestion}\n\n---\n\n` : ''}请优先基于「相关概念页」回答；当概念页不足时，再参考「证据链」和「原文片段候选」。按 system prompt 定义的 JSON schema 输出，只输出 JSON。`;
 
+    // ---- Streaming path ----
+    if (wantStream) {
+      const model = llmConfig?.model || process.env.LLM_MODEL || 'anthropic/claude-sonnet-4.6';
+      const reasoning = isReasoningModel(model);
+
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        async start(controller) {
+          function sendSSE(event: string, data: unknown) {
+            controller.enqueue(
+              encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+            );
+          }
+
+          try {
+            const raw = await chat({
+              messages: [
+                { role: 'system', content: QUERY_SYSTEM_PROMPT },
+                { role: 'user', content: userPrompt },
+              ],
+              responseFormat: reasoning ? undefined : 'json_object',
+              temperature: 0.35,
+              maxTokens: 2200,
+              llmConfig,
+              task: 'query',
+              stream: true,
+            });
+
+            // chat() with stream:true returns the full concatenated content.
+            // We parse the JSON and emit the answer text character-by-character
+            // as delta events for a progressive feel, then emit the full metadata
+            // in the `done` event.
+            const parsed = parseJSON<
+              QueryResponse & { rewrittenQuestion?: string; retrievalMode?: string }
+            >(raw);
+            parsed.citedConceptIds = parsed.citedConceptIds || [];
+            parsed.answer = parsed.answer || '(无回答)';
+            parsed.archivable = Boolean(parsed.archivable);
+            parsed.suggestedQuestions = Array.isArray(parsed.suggestedQuestions)
+              ? parsed.suggestedQuestions.slice(0, 3)
+              : [];
+
+            const validIds = new Set(concepts.map((c) => c.id));
+            parsed.citedConceptIds = parsed.citedConceptIds.filter((id) => validIds.has(id));
+
+            // Stream the answer in chunks for progressive rendering
+            const answerText = parsed.answer;
+            const CHUNK_SIZE = 4;
+            for (let i = 0; i < answerText.length; i += CHUNK_SIZE) {
+              sendSSE('delta', { text: answerText.slice(i, i + CHUNK_SIZE) });
+            }
+
+            // Emit final metadata
+            parsed.rewrittenQuestion =
+              retrieval.rewriteUsed === 'pass-through' ? undefined : retrieval.rewrittenQuestion;
+            parsed.retrievalMode = retrieval.retrievalMode;
+
+            sendSSE('done', {
+              citedConceptIds: parsed.citedConceptIds,
+              archivable: parsed.archivable,
+              suggestedTitle: parsed.suggestedTitle,
+              suggestedSummary: parsed.suggestedSummary,
+              suggestedQuestions: parsed.suggestedQuestions,
+              rewrittenQuestion: parsed.rewrittenQuestion,
+              retrievalMode: parsed.retrievalMode,
+            });
+
+            // Faithfulness check (log-only)
+            if (process.env.COMPOUND_FAITHFULNESS !== 'off') {
+              const citedConcepts = parsed.citedConceptIds
+                .map((id) => repo.getConceptsByIds([id])[0])
+                .filter((c): c is Concept => Boolean(c));
+              const faithfulness = checkFaithfulness({
+                answer: parsed.answer,
+                citedConcepts: citedConcepts.map((c) => ({
+                  id: c.id,
+                  title: c.title,
+                  summary: c.summary,
+                  body: c.body,
+                })),
+              });
+              if (faithfulness.score < 0.5 && faithfulness.unsupported.length > 0) {
+                logger.warn('query.faithfulness_low', {
+                  score: faithfulness.score,
+                  unsupported: faithfulness.unsupported,
+                  answerPreview: parsed.answer.slice(0, 200),
+                });
+              }
+            }
+
+            controller.close();
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendSSE('error', { error: msg.slice(0, 300) });
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        },
+      });
+    }
+
+    // ---- Non-streaming path (backward compatible) ----
     const raw = await chat({
       messages: [
         { role: 'system', content: QUERY_SYSTEM_PROMPT },
@@ -305,15 +422,16 @@ export const POST = withRequestTracing(async (req: Request) => {
     parsed.citedConceptIds = parsed.citedConceptIds || [];
     parsed.answer = parsed.answer || '(无回答)';
     parsed.archivable = Boolean(parsed.archivable);
+    parsed.suggestedQuestions = Array.isArray(parsed.suggestedQuestions)
+      ? parsed.suggestedQuestions.slice(0, 3)
+      : [];
 
     // Ensure citations reference real concept ids
     const validIds = new Set(concepts.map((c) => c.id));
     parsed.citedConceptIds = parsed.citedConceptIds.filter((id) => validIds.has(id));
 
     // Faithfulness check: warn (in logs only) when [CX] markers don't have
-    // token-level support in the cited bodies. Doesn't reject the answer —
-    // user-visible UX would be too disruptive — but produces an actionable
-    // signal for runbooks.
+    // token-level support in the cited bodies.
     if (process.env.COMPOUND_FAITHFULNESS !== 'off') {
       const citedConcepts = parsed.citedConceptIds
         .map((id) => repo.getConceptsByIds([id])[0])
