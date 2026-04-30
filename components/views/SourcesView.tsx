@@ -14,9 +14,20 @@ import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { Icon, SourceTypeIcon } from '../Icons';
+import type { SourceType } from '@/lib/types';
 
 const PAGE_SIZE = 50;
 const SCROLL_ROOT_SELECTOR = '.app-main';
+
+const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
+  link: '链接',
+  text: '文本',
+  file: '文件',
+  article: '文章',
+  book: '书籍',
+  pdf: 'PDF',
+  gist: '代码片段',
+};
 
 export function SourcesView() {
   const openSource = useAppStore((s) => s.openSource);
@@ -187,16 +198,17 @@ export function SourcesView() {
                 className={`source-card${detail?.type === 'source' && detail.id === source.id ? ' active' : ''}`}
                 onClick={() => openSource(source.id)}
               >
-                <div className="s-icon">
-                  <SourceTypeIcon type={source.type} />
-                </div>
-                <div className="s-body">
-                  <div className="s-title">{source.title}</div>
-                  <div className="s-meta">
-                    {source.author && <span>{source.author}</span>}
-                    <span className="pill">{conceptCountBySource?.get(source.id) ?? 0} 概念</span>
-                    <span className="pill">{formatRelativeTime(source.ingestedAt)}</span>
-                  </div>
+                <div className="s-title">{source.title}</div>
+                {source.author && <div className="s-author">{source.author}</div>}
+                <div className="s-meta">
+                  <span className="s-type-badge">
+                    <SourceTypeIcon type={source.type} />
+                    {SOURCE_TYPE_LABELS[source.type]}
+                  </span>
+                  <span>·</span>
+                  <span>{conceptCountBySource?.get(source.id) ?? 0} 个概念</span>
+                  <span>·</span>
+                  <span>{formatRelativeTime(source.ingestedAt)}</span>
                 </div>
               </button>
             ))}

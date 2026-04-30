@@ -1872,20 +1872,21 @@ button {
   background: var(--bg-card);
   border: 1px solid var(--border-light);
   border-radius: 12px;
-  padding: 16px;
-  display: flex;
-  gap: 12px;
+  padding: 18px;
   margin-bottom: 12px;
   cursor: pointer;
   transition:
-    background 0.18s ease,
-    border-color 0.18s ease,
-    transform 0.18s ease;
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
   text-align: left;
   width: 100%;
+  display: block;
 }
 .source-card:active {
   background: var(--bg-hover);
+  transform: scale(0.992);
 }
 @media (hover: hover) {
   .source-card:hover {
@@ -1898,32 +1899,14 @@ button {
   border-color: rgba(217, 119, 87, 0.28);
   box-shadow: var(--shadow-md);
 }
-.source-card .s-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: var(--bg-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-.source-card .s-icon svg {
-  width: 18px;
-  height: 18px;
-}
-.source-card .s-body {
-  flex: 1;
-  min-width: 0;
-}
 .source-card .s-title {
   font-family: var(--font-sans);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 650;
   color: var(--text-primary);
-  margin-bottom: 4px;
-  line-height: 1.35;
+  margin-bottom: 8px;
+  letter-spacing: -0.015em;
+  line-height: 1.4;
   overflow-wrap: anywhere;
   word-break: break-word;
   display: -webkit-box;
@@ -1931,21 +1914,35 @@ button {
   -webkit-line-clamp: 2;
   overflow: hidden;
 }
+.source-card .s-author {
+  font-family: var(--font-reading);
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text-body);
+  margin-bottom: 14px;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .source-card .s-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--font-sans);
   font-size: 11px;
   color: var(--text-tertiary);
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-top: 6px;
   flex-wrap: wrap;
 }
-.source-card .s-meta .pill {
-  background: var(--bg-secondary);
-  padding: 3px 8px;
-  border-radius: 100px;
+.source-card .s-meta .s-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--text-secondary);
+}
+.source-card .s-meta .s-type-badge svg {
+  width: 11px;
+  height: 11px;
 }
 
 .view-padding {
