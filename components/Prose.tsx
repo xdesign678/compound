@@ -20,6 +20,17 @@ async function resolveWikiLink(
   return null;
 }
 
+// 判断 href 是否是可直接打开的"真实外链"（http/https/protocol-relative）。
+// 站内相对路径(/wiki/xxx)和伪协议(wiki:xxx, concept:xxx)都不算,走 wiki-link 兜底。
+function isExternalHref(href: string): boolean {
+  return /^(https?:)?\/\//i.test(href);
+}
+
+// mailto/tel/sms 等允许浏览器默认行为。
+function isSpecialScheme(href: string): boolean {
+  return /^(mailto:|tel:|sms:)/i.test(href);
+}
+
 /**
  * Renders markdown and wires up inline concept links / citation pills
  * to the app store navigation.
@@ -42,7 +53,7 @@ export function Prose({
     const el = ref.current;
     if (!el) return;
 
-    const activate = (target: HTMLElement) => {
+    const activate = (target: HTMLElement, event?: Event) => {
       const conceptEl = target.closest('[data-concept-id]') as HTMLElement | null;
       if (conceptEl) {
         const id = conceptEl.dataset.conceptId;
@@ -67,10 +78,50 @@ export function Prose({
         const idx = Number(citEl.dataset.citationIndex) - 1;
         const id = citedConceptIds[idx];
         if (id) openConcept(id);
+        return;
+      }
+      // 普通 <a> 兜底:本项目是 SPA,没有 /wiki/* /concept/* 路由,默认跳转必 404。
+      // 外链用新标签打开;其他一律按 wiki-link 行为,用链接文本去查本地库。
+      const anchorEl = target.closest('a') as HTMLAnchorElement | null;
+      if (anchorEl) {
+        const rawHref = anchorEl.getAttribute('href') || '';
+        const href = rawHref.trim();
+        const text = (anchorEl.textContent || '').trim();
+        if (!href) {
+          event?.preventDefault();
+          return;
+        }
+        if (isSpecialScheme(href)) {
+          // mailto/tel/sms: 交给浏览器默认行为。
+          return;
+        }
+        event?.preventDefault();
+        if (isExternalHref(href)) {
+          try {
+            const url = href.startsWith('//') ? `https:${href}` : href;
+            window.open(url, '_blank', 'noopener,noreferrer');
+          } catch {
+            showToast('打开链接失败', false, true);
+          }
+          return;
+        }
+        // 站内相对路径 / 伪协议 / hash → 按 wiki-link 查找同名概念。
+        if (!text) {
+          showToast('链接无对应内容', false, true);
+          return;
+        }
+        void resolveWikiLink(text).then((hit) => {
+          if (!hit) {
+            showToast(`未找到 "${text}"`, false, true);
+            return;
+          }
+          if (hit.kind === 'source') openSource(hit.id);
+          else openConcept(hit.id);
+        });
       }
     };
 
-    const clickHandler = (e: Event) => activate(e.target as HTMLElement);
+    const clickHandler = (e: Event) => activate(e.target as HTMLElement, e);
 
     const keydownHandler = (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -78,10 +129,11 @@ export function Prose({
         if (
           target.closest('[data-concept-id]') ||
           target.closest('[data-citation-index]') ||
-          target.closest('[data-wikilink]')
+          target.closest('[data-wikilink]') ||
+          target.closest('a')
         ) {
           e.preventDefault();
-          activate(target);
+          activate(target, e);
         }
       }
     };
