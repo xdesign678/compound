@@ -73,6 +73,9 @@ tmp/duplicate-report.md
 # Coverage output (scripts/run-node-tests.mjs --coverage)
 tmp/coverage/
 
+# Q&A evaluation runner output (scripts/eval-query.mjs)
+tmp/eval/
+
 # Local profiling output produced by Clinic.js and Node CPU/heap profiles
 tmp/profiles/
 .local/

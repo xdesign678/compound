@@ -1,0 +1,47 @@
+{
+  "_help": "Add 30–50 questions across 'definition', 'comparison', 'multi-hop', 'follow-up', 'unknown'. Either expectedConceptIds (stable) or expectedConceptTitles (easier to author) is required for hit@k / MRR. Keywords are optional but free wins. Items without any expectations only contribute latency stats. See lib/eval/metrics.ts for the schema.",
+  "items": [
+    {
+      "id": "definition-001",
+      "category": "definition",
+      "question": "什么是 LLM Wiki 这个概念？",
+      "expectedConceptTitles": ["LLM Wiki", "Karpathy", "知识库"],
+      "expectedKeywords": ["概念页", "预合成"]
+    },
+    {
+      "id": "comparison-001",
+      "category": "comparison",
+      "question": "RAG 和 GraphRAG 有什么区别？",
+      "expectedConceptTitles": ["RAG", "GraphRAG"],
+      "expectedKeywords": ["检索", "图"]
+    },
+    {
+      "id": "follow-up-001",
+      "category": "follow-up",
+      "question": "那它和普通的相比有什么优势？",
+      "history": [
+        { "role": "user", "text": "什么是 GraphRAG ？" },
+        {
+          "role": "ai",
+          "text": "GraphRAG 是把知识组织成图谱再做检索的 RAG 变体。"
+        }
+      ],
+      "expectedConceptTitles": ["GraphRAG"],
+      "expectedKeywords": ["图", "关系"]
+    },
+    {
+      "id": "multi-hop-001",
+      "category": "multi-hop",
+      "question": "用户体验设计如何被认知心理学影响？",
+      "expectedConceptTitles": ["用户体验", "认知"],
+      "expectedKeywords": ["认知负荷"]
+    },
+    {
+      "id": "unknown-001",
+      "category": "unknown",
+      "question": "请解释一下 1973 年东京证券交易所的开盘价",
+      "shouldAnswer": false,
+      "expectedKeywords": ["Wiki 中没有", "建议"]
+    }
+  ]
+}
