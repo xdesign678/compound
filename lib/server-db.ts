@@ -10,7 +10,7 @@
  * Node.js bindings. All imports must live under `app/api/**` or `lib/server-*`.
  */
 
-import Database, { type Database as DB } from 'better-sqlite3';
+import Database, { type Database as DB, type Statement } from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -58,6 +58,14 @@ function getHolder(): Holder {
   db.pragma('busy_timeout = 3000');
 
   runMigrations(db);
+  // ANALYZE refreshes the query planner's statistics so large SELECTs pick
+  // the correct index after schema-introducing migrations. Cheap on small
+  // DBs (<100ms), and idempotent — safe to run unconditionally at startup.
+  try {
+    db.exec('ANALYZE;');
+  } catch {
+    // ANALYZE is best-effort; a corrupted stats table must not block boot.
+  }
   // After migrations finish, install the query analyzer so every prepared
   // statement records its fingerprint, duration, and error state into the
   // active query scope. Disabled by setting COMPOUND_DISABLE_QUERY_ANALYZER=1.
@@ -74,6 +82,38 @@ export function getServerDb(): DB {
 
 export function getServerDbPath(): string {
   return getHolder().path;
+}
+
+// --------------------------------------------------------------------
+// Prepared statement cache
+// --------------------------------------------------------------------
+
+/**
+ * Module-scope cache so hot-path queries don't re-prepare the same SQL on
+ * every request. `better-sqlite3` .prepare() parses and compiles the SQL each
+ * call (≈50-150µs on typical statements), which adds up across the thousands
+ * of per-request reads in this app.
+ *
+ * The cache is keyed by the raw SQL string and re-bound to the current DB
+ * instance. When the singleton rotates (tests / hot reload), all cached
+ * statements are invalidated in one shot to avoid operating on a closed
+ * Database handle.
+ */
+let cachedDbForPrepare: DB | null = null;
+const preparedStatementCache = new Map<string, Statement<unknown[]>>();
+
+function cachedPrepare(sql: string): Statement<unknown[]> {
+  const db = getServerDb();
+  if (db !== cachedDbForPrepare) {
+    cachedDbForPrepare = db;
+    preparedStatementCache.clear();
+  }
+  let stmt = preparedStatementCache.get(sql);
+  if (!stmt) {
+    stmt = db.prepare(sql) as Statement<unknown[]>;
+    preparedStatementCache.set(sql, stmt);
+  }
+  return stmt;
 }
 
 // --------------------------------------------------------------------
@@ -443,16 +483,14 @@ function findDirectTitleMentionConcepts(searchText: string, limit: number): Conc
   const normalizedSearchText = normalizeSearchText(searchText);
   if (normalizedSearchText.length === 0) return [];
 
-  const rows = getServerDb()
-    .prepare(
-      `SELECT ${selectConceptColumns(true)}
+  const rows = cachedPrepare(
+    `SELECT ${selectConceptColumns(true)}
        FROM concepts
        WHERE length(trim(title)) >= ?
          AND instr(?, lower(title)) > 0
        ORDER BY length(title) DESC, updated_at DESC
        LIMIT ?`,
-    )
-    .all(MIN_DIRECT_TITLE_MENTION_LENGTH, normalizedSearchText, limit) as ConceptRow[];
+  ).all(MIN_DIRECT_TITLE_MENTION_LENGTH, normalizedSearchText, limit) as ConceptRow[];
 
   return rows.map((row) => rowToConcept(row, 'partial'));
 }
@@ -500,40 +538,38 @@ function invalidateCategoryKeysCache(): void {
 export const repo = {
   // ---- sources ---------------------------------------------------
   insertSource(s: Source): void {
-    getServerDb()
-      .prepare(
-        `INSERT OR REPLACE INTO sources
+    cachedPrepare(
+      `INSERT OR REPLACE INTO sources
           (id, title, type, author, url, raw_content, ingested_at, external_key)
           VALUES (@id, @title, @type, @author, @url, @raw_content, @ingested_at, @external_key)`,
-      )
-      .run({
-        id: s.id,
-        title: s.title,
-        type: s.type,
-        author: s.author ?? null,
-        url: s.url ?? null,
-        raw_content: s.rawContent,
-        ingested_at: s.ingestedAt,
-        external_key: s.externalKey ?? null,
-      });
+    ).run({
+      id: s.id,
+      title: s.title,
+      type: s.type,
+      author: s.author ?? null,
+      url: s.url ?? null,
+      raw_content: s.rawContent,
+      ingested_at: s.ingestedAt,
+      external_key: s.externalKey ?? null,
+    });
   },
 
   getSource(id: string): Source | null {
-    const row = getServerDb().prepare(`SELECT * FROM sources WHERE id = ?`).get(id) as
+    const row = cachedPrepare(`SELECT * FROM sources WHERE id = ?`).get(id) as
       | SourceRow
       | undefined;
     return row ? rowToSource(row) : null;
   },
 
   getSourceByExternalKey(key: string): Source | null {
-    const row = getServerDb().prepare(`SELECT * FROM sources WHERE external_key = ?`).get(key) as
+    const row = cachedPrepare(`SELECT * FROM sources WHERE external_key = ?`).get(key) as
       | SourceRow
       | undefined;
     return row ? rowToSource(row) : null;
   },
 
   deleteSource(id: string): void {
-    getServerDb().prepare(`DELETE FROM sources WHERE id = ?`).run(id);
+    cachedPrepare(`DELETE FROM sources WHERE id = ?`).run(id);
   },
 
   listSources(options: RecordQueryOptions = {}): Source[] {
@@ -566,38 +602,36 @@ export const repo = {
    * Return all external keys whose prefix matches `github:`; used for dedup in sync.
    */
   listGithubExternalKeys(): Array<{ id: string; externalKey: string }> {
-    const rows = getServerDb()
-      .prepare(`SELECT id, external_key FROM sources WHERE external_key LIKE 'github:%'`)
-      .all() as Array<{ id: string; external_key: string }>;
+    const rows = cachedPrepare(
+      `SELECT id, external_key FROM sources WHERE external_key LIKE 'github:%'`,
+    ).all() as Array<{ id: string; external_key: string }>;
     return rows.map((r) => ({ id: r.id, externalKey: r.external_key }));
   },
 
   // ---- concepts --------------------------------------------------
   upsertConcept(c: Concept): void {
-    getServerDb()
-      .prepare(
-        `INSERT OR REPLACE INTO concepts
+    cachedPrepare(
+      `INSERT OR REPLACE INTO concepts
           (id, title, summary, body, sources, related, categories, category_keys, created_at, updated_at, version)
           VALUES (@id, @title, @summary, @body, @sources, @related, @categories, @category_keys, @created_at, @updated_at, @version)`,
-      )
-      .run({
-        id: c.id,
-        title: c.title,
-        summary: c.summary,
-        body: c.body,
-        sources: JSON.stringify(c.sources ?? []),
-        related: JSON.stringify(c.related ?? []),
-        categories: JSON.stringify(c.categories ?? []),
-        category_keys: JSON.stringify(c.categoryKeys ?? []),
-        created_at: c.createdAt,
-        updated_at: c.updatedAt,
-        version: c.version ?? 1,
-      });
+    ).run({
+      id: c.id,
+      title: c.title,
+      summary: c.summary,
+      body: c.body,
+      sources: JSON.stringify(c.sources ?? []),
+      related: JSON.stringify(c.related ?? []),
+      categories: JSON.stringify(c.categories ?? []),
+      category_keys: JSON.stringify(c.categoryKeys ?? []),
+      created_at: c.createdAt,
+      updated_at: c.updatedAt,
+      version: c.version ?? 1,
+    });
     invalidateCategoryKeysCache();
   },
 
   getConcept(id: string): Concept | null {
-    const row = getServerDb().prepare(`SELECT * FROM concepts WHERE id = ?`).get(id) as
+    const row = cachedPrepare(`SELECT * FROM concepts WHERE id = ?`).get(id) as
       | ConceptRow
       | undefined;
     return row ? rowToConcept(row) : null;
@@ -630,9 +664,9 @@ export const repo = {
   },
 
   findConceptByTitleCI(title: string): Concept | null {
-    const row = getServerDb()
-      .prepare(`SELECT * FROM concepts WHERE LOWER(title) = LOWER(?)`)
-      .get(title) as ConceptRow | undefined;
+    const row = cachedPrepare(`SELECT * FROM concepts WHERE LOWER(title) = LOWER(?)`).get(title) as
+      | ConceptRow
+      | undefined;
     return row ? rowToConcept(row) : null;
   },
 
@@ -825,21 +859,19 @@ export const repo = {
 
   // ---- activity --------------------------------------------------
   insertActivity(a: ActivityLog): void {
-    getServerDb()
-      .prepare(
-        `INSERT OR REPLACE INTO activity
+    cachedPrepare(
+      `INSERT OR REPLACE INTO activity
           (id, type, title, details, source_ids, concept_ids, at)
           VALUES (@id, @type, @title, @details, @source_ids, @concept_ids, @at)`,
-      )
-      .run({
-        id: a.id,
-        type: a.type,
-        title: a.title,
-        details: a.details ?? null,
-        source_ids: JSON.stringify(a.relatedSourceIds ?? []),
-        concept_ids: JSON.stringify(a.relatedConceptIds ?? []),
-        at: a.at,
-      });
+    ).run({
+      id: a.id,
+      type: a.type,
+      title: a.title,
+      details: a.details ?? null,
+      source_ids: JSON.stringify(a.relatedSourceIds ?? []),
+      concept_ids: JSON.stringify(a.relatedConceptIds ?? []),
+      at: a.at,
+    });
   },
 
   listActivity(limitOrOptions: number | TimeWindowWithLimit = 500): ActivityLog[] {
@@ -866,9 +898,9 @@ export const repo = {
   // ---- sync jobs -------------------------------------------------
   /** Returns the active (running) job if any. */
   getActiveSyncJob(): SyncJobRow | null {
-    const row = getServerDb()
-      .prepare(`SELECT * FROM sync_jobs WHERE status = 'running' LIMIT 1`)
-      .get() as SyncJobRow | undefined;
+    const row = cachedPrepare(`SELECT * FROM sync_jobs WHERE status = 'running' LIMIT 1`).get() as
+      | SyncJobRow
+      | undefined;
     return row ?? null;
   },
 
@@ -885,20 +917,18 @@ export const repo = {
     // A job is "alive" if its heartbeat is fresh. Fall back to started_at for
     // pre-migration rows. Long-running LLM pipelines that bump heartbeat_at
     // every iteration survive this check even if total runtime exceeds 10min.
-    const result = getServerDb()
-      .prepare(
-        `UPDATE sync_jobs
+    const result = cachedPrepare(
+      `UPDATE sync_jobs
          SET status = 'failed',
              error = COALESCE(error, '服务重启导致任务中断（已自动回收）'),
              finished_at = ?
          WHERE status = 'running' AND COALESCE(heartbeat_at, started_at) < ?`,
-      )
-      .run(Date.now(), cutoff);
+    ).run(Date.now(), cutoff);
     return result.changes;
   },
 
   getSyncJob(id: string): SyncJobRow | null {
-    const row = getServerDb().prepare(`SELECT * FROM sync_jobs WHERE id = ?`).get(id) as
+    const row = cachedPrepare(`SELECT * FROM sync_jobs WHERE id = ?`).get(id) as
       | SyncJobRow
       | undefined;
     return row ?? null;
@@ -906,13 +936,11 @@ export const repo = {
 
   insertSyncJob(j: SyncJobRow): void {
     const row: SyncJobRow = { heartbeat_at: j.heartbeat_at ?? j.started_at, ...j };
-    getServerDb()
-      .prepare(
-        `INSERT INTO sync_jobs
+    cachedPrepare(
+      `INSERT INTO sync_jobs
           (id, kind, status, total, done, failed, current, log, error, started_at, finished_at, heartbeat_at)
           VALUES (@id, @kind, @status, @total, @done, @failed, @current, @log, @error, @started_at, @finished_at, @heartbeat_at)`,
-      )
-      .run(row);
+    ).run(row);
   },
 
   updateSyncJob(id: string, patch: Partial<SyncJobRow>): void {
@@ -926,15 +954,13 @@ export const repo = {
         ? Date.now()
         : (patch.heartbeat_at ?? prev.heartbeat_at ?? prev.started_at);
     const next: SyncJobRow = { ...prev, ...patch, heartbeat_at: autoHeartbeat };
-    getServerDb()
-      .prepare(
-        `UPDATE sync_jobs SET
+    cachedPrepare(
+      `UPDATE sync_jobs SET
             status = @status, total = @total, done = @done, failed = @failed,
             current = @current, log = @log, error = @error, finished_at = @finished_at,
             heartbeat_at = @heartbeat_at
           WHERE id = @id`,
-      )
-      .run(next);
+    ).run(next);
   },
 };
 

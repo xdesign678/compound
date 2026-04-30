@@ -50,6 +50,7 @@ export function SourcesView() {
 
   const deferredQuery = useDeferredValue(query);
   const [scrolled, setScrolled] = useState(false);
+  // Keep the user's current page size on first mount; only reset after they change the filter.
   const filterResetSkipRef = useRef(true);
   const scrollRestoredRef = useRef(false);
 
@@ -73,27 +74,23 @@ export function SourcesView() {
     return map;
   }, [sources]);
 
-  const filteredSources = useMemo(() => {
-    if (!sources) return [];
-    const q = deferredQuery.trim().toLowerCase();
-    if (!q) return sources.slice(0, visibleCount);
-    return sources
-      .filter(
-        (source) =>
-          source.title.toLowerCase().includes(q) || (source.author ?? '').toLowerCase().includes(q),
-      )
-      .slice(0, visibleCount);
-  }, [sources, deferredQuery, visibleCount]);
+  const normalizedQuery = deferredQuery.trim().toLowerCase();
 
-  const totalMatches = useMemo(() => {
-    if (!sources) return 0;
-    const q = deferredQuery.trim().toLowerCase();
-    if (!q) return sources.length;
+  const matchingSources = useMemo(() => {
+    if (!sources) return [];
     return sources.filter(
       (source) =>
-        source.title.toLowerCase().includes(q) || (source.author ?? '').toLowerCase().includes(q),
-    ).length;
-  }, [sources, deferredQuery]);
+        source.title.toLowerCase().includes(normalizedQuery) ||
+        (source.author ?? '').toLowerCase().includes(normalizedQuery),
+    );
+  }, [normalizedQuery, sources]);
+
+  const filteredSources = useMemo(
+    () => matchingSources.slice(0, visibleCount),
+    [matchingSources, visibleCount],
+  );
+
+  const totalMatches = matchingSources.length;
 
   useEffect(() => {
     if (filterResetSkipRef.current) {
@@ -132,6 +129,7 @@ export function SourcesView() {
     };
   }, []);
 
+  // Restore the list scroll only once after Dexie has finished hydrating the source list.
   useLayoutEffect(() => {
     if (scrollRestoredRef.current) return;
     if (!sources) return;

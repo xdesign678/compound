@@ -95,7 +95,16 @@ async function validateApiUrl(url: string): Promise<void> {
   // Resolve DNS and reject if ANY returned address sits in a blocked range.
   // Prevents DNS-rebinding / wildcard DNS pointing at internal hosts.
   // Controlled by COMPOUND_SKIP_DNS_GUARD=true for rare cases (never use in prod).
-  if (process.env.COMPOUND_SKIP_DNS_GUARD === 'true') return;
+  //
+  // Belt-and-braces: even if `instrumentation.ts` is somehow skipped (e.g.
+  // programmatic server bootstrapping), reject the escape hatch here in
+  // production so SSRF protection can't be disabled with a single env flag.
+  if (process.env.COMPOUND_SKIP_DNS_GUARD === 'true') {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('COMPOUND_SKIP_DNS_GUARD=true is not allowed in production (SSRF risk).');
+    }
+    return;
+  }
 
   let records: Array<{ address: string; family: number }>;
   try {

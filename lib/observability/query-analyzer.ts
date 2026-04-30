@@ -36,6 +36,7 @@ import { performance } from 'node:perf_hooks';
 import type { Database as DB, Statement } from 'better-sqlite3';
 
 import { logger } from '../logging';
+import { reportError } from './sentry';
 
 const SQL_COMMENT_LINE_RE = /--[^\n]*/g;
 const SQL_COMMENT_BLOCK_RE = /\/\*[\s\S]*?\*\//g;
@@ -47,6 +48,7 @@ const SQL_WHITESPACE_RE = /\s+/g;
 
 const N_PLUS_ONE_ENV_KEY = 'COMPOUND_N_PLUS_ONE_THRESHOLD';
 const SLOW_QUERY_ENV_KEY = 'COMPOUND_SLOW_QUERY_MS';
+const SLOW_QUERY_SENTRY_ENV_KEY = 'COMPOUND_SLOW_QUERY_SENTRY_MS';
 const ANALYZER_DISABLED_ENV_KEY = 'COMPOUND_DISABLE_QUERY_ANALYZER';
 
 /** Default count above which repeated identical queries become an N+1 warning. */
@@ -54,6 +56,14 @@ export const DEFAULT_N_PLUS_ONE_THRESHOLD = 10;
 
 /** Default duration above which a single query is logged as slow. */
 export const DEFAULT_SLOW_QUERY_MS = 50;
+
+/**
+ * Duration above which a slow query is escalated to Sentry as a warning event
+ * (not just a log line). This threshold is intentionally much higher than the
+ * log threshold to avoid flooding Sentry with low-signal noise; only the
+ * obviously pathological queries (>500ms) land as distinct events.
+ */
+export const DEFAULT_SLOW_QUERY_SENTRY_MS = 500;
 
 function readNumberEnv(key: string, fallback: number): number {
   const raw = process.env[key];
@@ -73,6 +83,16 @@ export function getNPlusOneThreshold(): number {
 /** Slow-query duration (ms). Configurable via `COMPOUND_SLOW_QUERY_MS`. */
 export function getSlowQueryThresholdMs(): number {
   return readNumberEnv(SLOW_QUERY_ENV_KEY, DEFAULT_SLOW_QUERY_MS);
+}
+
+/**
+ * Slow-query threshold for Sentry escalation. Queries above the log threshold
+ * but below this value stay in NDJSON logs only; queries above this value also
+ * emit a Sentry warning event for incident triage. Configurable via
+ * `COMPOUND_SLOW_QUERY_SENTRY_MS`.
+ */
+export function getSlowQuerySentryThresholdMs(): number {
+  return readNumberEnv(SLOW_QUERY_SENTRY_ENV_KEY, DEFAULT_SLOW_QUERY_SENTRY_MS);
 }
 
 function isAnalyzerDisabled(): boolean {
@@ -313,11 +333,30 @@ export function recordQueryExecution(event: QueryExecution): void {
 
   const slowThreshold = getSlowQueryThresholdMs();
   if (event.durationMs >= slowThreshold) {
+    const sample = trimSql(event.sql);
     logger.warn('db.slow_query', {
       fingerprint: event.fingerprint,
       durationMs: Math.round(event.durationMs),
-      sample: trimSql(event.sql),
+      sample,
     });
+    // Escalate the pathologically-slow subset to Sentry so it shows up in
+    // incident dashboards. The fingerprint is used as the Sentry fingerprint
+    // so repeated incidents of the same query collapse into one issue instead
+    // of spawning a new one per request.
+    const sentryThreshold = getSlowQuerySentryThresholdMs();
+    if (event.durationMs >= sentryThreshold) {
+      reportError(new Error(`db.slow_query ${Math.round(event.durationMs)}ms: ${sample}`), {
+        level: 'warning',
+        tags: { area: 'db', slow: 'true' },
+        extras: {
+          fingerprint: event.fingerprint,
+          durationMs: Math.round(event.durationMs),
+          thresholdMs: sentryThreshold,
+          sample,
+        },
+        fingerprint: ['db.slow_query', event.fingerprint],
+      });
+    }
   }
 
   const scope = scopeStorage.getStore();

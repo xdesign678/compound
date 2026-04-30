@@ -62,12 +62,21 @@ function getClientKey(req: Request): string {
   // rate-limit bucket ('anon'), meaning a single aggressive client can
   // exhaust the quota for everyone. Set COMPOUND_TRUST_PROXY=true when
   // running behind a trusted reverse proxy (Vercel, Cloudflare, etc.).
+  //
+  // In production this is escalated to ERROR-level so the misconfig surfaces
+  // on Sentry / log aggregators — `instrumentation.ts` also prints a loud
+  // startup warning.
   if (!globalThis._compoundRateLimitAnonWarned) {
     globalThis._compoundRateLimitAnonWarned = true;
-    logger.warn('rate_limit.trust_proxy_disabled', {
+    const context = {
       bucket: 'anon',
       recommendation: 'Set COMPOUND_TRUST_PROXY=true behind a trusted reverse proxy.',
-    });
+    };
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('rate_limit.trust_proxy_disabled_in_production', context);
+    } else {
+      logger.warn('rate_limit.trust_proxy_disabled', context);
+    }
   }
   return 'anon';
 }

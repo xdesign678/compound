@@ -16,7 +16,13 @@ import { PullToRefresh } from '@/components/PullToRefresh';
 import { Icon } from '@/components/Icons';
 
 const ViewSkeleton = () => (
-  <div className="loading-skeleton">
+  <div
+    className="loading-skeleton"
+    role="status"
+    aria-live="polite"
+    aria-label="正在加载内容"
+    aria-busy="true"
+  >
     <div className="skeleton skeleton-header" />
     <div className="skeleton skeleton-card" />
     <div className="skeleton skeleton-card" style={{ opacity: 0.7 }} />

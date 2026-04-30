@@ -62,9 +62,25 @@ tmp/build-metrics.json
 tmp/tech-debt-report.json
 tmp/tech-debt-report.md
 
+# Quality metrics output (scripts/quality-metrics.mjs)
+tmp/quality-metrics.json
+tmp/quality-metrics.md
+
+# Duplicate detection output (scripts/duplicate-detection.mjs)
+tmp/duplicate-report.json
+tmp/duplicate-report.md
+
+# Coverage output (scripts/run-node-tests.mjs --coverage)
+tmp/coverage/
+
 # Local profiling output produced by Clinic.js and Node CPU/heap profiles
 tmp/profiles/
 .local/
+
+# Claude / Playwright / other agent scratch directories (worktrees, snapshots, etc.)
+.claude/
+.playwright-cli/
+.factory/
 
 # Sentry
 .sentryclirc

@@ -19,11 +19,11 @@ export const FONT_SIZE_MAP: Record<FontSize, { label: string; px: number }> = {
 export type LineHeight = 'compact' | 'snug' | 'standard' | 'relaxed' | 'loose';
 
 export const LINE_HEIGHT_MAP: Record<LineHeight, { label: string; value: number }> = {
-  compact:  { label: '紧凑', value: 1.5  },
-  snug:     { label: '偏紧', value: 1.65 },
+  compact: { label: '紧凑', value: 1.5 },
+  snug: { label: '偏紧', value: 1.65 },
   standard: { label: '标准', value: 1.75 },
-  relaxed:  { label: '宽松', value: 1.85 },
-  loose:    { label: '舒展', value: 2.0  },
+  relaxed: { label: '宽松', value: 1.85 },
+  loose: { label: '舒展', value: 2.0 },
 };
 
 interface DetailState {

@@ -45,6 +45,10 @@ const nextConfig = {
   serverExternalPackages: ['better-sqlite3'],
   experimental: {
     serverActions: { allowedOrigins },
+    // Tree-shake & on-demand compile imports from large icon/util packages so
+    // the client bundle only pulls the symbols actually referenced. Docs:
+    // https://nextjs.org/docs/app/api-reference/config/next-config-js/optimizePackageImports
+    optimizePackageImports: ['lucide-react', 'dexie', 'dexie-react-hooks', 'zustand'],
   },
   async headers() {
     return [
