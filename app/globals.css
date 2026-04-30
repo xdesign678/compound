@@ -1903,6 +1903,35 @@ button {
   color: var(--text-tertiary);
   padding: 4px 0;
 }
+.ask-new-chat-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  transition:
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    background var(--motion-duration-fast) var(--motion-ease-standard);
+}
+.ask-new-chat-btn:hover,
+.ask-new-chat-btn:focus-visible {
+  border-color: var(--brand-clay);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+.ask-new-chat-btn:disabled {
+  opacity: 0.48;
+  pointer-events: none;
+}
+.ask-new-chat-btn svg {
+  width: 14px;
+  height: 14px;
+}
 .ask-recovery-banner {
   display: flex;
   align-items: center;

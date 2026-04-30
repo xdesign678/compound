@@ -17,6 +17,7 @@ import {
 } from '../../lib/llm-config';
 import { AskComposer } from '../ask/AskComposer';
 import { AskMessageList } from '../ask/AskMessageList';
+import { Icon } from '../Icons';
 import type { InlineMention, MentionItem, MentionKind, ModelOption } from '../ask/types';
 import type { AskMessage, LlmConfig, Source, SourceType } from '../../lib/types';
 
@@ -37,7 +38,6 @@ export function AskView() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [archiving, setArchiving] = useState<string | null>(null);
-  const [confirmClear, setConfirmClear] = useState(false);
   const [selectedMentions, setSelectedMentions] = useState<MentionItem[]>([]);
   const [referencePickerOpen, setReferencePickerOpen] = useState(false);
   const [referenceMode, setReferenceMode] = useState<MentionKind>('concept');
@@ -361,9 +361,17 @@ export function AskView() {
     setModelMenuOpen(false);
   }
 
-  function restartConversation() {
-    clearAskHistory();
-    setConfirmClear(false);
+  async function restartConversation() {
+    if (loading) return;
+    setInput('');
+    setSelectedMentions([]);
+    setPickerSearch('');
+    setReferencePickerOpen(false);
+    setModelMenuOpen(false);
+    setInlineResults([]);
+    await clearAskHistory();
+    showToast('已开始新对话');
+    requestAnimationFrame(() => textareaRef.current?.focus());
   }
 
   return (
@@ -371,27 +379,16 @@ export function AskView() {
       {history && history.length > 0 && (
         <div className="ask-toolbar">
           <div className="ask-toolbar-inner">
-            {confirmClear ? (
-              <>
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)', marginRight: 8 }}>
-                  确认清空所有对话？
-                </span>
-                <button
-                  className="ask-reset-btn"
-                  onClick={restartConversation}
-                  style={{ background: 'var(--brand-clay)', color: '#fff', marginRight: 4 }}
-                >
-                  清空
-                </button>
-                <button className="ask-reset-btn" onClick={() => setConfirmClear(false)}>
-                  取消
-                </button>
-              </>
-            ) : (
-              <button className="ask-reset-btn" onClick={() => setConfirmClear(true)}>
-                新对话
-              </button>
-            )}
+            <button
+              className="ask-reset-btn ask-new-chat-btn"
+              type="button"
+              onClick={() => void restartConversation()}
+              disabled={loading}
+              aria-label="开始新对话"
+            >
+              <Icon.Plus />
+              <span>新对话</span>
+            </button>
           </div>
         </div>
       )}
