@@ -88,7 +88,7 @@ function describeReviewItem(item: ReviewItem): Friendly {
         kindLabel: '大批量概念变更',
         severity: 'warn',
         headline: `《${basename(path) || '未命名文档'}》一次入库改动了 ${total} 个概念`,
-        why: `这篇文档在最近一次入库时，新增了 ${newIds.length} 个概念，更新了 ${updIds.length} 个概念，超过了系统设定的阈值（默认 8 个）。变更可能来自重要更新，也可能是误改或抓取异常，请确认是否符合预期。`,
+        why: `这篇文档在最近一次入库时，新增了 ${newIds.length} 个概念，更新了 ${updIds.length} 个概念，超过了系统设定的阈值（默认 15 个）。变更可能来自重要更新，也可能是误改或抓取异常，请确认是否符合预期。`,
         facts: [
           { label: '文档路径', value: path || '—' },
           { label: '新增概念', value: `${newIds.length} 个` },

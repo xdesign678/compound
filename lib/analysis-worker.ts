@@ -614,8 +614,8 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
   });
 
   if (
-    result.newConceptIds.length + result.updatedConceptIds.length >=
-    Number(process.env.COMPOUND_REVIEW_LARGE_CHANGE_THRESHOLD || 8)
+    result.newConceptIds.length + result.updatedConceptIds.length >
+    Number(process.env.COMPOUND_REVIEW_LARGE_CHANGE_THRESHOLD || 15)
   ) {
     createReviewItem({
       kind: 'large_ingest_change',
