@@ -28,7 +28,7 @@ export function AskMessageList({
   archiving: string | null;
   messagesRef: RefObject<HTMLDivElement>;
   onSendSuggestion: (text: string) => void | Promise<void>;
-  onRestart: () => void;
+  onRestart: () => void | Promise<void>;
   onArchive: (message: AskMessage, userQuestion: string | null) => void | Promise<void>;
   onOpenConcept: (id: string) => void;
 }) {
@@ -56,7 +56,10 @@ export function AskMessageList({
                     通常是 API 配置或服务端暂时不可用。可以重新开始，也可以保留记录继续问。
                   </div>
                 </div>
-                <button className="ask-reset-btn ask-recovery-action" onClick={onRestart}>
+                <button
+                  className="ask-reset-btn ask-recovery-action"
+                  onClick={() => void onRestart()}
+                >
                   重新开始
                 </button>
               </div>
@@ -98,24 +101,36 @@ export function AskMessageList({
                         <CitedList ids={message.citedConcepts} onClick={onOpenConcept} />
                       </div>
                     )}
-                    {!failedAnswer &&
-                      message.citedConcepts &&
-                      message.citedConcepts.length > 0 &&
-                      (message.savedAsConceptId ? (
-                        <button className="save-as-page" disabled>
-                          <Icon.Save />
-                          已归档为 Wiki 页面
-                        </button>
-                      ) : (
-                        <button
-                          className="save-as-page"
-                          disabled={archiving === message.id}
-                          onClick={() => void onArchive(message, userQuestion)}
-                        >
-                          <Icon.Save />
-                          {archiving === message.id ? '归档中...' : '归档为新页面'}
-                        </button>
-                      ))}
+                    <div className="msg-answer-actions">
+                      {!failedAnswer &&
+                        message.citedConcepts &&
+                        message.citedConcepts.length > 0 &&
+                        (message.savedAsConceptId ? (
+                          <button className="save-as-page" disabled>
+                            <Icon.Save />
+                            已归档为 Wiki 页面
+                          </button>
+                        ) : (
+                          <button
+                            className="save-as-page"
+                            disabled={archiving === message.id}
+                            onClick={() => void onArchive(message, userQuestion)}
+                          >
+                            <Icon.Save />
+                            {archiving === message.id ? '归档中...' : '归档为新页面'}
+                          </button>
+                        ))}
+                      <button
+                        className="ask-reset-btn ask-new-chat-btn ask-answer-new-btn"
+                        type="button"
+                        onClick={() => void onRestart()}
+                        disabled={loading}
+                        aria-label="开始新对话"
+                      >
+                        <Icon.Plus />
+                        <span>新对话</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

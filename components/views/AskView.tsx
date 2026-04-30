@@ -17,7 +17,6 @@ import {
 } from '../../lib/llm-config';
 import { AskComposer } from '../ask/AskComposer';
 import { AskMessageList } from '../ask/AskMessageList';
-import { Icon } from '../Icons';
 import type { InlineMention, MentionItem, MentionKind, ModelOption } from '../ask/types';
 import type { AskMessage, LlmConfig, Source, SourceType } from '../../lib/types';
 
@@ -376,23 +375,6 @@ export function AskView() {
 
   return (
     <div className="ask-view">
-      {history && history.length > 0 && (
-        <div className="ask-toolbar">
-          <div className="ask-toolbar-inner">
-            <button
-              className="ask-reset-btn ask-new-chat-btn"
-              type="button"
-              onClick={() => void restartConversation()}
-              disabled={loading}
-              aria-label="开始新对话"
-            >
-              <Icon.Plus />
-              <span>新对话</span>
-            </button>
-          </div>
-        </div>
-      )}
-
       <AskMessageList
         history={history}
         loading={loading}

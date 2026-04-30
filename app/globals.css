@@ -2243,6 +2243,17 @@ button {
   border-radius: 50%;
 }
 
+.msg-answer-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.msg-answer-actions .save-as-page,
+.msg-answer-actions .ask-new-chat-btn {
+  margin-top: 0;
+}
 .save-as-page {
   margin-top: 14px;
   display: inline-flex;
@@ -5063,6 +5074,10 @@ button,
     margin-top: 10px;
     padding: 7px 10px;
     font-size: 11.5px;
+  }
+  .msg-answer-actions .save-as-page,
+  .msg-answer-actions .ask-new-chat-btn {
+    margin-top: 0;
   }
 
   /* 空态：整体上移，不要太空旷 */
