@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAppStore } from '@/lib/store';
 import { Icon } from './Icons';
@@ -28,6 +29,83 @@ const TAB_TITLES: Record<string, { t: string; s: (h: HeaderProps) => string }> =
   },
 };
 
+function OverflowMenu({
+  open,
+  onClose,
+  onGithubSync,
+  onObsidianImport,
+  onSettings,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onGithubSync: () => void;
+  onObsidianImport: () => void;
+  onSettings: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="overflow-menu" ref={menuRef}>
+      <button
+        className="overflow-menu-item"
+        onClick={() => {
+          onClose();
+          onGithubSync();
+        }}
+      >
+        <Icon.Github />
+        <span>从 GitHub 同步</span>
+      </button>
+      <Link className="overflow-menu-item" href="/sync" onClick={onClose}>
+        <Icon.Activity />
+        <span>同步控制台</span>
+      </Link>
+      <button
+        className="overflow-menu-item"
+        onClick={() => {
+          onClose();
+          onObsidianImport();
+        }}
+      >
+        <Icon.Ingest />
+        <span>从 Obsidian 批量导入</span>
+      </button>
+      <button
+        className="overflow-menu-item"
+        onClick={() => {
+          onClose();
+          onSettings();
+        }}
+      >
+        <Icon.Settings />
+        <span>设置</span>
+      </button>
+    </div>
+  );
+}
+
 export function Header(props: HeaderProps) {
   const tab = useAppStore((s) => s.tab);
   const detail = useAppStore((s) => s.detail);
@@ -37,6 +115,9 @@ export function Header(props: HeaderProps) {
   const openGithubSync = useAppStore((s) => s.openGithubSync);
   const searchCollapsed = useAppStore((s) => s.searchCollapsed);
   const triggerSearchFocus = useAppStore((s) => s.triggerSearchFocus);
+
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const closeOverflow = useCallback(() => setOverflowOpen(false), []);
 
   const showSearchIcon = !detail && (tab === 'wiki' || tab === 'sources') && searchCollapsed;
   const handleExpandSearch = () => {
@@ -75,28 +156,52 @@ export function Header(props: HeaderProps) {
         >
           <Icon.Search />
         </button>
+        {/* Desktop: show individual icons */}
         <button
-          className="icon-btn"
+          className="icon-btn header-desktop-action"
           onClick={openGithubSync}
           aria-label="从 GitHub 同步"
           title="从 GitHub 同步 Obsidian 笔记"
         >
           <Icon.Github />
         </button>
-        <Link className="icon-btn" href="/sync" aria-label="同步控制台" title="同步控制台">
+        <Link
+          className="icon-btn header-desktop-action"
+          href="/sync"
+          aria-label="同步控制台"
+          title="同步控制台"
+        >
           <Icon.Activity />
         </Link>
         <button
-          className="icon-btn"
+          className="icon-btn header-desktop-action"
           onClick={openObsidianImport}
           aria-label="从 Obsidian 批量导入"
           title="从本地 Obsidian 文件夹批量导入"
         >
           <Icon.Ingest />
         </button>
-        <button className="icon-btn" onClick={openSettings} aria-label="设置">
+        <button className="icon-btn header-desktop-action" onClick={openSettings} aria-label="设置">
           <Icon.Settings />
         </button>
+        {/* Mobile: single overflow menu */}
+        <div className="header-mobile-overflow">
+          <button
+            className={`icon-btn${overflowOpen ? ' is-active' : ''}`}
+            onClick={() => setOverflowOpen((v) => !v)}
+            aria-label="更多操作"
+            aria-expanded={overflowOpen}
+          >
+            <Icon.Overflow />
+          </button>
+          <OverflowMenu
+            open={overflowOpen}
+            onClose={closeOverflow}
+            onGithubSync={openGithubSync}
+            onObsidianImport={openObsidianImport}
+            onSettings={openSettings}
+          />
+        </div>
       </div>
     </header>
   );

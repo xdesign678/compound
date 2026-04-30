@@ -255,6 +255,73 @@ button {
   height: 18px;
 }
 
+/* --- Mobile overflow menu --- */
+.header-mobile-overflow {
+  display: none;
+  position: relative;
+}
+.header-desktop-action {
+  display: inline-flex;
+}
+@media (max-width: 767px) {
+  .header-desktop-action {
+    display: none !important;
+  }
+  .header-mobile-overflow {
+    display: block;
+  }
+}
+.overflow-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  min-width: 200px;
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  padding: 6px 0;
+  z-index: 200;
+  animation: overflow-menu-in 150ms ease-out;
+}
+@keyframes overflow-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.overflow-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: none;
+  color: var(--text-primary, #111);
+  font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.overflow-menu-item:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+}
+.overflow-menu-item svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.icon-btn.is-active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .back-btn {
   display: flex;
   align-items: center;
