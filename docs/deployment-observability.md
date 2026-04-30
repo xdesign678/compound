@@ -38,6 +38,8 @@ Each deploy notification should include:
 
 1. Open the Zeabur service dashboard and confirm the latest deploy is running,
    not restarting, and has the expected persistent volume mounted at `/data`.
+   Empty commits may not always create a Zeabur deployment; use a manual
+   redeploy or a real file change when retriggering production.
 2. Call `GET /api/health`. A healthy production response should include
    `status: "ok"`, admin auth configured, LLM configured, and `DATA_DIR`
    configured.
