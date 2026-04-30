@@ -94,7 +94,7 @@ selection (typically grabbed from another concept page in the UI) is fed to
 the LLM together with a candidate list of related Wiki concepts so it can
 synthesise a focused note that links back into the existing graph.
 
-Body: `SelectionWikiRequest` — `selection` is required (>= 6, <= 4k chars).
+Body: `SelectionWikiRequest` — `selection` is required (>= 2, <= 4k chars).
 Optional `sourceConceptId` (the page the snippet came from) is added as the
 first related link; `contextTitle` adds extra grounding. The response mirrors
 the persisted concept and any concepts that received bidirectional updates,

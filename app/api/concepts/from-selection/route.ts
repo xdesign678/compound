@@ -23,7 +23,8 @@ export const maxDuration = 90;
 
 const MAX_BODY_BYTES = 256_000;
 const MAX_SELECTION_CHARS = 4_000;
-const MIN_SELECTION_CHARS = 6;
+// 与前端 `ConceptDetail` 保持一致:中文词语常见 2-4 字,阈值太高会让按钮永远不触发。
+const MIN_SELECTION_CHARS = 2;
 const MAX_CONTEXT_TITLE_CHARS = 200;
 const MAX_CANDIDATES = 32;
 const MAX_CANDIDATE_BODY_CHARS = 1_200;
@@ -69,7 +70,7 @@ function buildCandidateBlock(candidates: Concept[]): string {
  * the LLM together with a candidate list of related Wiki concepts so it can
  * synthesise a focused note that links back into the existing graph.
  *
- * Body: `SelectionWikiRequest` — `selection` is required (>= 6, <= 4k chars).
+ * Body: `SelectionWikiRequest` — `selection` is required (>= 2, <= 4k chars).
  * Optional `sourceConceptId` (the page the snippet came from) is added as the
  * first related link; `contextTitle` adds extra grounding. The response mirrors
  * the persisted concept and any concepts that received bidirectional updates,

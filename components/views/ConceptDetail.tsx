@@ -23,14 +23,18 @@ type VersionDialogState = {
 
 type SelectionPopoverState = {
   visible: boolean;
-  /** viewport-relative anchor — popover positions itself absolutely against window. */
+  /** viewport coordinates — popover is `position: fixed`. */
   top: number;
   left: number;
   text: string;
 };
 
-const MIN_SELECTION_CHARS = 6;
+// 中文用户常选 2-4 字的词语，阈值过高会让按钮"经常无法触发"。
+const MIN_SELECTION_CHARS = 2;
 const MAX_SELECTION_CHARS = 4_000;
+const POPOVER_ESTIMATED_WIDTH = 148;
+const POPOVER_ESTIMATED_HEIGHT = 36;
+const POPOVER_EDGE_PADDING = 8;
 
 export function ConceptDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
@@ -57,6 +61,9 @@ export function ConceptDetail({ id }: { id: string }) {
   const [creatingFromSelection, setCreatingFromSelection] = useState(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const bodyShellRef = useRef<HTMLDivElement>(null);
+  // 点击 popover 时浏览器会清除外部选区 -> selectionchange 触发 -> popover 被卸载 ->
+  // onClick 无法触发。用一个短暂的抑制窗口，让 click 先落地。
+  const suppressDismissRef = useRef(false);
 
   const concept = useLiveQuery(async () => getDb().concepts.get(id), [id]);
   const sources = useLiveQuery(async () => {
@@ -130,15 +137,34 @@ export function ConceptDetail({ id }: { id: string }) {
         dismissSelectionPopover();
         return;
       }
-      const rect = range.getBoundingClientRect();
-      if (!rect || (rect.width === 0 && rect.height === 0)) {
+      // 用最后一行的 rect 做锚点，让按钮始终贴近用户选段末尾(即鼠标松开处附近)，
+      // 而不是整段 bounding box 的中心。
+      const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
+      const anchorRect = rects[rects.length - 1] ?? range.getBoundingClientRect();
+      if (!anchorRect || (anchorRect.width === 0 && anchorRect.height === 0)) {
         dismissSelectionPopover();
         return;
       }
+
+      const viewportW = window.innerWidth;
+      const viewportH = window.innerHeight;
+      // 默认放到选段末尾的正下方。
+      let top = anchorRect.bottom + 6;
+      let left = anchorRect.right - POPOVER_ESTIMATED_WIDTH / 2;
+      // 水平越界时夹回视口内。
+      left = Math.min(
+        Math.max(left, POPOVER_EDGE_PADDING),
+        viewportW - POPOVER_ESTIMATED_WIDTH - POPOVER_EDGE_PADDING,
+      );
+      // 底部放不下时，改到选段上方。
+      if (top + POPOVER_ESTIMATED_HEIGHT > viewportH - POPOVER_EDGE_PADDING) {
+        top = Math.max(POPOVER_EDGE_PADDING, anchorRect.top - POPOVER_ESTIMATED_HEIGHT - 6);
+      }
+
       setSelectionPopover({
         visible: true,
-        top: rect.top + window.scrollY - 8,
-        left: rect.left + window.scrollX + rect.width / 2,
+        top,
+        left,
         text,
       });
     };
@@ -147,6 +173,9 @@ export function ConceptDetail({ id }: { id: string }) {
       window.setTimeout(updateFromSelection, 10);
     };
     const handleSelectionChange = () => {
+      // 用户正点击 popover 时,浏览器可能瞬时把选区折叠;稍后会自动恢复。
+      // 加一个抑制窗口,避免 popover 在 click 前被卸载导致"点击没反应"。
+      if (suppressDismissRef.current) return;
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed) {
         dismissSelectionPopover();
@@ -375,12 +404,30 @@ export function ConceptDetail({ id }: { id: string }) {
         <div
           className="selection-popover"
           style={{ top: `${selectionPopover.top}px`, left: `${selectionPopover.left}px` }}
-          onMouseDown={(event) => event.preventDefault()}
+          onMouseDown={(event) => {
+            // 阻止浏览器默认的「清除外部选区 + 转移 focus」行为,保住选中态,
+            // 也保住 popover 的挂载状态以便 click 能正常触发。
+            event.preventDefault();
+            event.stopPropagation();
+            suppressDismissRef.current = true;
+            window.setTimeout(() => {
+              suppressDismissRef.current = false;
+            }, 200);
+          }}
+          onTouchStart={() => {
+            suppressDismissRef.current = true;
+            window.setTimeout(() => {
+              suppressDismissRef.current = false;
+            }, 200);
+          }}
         >
           <button
             type="button"
             className="selection-popover-btn"
             disabled={creatingFromSelection}
+            onMouseDown={(event) => {
+              event.preventDefault();
+            }}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();

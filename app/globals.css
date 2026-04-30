@@ -979,14 +979,16 @@ button {
   }
 }
 
-/* ConceptDetail selection popover — appears above a text selection in the body
+/* ConceptDetail selection popover — appears next to the user's text selection
    so the reader can spin a brand-new concept page from that snippet. */
 .selection-popover {
-  position: absolute;
+  position: fixed;
   z-index: 60;
-  transform: translate(-50%, -100%);
   pointer-events: auto;
   animation: selection-popover-in 140ms var(--motion-ease-emphasized) both;
+  /* 防止点击 popover 时浏览器把外部选区清除掉（保住"选择态不丢失"）。*/
+  user-select: none;
+  -webkit-user-select: none;
 }
 .selection-popover-btn {
   display: inline-flex;
@@ -1004,6 +1006,8 @@ button {
   box-shadow: var(--shadow-md);
   cursor: pointer;
   white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
   transition:
     background var(--motion-duration-fast) var(--motion-ease-standard),
     transform var(--motion-duration-fast) var(--motion-ease-standard);
@@ -1032,11 +1036,11 @@ button {
 @keyframes selection-popover-in {
   from {
     opacity: 0;
-    transform: translate(-50%, calc(-100% + 6px));
+    transform: translateY(-4px);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, -100%);
+    transform: translateY(0);
   }
 }
 
