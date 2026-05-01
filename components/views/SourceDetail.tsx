@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { ensureSourceHydrated } from '@/lib/cloud-sync';
@@ -204,10 +203,12 @@ export function SourceDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
   const editorRef = useRef<HTMLDivElement>(null);
   const renderedContentRef = useRef<string | null>(null);
+  const tocCloseTimerRef = useRef<number | null>(null);
   const [draftContent, setDraftContent] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [tocOpen, setTocOpen] = useState(false);
+  const [tocVisible, setTocVisible] = useState(false);
   const [tocItems, setTocItems] = useState<SourceTocItem[]>([]);
   const [bubble, setBubble] = useState<{
     visible: boolean;
@@ -221,6 +222,14 @@ export function SourceDetail({ id }: { id: string }) {
     [id],
   );
   const hasFullContent = Boolean(source?.rawContent.trim()) || source?.contentStatus === 'full';
+
+  useEffect(() => {
+    return () => {
+      if (tocCloseTimerRef.current) {
+        window.clearTimeout(tocCloseTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!source || hasFullContent) return;
@@ -239,14 +248,37 @@ export function SourceDetail({ id }: { id: string }) {
     setTocItems(editor ? collectSourceToc(editor) : []);
   }, []);
 
+  const openToc = useCallback(() => {
+    if (tocCloseTimerRef.current) {
+      window.clearTimeout(tocCloseTimerRef.current);
+      tocCloseTimerRef.current = null;
+    }
+    refreshToc();
+    setTocOpen(true);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => setTocVisible(true));
+    });
+  }, [refreshToc]);
+
+  const closeToc = useCallback(() => {
+    setTocVisible(false);
+    if (tocCloseTimerRef.current) {
+      window.clearTimeout(tocCloseTimerRef.current);
+    }
+    tocCloseTimerRef.current = window.setTimeout(() => {
+      setTocOpen(false);
+      tocCloseTimerRef.current = null;
+    }, 260);
+  }, []);
+
   useEffect(() => {
     setDraftContent('');
     setIsDirty(false);
     setSaveStatus('idle');
-    setTocOpen(false);
+    closeToc();
     setTocItems([]);
     renderedContentRef.current = null;
-  }, [id]);
+  }, [closeToc, id]);
 
   useEffect(() => {
     if (!source || !hasFullContent || isDirty) return;
@@ -380,31 +412,33 @@ export function SourceDetail({ id }: { id: string }) {
     if (!tocOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setTocOpen(false);
+        closeToc();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [tocOpen]);
+  }, [closeToc, tocOpen]);
 
   useEffect(() => {
     const handleOpenToc = () => {
-      refreshToc();
-      setTocOpen(true);
+      openToc();
     };
     window.addEventListener('compound:open-source-toc', handleOpenToc);
     return () => window.removeEventListener('compound:open-source-toc', handleOpenToc);
-  }, [refreshToc]);
+  }, [openToc]);
 
-  const handleTocJump = useCallback((headingId: string) => {
-    const target = Array.from(
-      editorRef.current?.querySelectorAll<HTMLElement>('h1, h2, h3, h4') ?? [],
-    ).find((heading) => heading.id === headingId);
-    setTocOpen(false);
-    window.setTimeout(() => {
-      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 0);
-  }, []);
+  const handleTocJump = useCallback(
+    (headingId: string) => {
+      const target = Array.from(
+        editorRef.current?.querySelectorAll<HTMLElement>('h1, h2, h3, h4') ?? [],
+      ).find((heading) => heading.id === headingId);
+      closeToc();
+      window.setTimeout(() => {
+        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 280);
+    },
+    [closeToc],
+  );
 
   if (!source) return <div className="empty-state">未找到资料</div>;
 
@@ -506,25 +540,26 @@ export function SourceDetail({ id }: { id: string }) {
 
       {tocOpen && (
         <div
-          className="source-toc-backdrop"
+          className={`modal-overlay source-toc-overlay${tocVisible ? ' visible' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="source-toc-title"
-          onClick={() => setTocOpen(false)}
+          onClick={closeToc}
         >
-          <div className="source-toc-dialog" onClick={(event) => event.stopPropagation()}>
-            <div className="source-toc-head">
+          <div className="modal source-toc-dialog" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-handle" />
+            <div className="settings-hero source-toc-head">
               <div>
-                <div className="source-toc-kicker">文章目录</div>
+                <div className="settings-kicker source-toc-kicker">文章目录</div>
                 <h2 id="source-toc-title">跳转到标题</h2>
               </div>
               <button
                 type="button"
-                className="source-toc-close"
-                onClick={() => setTocOpen(false)}
+                className="settings-close-btn source-toc-close"
+                onClick={closeToc}
                 aria-label="关闭目录"
               >
-                <X size={18} strokeWidth={2} />
+                关闭
               </button>
             </div>
 
