@@ -1,11 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ListTree, X } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { ensureSourceHydrated } from '@/lib/cloud-sync';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime, renderMarkdown } from '@/lib/format';
+
+interface SourceTocItem {
+  id: string;
+  level: number;
+  title: string;
+}
 
 function normalizeText(text: string) {
   return text.replace(/\u00a0/g, ' ');
@@ -176,6 +183,23 @@ function markLeadingTitleEcho(html: string, title: string): string {
   return root.innerHTML;
 }
 
+function collectSourceToc(root: HTMLElement): SourceTocItem[] {
+  return Array.from(root.querySelectorAll<HTMLHeadingElement>('h1, h2, h3, h4'))
+    .filter((heading) => !heading.classList.contains('source-title-echo'))
+    .map((heading, index) => {
+      const title = normalizeText(heading.textContent || '').trim();
+      if (!title) return null;
+      const id = heading.id || `source-heading-${index + 1}`;
+      heading.id = id;
+      return {
+        id,
+        level: Number(heading.tagName[1]),
+        title,
+      };
+    })
+    .filter((item): item is SourceTocItem => item !== null);
+}
+
 export function SourceDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -183,6 +207,8 @@ export function SourceDetail({ id }: { id: string }) {
   const [draftContent, setDraftContent] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [tocOpen, setTocOpen] = useState(false);
+  const [tocItems, setTocItems] = useState<SourceTocItem[]>([]);
   const [bubble, setBubble] = useState<{
     visible: boolean;
     top: number;
@@ -208,10 +234,17 @@ export function SourceDetail({ id }: { id: string }) {
     void getDb().sources.update(id, { contentStatus: 'full' });
   }, [id, source]);
 
+  const refreshToc = useCallback(() => {
+    const editor = editorRef.current;
+    setTocItems(editor ? collectSourceToc(editor) : []);
+  }, []);
+
   useEffect(() => {
     setDraftContent('');
     setIsDirty(false);
     setSaveStatus('idle');
+    setTocOpen(false);
+    setTocItems([]);
     renderedContentRef.current = null;
   }, [id]);
 
@@ -226,7 +259,8 @@ export function SourceDetail({ id }: { id: string }) {
     if (renderedContentRef.current === nextMarkdown) return;
     editorRef.current.innerHTML = markLeadingTitleEcho(renderMarkdown(nextMarkdown), source.title);
     renderedContentRef.current = nextMarkdown;
-  }, [hasFullContent, isDirty, source]);
+    refreshToc();
+  }, [hasFullContent, isDirty, refreshToc, source]);
 
   useEffect(() => {
     if (saveStatus !== 'saved') return;
@@ -241,7 +275,8 @@ export function SourceDetail({ id }: { id: string }) {
     setIsDirty(nextMarkdown !== (source?.rawContent ?? ''));
     renderedContentRef.current = nextMarkdown;
     setSaveStatus((current) => (current === 'idle' ? current : 'idle'));
-  }, [source?.rawContent]);
+    refreshToc();
+  }, [refreshToc, source?.rawContent]);
 
   const applyRichCommand = useCallback(
     (command: string, value?: string) => {
@@ -265,7 +300,8 @@ export function SourceDetail({ id }: { id: string }) {
     setDraftContent(originalContent);
     setIsDirty(false);
     setSaveStatus('idle');
-  }, [source?.rawContent, source?.title]);
+    window.requestAnimationFrame(refreshToc);
+  }, [refreshToc, source?.rawContent, source?.title]);
 
   const canEdit = hasFullContent;
   const canSave = canEdit && isDirty && saveStatus !== 'saving';
@@ -340,6 +376,27 @@ export function SourceDetail({ id }: { id: string }) {
     };
   }, [canEdit]);
 
+  useEffect(() => {
+    if (!tocOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setTocOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [tocOpen]);
+
+  const handleTocJump = useCallback((headingId: string) => {
+    const target = Array.from(
+      editorRef.current?.querySelectorAll<HTMLElement>('h1, h2, h3, h4') ?? [],
+    ).find((heading) => heading.id === headingId);
+    setTocOpen(false);
+    window.setTimeout(() => {
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  }, []);
+
   if (!source) return <div className="empty-state">未找到资料</div>;
 
   const generatedCount = generated?.length ?? 0;
@@ -357,6 +414,17 @@ export function SourceDetail({ id }: { id: string }) {
   return (
     <article className="concept-detail source-detail-page">
       <header className="source-hero">
+        <button
+          type="button"
+          className="source-toc-trigger"
+          onClick={() => setTocOpen(true)}
+          disabled={tocItems.length === 0}
+          aria-label="显示目录"
+          title={tocItems.length === 0 ? '没有可识别的标题' : '显示目录'}
+        >
+          <ListTree size={18} strokeWidth={2} />
+        </button>
+
         <div className="source-hero-kicker">
           <span>资料档案</span>
           <span className="source-hero-kicker-dot" aria-hidden="true">
@@ -437,6 +505,48 @@ export function SourceDetail({ id }: { id: string }) {
           </div>
         )}
       </section>
+
+      {tocOpen && (
+        <div
+          className="source-toc-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="source-toc-title"
+          onClick={() => setTocOpen(false)}
+        >
+          <div className="source-toc-dialog" onClick={(event) => event.stopPropagation()}>
+            <div className="source-toc-head">
+              <div>
+                <div className="source-toc-kicker">文章目录</div>
+                <h2 id="source-toc-title">跳转到标题</h2>
+              </div>
+              <button
+                type="button"
+                className="source-toc-close"
+                onClick={() => setTocOpen(false)}
+                aria-label="关闭目录"
+              >
+                <X size={18} strokeWidth={2} />
+              </button>
+            </div>
+
+            <div className="source-toc-list">
+              {tocItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="source-toc-item"
+                  style={{ paddingLeft: `${12 + Math.max(0, item.level - 1) * 14}px` }}
+                  onClick={() => handleTocJump(item.id)}
+                >
+                  <span className="source-toc-item-marker" aria-hidden="true" />
+                  <span>{item.title}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {bubble.visible && (
         <div
