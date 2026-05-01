@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ListTree, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { ensureSourceHydrated } from '@/lib/cloud-sync';
@@ -387,6 +387,15 @@ export function SourceDetail({ id }: { id: string }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [tocOpen]);
 
+  useEffect(() => {
+    const handleOpenToc = () => {
+      refreshToc();
+      setTocOpen(true);
+    };
+    window.addEventListener('compound:open-source-toc', handleOpenToc);
+    return () => window.removeEventListener('compound:open-source-toc', handleOpenToc);
+  }, [refreshToc]);
+
   const handleTocJump = useCallback((headingId: string) => {
     const target = Array.from(
       editorRef.current?.querySelectorAll<HTMLElement>('h1, h2, h3, h4') ?? [],
@@ -414,17 +423,6 @@ export function SourceDetail({ id }: { id: string }) {
   return (
     <article className="concept-detail source-detail-page">
       <header className="source-hero">
-        <button
-          type="button"
-          className="source-toc-trigger"
-          onClick={() => setTocOpen(true)}
-          disabled={tocItems.length === 0}
-          aria-label="显示目录"
-          title={tocItems.length === 0 ? '没有可识别的标题' : '显示目录'}
-        >
-          <ListTree size={18} strokeWidth={2} />
-        </button>
-
         <div className="source-hero-kicker">
           <span>资料档案</span>
           <span className="source-hero-kicker-dot" aria-hidden="true">

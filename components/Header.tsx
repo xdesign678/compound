@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { ListTree } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { Icon } from './Icons';
 
@@ -125,6 +126,9 @@ export function Header(props: HeaderProps) {
     if (main) main.scrollTo({ top: 0, behavior: 'smooth' });
     triggerSearchFocus();
   };
+  const handleOpenSourceToc = () => {
+    window.dispatchEvent(new CustomEvent('compound:open-source-toc'));
+  };
 
   if (detail) {
     return (
@@ -133,6 +137,19 @@ export function Header(props: HeaderProps) {
           <Icon.Back />
           <span>返回</span>
         </button>
+        {detail.type === 'source' && (
+          <div className="header-actions">
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={handleOpenSourceToc}
+              aria-label="显示目录"
+              title="显示目录"
+            >
+              <ListTree />
+            </button>
+          </div>
+        )}
       </header>
     );
   }

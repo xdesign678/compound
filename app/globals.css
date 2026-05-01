@@ -1476,39 +1476,6 @@ button {
   margin: 0 auto 40px;
   display: flex;
   flex-direction: column;
-  position: relative;
-}
-.source-toc-trigger {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 38px;
-  height: 38px;
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
-  color: var(--text-secondary);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition:
-    background var(--motion-duration-fast) var(--motion-ease-standard),
-    border-color var(--motion-duration-fast) var(--motion-ease-standard),
-    color var(--motion-duration-fast) var(--motion-ease-standard),
-    transform var(--motion-duration-fast) var(--motion-ease-standard);
-}
-.source-toc-trigger:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-default);
-  color: var(--text-primary);
-  transform: translateY(-1px);
-}
-.source-toc-trigger:disabled {
-  opacity: 0.38;
-  cursor: not-allowed;
-  transform: none;
 }
 .source-hero-kicker {
   display: flex;
@@ -1976,11 +1943,6 @@ button {
   }
   .source-hero {
     margin-bottom: 28px;
-  }
-  .source-toc-trigger {
-    top: -2px;
-    width: 36px;
-    height: 36px;
   }
   .source-toc-backdrop {
     align-items: flex-end;
