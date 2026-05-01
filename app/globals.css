@@ -6343,12 +6343,6 @@ button,
   color: var(--brand-clay);
 }
 
-.library-filter-hint {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
 .library-primary-controls {
   display: inline-flex;
   gap: 8px;

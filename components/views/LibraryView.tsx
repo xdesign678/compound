@@ -360,7 +360,6 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
           <div className="library-filter-heading">
             <div className="library-filter-heading-main">
               <span className="library-filter-eyebrow">一级分类</span>
-              <span className="library-filter-hint">先选领域，再看细分方向</span>
             </div>
             <div
               className="library-primary-controls"
