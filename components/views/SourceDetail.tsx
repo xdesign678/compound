@@ -529,18 +529,22 @@ export function SourceDetail({ id }: { id: string }) {
             </div>
 
             <div className="source-toc-list">
-              {tocItems.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="source-toc-item"
-                  style={{ paddingLeft: `${12 + Math.max(0, item.level - 1) * 14}px` }}
-                  onClick={() => handleTocJump(item.id)}
-                >
-                  <span className="source-toc-item-marker" aria-hidden="true" />
-                  <span>{item.title}</span>
-                </button>
-              ))}
+              {tocItems.length > 0 ? (
+                tocItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="source-toc-item"
+                    style={{ paddingLeft: `${12 + Math.max(0, item.level - 1) * 14}px` }}
+                    onClick={() => handleTocJump(item.id)}
+                  >
+                    <span className="source-toc-item-marker" aria-hidden="true" />
+                    <span>{item.title}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="source-toc-empty">暂未识别到标题</div>
+              )}
             </div>
           </div>
         </div>

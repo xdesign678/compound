@@ -227,6 +227,16 @@ button {
   display: flex;
   gap: 4px;
 }
+.detail-header {
+  position: relative;
+  z-index: 60;
+}
+.detail-header-actions {
+  margin-left: auto;
+}
+.detail-toc-btn {
+  flex: 0 0 auto;
+}
 .icon-btn {
   min-width: 44px;
   min-height: 44px;
@@ -1739,6 +1749,14 @@ button {
   border-radius: 50%;
   background: currentColor;
   opacity: 0.35;
+}
+.source-toc-empty {
+  padding: 28px 16px 32px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+  text-align: center;
 }
 @keyframes source-toc-backdrop-in {
   from {

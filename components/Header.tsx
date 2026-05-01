@@ -132,16 +132,16 @@ export function Header(props: HeaderProps) {
 
   if (detail) {
     return (
-      <header className="header">
+      <header className="header detail-header">
         <button className="back-btn" onClick={back}>
           <Icon.Back />
           <span>返回</span>
         </button>
         {detail.type === 'source' && (
-          <div className="header-actions">
+          <div className="header-actions detail-header-actions">
             <button
               type="button"
-              className="icon-btn"
+              className="icon-btn detail-toc-btn"
               onClick={handleOpenSourceToc}
               aria-label="显示目录"
               title="显示目录"
