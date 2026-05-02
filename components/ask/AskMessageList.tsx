@@ -137,7 +137,10 @@ export function AskMessageList({
                       message.suggestedQuestions &&
                       message.suggestedQuestions.length > 0 && (
                         <div className="msg-follow-ups">
-                          <div className="msg-follow-ups-label">你可能还想问</div>
+                          <div className="msg-follow-ups-label">
+                            <Icon.Sparkle />
+                            <span>你可能还想问</span>
+                          </div>
                           {message.suggestedQuestions.map((q) => (
                             <button
                               key={q}
