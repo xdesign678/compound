@@ -11017,46 +11017,36 @@ button,
 
 /* ─── Recap (Today's Review) ─────────────────────────────────── */
 
-/* Entry card — matches concept-card style, shown below search */
+/* Entry bar — matches library banner rhythm */
 .recap-entry-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: calc(100% - 40px);
-  margin: 12px 20px 0;
-  padding: 14px 18px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-light);
-  border-radius: 12px;
+  margin: 8px 16px 8px;
+  padding: 10px 16px;
+  background: var(--bg-muted);
+  border-radius: 10px;
   cursor: pointer;
   text-align: left;
-  transition:
-    background var(--motion-duration-fast) var(--motion-ease-standard),
-    border-color var(--motion-duration-fast) var(--motion-ease-standard),
-    transform var(--motion-duration-fast) var(--motion-ease-standard);
+  transition: background var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .recap-entry-bar:hover,
 .recap-entry-bar:focus-visible {
-  border-color: var(--border-default);
-  transform: translateY(-1px);
+  background: var(--bg-hover);
   outline: none;
-}
-.recap-entry-bar:active {
-  transform: scale(0.992);
 }
 .recap-entry-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-family: var(--font-sans);
-  font-size: 15px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: -0.015em;
 }
 .recap-entry-left svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
   color: var(--brand-clay);
 }
@@ -11067,25 +11057,24 @@ button,
   white-space: nowrap;
 }
 
-/* Recap page root */
+/* Recap page root — exact viewport fit, no body scroll */
 .recap-root {
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--bg-primary);
 }
 
-/* Header */
+/* Header — fixed, non-scrollable */
 .recap-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border-section);
   background: var(--bg-primary);
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  flex-shrink: 0;
 }
 .recap-back-btn {
   display: flex;
@@ -11120,14 +11109,14 @@ button,
   font-variant-numeric: tabular-nums;
 }
 
-/* Card stack area — fills remaining viewport */
+/* Card stack area — fills all remaining viewport space */
 .recap-stack-area {
   flex: 1;
-  display: flex;
-  align-items: stretch;
-  justify-content: center;
-  padding: 16px;
   min-height: 0;
+  padding: 12px 16px 16px;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
 }
 .recap-stack {
   position: relative;
@@ -11136,43 +11125,42 @@ button,
   height: 100%;
 }
 
-/* Shared card base */
-.recap-card {
-  background: var(--bg-card);
-  border-radius: 14px;
-  border: 1px solid var(--border-default);
-  box-shadow: var(--shadow-md);
-}
-
-/* Ghost / behind cards */
+/* Ghost / behind cards — same size as active, just offset for depth */
 .recap-card-ghost-1,
-.recap-card-ghost-ghost-2,
 .recap-card-ghost-2 {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  pointer-events: none;
+  height: 100%;
+  background: var(--bg-card);
   border-radius: 14px;
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
 }
 .recap-card-ghost-1 {
   z-index: 1;
-  transform: scale(0.97) translateY(6px);
+  transform: translateY(6px);
   opacity: 0.55;
 }
 .recap-card-ghost-2 {
   z-index: 0;
-  transform: scale(0.94) translateY(12px);
+  transform: translateY(12px);
   opacity: 0.3;
 }
 
-/* Top / active card — full height, scrollable inside */
+/* Top / active card — fills stack, establishes height, scrollable inside */
 .recap-card-top {
   position: relative;
   z-index: 2;
   width: 100%;
   height: 100%;
+  background: var(--bg-card);
+  border-radius: 14px;
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-md);
   cursor: grab;
   touch-action: pan-y;
   will-change: transform;
@@ -11191,7 +11179,7 @@ button,
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
-  padding: 24px 22px 20px;
+  padding: 20px 18px 16px;
 }
 
 /* Card content */
@@ -11199,7 +11187,7 @@ button,
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 .recap-card-tag {
   font-family: var(--font-sans);
@@ -11212,26 +11200,26 @@ button,
 }
 .recap-card-title {
   font-family: var(--font-sans);
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--text-primary);
   line-height: var(--leading-tight);
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   letter-spacing: -0.02em;
 }
 .recap-card-summary {
   font-family: var(--font-reading);
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   color: var(--text-body);
   line-height: var(--leading-body);
-  margin: 0 0 18px;
+  margin: 0 0 16px;
 }
 
 /* Body prose — inherits .prose styles, tuned for recap card */
 .recap-card-body-prose {
   padding-top: 4px;
   border-top: 1px solid var(--border-section);
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 .recap-card-body-prose p {
   margin: 0 0 0.8em;
@@ -11260,7 +11248,7 @@ button,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid var(--border-section);
 }
 .recap-card-read-more {
@@ -11273,7 +11261,7 @@ button,
   color: var(--brand-clay);
   background: transparent;
   border: none;
-  padding: 6px 0;
+  padding: 4px 0;
   cursor: pointer;
   transition: opacity var(--motion-duration-fast) var(--motion-ease-standard);
 }
