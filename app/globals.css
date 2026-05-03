@@ -11014,3 +11014,292 @@ button,
     opacity: 1 !important;
   }
 }
+
+/* ─── Recap (Today's Review) ─────────────────────────────────── */
+
+/* Entry bar — shown below search in WikiView / LibraryView */
+.recap-entry-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 11px 20px;
+  background: var(--brand-clay-soft);
+  border: none;
+  border-bottom: 1px solid var(--border-section);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--motion-duration-fast) var(--motion-ease-standard);
+}
+.recap-entry-bar:hover,
+.recap-entry-bar:focus-visible {
+  background: rgba(217, 119, 87, 0.18);
+  outline: none;
+}
+.recap-entry-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--brand-clay);
+}
+.recap-entry-left svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.recap-entry-right {
+  font-size: var(--text-xs);
+  color: var(--brand-clay);
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+/* Recap page root */
+.recap-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--bg-primary);
+}
+
+/* Header */
+.recap-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-section);
+  background: var(--bg-primary);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.recap-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--motion-duration-fast) var(--motion-ease-standard);
+}
+.recap-back-btn:hover {
+  background: var(--bg-hover);
+}
+.recap-back-btn svg {
+  width: 20px;
+  height: 20px;
+}
+.recap-header-title {
+  flex: 1;
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.recap-header-progress {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Card stack area */
+.recap-stack-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 20px 16px;
+  min-height: 0;
+}
+.recap-stack {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  /* height driven by the card content */
+}
+
+/* Shared card base */
+.recap-card {
+  background: var(--bg-card);
+  border-radius: 18px;
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-lg);
+  padding: 24px 22px 20px;
+}
+
+/* Ghost / behind cards */
+.recap-card-ghost-1,
+.recap-card-ghost-2 {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.recap-card-ghost-1 {
+  z-index: 1;
+  transform: scale(0.965) translateY(10px);
+  opacity: 0.6;
+}
+.recap-card-ghost-2 {
+  z-index: 0;
+  transform: scale(0.93) translateY(20px);
+  opacity: 0.35;
+}
+
+/* Top / active card */
+.recap-card-top {
+  position: relative;
+  z-index: 2;
+  cursor: grab;
+  touch-action: pan-y;
+  will-change: transform;
+  user-select: none;
+}
+.recap-card-top:active {
+  cursor: grabbing;
+}
+
+/* Card content */
+.recap-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+.recap-card-tag {
+  font-size: var(--text-2xs);
+  padding: 2px 8px;
+  background: var(--brand-clay-soft);
+  color: var(--brand-clay);
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+}
+.recap-card-title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: var(--leading-tight);
+  margin: 0 0 10px;
+}
+.recap-card-summary {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: var(--leading-body);
+  margin: 0 0 14px;
+}
+.recap-card-body-wrap {
+  position: relative;
+  max-height: 110px;
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+.recap-card-body-wrap::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 52px;
+  background: linear-gradient(to bottom, transparent, var(--bg-card));
+  pointer-events: none;
+}
+.recap-card-body-text {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  line-height: 1.7;
+  margin: 0;
+}
+.recap-card-read-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--brand-clay);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: opacity var(--motion-duration-fast) var(--motion-ease-standard);
+}
+.recap-card-read-more:hover {
+  opacity: 0.75;
+}
+.recap-card-read-more svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Bottom action row */
+.recap-actions {
+  padding: 16px 20px max(16px, env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: center;
+}
+.recap-next-btn {
+  padding: 13px 40px;
+  background: var(--bg-button);
+  color: var(--text-on-button);
+  border: none;
+  border-radius: 12px;
+  font-size: var(--text-base);
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--motion-duration-fast) var(--motion-ease-standard);
+  font-family: var(--font-sans);
+}
+.recap-next-btn:hover {
+  opacity: 0.85;
+}
+.recap-next-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Empty / complete / loading screens */
+.recap-state-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 60px 28px;
+  text-align: center;
+}
+.recap-state-icon {
+  width: 44px;
+  height: 44px;
+  color: var(--brand-clay);
+}
+.recap-state-icon svg {
+  width: 100%;
+  height: 100%;
+}
+.recap-state-heading {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+.recap-state-body {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 260px;
+  line-height: var(--leading-body);
+}
+
+/* Dark mode adjustments */
+.dark .recap-card-body-wrap::after {
+  background: linear-gradient(to bottom, transparent, var(--bg-card));
+}

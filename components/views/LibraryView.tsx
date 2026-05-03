@@ -10,6 +10,7 @@ import {
   useLayoutEffect,
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useRouter } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 import {
   Binary,
@@ -29,6 +30,7 @@ import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { categorizeConcepts } from '@/lib/api-client';
 import { formatCategorizeCompletionMessage } from '@/lib/categorize-status';
+import { getUnreviewedCount } from '@/lib/review-picks';
 import { Icon } from '../Icons';
 import type { Concept, CategoryTag } from '@/lib/types';
 
@@ -92,6 +94,7 @@ function buildCategoryTree(concepts: Concept[]): CategoryTree[] {
 }
 
 export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewProps) {
+  const router = useRouter();
   const openConcept = useAppStore((s) => s.openConcept);
   const detail = useAppStore((s) => s.detail);
   const showToast = useAppStore((s) => s.showToast);
@@ -141,6 +144,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   const deferredQuery = useDeferredValue(query);
   const [scrolled, setScrolled] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
+  const [unreviewedCount, setUnreviewedCount] = useState(0);
   const [primaryRailState, setPrimaryRailState] = useState({
     canScrollLeft: false,
     canScrollRight: false,
@@ -191,6 +195,11 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
       main.scrollTop = saved;
     }
   }, [concepts, scrollRootSelector]);
+
+  useEffect(() => {
+    if (!concepts) return;
+    setUnreviewedCount(getUnreviewedCount(concepts));
+  }, [concepts]);
 
   useEffect(() => {
     if (searchFocusNonce === 0) return;
@@ -338,6 +347,21 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
           </div>
         </div>
       </div>
+
+      {unreviewedCount > 0 && (
+        <button
+          className="recap-entry-bar"
+          onClick={() => router.push('/recap')}
+          type="button"
+          aria-label={`今日复盘，共 ${unreviewedCount} 个概念待回顾`}
+        >
+          <span className="recap-entry-left">
+            <Icon.Sparkle />
+            今日复盘
+          </span>
+          <span className="recap-entry-right">{unreviewedCount} 个概念待回顾 →</span>
+        </button>
+      )}
 
       {uncategorizedCount > 0 && (
         <div className="library-categorize-banner">

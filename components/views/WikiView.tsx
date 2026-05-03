@@ -2,9 +2,11 @@
 
 import { useState, useMemo, useEffect, useDeferredValue, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useRouter } from 'next/navigation';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
+import { getUnreviewedCount } from '@/lib/review-picks';
 import { Icon } from '../Icons';
 
 interface WikiViewProps {
@@ -14,6 +16,7 @@ interface WikiViewProps {
 const PAGE_SIZE = 60;
 
 export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
+  const router = useRouter();
   const openConcept = useAppStore((s) => s.openConcept);
   const freshIds = useAppStore((s) => s.freshConceptIds);
   const detail = useAppStore((s) => s.detail);
@@ -25,6 +28,7 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   const deferredQuery = useDeferredValue(query);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [scrolled, setScrolled] = useState(false);
+  const [unreviewedCount, setUnreviewedCount] = useState(0);
 
   const concepts = useLiveQuery(async () => {
     const q = deferredQuery.trim().toLowerCase();
@@ -43,6 +47,8 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   const totalConceptCount = useLiveQuery(async () => {
     return getDb().concepts.count();
   }, []);
+
+  const allConceptsForReview = useLiveQuery(async () => getDb().concepts.toArray(), []);
 
   const totalMatches = useLiveQuery(async () => {
     const q = deferredQuery.trim().toLowerCase();
@@ -85,6 +91,11 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
     const id = window.setTimeout(() => searchInputRef.current?.focus(), 240);
     return () => window.clearTimeout(id);
   }, [searchFocusNonce]);
+
+  useEffect(() => {
+    if (!allConceptsForReview) return;
+    setUnreviewedCount(getUnreviewedCount(allConceptsForReview));
+  }, [allConceptsForReview]);
 
   const fresh = useMemo(() => (concepts ?? []).filter((c) => freshIds[c.id]), [concepts, freshIds]);
   const others = useMemo(
@@ -138,6 +149,20 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
           </div>
         </div>
       </div>
+      {unreviewedCount > 0 && (
+        <button
+          className="recap-entry-bar"
+          onClick={() => router.push('/recap')}
+          type="button"
+          aria-label={`今日复盘，共 ${unreviewedCount} 个概念待回顾`}
+        >
+          <span className="recap-entry-left">
+            <Icon.Sparkle />
+            今日复盘
+          </span>
+          <span className="recap-entry-right">{unreviewedCount} 个概念待回顾 →</span>
+        </button>
+      )}
       {!hasMatches ? (
         !hasAnyConcepts ? (
           <div className="empty-state empty-state-spacious">
