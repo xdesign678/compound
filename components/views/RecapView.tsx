@@ -5,25 +5,16 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
+import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
 import { pickReviewConcepts, markReviewed } from '@/lib/review-picks';
 import { Icon } from '../Icons';
+import { Prose } from '../Prose';
 import type { Concept } from '@/lib/types';
 
-const SWIPE_THRESHOLD = 72;
-const MAX_Y_DRIFT = 60;
-
-function getBodyPreview(body: string): string {
-  const stripped = body
-    .replace(/#{1,6}\s+/g, '')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/`(.+?)`/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/\[\[([^\]]+)\]\]/g, '$1')
-    .replace(/\n+/g, ' ')
-    .trim();
-  return stripped.length > 220 ? stripped.slice(0, 220) + '…' : stripped;
-}
+const SWIPE_THRESHOLD = 64;
+const MAX_Y_DRIFT = 80;
+const EXIT_DURATION_MS = 320;
+const SPRING_DURATION_MS = 360;
 
 export function RecapView() {
   const router = useRouter();
@@ -34,14 +25,14 @@ export function RecapView() {
 
   const [cards, setCards] = useState<Concept[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [dragX, setDragX] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const [exiting, setExiting] = useState(false);
-  const [exitDir, setExitDir] = useState<'left' | 'right'>('left');
   const [mounted, setMounted] = useState(false);
 
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const dragXRef = useRef(0);
+  const isDraggingRef = useRef(false);
+  const rafRef = useRef(0);
+  const animatingRef = useRef(false);
 
   useEffect(() => {
     setMounted(true);
@@ -53,56 +44,105 @@ export function RecapView() {
     setCurrentIndex(0);
   }, [allConcepts, mounted]);
 
+  // ---- direct DOM manipulation for drag (no setState during move) ----
+
+  const applyCardTransform = useCallback((dx: number, rotation = dx * 0.015) => {
+    const el = cardRef.current;
+    if (!el) return;
+    const scale = 1 - Math.min(Math.abs(dx), 200) / 2000;
+    el.style.transform = `translateX(${dx}px) rotate(${rotation}deg) scale(${scale})`;
+    el.style.transition = 'none';
+  }, []);
+
+  const animateExit = useCallback((dir: 'left' | 'right') => {
+    const el = cardRef.current;
+    if (!el) return;
+    animatingRef.current = true;
+    el.style.transition = `transform ${EXIT_DURATION_MS}ms cubic-bezier(0.4, 0, 1, 1), opacity ${EXIT_DURATION_MS}ms ease`;
+    el.style.transform = `translateX(${dir === 'left' ? '-130%' : '130%'}) rotate(${dir === 'left' ? -14 : 14}deg) scale(0.92)`;
+    el.style.opacity = '0';
+
+    setTimeout(() => {
+      animatingRef.current = false;
+      dragXRef.current = 0;
+      setCurrentIndex((i) => i + 1);
+    }, EXIT_DURATION_MS);
+  }, []);
+
+  const animateSpring = useCallback(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    animatingRef.current = true;
+    el.style.transition = `transform ${SPRING_DURATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+    el.style.transform = 'translateX(0) rotate(0deg) scale(1)';
+
+    const onEnd = () => {
+      animatingRef.current = false;
+      dragXRef.current = 0;
+      el.removeEventListener('transitionend', onEnd);
+    };
+    el.addEventListener('transitionend', onEnd);
+  }, []);
+
   const advance = useCallback(
     (dir: 'left' | 'right') => {
-      if (exiting) return;
+      if (animatingRef.current) return;
       const card = cards[currentIndex];
       if (card) markReviewed(card.id);
-      setExitDir(dir);
-      setExiting(true);
-      setTimeout(() => {
-        setCurrentIndex((i) => i + 1);
-        setExiting(false);
-        setDragX(0);
-        dragXRef.current = 0;
-      }, 280);
+      animateExit(dir);
     },
-    [exiting, cards, currentIndex],
+    [cards, currentIndex, animateExit],
   );
 
+  // ---- touch handlers ----
+
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (animatingRef.current) return;
     const t = e.touches[0];
-    touchStartRef.current = { x: t.clientX, y: t.clientY };
-    setIsDragging(true);
+    touchStartRef.current = { x: t.clientX, y: t.clientY, time: Date.now() };
+    isDraggingRef.current = true;
+    dragXRef.current = 0;
   }, []);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!touchStartRef.current) return;
-    const t = e.touches[0];
-    const dx = t.clientX - touchStartRef.current.x;
-    const dy = Math.abs(t.clientY - touchStartRef.current.y);
-    if (dy > MAX_Y_DRIFT) {
-      touchStartRef.current = null;
-      setIsDragging(false);
-      setDragX(0);
-      dragXRef.current = 0;
-      return;
-    }
-    dragXRef.current = dx;
-    setDragX(dx);
-  }, []);
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (!isDraggingRef.current || !touchStartRef.current) return;
+      const t = e.touches[0];
+      const dx = t.clientX - touchStartRef.current.x;
+      const dy = Math.abs(t.clientY - touchStartRef.current.y);
+
+      // If vertical scroll intent, cancel drag
+      if (dy > MAX_Y_DRIFT && Math.abs(dx) < 10) {
+        isDraggingRef.current = false;
+        touchStartRef.current = null;
+        applyCardTransform(0, 0);
+        return;
+      }
+
+      // Apply damping: the further you drag, the more resistance
+      const damped = dx * 0.85;
+      dragXRef.current = damped;
+
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        applyCardTransform(damped, damped * 0.015);
+      });
+    },
+    [applyCardTransform],
+  );
 
   const handleTouchEnd = useCallback(() => {
-    setIsDragging(false);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    isDraggingRef.current = false;
+    touchStartRef.current = null;
+
     const dx = dragXRef.current;
     if (Math.abs(dx) >= SWIPE_THRESHOLD) {
       advance(dx > 0 ? 'right' : 'left');
     } else {
-      setDragX(0);
-      dragXRef.current = 0;
+      animateSpring();
     }
-    touchStartRef.current = null;
-  }, [advance]);
+  }, [advance, animateSpring]);
 
   const handleReadMore = useCallback(
     (id: string) => {
@@ -112,6 +152,8 @@ export function RecapView() {
     },
     [openConcept, router, setTab],
   );
+
+  // ---- render helpers ----
 
   if (!mounted || !allConcepts) {
     return (
@@ -146,9 +188,7 @@ export function RecapView() {
     );
   }
 
-  const isComplete = currentIndex >= cards.length;
-
-  if (isComplete) {
+  if (currentIndex >= cards.length) {
     return (
       <div className="recap-root">
         <header className="recap-header">
@@ -175,19 +215,6 @@ export function RecapView() {
   const nextCard = cards[currentIndex + 1];
   const nextNextCard = cards[currentIndex + 2];
 
-  let cardTransform = `translateX(${isDragging ? dragX : 0}px) rotate(${isDragging ? dragX * 0.025 : 0}deg)`;
-  let cardOpacity = 1;
-  let cardTransition = isDragging
-    ? 'none'
-    : exiting
-      ? 'transform 280ms cubic-bezier(0.4,0,1,1), opacity 280ms'
-      : 'transform 200ms cubic-bezier(0.22,1,0.36,1)';
-
-  if (exiting) {
-    cardTransform = `translateX(${exitDir === 'left' ? '-130%' : '130%'}) rotate(${exitDir === 'left' ? -18 : 18}deg)`;
-    cardOpacity = 0;
-  }
-
   return (
     <div className="recap-root">
       <header className="recap-header">
@@ -206,48 +233,52 @@ export function RecapView() {
           {nextCard && <div className="recap-card recap-card-ghost-1" aria-hidden="true" />}
 
           <div
+            ref={cardRef}
             className="recap-card recap-card-top"
-            style={{ transform: cardTransform, opacity: cardOpacity, transition: cardTransition }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
+            key={currentCard.id}
           >
-            {currentCard.categories && currentCard.categories.length > 0 && (
-              <div className="recap-card-tags">
-                {currentCard.categories.slice(0, 3).map((cat) => (
-                  <span key={`${cat.primary}-${cat.secondary ?? ''}`} className="recap-card-tag">
-                    {cat.secondary || cat.primary}
-                  </span>
-                ))}
+            <div className="recap-card-scroll">
+              {/* fixed header zone */}
+              {currentCard.categories && currentCard.categories.length > 0 && (
+                <div className="recap-card-tags">
+                  {currentCard.categories.slice(0, 3).map((cat) => (
+                    <span key={`${cat.primary}-${cat.secondary ?? ''}`} className="recap-card-tag">
+                      {cat.secondary || cat.primary}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <h2 className="recap-card-title">{currentCard.title}</h2>
+              <p className="recap-card-summary">{currentCard.summary}</p>
+
+              {/* full body — scrollable inside the card */}
+              {currentCard.body && (
+                <Prose
+                  markdown={formatConceptBodyForDisplay(currentCard.body)}
+                  className="recap-card-body-prose"
+                />
+              )}
+
+              <div className="recap-card-footer">
+                <button
+                  className="recap-card-read-more"
+                  onClick={() => handleReadMore(currentCard.id)}
+                >
+                  深入阅读
+                  <Icon.Send />
+                </button>
+                <span className="recap-card-meta">
+                  <Icon.Link />
+                  {currentCard.related.length} 链接
+                </span>
               </div>
-            )}
-
-            <h2 className="recap-card-title">{currentCard.title}</h2>
-            <p className="recap-card-summary">{currentCard.summary}</p>
-
-            {currentCard.body && (
-              <div className="recap-card-body-wrap">
-                <p className="recap-card-body-text">{getBodyPreview(currentCard.body)}</p>
-              </div>
-            )}
-
-            <button className="recap-card-read-more" onClick={() => handleReadMore(currentCard.id)}>
-              深入阅读
-              <Icon.Send />
-            </button>
+            </div>
           </div>
         </div>
-      </div>
-
-      <div className="recap-actions">
-        <button
-          className="recap-next-btn"
-          onClick={() => advance('left')}
-          disabled={exiting}
-          aria-label="下一个概念"
-        >
-          下一个
-        </button>
       </div>
     </div>
   );

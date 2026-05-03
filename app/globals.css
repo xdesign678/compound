@@ -11017,42 +11017,53 @@ button,
 
 /* ─── Recap (Today's Review) ─────────────────────────────────── */
 
-/* Entry bar — shown below search in WikiView / LibraryView */
+/* Entry card — matches concept-card style, shown below search */
 .recap-entry-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
-  padding: 11px 20px;
-  background: var(--brand-clay-soft);
-  border: none;
-  border-bottom: 1px solid var(--border-section);
+  width: calc(100% - 40px);
+  margin: 12px 20px 0;
+  padding: 14px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
   cursor: pointer;
   text-align: left;
-  transition: background var(--motion-duration-fast) var(--motion-ease-standard);
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .recap-entry-bar:hover,
 .recap-entry-bar:focus-visible {
-  background: rgba(217, 119, 87, 0.18);
+  border-color: var(--border-default);
+  transform: translateY(-1px);
   outline: none;
+}
+.recap-entry-bar:active {
+  transform: scale(0.992);
 }
 .recap-entry-left {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--brand-clay);
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text-primary);
+  letter-spacing: -0.015em;
 }
 .recap-entry-left svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
+  color: var(--brand-clay);
 }
 .recap-entry-right {
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  color: var(--brand-clay);
-  opacity: 0.75;
+  color: var(--text-tertiary);
   white-space: nowrap;
 }
 
@@ -11109,33 +11120,33 @@ button,
   font-variant-numeric: tabular-nums;
 }
 
-/* Card stack area */
+/* Card stack area — fills remaining viewport */
 .recap-stack-area {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  padding: 28px 20px 16px;
+  padding: 16px;
   min-height: 0;
 }
 .recap-stack {
   position: relative;
   width: 100%;
-  max-width: 440px;
-  /* height driven by the card content */
+  max-width: 640px;
+  height: 100%;
 }
 
 /* Shared card base */
 .recap-card {
   background: var(--bg-card);
-  border-radius: 18px;
+  border-radius: 14px;
   border: 1px solid var(--border-default);
-  box-shadow: var(--shadow-lg);
-  padding: 24px 22px 20px;
+  box-shadow: var(--shadow-md);
 }
 
 /* Ghost / behind cards */
 .recap-card-ghost-1,
+.recap-card-ghost-ghost-2,
 .recap-card-ghost-2 {
   position: absolute;
   top: 0;
@@ -11143,29 +11154,44 @@ button,
   right: 0;
   bottom: 0;
   pointer-events: none;
+  border-radius: 14px;
 }
 .recap-card-ghost-1 {
   z-index: 1;
-  transform: scale(0.965) translateY(10px);
-  opacity: 0.6;
+  transform: scale(0.97) translateY(6px);
+  opacity: 0.55;
 }
 .recap-card-ghost-2 {
   z-index: 0;
-  transform: scale(0.93) translateY(20px);
-  opacity: 0.35;
+  transform: scale(0.94) translateY(12px);
+  opacity: 0.3;
 }
 
-/* Top / active card */
+/* Top / active card — full height, scrollable inside */
 .recap-card-top {
   position: relative;
   z-index: 2;
+  width: 100%;
+  height: 100%;
   cursor: grab;
   touch-action: pan-y;
   will-change: transform;
   user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
 }
 .recap-card-top:active {
   cursor: grabbing;
+}
+
+/* Inner scroll container */
+.recap-card-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  padding: 24px 22px 20px;
 }
 
 /* Card content */
@@ -11176,58 +11202,78 @@ button,
   margin-bottom: 14px;
 }
 .recap-card-tag {
+  font-family: var(--font-sans);
   font-size: var(--text-2xs);
-  padding: 2px 8px;
+  padding: 3px 9px;
   background: var(--brand-clay-soft);
   color: var(--brand-clay);
   border-radius: 20px;
   letter-spacing: 0.02em;
 }
 .recap-card-title {
-  font-size: var(--text-xl);
+  font-family: var(--font-sans);
+  font-size: 22px;
   font-weight: 700;
   color: var(--text-primary);
   line-height: var(--leading-tight);
   margin: 0 0 10px;
+  letter-spacing: -0.02em;
 }
 .recap-card-summary {
-  font-size: var(--text-base);
-  color: var(--text-secondary);
+  font-family: var(--font-reading);
+  font-size: var(--text-md);
+  color: var(--text-body);
   line-height: var(--leading-body);
-  margin: 0 0 14px;
+  margin: 0 0 18px;
 }
-.recap-card-body-wrap {
-  position: relative;
-  max-height: 110px;
-  overflow: hidden;
-  margin-bottom: 18px;
+
+/* Body prose — inherits .prose styles, tuned for recap card */
+.recap-card-body-prose {
+  padding-top: 4px;
+  border-top: 1px solid var(--border-section);
+  margin-bottom: 20px;
 }
-.recap-card-body-wrap::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 52px;
-  background: linear-gradient(to bottom, transparent, var(--bg-card));
-  pointer-events: none;
+.recap-card-body-prose p {
+  margin: 0 0 0.8em;
 }
-.recap-card-body-text {
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-  line-height: 1.7;
-  margin: 0;
+.recap-card-body-prose p:last-child {
+  margin-bottom: 0;
+}
+.recap-card-body-prose h1,
+.recap-card-body-prose h2,
+.recap-card-body-prose h3 {
+  margin: 1.2em 0 0.4em;
+  font-family: var(--font-sans);
+}
+.recap-card-body-prose h1 {
+  font-size: var(--text-lg);
+}
+.recap-card-body-prose h2 {
+  font-size: var(--text-md);
+}
+.recap-card-body-prose h3 {
+  font-size: var(--text-base);
+}
+
+/* Footer inside card */
+.recap-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-section);
 }
 .recap-card-read-more {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--brand-clay);
   background: transparent;
   border: none;
-  padding: 0;
+  padding: 6px 0;
   cursor: pointer;
   transition: opacity var(--motion-duration-fast) var(--motion-ease-standard);
 }
@@ -11235,34 +11281,20 @@ button,
   opacity: 0.75;
 }
 .recap-card-read-more svg {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
 }
-
-/* Bottom action row */
-.recap-actions {
-  padding: 16px 20px max(16px, env(safe-area-inset-bottom));
+.recap-card-meta {
   display: flex;
-  justify-content: center;
-}
-.recap-next-btn {
-  padding: 13px 40px;
-  background: var(--bg-button);
-  color: var(--text-on-button);
-  border: none;
-  border-radius: 12px;
-  font-size: var(--text-base);
-  font-weight: 500;
-  cursor: pointer;
-  transition: opacity var(--motion-duration-fast) var(--motion-ease-standard);
+  align-items: center;
+  gap: 4px;
   font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
 }
-.recap-next-btn:hover {
-  opacity: 0.85;
-}
-.recap-next-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
+.recap-card-meta svg {
+  width: 12px;
+  height: 12px;
 }
 
 /* Empty / complete / loading screens */
@@ -11297,9 +11329,4 @@ button,
   margin: 0;
   max-width: 260px;
   line-height: var(--leading-body);
-}
-
-/* Dark mode adjustments */
-.dark .recap-card-body-wrap::after {
-  background: linear-gradient(to bottom, transparent, var(--bg-card));
 }
