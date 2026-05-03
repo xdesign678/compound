@@ -150,18 +150,28 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
         </div>
       </div>
       {unreviewedCount > 0 && (
-        <div className="concept-list">
+        <div className="concept-list recap-entry-list">
           <button
-            className="recap-entry-bar"
+            className="concept-card recap-entry-card"
             onClick={() => router.push('/recap')}
             type="button"
             aria-label={`今日复盘，共 ${unreviewedCount} 个概念待回顾`}
           >
-            <span className="recap-entry-left">
+            <div className="title">
               <Icon.Sparkle />
               今日复盘
-            </span>
-            <span className="recap-entry-right">{unreviewedCount} 个概念待回顾 →</span>
+            </div>
+            <div className="summary">
+              {unreviewedCount} 个概念等待回顾。打开卡片堆，跟着节奏一张一张过一遍。
+            </div>
+            <div className="meta">
+              <span className="badge-link">
+                <Icon.Sparkle />
+                {unreviewedCount} 个待回顾
+              </span>
+              <span>·</span>
+              <span className="updated">立即开始 →</span>
+            </div>
           </button>
         </div>
       )}

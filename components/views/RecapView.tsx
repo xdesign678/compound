@@ -254,12 +254,14 @@ export function RecapView() {
 
               <h2 className="recap-card-title">{currentCard.title}</h2>
 
-              {/* full body — mirrors ConceptDetail prose, scrollable inside card */}
+              {/* full body — reuses ConceptDetail prose verbatim, scrollable inside card */}
               {currentCard.body && (
-                <Prose
-                  markdown={formatConceptBodyForDisplay(currentCard.body)}
-                  className="recap-card-body-prose"
-                />
+                <div className="recap-card-body-shell">
+                  <Prose
+                    markdown={formatConceptBodyForDisplay(currentCard.body)}
+                    className="concept-body-prose"
+                  />
+                </div>
               )}
 
               <div className="recap-swipe-hint" aria-hidden="true">

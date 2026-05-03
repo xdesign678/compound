@@ -11017,51 +11017,37 @@ button,
 
 /* ─── Recap (Today's Review) ─────────────────────────────────── */
 
-/* Entry bar — styled as a concept card for visual consistency */
-.recap-entry-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  margin: 0;
-  padding: 14px 18px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-light);
-  border-radius: 12px;
-  cursor: pointer;
-  text-align: left;
-  transition:
-    background var(--motion-duration-fast) var(--motion-ease-standard),
-    border-color var(--motion-duration-fast) var(--motion-ease-standard),
-    box-shadow var(--motion-duration-base) var(--motion-ease-standard);
+/* Entry list — wraps the recap card so it shares horizontal padding with concept cards */
+.recap-entry-list {
+  margin-bottom: 12px;
 }
-.recap-entry-bar:hover,
-.recap-entry-bar:focus-visible {
-  background: var(--bg-card);
-  border-color: var(--border-default);
-  box-shadow: var(--shadow-md);
-  outline: none;
+.recap-entry-list-library {
+  padding: 0 16px;
+  margin-bottom: 12px;
 }
-.recap-entry-left {
-  display: flex;
+
+/* Entry card — reuses .concept-card visual; this only adds icon + arrow tweaks */
+.recap-entry-card {
+  border: 1px solid var(--border-default);
+}
+.recap-entry-card .title {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
 }
-.recap-entry-left svg {
+.recap-entry-card .title svg {
   width: 14px;
   height: 14px;
+  color: var(--brand-clay);
   flex-shrink: 0;
+}
+.recap-entry-card .meta .badge-link {
   color: var(--brand-clay);
 }
-.recap-entry-right {
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  white-space: nowrap;
+.recap-entry-card .meta .updated {
+  margin-left: auto;
+  color: var(--brand-clay);
+  font-weight: 500;
 }
 
 /* Recap page root — exact viewport fit, no body scroll */
@@ -11120,7 +11106,7 @@ button,
 .recap-stack-area {
   flex: 1;
   min-height: 0;
-  padding: 8px 12px 12px;
+  padding: 12px 14px 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11129,18 +11115,23 @@ button,
 .recap-stack {
   position: relative;
   width: 100%;
-  max-width: 640px;
+  max-width: 560px;
 }
 
-/* Ghost / behind cards — match top card height, peek out laterally */
+/* Card sizing — short, never exceeds viewport, internally scrollable */
+.recap-card-ghost-1,
+.recap-card-ghost-2,
+.recap-card-top {
+  height: clamp(300px, 56dvh, calc(100dvh - 200px));
+}
+
+/* Ghost / behind cards — peek out laterally so the deck reads as a stack */
 .recap-card-ghost-1,
 .recap-card-ghost-2 {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 55vh;
-  max-height: calc(100dvh - 148px);
   background: var(--bg-card);
   border-radius: 14px;
   border: 1px solid var(--border-default);
@@ -11158,14 +11149,11 @@ button,
   opacity: 0.25;
 }
 
-/* Top / active card — shorter so ~2 cards almost fit, scrollable inside */
+/* Top / active card — shorter, content scrolls inside */
 .recap-card-top {
   position: relative;
   z-index: 2;
   width: 100%;
-  height: 55vh;
-  max-height: calc(100dvh - 148px);
-  min-height: 360px;
   background: var(--bg-card);
   border-radius: 14px;
   border: 1px solid var(--border-default);
@@ -11181,14 +11169,14 @@ button,
   cursor: grabbing;
 }
 
-/* Inner scroll container */
+/* Inner scroll container — text scrolls inside when it overflows */
 .recap-card-scroll {
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
-  padding: 20px 18px 16px;
+  padding: 18px 18px 14px;
 }
 
 /* Card content */
@@ -11209,52 +11197,44 @@ button,
 }
 .recap-card-title {
   font-family: var(--font-sans);
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 700;
   color: var(--text-primary);
   line-height: var(--leading-tight);
-  margin: 0 0 8px;
+  margin: 0 0 4px;
   letter-spacing: -0.02em;
 }
-.recap-card-summary {
-  font-family: var(--font-reading);
-  font-size: var(--text-base);
-  color: var(--text-body);
-  line-height: var(--leading-body);
-  margin: 0 0 16px;
-}
-
-/* Body prose — matches detail page .concept-body-prose but tuned for card context */
-.recap-card-body-prose {
-  padding-top: 4px;
+/* Body shell — wraps the verbatim ConceptDetail prose, separated from the title */
+.recap-card-body-shell {
+  padding-top: 12px;
+  margin-top: 4px;
   border-top: 1px solid var(--border-section);
   margin-bottom: 16px;
-  text-wrap: pretty;
 }
-.recap-card-body-prose p {
-  margin: 0 0 16px;
-  line-height: var(--prose-line-height, 1.85);
-  letter-spacing: 0.01em;
-  text-align: justify;
-  text-justify: inter-ideograph;
+.recap-card-body-shell .concept-body-prose {
+  font-size: 15px;
 }
-.recap-card-body-prose p:last-child {
+.recap-card-body-shell .concept-body-prose p,
+.recap-card-body-shell .concept-body-prose li {
+  margin: 0 0 14px;
+  line-height: 1.78;
+}
+.recap-card-body-shell .concept-body-prose > *:last-child {
   margin-bottom: 0;
 }
-.recap-card-body-prose h1,
-.recap-card-body-prose h2,
-.recap-card-body-prose h3 {
-  margin: 1.2em 0 0.4em;
+.recap-card-body-shell .concept-body-prose h1,
+.recap-card-body-shell .concept-body-prose h2,
+.recap-card-body-shell .concept-body-prose h3 {
+  margin: 1em 0 0.4em;
   font-family: var(--font-sans);
-  text-wrap: balance;
 }
-.recap-card-body-prose h1 {
+.recap-card-body-shell .concept-body-prose h1 {
   font-size: var(--text-lg);
 }
-.recap-card-body-prose h2 {
+.recap-card-body-shell .concept-body-prose h2 {
   font-size: var(--text-md);
 }
-.recap-card-body-prose h3 {
+.recap-card-body-shell .concept-body-prose h3 {
   font-size: var(--text-base);
 }
 
