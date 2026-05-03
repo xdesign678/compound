@@ -349,18 +349,20 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
       </div>
 
       {unreviewedCount > 0 && (
-        <button
-          className="recap-entry-bar"
-          onClick={() => router.push('/recap')}
-          type="button"
-          aria-label={`今日复盘，共 ${unreviewedCount} 个概念待回顾`}
-        >
-          <span className="recap-entry-left">
-            <Icon.Sparkle />
-            今日复盘
-          </span>
-          <span className="recap-entry-right">{unreviewedCount} 个概念待回顾 →</span>
-        </button>
+        <div className="concept-list">
+          <button
+            className="recap-entry-bar"
+            onClick={() => router.push('/recap')}
+            type="button"
+            aria-label={`今日复盘，共 ${unreviewedCount} 个概念待回顾`}
+          >
+            <span className="recap-entry-left">
+              <Icon.Sparkle />
+              今日复盘
+            </span>
+            <span className="recap-entry-right">{unreviewedCount} 个概念待回顾 →</span>
+          </button>
+        </div>
       )}
 
       {uncategorizedCount > 0 && (

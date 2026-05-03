@@ -11017,25 +11017,29 @@ button,
 
 /* ─── Recap (Today's Review) ─────────────────────────────────── */
 
-/* Entry bar — full-width banner below search, flush edges */
+/* Entry bar — styled as a concept card for visual consistency */
 .recap-entry-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  margin: 8px 0;
-  padding: 12px 20px;
-  background: var(--bg-muted);
-  border: none;
-  border-bottom: 1px solid var(--border-section);
-  border-radius: 0;
+  margin: 0;
+  padding: 14px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
   cursor: pointer;
   text-align: left;
-  transition: background var(--motion-duration-fast) var(--motion-ease-standard);
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard);
 }
 .recap-entry-bar:hover,
 .recap-entry-bar:focus-visible {
-  background: var(--bg-hover);
+  background: var(--bg-card);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-md);
   outline: none;
 }
 .recap-entry-left {
@@ -11112,12 +11116,13 @@ button,
   font-variant-numeric: tabular-nums;
 }
 
-/* Card stack area — fills all remaining viewport space, tight padding */
+/* Card stack area — fills remaining viewport space, centered */
 .recap-stack-area {
   flex: 1;
   min-height: 0;
   padding: 8px 12px 12px;
   display: flex;
+  align-items: center;
   justify-content: center;
   overflow: hidden;
 }
@@ -11125,18 +11130,17 @@ button,
   position: relative;
   width: 100%;
   max-width: 640px;
-  height: 100%;
 }
 
-/* Ghost / behind cards — peek out with lateral offset to hint swiping */
+/* Ghost / behind cards — match top card height, peek out laterally */
 .recap-card-ghost-1,
 .recap-card-ghost-2 {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
-  height: 100%;
+  height: 55vh;
+  max-height: calc(100dvh - 148px);
   background: var(--bg-card);
   border-radius: 14px;
   border: 1px solid var(--border-default);
@@ -11154,12 +11158,14 @@ button,
   opacity: 0.25;
 }
 
-/* Top / active card — fills stack, establishes height, scrollable inside */
+/* Top / active card — shorter so ~2 cards almost fit, scrollable inside */
 .recap-card-top {
   position: relative;
   z-index: 2;
   width: 100%;
-  height: 100%;
+  height: 55vh;
+  max-height: calc(100dvh - 148px);
+  min-height: 360px;
   background: var(--bg-card);
   border-radius: 14px;
   border: 1px solid var(--border-default);
@@ -11218,14 +11224,19 @@ button,
   margin: 0 0 16px;
 }
 
-/* Body prose — inherits .prose styles, tuned for recap card */
+/* Body prose — matches detail page .concept-body-prose but tuned for card context */
 .recap-card-body-prose {
   padding-top: 4px;
   border-top: 1px solid var(--border-section);
   margin-bottom: 16px;
+  text-wrap: pretty;
 }
 .recap-card-body-prose p {
-  margin: 0 0 0.8em;
+  margin: 0 0 16px;
+  line-height: var(--prose-line-height, 1.85);
+  letter-spacing: 0.01em;
+  text-align: justify;
+  text-justify: inter-ideograph;
 }
 .recap-card-body-prose p:last-child {
   margin-bottom: 0;
@@ -11235,6 +11246,7 @@ button,
 .recap-card-body-prose h3 {
   margin: 1.2em 0 0.4em;
   font-family: var(--font-sans);
+  text-wrap: balance;
 }
 .recap-card-body-prose h1 {
   font-size: var(--text-lg);
@@ -11244,23 +11256,6 @@ button,
 }
 .recap-card-body-prose h3 {
   font-size: var(--text-base);
-}
-
-/* Swipe hint — subtle indicator at bottom of card */
-.recap-swipe-hint {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 10px 0 4px;
-  font-family: var(--font-sans);
-  font-size: var(--text-2xs);
-  color: var(--text-tertiary);
-  letter-spacing: 0.06em;
-}
-.recap-swipe-hint .recap-swipe-arrow {
-  font-size: 14px;
-  opacity: 0.5;
 }
 
 /* Swipe hint — subtle indicator at bottom of card */

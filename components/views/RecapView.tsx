@@ -253,9 +253,8 @@ export function RecapView() {
               )}
 
               <h2 className="recap-card-title">{currentCard.title}</h2>
-              <p className="recap-card-summary">{currentCard.summary}</p>
 
-              {/* full body — scrollable inside the card */}
+              {/* full body — mirrors ConceptDetail prose, scrollable inside card */}
               {currentCard.body && (
                 <Prose
                   markdown={formatConceptBodyForDisplay(currentCard.body)}
