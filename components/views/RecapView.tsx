@@ -12,7 +12,6 @@ import { Prose } from '../Prose';
 import type { Concept } from '@/lib/types';
 
 const SWIPE_THRESHOLD = 64;
-const MAX_Y_DRIFT = 80;
 const EXIT_DURATION_MS = 320;
 const SPRING_DURATION_MS = 360;
 
@@ -28,9 +27,8 @@ export function RecapView() {
   const [mounted, setMounted] = useState(false);
 
   const cardRef = useRef<HTMLDivElement>(null);
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const dragXRef = useRef(0);
-  const isDraggingRef = useRef(false);
   const rafRef = useRef(0);
   const animatingRef = useRef(false);
 
@@ -94,55 +92,95 @@ export function RecapView() {
     [cards, currentIndex, animateExit],
   );
 
-  // ---- touch handlers ----
+  // ---- native touch events on the scrollable inner container ----
+  // Using native listeners so we can call preventDefault() during horizontal
+  // swipes (passive:false) while letting vertical scroll pass through.
+  useEffect(() => {
+    const scrollEl = scrollRef.current;
+    const cardEl = cardRef.current;
+    if (!scrollEl || !cardEl) return;
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (animatingRef.current) return;
-    const t = e.touches[0];
-    touchStartRef.current = { x: t.clientX, y: t.clientY, time: Date.now() };
-    isDraggingRef.current = true;
-    dragXRef.current = 0;
-  }, []);
+    let startX = 0;
+    let startY = 0;
+    let isTracking = false;
+    let isHorizontal = false;
 
-  const handleTouchMove = useCallback(
-    (e: React.TouchEvent) => {
-      if (!isDraggingRef.current || !touchStartRef.current) return;
+    const onTouchStart = (e: TouchEvent) => {
+      if (animatingRef.current) return;
       const t = e.touches[0];
-      const dx = t.clientX - touchStartRef.current.x;
-      const dy = Math.abs(t.clientY - touchStartRef.current.y);
+      startX = t.clientX;
+      startY = t.clientY;
+      isTracking = true;
+      isHorizontal = false;
+      dragXRef.current = 0;
+    };
 
-      // If vertical scroll intent, cancel drag
-      if (dy > MAX_Y_DRIFT && Math.abs(dx) < 10) {
-        isDraggingRef.current = false;
-        touchStartRef.current = null;
-        applyCardTransform(0, 0);
-        return;
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isTracking) return;
+      const t = e.touches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+
+      if (!isHorizontal) {
+        const totalDrift = Math.abs(dx) + Math.abs(dy);
+        if (totalDrift < 10) return; // not enough to decide yet
+
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          isHorizontal = true;
+        } else {
+          isTracking = false;
+          return;
+        }
       }
 
-      // Apply damping: the further you drag, the more resistance
-      const damped = dx * 0.85;
-      dragXRef.current = damped;
+      if (isHorizontal) {
+        e.preventDefault();
+        const damped = dx * 0.85;
+        dragXRef.current = damped;
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(() => {
+          applyCardTransform(damped, damped * 0.015);
+        });
+      }
+    };
 
+    const onTouchEnd = () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
-        applyCardTransform(damped, damped * 0.015);
-      });
-    },
-    [applyCardTransform],
-  );
+      const wasHorizontal = isHorizontal;
+      isTracking = false;
+      isHorizontal = false;
 
-  const handleTouchEnd = useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    isDraggingRef.current = false;
-    touchStartRef.current = null;
+      if (wasHorizontal) {
+        const dx = dragXRef.current;
+        if (Math.abs(dx) >= SWIPE_THRESHOLD) {
+          advance(dx > 0 ? 'right' : 'left');
+        } else {
+          animateSpring();
+        }
+      }
+    };
 
-    const dx = dragXRef.current;
-    if (Math.abs(dx) >= SWIPE_THRESHOLD) {
-      advance(dx > 0 ? 'right' : 'left');
-    } else {
-      animateSpring();
-    }
-  }, [advance, animateSpring]);
+    const onTouchCancel = () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      isTracking = false;
+      isHorizontal = false;
+      if (dragXRef.current !== 0) {
+        animateSpring();
+      }
+    };
+
+    scrollEl.addEventListener('touchstart', onTouchStart, { passive: true });
+    scrollEl.addEventListener('touchmove', onTouchMove, { passive: false });
+    scrollEl.addEventListener('touchend', onTouchEnd, { passive: true });
+    scrollEl.addEventListener('touchcancel', onTouchCancel, { passive: true });
+
+    return () => {
+      scrollEl.removeEventListener('touchstart', onTouchStart);
+      scrollEl.removeEventListener('touchmove', onTouchMove);
+      scrollEl.removeEventListener('touchend', onTouchEnd);
+      scrollEl.removeEventListener('touchcancel', onTouchCancel);
+    };
+  }, [applyCardTransform, animateSpring, advance]);
 
   const handleReadMore = useCallback(
     (id: string) => {
@@ -232,15 +270,8 @@ export function RecapView() {
           {nextNextCard && <div className="recap-card recap-card-ghost-2" aria-hidden="true" />}
           {nextCard && <div className="recap-card recap-card-ghost-1" aria-hidden="true" />}
 
-          <div
-            ref={cardRef}
-            className="recap-card recap-card-top"
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            key={currentCard.id}
-          >
-            <div className="recap-card-scroll">
+          <div ref={cardRef} className="recap-card recap-card-top" key={currentCard.id}>
+            <div className="recap-card-scroll" ref={scrollRef}>
               {/* fixed header zone */}
               {currentCard.categories && currentCard.categories.length > 0 && (
                 <div className="recap-card-tags">

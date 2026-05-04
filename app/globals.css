@@ -11118,11 +11118,11 @@ button,
   max-width: 560px;
 }
 
-/* Card sizing — short, never exceeds viewport, internally scrollable */
+/* Card sizing — fills almost all viewport below header with small padding */
 .recap-card-ghost-1,
 .recap-card-ghost-2,
 .recap-card-top {
-  height: clamp(300px, 56dvh, calc(100dvh - 200px));
+  height: calc(100dvh - 96px);
 }
 
 /* Ghost / behind cards — peek out laterally so the deck reads as a stack */
@@ -11177,6 +11177,8 @@ button,
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
   padding: 18px 18px 14px;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Card content */
@@ -11185,6 +11187,7 @@ button,
   flex-wrap: wrap;
   gap: 5px;
   margin-bottom: 12px;
+  flex-shrink: 0;
 }
 .recap-card-tag {
   font-family: var(--font-sans);
@@ -11203,6 +11206,7 @@ button,
   line-height: var(--leading-tight);
   margin: 0 0 4px;
   letter-spacing: -0.02em;
+  flex-shrink: 0;
 }
 /* Body shell — wraps the verbatim ConceptDetail prose, separated from the title */
 .recap-card-body-shell {
@@ -11210,6 +11214,7 @@ button,
   margin-top: 4px;
   border-top: 1px solid var(--border-section);
   margin-bottom: 16px;
+  flex: 1 1 auto;
 }
 .recap-card-body-shell .concept-body-prose {
   font-size: 15px;
@@ -11249,6 +11254,7 @@ button,
   font-size: var(--text-2xs);
   color: var(--text-tertiary);
   letter-spacing: 0.06em;
+  flex-shrink: 0;
 }
 .recap-swipe-hint .recap-swipe-arrow {
   font-size: 14px;
@@ -11262,6 +11268,7 @@ button,
   justify-content: space-between;
   padding-top: 12px;
   border-top: 1px solid var(--border-section);
+  flex-shrink: 0;
 }
 .recap-card-read-more {
   display: inline-flex;
