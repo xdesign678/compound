@@ -52,7 +52,7 @@ export function RecapView() {
     el.style.transition = 'none';
   }, []);
 
-  const animateExit = useCallback((dir: 'left' | 'right') => {
+  const animateExit = useCallback((dir: 'left' | 'right', delta = 1) => {
     const el = cardRef.current;
     if (!el) return;
     animatingRef.current = true;
@@ -63,7 +63,7 @@ export function RecapView() {
     setTimeout(() => {
       animatingRef.current = false;
       dragXRef.current = 0;
-      setCurrentIndex((i) => i + 1);
+      setCurrentIndex((i) => Math.max(0, i + delta));
     }, EXIT_DURATION_MS);
   }, []);
 
@@ -85,11 +85,21 @@ export function RecapView() {
   const advance = useCallback(
     (dir: 'left' | 'right') => {
       if (animatingRef.current) return;
-      const card = cards[currentIndex];
-      if (card) markReviewed(card.id);
-      animateExit(dir);
+      if (dir === 'left') {
+        // swipe left = go back
+        if (currentIndex <= 0) {
+          animateSpring();
+          return;
+        }
+        animateExit('left', -1);
+      } else {
+        // swipe right = go forward and mark reviewed
+        const card = cards[currentIndex];
+        if (card) markReviewed(card.id);
+        animateExit('right', 1);
+      }
     },
-    [cards, currentIndex, animateExit],
+    [cards, currentIndex, animateExit, animateSpring],
   );
 
   // ---- native touch events on the scrollable inner container ----
