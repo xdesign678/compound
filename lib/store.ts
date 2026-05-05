@@ -93,6 +93,7 @@ interface AppState {
   settingsOpen: boolean;
   obsidianImportOpen: boolean;
   githubSyncOpen: boolean;
+  commandPaletteOpen: boolean;
   toast: ToastState;
   freshConceptIds: Record<string, true>;
 
@@ -124,6 +125,8 @@ interface AppState {
   closeObsidianImport: () => void;
   openGithubSync: () => void;
   closeGithubSync: () => void;
+  openCommandPalette: () => void;
+  closeCommandPalette: () => void;
   showToast: (text: string, loading?: boolean, isError?: boolean) => void;
   showErrorToast: (text: string, retry?: () => void | Promise<void>, retryLabel?: string) => void;
   hideToast: () => void;
@@ -217,6 +220,7 @@ export const useAppStore = create<AppState>((set) => ({
   settingsOpen: false,
   obsidianImportOpen: false,
   githubSyncOpen: false,
+  commandPaletteOpen: false,
   toast: { visible: false, text: '', loading: false },
   freshConceptIds: {} as Record<string, true>,
 
@@ -259,6 +263,8 @@ export const useAppStore = create<AppState>((set) => ({
   closeObsidianImport: () => set({ obsidianImportOpen: false }),
   openGithubSync: () => set({ githubSyncOpen: true }),
   closeGithubSync: () => set({ githubSyncOpen: false }),
+  openCommandPalette: () => set({ commandPaletteOpen: true }),
+  closeCommandPalette: () => set({ commandPaletteOpen: false }),
   showToast: (text, loading = false, isError = false) => {
     if (_toastTimer) {
       clearTimeout(_toastTimer);
