@@ -140,17 +140,17 @@ export function RecapView() {
     (dir: 'left' | 'right') => {
       if (animatingRef.current) return;
       if (dir === 'left') {
-        // swipe left = go back
+        // swipe left = go forward and mark reviewed
+        const card = cards[currentIndex];
+        if (card) markReviewed(card.id);
+        animateExit('left', 1);
+      } else {
+        // swipe right = go back
         if (currentIndex <= 0) {
           animateSpring();
           return;
         }
-        animateExit('left', -1);
-      } else {
-        // swipe right = go forward and mark reviewed
-        const card = cards[currentIndex];
-        if (card) markReviewed(card.id);
-        animateExit('right', 1);
+        animateExit('right', -1);
       }
     },
     [cards, currentIndex, animateExit, animateSpring],
