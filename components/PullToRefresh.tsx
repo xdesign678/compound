@@ -50,6 +50,16 @@ export function PullToRefresh({
       if (!isMobile()) return;
       const el = getContainer();
       if (!el) return;
+      // Don't trigger pull if not the root scroll container
+      const target = e.target as HTMLElement;
+      const isRootScroll = target === el || el.contains(target);
+      // Don't trigger inside scrollable sub-containers (modals, textareas)
+      if (!isRootScroll) return;
+      if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') return;
+      const scrollableParent = target.closest(
+        '.library-detail-modal-scroll, .modal, .settings-modal',
+      );
+      if (scrollableParent) return;
       const scrollTop = el.scrollTop ?? 0;
       if (scrollTop > 2) return; // not at top
       const touch = e.touches[0];
@@ -88,12 +98,13 @@ export function PullToRefresh({
       if (distanceRef.current >= TRIGGER_DISTANCE && !refreshingRef.current) {
         refreshingRef.current = true;
         hapticSuccess();
-        onRefresh();
-        // auto-reset after a sensible delay
-        window.setTimeout(() => {
-          refreshingRef.current = false;
-          forceRender();
-        }, 600);
+        // Wait for onRefresh to complete before hiding indicator
+        Promise.resolve(onRefresh())
+          .catch(() => {})
+          .finally(() => {
+            refreshingRef.current = false;
+            forceRender();
+          });
       }
       distanceRef.current = 0;
       startYRef.current = null;

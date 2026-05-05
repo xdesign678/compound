@@ -270,6 +270,19 @@ export function ModelTab() {
         <button className="modal-btn primary settings-primary-action" onClick={saveLlm}>
           {llmSaved ? '已保存 ✓' : '保存配置'}
         </button>
+        <button
+          className="modal-btn danger settings-secondary-action"
+          onClick={() => {
+            setLlmConfig({ apiKey: undefined, apiUrl: undefined, model: undefined });
+            localStorage.removeItem('compound_llm_api_key');
+            localStorage.removeItem('compound_llm_api_url');
+            localStorage.removeItem('compound_llm_model');
+            setLlmSaved(true);
+            safeTimeout(() => setLlmSaved(false), 2000);
+          }}
+        >
+          清除本地 LLM 凭据
+        </button>
       </div>
 
       {/* 访问保护 */}

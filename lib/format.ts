@@ -1,10 +1,30 @@
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
+const DEFAULT_BREAKS = false;
+
+function readBreaksPref(): boolean {
+  if (typeof window === 'undefined') return DEFAULT_BREAKS;
+  const raw = localStorage.getItem('compound_markdown_breaks');
+  return raw === '1';
+}
+
 marked.setOptions({
   gfm: true,
-  breaks: false,
+  breaks: readBreaksPref(),
 });
+
+/** Toggle markdown line-break mode and update the marked renderer */
+export function setMarkdownBreaks(enabled: boolean) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('compound_markdown_breaks', enabled ? '1' : '0');
+  }
+  marked.setOptions({ breaks: enabled });
+}
+
+export function getMarkdownBreaks(): boolean {
+  return readBreaksPref();
+}
 
 /**
  * Render markdown → HTML, and transform [text](concept:id) into clickable spans

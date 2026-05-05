@@ -56,6 +56,17 @@ export function ViewportObserver() {
       measureBar(el);
     };
 
+    // On iOS, when a textarea/input gets focus, scroll it into view
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') {
+        requestAnimationFrame(() => {
+          target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        });
+      }
+    };
+    document.addEventListener('focusin', handleFocusIn, { passive: true });
+
     attachBar();
     const mutationObserver = new MutationObserver(() => attachBar());
     const mutationTarget = document.querySelector('.app-main') || document.body;
@@ -66,6 +77,7 @@ export function ViewportObserver() {
       vv?.removeEventListener('scroll', updateKb);
       mutationObserver.disconnect();
       barObserver?.disconnect();
+      document.removeEventListener('focusin', handleFocusIn as EventListener);
       root.style.removeProperty('--ask-kb-offset');
       root.style.removeProperty('--ask-input-height');
       root.classList.remove('ask-kb-open');

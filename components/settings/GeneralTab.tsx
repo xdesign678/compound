@@ -1,6 +1,8 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useAppStore, type ColorMode } from '@/lib/store';
+import { getMarkdownBreaks, setMarkdownBreaks } from '@/lib/format';
 import { FontSizeSelector } from './FontSizeSelector';
 import { LineHeightSelector } from './LineHeightSelector';
 
@@ -9,6 +11,11 @@ export function GeneralTab() {
   const setHomeStyle = useAppStore((s) => s.setHomeStyle);
   const colorMode = useAppStore((s) => s.colorMode);
   const setColorMode = useAppStore((s) => s.setColorMode);
+  const [breaksEnabled, setBreaksEnabled] = useState(getMarkdownBreaks());
+
+  useEffect(() => {
+    setBreaksEnabled(getMarkdownBreaks());
+  }, []);
 
   return (
     <div className="settings-tab-content">
@@ -63,6 +70,35 @@ export function GeneralTab() {
             onClick={() => setHomeStyle('library')}
           >
             知识库
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-tool-row settings-tool-row-flat">
+        <div>
+          <div className="settings-tool-title">Markdown 换行</div>
+          <div className="settings-card-desc">
+            {breaksEnabled ? '宽松模式：单个换行即分段' : '严格模式：需空行才能分段'}
+          </div>
+        </div>
+        <div className="settings-segmented">
+          <button
+            className={!breaksEnabled ? 'active' : ''}
+            onClick={() => {
+              setMarkdownBreaks(false);
+              setBreaksEnabled(false);
+            }}
+          >
+            严格
+          </button>
+          <button
+            className={breaksEnabled ? 'active' : ''}
+            onClick={() => {
+              setMarkdownBreaks(true);
+              setBreaksEnabled(true);
+            }}
+          >
+            宽松
           </button>
         </div>
       </div>

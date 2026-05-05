@@ -163,10 +163,16 @@ export function SettingsDrawer() {
           <div className="settings-main">
             {/* 移动端分段控制（<768px 显示） */}
             <div className="settings-mobile-tabs">
-              <div className="settings-segmented settings-segmented-three">
+              <div
+                className="settings-segmented settings-segmented-three"
+                role="tablist"
+                aria-label="设置分类"
+              >
                 {TABS.map((tab) => (
                   <button
                     key={tab.id}
+                    role="tab"
+                    aria-selected={activeTab === tab.id}
                     className={activeTab === tab.id ? 'active' : ''}
                     onClick={() => setActiveTab(tab.id)}
                   >

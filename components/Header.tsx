@@ -163,16 +163,16 @@ export function Header(props: HeaderProps) {
         <div className="header-subtitle">{meta.s(props)}</div>
       </div>
       <div className="header-actions">
-        <button
-          type="button"
-          className={`icon-btn header-search-btn${showSearchIcon ? ' is-visible' : ''}`}
-          onClick={handleExpandSearch}
-          aria-label="展开搜索"
-          aria-hidden={!showSearchIcon}
-          tabIndex={showSearchIcon ? 0 : -1}
-        >
-          <Icon.Search />
-        </button>
+        {showSearchIcon && (
+          <button
+            type="button"
+            className="icon-btn header-search-btn is-visible"
+            onClick={handleExpandSearch}
+            aria-label="展开搜索"
+          >
+            <Icon.Search />
+          </button>
+        )}
         {/* Desktop: show individual icons */}
         <button
           className="icon-btn header-desktop-action"

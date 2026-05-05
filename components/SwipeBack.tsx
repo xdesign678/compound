@@ -5,7 +5,8 @@ import { useAppStore } from '@/lib/store';
 import { hapticLight, hapticSuccess } from '@/lib/haptic';
 
 const EDGE_WIDTH = 36; // px from left edge to start (was 24)
-const MIN_DISTANCE = 60; // px to trigger back
+const MIN_DISTANCE = 80; // px to trigger back (raised from 60 to avoid iOS conflict)
+const MIN_VELOCITY = 0.3; // px/ms - fast swipe can trigger even below MIN_DISTANCE
 const MAX_Y_DRIFT = 100; // px vertical drift tolerance
 
 export function SwipeBack() {
@@ -14,7 +15,7 @@ export function SwipeBack() {
   const modalOpen = useAppStore((s) => s.modalOpen);
   const settingsOpen = useAppStore((s) => s.settingsOpen);
 
-  const startRef = useRef<{ x: number; y: number } | null>(null);
+  const startRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const indicatorRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef(0);
 
@@ -43,7 +44,7 @@ export function SwipeBack() {
     const onTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];
       if (touch.clientX <= EDGE_WIDTH) {
-        startRef.current = { x: touch.clientX, y: touch.clientY };
+        startRef.current = { x: touch.clientX, y: touch.clientY, t: Date.now() };
         hapticLight();
       }
     };
@@ -67,9 +68,19 @@ export function SwipeBack() {
     };
 
     const onTouchEnd = () => {
+      const start = startRef.current;
       if (progressRef.current >= 1) {
         hapticSuccess();
         back();
+      } else if (start) {
+        // Velocity-based trigger: fast swipe even below threshold
+        const dt = Date.now() - start.t;
+        const endTouch = document.documentElement;
+        // If we have a recent start and fast movement, trigger
+        if (dt > 0 && dt < 400 && progressRef.current >= 0.5) {
+          hapticSuccess();
+          back();
+        }
       }
       startRef.current = null;
       updateIndicator(0);
