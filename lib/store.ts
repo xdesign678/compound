@@ -31,14 +31,52 @@ interface DetailState {
   id: string;
 }
 
-interface ToastState {
+export interface ToastState {
   visible: boolean;
   text: string;
   loading: boolean;
   isError?: boolean;
   retry?: () => void | Promise<void>;
   retryLabel?: string;
+  id: number;
 }
+
+/** Friendly error message mapping */
+export const ERROR_MESSAGES: Record<string, string> = {
+  '502': '服务暂时不可用，请稍后重试或检查网络',
+  '503': '服务暂时不可用，请稍后重试',
+  '429': '请求过于频繁，请稍后再试',
+  '401': '认证失败，请在设置中检查 API 配置',
+  '403': '访问被拒绝，请检查认证信息',
+  '500': '服务器内部错误，请稍后重试',
+  TIMEOUT: '请求超时，请检查网络后重试',
+  OFFLINE: '网络已断开，请检查连接后重试',
+  NETWORK: '网络连接失败，请检查网络设置',
+  INGEST_FAIL: '摄入失败，请检查资料内容或重试',
+  LINT_FAIL: '体检失败，请稍后重试',
+  QUERY_FAIL: '问答失败，请稍后重试',
+};
+
+/** Extract friendly error message from raw error */
+export function friendlyErrorMessage(raw: string): string {
+  // Try HTTP status code patterns
+  const statusMatch = raw.match(/\((\d{3})\)/);
+  if (statusMatch) {
+    const code = statusMatch[1];
+    if (ERROR_MESSAGES[code]) return ERROR_MESSAGES[code];
+  }
+  // Try keyword match
+  for (const [key, msg] of Object.entries(ERROR_MESSAGES)) {
+    if (raw.includes(key) || raw.toLowerCase().includes(key.toLowerCase())) {
+      return msg;
+    }
+  }
+  // Fallback: truncate
+  return raw.length > 120 ? raw.slice(0, 120) + '…' : raw;
+}
+
+const MAX_TOAST_QUEUE = 3;
+const TOAST_DEDUPE_MS = 2000;
 
 interface LintBannerState {
   tone: 'running' | 'error';
@@ -115,6 +153,7 @@ interface AppState {
   commandPaletteOpen: boolean;
   isOnline: boolean;
   toast: ToastState;
+  toastQueue: ToastState[];
   freshConceptIds: Record<string, true>;
   tasks: TaskItem[];
   taskCenterOpen: boolean;
@@ -230,6 +269,16 @@ function applyLineHeight(lh: LineHeight) {
   document.documentElement.style.setProperty('--prose-line-height', String(val));
 }
 
+/** Ensure minimum gap between font size and line height to prevent text overlap */
+function applySizeLineHeightLinkage(size: FontSize, lh: LineHeight) {
+  if (typeof window === 'undefined') return;
+  const px = FONT_SIZE_MAP[size].px;
+  const ratio = LINE_HEIGHT_MAP[lh].value;
+  const minRatio = px >= 18 ? 1.6 : px >= 16 ? 1.5 : 1.4;
+  const effective = Math.max(ratio, minRatio);
+  document.documentElement.style.setProperty('--prose-line-height', String(effective));
+}
+
 // Module-level toast auto-dismiss timer
 let _toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -253,7 +302,8 @@ export const useAppStore = create<AppState>((set) => ({
   isOnline: true,
   tasks: [],
   taskCenterOpen: false,
-  toast: { visible: false, text: '', loading: false },
+  toast: { visible: false, text: '', loading: false, id: 0 },
+  toastQueue: [],
   freshConceptIds: {} as Record<string, true>,
 
   activitySubTab: 'health',
@@ -312,10 +362,23 @@ export const useAppStore = create<AppState>((set) => ({
       clearTimeout(_toastTimer);
       _toastTimer = null;
     }
-    set({ toast: { visible: true, text, loading, isError } });
+    const id = Date.now();
+    const entry: ToastState = { visible: true, text, loading, isError, id };
+    // Dedupe: skip if same text appeared recently
+    set((s) => {
+      const recent = s.toastQueue.find(
+        (t) => t.text === text && Date.now() - t.id < TOAST_DEDUPE_MS,
+      );
+      if (recent) return s;
+      const queue = [entry, ...s.toastQueue].slice(0, MAX_TOAST_QUEUE);
+      return { toast: entry, toastQueue: queue };
+    });
     if (!loading && !isError) {
       _toastTimer = setTimeout(() => {
-        set((s) => ({ toast: { ...s.toast, visible: false } }));
+        set((s) => ({
+          toast: { ...s.toast, visible: false },
+          toastQueue: s.toastQueue.filter((t) => t.id !== id),
+        }));
         _toastTimer = null;
       }, 3000);
     }
@@ -325,15 +388,24 @@ export const useAppStore = create<AppState>((set) => ({
       clearTimeout(_toastTimer);
       _toastTimer = null;
     }
-    set({
-      toast: {
-        visible: true,
-        text,
-        loading: false,
-        isError: true,
-        retry,
-        retryLabel,
-      },
+    const id = Date.now();
+    const friendlyText = friendlyErrorMessage(text);
+    const entry: ToastState = {
+      visible: true,
+      text: friendlyText,
+      loading: false,
+      isError: true,
+      retry,
+      retryLabel,
+      id,
+    };
+    set((s) => {
+      const recent = s.toastQueue.find(
+        (t) => t.text === friendlyText && Date.now() - t.id < TOAST_DEDUPE_MS,
+      );
+      if (recent) return s;
+      const queue = [entry, ...s.toastQueue].slice(0, MAX_TOAST_QUEUE);
+      return { toast: entry, toastQueue: queue };
     });
   },
   hideToast: () => set((s) => ({ toast: { ...s.toast, visible: false } })),
@@ -378,6 +450,8 @@ export const useAppStore = create<AppState>((set) => ({
   setFontSize: (size) => {
     localStorage.setItem('compound_font_size', size);
     applyFontSize(size);
+    const lh = useAppStore.getState().lineHeight;
+    applySizeLineHeightLinkage(size, lh);
     set({ fontSize: size });
   },
   hydrateFontSize: () => {
@@ -387,7 +461,8 @@ export const useAppStore = create<AppState>((set) => ({
   },
   setLineHeight: (lh) => {
     localStorage.setItem('compound_line_height', lh);
-    applyLineHeight(lh);
+    const size = useAppStore.getState().fontSize;
+    applySizeLineHeightLinkage(size, lh);
     set({ lineHeight: lh });
   },
   hydrateLineHeight: () => {

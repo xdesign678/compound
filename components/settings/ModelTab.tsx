@@ -5,12 +5,14 @@ import {
   fetchModelSettings,
   getLlmConfig,
   hidePresetModelOnServer,
+  isLlmRemembered,
   modelLabel,
   PRESET_MODELS,
   rememberCustomModelOnServer,
   removeCustomModelOnServer,
   saveLlmConfig,
   saveSelectedModelOnServer,
+  setLlmRemember,
 } from '@/lib/llm-config';
 import { clearAdminToken, getAdminToken, saveAdminToken } from '@/lib/admin-auth-client';
 import type { LlmConfig } from '@/lib/types';
@@ -54,6 +56,7 @@ export function ModelTab() {
   const [customModels, setCustomModels] = useState<string[]>([]);
   const [hiddenPresetModels, setHiddenPresetModels] = useState<string[]>([]);
   const [llmAdvancedExpanded, setLlmAdvancedExpanded] = useState(false);
+  const [llmRemember, setLlmRemember] = useState(isLlmRemembered());
   const [llmSaved, setLlmSaved] = useState(false);
   const [adminToken, setAdminToken] = useState('');
   const [adminSaved, setAdminSaved] = useState(false);
@@ -283,6 +286,20 @@ export function ModelTab() {
         >
           清除本地 LLM 凭据
         </button>
+        <label
+          className="settings-field-row"
+          style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}
+        >
+          <input
+            type="checkbox"
+            checked={llmRemember}
+            onChange={(e) => {
+              setLlmRemember(e.target.checked);
+              setLlmRemember(e.target.checked);
+            }}
+          />
+          记住凭据（否则关闭浏览器后清除）
+        </label>
       </div>
 
       {/* 访问保护 */}

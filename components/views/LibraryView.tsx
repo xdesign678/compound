@@ -233,6 +233,18 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
     return () => window.clearTimeout(id);
   }, [searchFocusNonce]);
 
+  // Highlight the category of the currently opened concept
+  useEffect(() => {
+    if (!detail || detail.type !== 'concept' || !concepts) return;
+    const concept = concepts.find((c) => c.id === detail.id);
+    if (!concept || !concept.categories.length) return;
+    const primary = concept.categories[0].primary;
+    if (primary && primary !== selectedPrimary) {
+      setSelectedPrimary(primary);
+      setSelectedSecondary(null);
+    }
+  }, [detail, concepts, selectedPrimary, setSelectedPrimary, setSelectedSecondary]);
+
   useEffect(() => {
     if (filterResetSkipRef.current) {
       filterResetSkipRef.current = false;

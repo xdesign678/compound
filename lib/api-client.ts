@@ -138,13 +138,13 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   }
   if (!res.ok) {
     if (res.status === 429) {
-      throw new Error('请求过于频繁，请稍后重试');
+      throw new Error('请求过于频繁，请稍后重试（可切换模型或减少并发）');
     }
     if (res.status === 401 || res.status === 403) {
-      throw new Error('认证失败，请检查配置');
+      throw new Error('认证失败，请在设置中检查 API Key 和 Admin Token');
     }
     if (res.status >= 500) {
-      throw new Error('服务暂时不可用，请稍后重试');
+      throw new Error('服务暂时不可用（502/503），请稍后重试或查看 /sync 日志');
     }
     const text = await res.text().catch(() => '');
     throw new Error(text.slice(0, 200) || `请求失败 (${res.status})`);
@@ -303,9 +303,11 @@ export async function askWikiStream(
   }
 
   if (!res.ok) {
-    if (res.status === 429) throw new Error('请求过于频繁，请稍后重试');
-    if (res.status === 401 || res.status === 403) throw new Error('认证失败，请检查配置');
-    if (res.status >= 500) throw new Error('服务暂时不可用，请稍后重试');
+    if (res.status === 429) throw new Error('请求过于频繁，请稍后重试（可切换模型或减少并发）');
+    if (res.status === 401 || res.status === 403)
+      throw new Error('认证失败，请在设置中检查 API Key 和 Admin Token');
+    if (res.status >= 500)
+      throw new Error('服务暂时不可用（502/503），请稍后重试或查看 /sync 日志');
     const text = await res.text().catch(() => '');
     throw new Error(text.slice(0, 200) || `请求失败 (${res.status})`);
   }

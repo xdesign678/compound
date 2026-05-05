@@ -154,7 +154,15 @@ export function SourcesView() {
     return () => window.clearTimeout(id);
   }, [searchFocusNonce]);
 
-  if (!sources) return <div className="empty-state">加载中...</div>;
+  if (!sources)
+    return (
+      <div className="skeleton-sources" aria-label="正在加载..." aria-busy="true">
+        <div className="skeleton skeleton-header" />
+        <div className="skeleton skeleton-card" />
+        <div className="skeleton skeleton-card" style={{ opacity: 0.7 }} />
+        <div className="skeleton skeleton-card" style={{ opacity: 0.4 }} />
+      </div>
+    );
 
   return (
     <>

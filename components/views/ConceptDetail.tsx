@@ -406,9 +406,9 @@ export function ConceptDetail({ id }: { id: string }) {
         <div
           className="selection-popover"
           style={{ top: `${selectionPopover.top}px`, left: `${selectionPopover.left}px` }}
+          role="toolbar"
+          aria-label="选区操作"
           onMouseDown={(event) => {
-            // 阻止浏览器默认的「清除外部选区 + 转移 focus」行为,保住选中态,
-            // 也保住 popover 的挂载状态以便 click 能正常触发。
             event.preventDefault();
             event.stopPropagation();
             suppressDismissRef.current = true;
@@ -434,6 +434,12 @@ export function ConceptDetail({ id }: { id: string }) {
               event.preventDefault();
               event.stopPropagation();
               void handleCreateFromSelection();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                void handleCreateFromSelection();
+              }
             }}
           >
             <span className="selection-popover-icon" aria-hidden="true">

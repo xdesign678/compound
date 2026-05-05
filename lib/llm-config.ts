@@ -3,6 +3,7 @@ import { getAdminAuthHeaders } from './admin-auth-client';
 import { withRequestId } from './trace-client';
 
 const STORAGE_KEY = 'compound_llm_config';
+const REMEMBER_KEY = 'compound_llm_remember';
 
 export const PRESET_MODELS = [
   { label: 'Claude Sonnet 4.6', value: 'anthropic/claude-sonnet-4.6' },
@@ -36,7 +37,9 @@ function parseModelSettings(data: {
 export function getLlmConfig(): LlmConfig {
   if (typeof window === 'undefined') return {};
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const remember = localStorage.getItem(REMEMBER_KEY) === '1';
+    const store = remember ? localStorage : sessionStorage;
+    const raw = store.getItem(STORAGE_KEY);
     return raw ? (JSON.parse(raw) as LlmConfig) : {};
   } catch {
     return {};
@@ -45,7 +48,38 @@ export function getLlmConfig(): LlmConfig {
 
 export function saveLlmConfig(config: LlmConfig): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  const remember = localStorage.getItem(REMEMBER_KEY) === '1';
+  const store = remember ? localStorage : sessionStorage;
+  store.setItem(STORAGE_KEY, JSON.stringify(config));
+  // Clean up the other store to avoid stale data
+  const otherStore = remember ? sessionStorage : localStorage;
+  otherStore.removeItem(STORAGE_KEY);
+}
+
+export function isLlmRemembered(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem(REMEMBER_KEY) === '1';
+}
+
+export function setLlmRemember(remember: boolean): void {
+  if (typeof window === 'undefined') return;
+  if (remember) {
+    localStorage.setItem(REMEMBER_KEY, '1');
+    // Migrate current config from sessionStorage to localStorage
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      localStorage.setItem(STORAGE_KEY, raw);
+      sessionStorage.removeItem(STORAGE_KEY);
+    }
+  } else {
+    localStorage.removeItem(REMEMBER_KEY);
+    // Migrate current config from localStorage to sessionStorage
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      sessionStorage.setItem(STORAGE_KEY, raw);
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }
 }
 
 export async function fetchModelSettings(): Promise<ModelSettings> {

@@ -13,7 +13,7 @@
   --text-primary: #141413;
   --text-body: rgba(20, 20, 19, 0.85);
   --text-secondary: #5e5d59;
-  --text-tertiary: #b0aea5;
+  --text-tertiary: #9a9890;
   --text-on-button: #faf9f5;
   --ink-soft: var(--text-tertiary);
   --ink: var(--text-primary);
@@ -67,6 +67,9 @@
   --space-2xl: 24px;
   --space-3xl: 32px;
   --space-4xl: 44px;
+
+  /* Safe area (unified reference for all safe-area-inset usages) */
+  --safe-bottom: var(--safe-bottom);
 
   /* Semantic Status Colors */
   --color-success: #2f6a47;
@@ -383,7 +386,7 @@ button {
   display: flex;
   background: var(--bg-primary);
   border-top: 1px solid var(--border-section);
-  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+  padding: 6px 4px calc(6px + var(--safe-bottom));
   flex-shrink: 0;
   z-index: 40;
 }
@@ -545,7 +548,7 @@ button {
 .fab {
   position: absolute;
   right: 20px;
-  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(72px + var(--safe-bottom));
   width: 52px;
   height: 52px;
   border-radius: 14px;
@@ -1944,7 +1947,7 @@ button {
   }
   .source-save-indicator {
     top: auto;
-    bottom: calc(12px + env(safe-area-inset-bottom));
+    bottom: calc(12px + var(--safe-bottom));
     right: 12px;
     left: 12px;
     justify-content: center;
@@ -2475,7 +2478,7 @@ button {
 }
 
 .ask-input-bar {
-  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  padding: 14px 16px calc(14px + var(--safe-bottom));
   border-top: 1px solid rgba(20, 20, 19, 0.04);
   background:
     linear-gradient(180deg, rgba(250, 249, 245, 0), var(--bg-primary) 22%), var(--bg-primary);
@@ -3460,7 +3463,7 @@ button {
   width: 100%;
   background: var(--bg-primary);
   border-radius: 16px 16px 0 0;
-  padding: 12px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+  padding: 12px 20px calc(24px + var(--safe-bottom));
   transform: translateY(100%);
   opacity: 0.96;
   will-change: transform, opacity;
@@ -3493,7 +3496,7 @@ button {
 .settings-modal {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0)), var(--bg-primary);
-  padding: 10px 14px calc(18px + env(safe-area-inset-bottom, 0px));
+  padding: 10px 14px calc(18px + var(--safe-bottom));
 }
 .settings-modal:focus {
   outline: none;
@@ -4376,6 +4379,31 @@ button {
 .skeleton-card {
   height: 78px;
 }
+/* Skeleton variants per view */
+.skeleton-sources .skeleton-card {
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px;
+}
+.skeleton-sources .skeleton-card::before {
+  content: '';
+  display: block;
+  height: 14px;
+  width: 55%;
+  border-radius: 4px;
+  background: inherit;
+}
+.skeleton-sources .skeleton-card::after {
+  content: '';
+  display: block;
+  height: 10px;
+  width: 30%;
+  border-radius: 4px;
+  background: inherit;
+  opacity: 0.6;
+}
 
 /* Note Editor — full-screen WYSIWYG Markdown editor */
 .note-editor-overlay {
@@ -4482,7 +4510,7 @@ button {
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 20px 20px calc(40px + env(safe-area-inset-bottom, 0px));
+  padding: 20px 20px calc(40px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -5533,7 +5561,7 @@ button,
     width: 100%;
     max-width: 100%;
     max-height: 75dvh;
-    padding: 14px 14px calc(18px + env(safe-area-inset-bottom, 0px));
+    padding: 14px 14px calc(18px + var(--safe-bottom));
     border-radius: 16px 16px 0 0;
     border: 1px solid var(--border-light);
     border-bottom: none;
@@ -5545,7 +5573,7 @@ button,
 
   /* 输入法唤起时吸附到 composer 上方 */
   .ask-flyout.ask-inline-flyout {
-    bottom: calc(72px + env(safe-area-inset-bottom, 0px) + var(--ask-kb-offset, 0px));
+    bottom: calc(72px + var(--safe-bottom) + var(--ask-kb-offset, 0px));
     max-height: 60vh;
     padding: 14px 14px;
     border-radius: 12px 12px 0 0;
@@ -5621,7 +5649,7 @@ button,
     width: 100%;
     max-width: 100%;
     max-height: 75dvh;
-    padding: 14px 14px calc(18px + env(safe-area-inset-bottom, 0px));
+    padding: 14px 14px calc(18px + var(--safe-bottom));
     border-radius: 16px 16px 0 0;
     border: 1px solid var(--border-light);
     border-bottom: none;
@@ -5632,7 +5660,7 @@ button,
   }
 
   .ask-flyout.ask-inline-flyout {
-    bottom: calc(72px + env(safe-area-inset-bottom, 0px) + var(--ask-kb-offset, 0px));
+    bottom: calc(72px + var(--safe-bottom) + var(--ask-kb-offset, 0px));
     max-height: 60vh;
     padding: 14px 14px;
     border-radius: 12px 12px 0 0;
@@ -11173,7 +11201,7 @@ button,
 
 /* Recap page root — exact viewport fit, no body scroll */
 .recap-root {
-  --recap-card-height: min(760px, calc(100dvh - 96px - env(safe-area-inset-bottom, 0px)));
+  --recap-card-height: min(760px, calc(100dvh - 96px - var(--safe-bottom)));
 
   display: flex;
   flex-direction: column;
@@ -11229,7 +11257,7 @@ button,
 .recap-stack-area {
   flex: 1;
   min-height: 0;
-  padding: 8px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  padding: 8px 14px calc(10px + var(--safe-bottom));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11734,7 +11762,7 @@ button,
 /* Task Center */
 .tc-trigger {
   position: fixed;
-  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(80px + var(--safe-bottom));
   right: 16px;
   z-index: 60;
   display: flex;
@@ -11790,7 +11818,7 @@ button,
 }
 .tc-panel {
   position: fixed;
-  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(80px + var(--safe-bottom));
   right: 12px;
   z-index: 60;
   width: min(360px, calc(100vw - 24px));

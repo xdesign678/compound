@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { nanoid } from 'nanoid';
 import { getDb } from '../../lib/db';
+import { LRUMap } from '../../lib/lru-cache';
 import { useAppStore } from '../../lib/store';
 import { askWikiStream, archiveAnswerAsConcept } from '../../lib/api-client';
 import { pickStableConceptTitles } from '../../lib/ask-suggestions';
@@ -18,7 +19,7 @@ import {
 import { AskComposer } from '../ask/AskComposer';
 import { AskMessageList } from '../ask/AskMessageList';
 import type { InlineMention, MentionItem, MentionKind, ModelOption } from '../ask/types';
-import type { AskMessage, LlmConfig, Source, SourceType } from '../../lib/types';
+import type { AskMessage, Concept, LlmConfig, Source, SourceType } from '../../lib/types';
 
 const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
   link: '链接',
@@ -29,6 +30,9 @@ const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
   pdf: 'PDF',
   gist: '代码片段',
 };
+
+/** LRU cache for @-mention lookups — avoids repeated Dexie queries for the same prefix. */
+const mentionQueryCache = new LRUMap<string, unknown[]>(50);
 
 export function AskView() {
   const openConcept = useAppStore((s) => s.openConcept);
@@ -449,19 +453,24 @@ async function lookupMentions(
   const db = getDb();
   const excluded = new Set(selected.filter((item) => item.kind === kind).map((item) => item.id));
   const query = normalizeText(rawQuery);
+  const cacheKey = `${kind}:${query}`;
 
   if (kind === 'concept') {
-    let concepts = query
-      ? await db.concepts
-          .toCollection()
-          .filter((concept) => matchesText([concept.title, concept.summary], query))
-          .limit(limit * 3)
-          .toArray()
-      : await db.concepts
-          .orderBy('updatedAt')
-          .reverse()
-          .limit(limit * 2)
-          .toArray();
+    let concepts = mentionQueryCache.get(cacheKey) as Concept[] | undefined;
+    if (!concepts) {
+      concepts = query
+        ? await db.concepts
+            .toCollection()
+            .filter((concept) => matchesText([concept.title, concept.summary], query))
+            .limit(limit * 3)
+            .toArray()
+        : await db.concepts
+            .orderBy('updatedAt')
+            .reverse()
+            .limit(limit * 2)
+            .toArray();
+      mentionQueryCache.set(cacheKey, concepts);
+    }
 
     concepts = concepts
       .filter((concept) => !excluded.has(concept.id))
@@ -478,17 +487,21 @@ async function lookupMentions(
     }));
   }
 
-  let sources = query
-    ? await db.sources
-        .toCollection()
-        .filter((source) => matchesText([source.title, source.author, source.url], query))
-        .limit(limit * 3)
-        .toArray()
-    : await db.sources
-        .orderBy('ingestedAt')
-        .reverse()
-        .limit(limit * 2)
-        .toArray();
+  let sources = mentionQueryCache.get(cacheKey) as Source[] | undefined;
+  if (!sources) {
+    sources = query
+      ? await db.sources
+          .toCollection()
+          .filter((source) => matchesText([source.title, source.author, source.url], query))
+          .limit(limit * 3)
+          .toArray()
+      : await db.sources
+          .orderBy('ingestedAt')
+          .reverse()
+          .limit(limit * 2)
+          .toArray();
+    mentionQueryCache.set(cacheKey, sources);
+  }
 
   sources = sources
     .filter((source) => !excluded.has(source.id))

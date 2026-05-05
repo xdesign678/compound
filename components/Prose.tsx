@@ -159,6 +159,7 @@ export function Prose({
       ref={ref}
       className={className ? `prose ${className}` : 'prose'}
       dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(renderMarkdown(markdown)) }}
+      lang="zh-CN"
     />
   );
 }

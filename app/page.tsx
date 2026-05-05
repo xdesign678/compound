@@ -374,12 +374,6 @@ export default function Page() {
               <div className="desktop-primary-scroll">
                 {renderPrimaryView('.desktop-primary-scroll')}
               </div>
-
-              {showFab && ready && (
-                <button className="fab desktop-fab" onClick={openModal} aria-label="添加资料">
-                  <Icon.Plus />
-                </button>
-              )}
             </section>
 
             {shouldShowDesktopDetail && <div className="desktop-divider" {...dividerProps} />}

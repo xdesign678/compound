@@ -1,50 +1,76 @@
 'use client';
 
 import { useState } from 'react';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, type ToastState } from '@/lib/store';
 
-export function Toast() {
-  const { visible, text, loading, isError, retry, retryLabel } = useAppStore((s) => s.toast);
-  const hideToast = useAppStore((s) => s.hideToast);
+function ToastSlot({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   const [retrying, setRetrying] = useState(false);
-
-  const displayText = isError && text.length > 200 ? text.slice(0, 200) + '…' : text;
+  const displayText =
+    toast.isError && toast.text.length > 200 ? toast.text.slice(0, 200) + '…' : toast.text;
 
   const handleRetry = async () => {
-    if (!retry || retrying) return;
+    if (!toast.retry || retrying) return;
     setRetrying(true);
-    hideToast();
+    onDismiss();
     try {
-      await retry();
+      await toast.retry();
     } finally {
       setRetrying(false);
     }
   };
 
+  if (!toast.visible) return null;
+
   return (
     <div
-      className={`toast ${visible ? 'visible' : ''} ${isError ? 'toast-error' : ''}`}
+      className={`toast ${toast.visible ? 'visible' : ''} ${toast.isError ? 'toast-error' : ''}`}
       role="status"
-      aria-live={isError ? 'assertive' : 'polite'}
+      aria-live={toast.isError ? 'assertive' : 'polite'}
       aria-atomic="true"
     >
-      {loading && <div className="spinner" />}
+      {toast.loading && <div className="spinner" />}
       <span className="toast-text">{displayText}</span>
-      {isError && retry && (
+      {toast.isError && toast.retry && (
         <button
           className="toast-retry"
           onClick={() => void handleRetry()}
           disabled={retrying}
           type="button"
         >
-          {retrying ? '重试中…' : (retryLabel ?? '重试')}
+          {retrying ? '重试中…' : (toast.retryLabel ?? '重试')}
         </button>
       )}
-      {isError && (
-        <button className="toast-close" onClick={hideToast} aria-label="关闭">
+      {toast.isError && (
+        <button className="toast-close" onClick={onDismiss} aria-label="关闭">
           ×
         </button>
       )}
+    </div>
+  );
+}
+
+export function Toast() {
+  const primaryToast = useAppStore((s) => s.toast);
+  const toastQueue = useAppStore((s) => s.toastQueue);
+  const hideToast = useAppStore((s) => s.hideToast);
+
+  const dismissQueueItem = (id: number) => {
+    useAppStore.setState((s) => ({
+      toastQueue: s.toastQueue.filter((t) => t.id !== id),
+    }));
+  };
+
+  // Show primary toast + any additional queue items (excluding primary)
+  const additionalToasts = toastQueue.filter((t) => t.id !== primaryToast.id && t.visible);
+
+  return (
+    <div className="toast-container">
+      {/* Additional stacked toasts */}
+      {additionalToasts.map((t) => (
+        <ToastSlot key={t.id} toast={t} onDismiss={() => dismissQueueItem(t.id)} />
+      ))}
+      {/* Primary (most recent) toast */}
+      <ToastSlot toast={primaryToast} onDismiss={hideToast} />
     </div>
   );
 }
