@@ -66,15 +66,15 @@ export function SourcesView() {
   const totalSourceCount = useLiveQuery(async () => getDb().sources.count(), []);
 
   const conceptCountBySource = useLiveQuery(async () => {
-    if (!sources) return new Map<string, number>();
     const db = getDb();
+    // Single pass: load all concepts' sources arrays and count
+    const allConcepts = await db.concepts.toArray();
     const map = new Map<string, number>();
-    await Promise.all(
-      sources.map(async (source) => {
-        const count = await db.concepts.where('sources').equals(source.id).count();
-        map.set(source.id, count);
-      }),
-    );
+    for (const concept of allConcepts) {
+      for (const sourceId of concept.sources) {
+        map.set(sourceId, (map.get(sourceId) || 0) + 1);
+      }
+    }
     return map;
   }, [sources]);
 

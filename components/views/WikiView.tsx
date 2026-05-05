@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
-import { getUnreviewedCount } from '@/lib/review-picks';
+import { getUnreviewedCountFromDb } from '@/lib/review-picks';
 import { Icon } from '../Icons';
 
 interface WikiViewProps {
@@ -47,8 +47,6 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   const totalConceptCount = useLiveQuery(async () => {
     return getDb().concepts.count();
   }, []);
-
-  const allConceptsForReview = useLiveQuery(async () => getDb().concepts.toArray(), []);
 
   const totalMatches = useLiveQuery(async () => {
     const q = deferredQuery.trim().toLowerCase();
@@ -93,9 +91,8 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   }, [searchFocusNonce]);
 
   useEffect(() => {
-    if (!allConceptsForReview) return;
-    setUnreviewedCount(getUnreviewedCount(allConceptsForReview));
-  }, [allConceptsForReview]);
+    getUnreviewedCountFromDb().then(setUnreviewedCount);
+  }, [totalConceptCount]);
 
   const fresh = useMemo(() => (concepts ?? []).filter((c) => freshIds[c.id]), [concepts, freshIds]);
   const others = useMemo(

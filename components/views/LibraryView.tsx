@@ -30,7 +30,7 @@ import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { categorizeConcepts } from '@/lib/api-client';
 import { formatCategorizeCompletionMessage } from '@/lib/categorize-status';
-import { getUnreviewedCount } from '@/lib/review-picks';
+import { getUnreviewedCount, getUnreviewedCountFromDb } from '@/lib/review-picks';
 import { Icon } from '../Icons';
 import { OnboardingCard } from '../OnboardingCard';
 import type { Concept, CategoryTag } from '@/lib/types';
@@ -199,8 +199,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   }, [concepts, scrollRootSelector]);
 
   useEffect(() => {
-    if (!concepts) return;
-    setUnreviewedCount(getUnreviewedCount(concepts));
+    getUnreviewedCountFromDb().then(setUnreviewedCount);
   }, [concepts]);
 
   useEffect(() => {

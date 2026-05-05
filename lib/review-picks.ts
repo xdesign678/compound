@@ -65,3 +65,15 @@ export function getUnreviewedCount(concepts: Concept[]): number {
   const reviewedIds = getReviewedIds();
   return concepts.filter((c) => !reviewedIds.has(c.id)).length;
 }
+
+/** Lightweight unreviewed count using only concept IDs (avoids loading full objects) */
+export async function getUnreviewedCountFromDb(): Promise<number> {
+  const { getDb } = await import('./db');
+  const allIds = await getDb().concepts.toCollection().keys();
+  const reviewedIds = getReviewedIds();
+  let count = 0;
+  for (const id of allIds) {
+    if (!reviewedIds.has(id as string)) count++;
+  }
+  return count;
+}
