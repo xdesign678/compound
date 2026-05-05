@@ -3675,11 +3675,26 @@ button {
 }
 
 /* Toast */
-.toast {
+.toast-container {
   position: absolute;
   top: 70px;
   left: 50%;
-  transform: translateX(-50%) translateY(-120%);
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.desktop-shell .toast-container {
+  position: fixed;
+}
+.toast {
+  position: relative;
+  top: auto;
+  left: auto;
+  transform: translateY(-120%);
   background: var(--text-primary);
   color: var(--bg-primary);
   padding: 10px 16px;
@@ -3687,7 +3702,7 @@ button {
   font-family: var(--font-sans);
   font-size: 13px;
   box-shadow: var(--shadow-md);
-  z-index: 60;
+  pointer-events: auto;
   opacity: 0;
   transition:
     opacity var(--motion-duration-base) var(--motion-ease-standard),
@@ -3699,7 +3714,7 @@ button {
 }
 .toast.visible {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(0);
 }
 .toast .spinner {
   width: 14px;
@@ -4799,6 +4814,28 @@ button {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .desktop-content.resizable {
+    grid-template-columns: var(--desktop-primary-width) 4px minmax(0, 1fr);
+  }
+
+  .desktop-divider {
+    width: 4px;
+    min-width: 4px;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    z-index: 1;
+    transition: background 0.15s ease;
+  }
+
+  .desktop-divider:hover {
+    background: var(--border-section);
+  }
+
+  .desktop-divider:active {
+    background: var(--border-active, var(--accent));
+  }
+
   .desktop-primary-panel,
   .desktop-detail-panel {
     min-width: 0;
@@ -4813,7 +4850,8 @@ button {
     border-right: 1px solid var(--border-section);
   }
 
-  .desktop-content.single-pane .desktop-primary-panel {
+  .desktop-content.single-pane .desktop-primary-panel,
+  .desktop-content.resizable .desktop-primary-panel {
     border-right: none;
   }
 
@@ -5195,6 +5233,9 @@ button,
   }
   .desktop-detail-panel {
     background: var(--bg-primary) !important;
+  }
+  .desktop-content.resizable {
+    grid-template-columns: var(--desktop-primary-width) 4px minmax(0, 1fr) !important;
   }
 }
 

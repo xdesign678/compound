@@ -16,6 +16,7 @@ import { OfflineBanner } from '@/components/OfflineBanner';
 import { TaskCenter } from '@/components/TaskCenter';
 import { useKeyboardShortcuts } from '@/lib/hooks/useKeyboardShortcuts';
 import { useOnlineStatus } from '@/lib/hooks/useOnlineStatus';
+import { useResizable } from '@/lib/hooks/useResizable';
 import { SwipeBack } from '@/components/SwipeBack';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { Icon } from '@/components/Icons';
@@ -116,6 +117,7 @@ export default function Page() {
   const [libraryOverlayDetail, setLibraryOverlayDetail] = useState<typeof detail>(null);
   const [libraryOverlayVisible, setLibraryOverlayVisible] = useState(false);
   const libraryOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const desktopContentRef = useRef<HTMLElement>(null);
   useEffect(() => {
     setMounted(true);
     hydrateHomeStyle();
@@ -208,6 +210,7 @@ export default function Page() {
   const usesDetailOverlay = inLibraryMode || tab === 'ask';
   const shouldShowDesktopDetail =
     isDesktop && !usesDetailOverlay && (tab === 'wiki' || tab === 'sources' || detail !== null);
+  const { dividerProps } = useResizable(desktopContentRef, shouldShowDesktopDetail);
   const desktopSummary = ready
     ? `${conceptCount ?? 0} 个概念 · ${sourceCount ?? 0} 份资料`
     : '正在同步本地知识库';
@@ -363,7 +366,10 @@ export default function Page() {
             </div>
           </aside>
 
-          <main className={`desktop-content${shouldShowDesktopDetail ? '' : ' single-pane'}`}>
+          <main
+            ref={desktopContentRef}
+            className={`desktop-content${shouldShowDesktopDetail ? ' resizable' : ' single-pane'}`}
+          >
             <section className="desktop-primary-panel">
               <div className="desktop-primary-scroll">
                 {renderPrimaryView('.desktop-primary-scroll')}
@@ -375,6 +381,8 @@ export default function Page() {
                 </button>
               )}
             </section>
+
+            {shouldShowDesktopDetail && <div className="desktop-divider" {...dividerProps} />}
 
             {shouldShowDesktopDetail && (
               <aside className="desktop-detail-panel">
