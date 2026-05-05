@@ -173,6 +173,17 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
       setSearchCollapsed(y > 40);
       pendingY = y;
       if (!raf) raf = requestAnimationFrame(flush);
+      // Find the first visible concept card for anchor-based restore
+      const cards = main.querySelectorAll('[data-concept-id]');
+      for (const card of cards) {
+        const rect = card.getBoundingClientRect();
+        if (rect.top >= 0 && rect.top < main.clientHeight / 2) {
+          useAppStore.getState().setLibraryState({
+            scrollAnchorId: (card as HTMLElement).dataset.conceptId ?? null,
+          });
+          break;
+        }
+      }
     };
     onScroll();
     main.addEventListener('scroll', onScroll, { passive: true });
@@ -192,9 +203,23 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
     const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
     if (!main) return;
     scrollRestoredRef.current = true;
-    const saved = useAppStore.getState().libraryState.scrollTop;
-    if (saved > 0) {
-      main.scrollTop = saved;
+
+    // Try anchor-based restore first (more reliable than pixel offset)
+    const anchorId = useAppStore.getState().libraryState.scrollAnchorId;
+    if (anchorId) {
+      requestAnimationFrame(() => {
+        const card = main.querySelector(`[data-concept-id="${anchorId}"]`) as HTMLElement | null;
+        if (card) {
+          card.scrollIntoView({ block: 'center' });
+          return;
+        }
+        // Fallback to pixel offset
+        const saved = useAppStore.getState().libraryState.scrollTop;
+        if (saved > 0) main.scrollTop = saved;
+      });
+    } else {
+      const saved = useAppStore.getState().libraryState.scrollTop;
+      if (saved > 0) main.scrollTop = saved;
     }
   }, [concepts, scrollRootSelector]);
 
@@ -578,6 +603,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                 key={c.id}
                 className={`concept-card${detail?.type === 'concept' && detail.id === c.id ? ' active' : ''}`}
                 onClick={() => openConcept(c.id)}
+                data-concept-id={c.id}
               >
                 <div className="title">{c.title}</div>
                 <div className="summary">{c.summary}</div>

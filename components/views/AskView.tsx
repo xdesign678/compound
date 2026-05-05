@@ -80,8 +80,12 @@ export function AskView() {
   }, []);
 
   useEffect(() => {
-    if (messagesRef.current) {
-      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+    const el = messagesRef.current;
+    if (!el) return;
+    // Only auto-scroll if user is near the bottom (within 50px)
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+    if (nearBottom) {
+      el.scrollTop = el.scrollHeight;
     }
   }, [history?.length, loading]);
 

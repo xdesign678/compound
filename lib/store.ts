@@ -76,6 +76,7 @@ export interface LibraryUIState {
   visibleCount: number;
   showAllSecondaries: boolean;
   scrollTop: number;
+  scrollAnchorId: string | null;
 }
 
 const DEFAULT_LIBRARY_VISIBLE_COUNT = 60;
@@ -87,6 +88,7 @@ const DEFAULT_LIBRARY_STATE: LibraryUIState = {
   visibleCount: DEFAULT_LIBRARY_VISIBLE_COUNT,
   showAllSecondaries: false,
   scrollTop: 0,
+  scrollAnchorId: null,
 };
 
 export interface SourcesUIState {

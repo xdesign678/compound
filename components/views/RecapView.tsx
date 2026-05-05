@@ -188,7 +188,9 @@ export function RecapView() {
         const totalDrift = Math.abs(dx) + Math.abs(dy);
         if (totalDrift < 10) return; // not enough to decide yet
 
-        if (Math.abs(dx) >= Math.abs(dy)) {
+        // Use angle threshold + lock axis (30° = tan(30°) ≈ 0.577)
+        const angle = Math.abs(dy) / (Math.abs(dx) + Math.abs(dy) + 0.001);
+        if (angle < 0.5) {
           isHorizontal = true;
         } else {
           isTracking = false;
@@ -203,12 +205,16 @@ export function RecapView() {
         if (rafRef.current) cancelAnimationFrame(rafRef.current);
         rafRef.current = requestAnimationFrame(() => {
           applyCardTransform(damped, damped * 0.015);
+          // Disable pointer events during drag to prevent click-through
+          if (cardRef.current) cardRef.current.style.pointerEvents = 'none';
         });
       }
     };
 
     const onTouchEnd = () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      // Restore pointer events after drag
+      if (cardRef.current) cardRef.current.style.pointerEvents = '';
       const wasHorizontal = isHorizontal;
       isTracking = false;
       isHorizontal = false;
