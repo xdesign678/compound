@@ -157,21 +157,17 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
             type="button"
             aria-label={`今日复盘，共 ${unreviewedCount} 个概念待回顾`}
           >
-            <div className="title">
-              <Icon.Sparkle />
-              今日复盘
-            </div>
-            <div className="summary">
-              {unreviewedCount} 个概念等待回顾。打开卡片堆，跟着节奏一张一张过一遍。
-            </div>
-            <div className="meta">
-              <span className="badge-link">
+            <span className="recap-entry-main">
+              <span className="recap-entry-title">
                 <Icon.Sparkle />
-                {unreviewedCount} 个待回顾
+                今日复盘
               </span>
-              <span>·</span>
-              <span className="updated">立即开始 →</span>
-            </div>
+              <span className="recap-entry-count">{unreviewedCount} 个待回顾</span>
+            </span>
+            <span className="recap-entry-action">
+              开始
+              <Icon.Send />
+            </span>
           </button>
         </div>
       )}

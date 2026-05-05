@@ -11028,26 +11028,59 @@ button,
 
 /* Entry card — reuses .concept-card visual; this only adds icon + arrow tweaks */
 .recap-entry-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 10px 12px;
   border: 1px solid var(--border-default);
 }
-.recap-entry-card .title {
+.recap-entry-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.recap-entry-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  font-weight: 650;
+  color: var(--text-primary);
+  white-space: nowrap;
 }
-.recap-entry-card .title svg {
+.recap-entry-title svg {
   width: 14px;
   height: 14px;
   color: var(--brand-clay);
   flex-shrink: 0;
 }
-.recap-entry-card .meta .badge-link {
+.recap-entry-count {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+.recap-entry-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
   color: var(--brand-clay);
 }
-.recap-entry-card .meta .updated {
-  margin-left: auto;
-  color: var(--brand-clay);
-  font-weight: 500;
+.recap-entry-action svg {
+  width: 13px;
+  height: 13px;
 }
 
 /* Recap page root — exact viewport fit, no body scroll */
