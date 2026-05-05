@@ -131,6 +131,9 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
       body: JSON.stringify(payload),
     });
   } catch {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new Error('网络已断开，请检查连接后重试');
+    }
     throw new Error('网络连接失败');
   }
   if (!res.ok) {
@@ -293,6 +296,9 @@ export async function askWikiStream(
       body: JSON.stringify(payload),
     });
   } catch {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new Error('网络已断开，请检查连接后重试');
+    }
     throw new Error('网络连接失败');
   }
 

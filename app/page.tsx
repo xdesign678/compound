@@ -12,7 +12,9 @@ import { Header } from '@/components/Header';
 import { TabBar } from '@/components/TabBar';
 import { Toast } from '@/components/Toast';
 import { CommandPalette } from '@/components/CommandPalette';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { useKeyboardShortcuts } from '@/lib/hooks/useKeyboardShortcuts';
+import { useOnlineStatus } from '@/lib/hooks/useOnlineStatus';
 import { SwipeBack } from '@/components/SwipeBack';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { Icon } from '@/components/Icons';
@@ -96,6 +98,7 @@ function useDelayedUnmount(isOpen: boolean, delayMs = MODAL_EXIT_DURATION_MS): b
 
 export default function Page() {
   useKeyboardShortcuts();
+  useOnlineStatus();
   const tab = useAppStore((s) => s.tab);
   const detail = useAppStore((s) => s.detail);
   const openModal = useAppStore((s) => s.openModal);
@@ -326,6 +329,7 @@ export default function Page() {
       <div className="app-shell desktop-shell">
         <Toast />
         <CommandPalette />
+        <OfflineBanner />
 
         <div className="desktop-frame">
           <aside className="desktop-sidebar">
@@ -424,6 +428,7 @@ export default function Page() {
     <div className="app-shell">
       <Toast />
       <CommandPalette />
+      <OfflineBanner />
       <SwipeBack />
       <PullToRefresh
         onRefresh={async () => {

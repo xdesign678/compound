@@ -1,10 +1,10 @@
 // Compound PWA Service Worker
-const CACHE_NAME = 'compound-v8';
-const RUNTIME_CACHE = 'compound-runtime-v8';
+const CACHE_NAME = 'compound-v9';
+const RUNTIME_CACHE = 'compound-runtime-v9';
 const IS_LOCAL_DEV = ['localhost', '127.0.0.1', '0.0.0.0'].includes(location.hostname);
 
 // App shell files to precache
-const PRECACHE_URLS = ['/', '/manifest.json'];
+const PRECACHE_URLS = ['/', '/offline', '/manifest.json'];
 
 // Install: precache app shell
 self.addEventListener('install', (event) => {
@@ -70,11 +70,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Navigation requests: network-first, fallback to cache
+  // Navigation requests: network-first, fallback to cache, then offline page
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).catch(() => {
-        return caches.match('/') || caches.match(request);
+        return caches.match(request).then((cached) => {
+          return cached || caches.match('/') || caches.match('/offline');
+        });
       }),
     );
     return;

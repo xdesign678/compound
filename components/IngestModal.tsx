@@ -16,6 +16,7 @@ export function IngestModal() {
   const showErrorToast = useAppStore((s) => s.showErrorToast);
   const hideToast = useAppStore((s) => s.hideToast);
   const markFresh = useAppStore((s) => s.markFresh);
+  const isOnline = useAppStore((s) => s.isOnline);
 
   const modalRef = useRef<HTMLDivElement>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -178,6 +179,7 @@ export function IngestModal() {
         onCancel={() => {
           setNoteEditorOpen(false);
         }}
+        disabled={!isOnline}
       />
     );
   }
@@ -297,10 +299,10 @@ export function IngestModal() {
                 {error && <div className="ingest-error-banner">{error}</div>}
                 <button
                   className="modal-btn primary"
-                  disabled={!title.trim() || !content.trim() || submitting}
+                  disabled={!title.trim() || !content.trim() || submitting || !isOnline}
                   onClick={() => handleSubmit('link')}
                 >
-                  {submitting ? '编译中...' : '送入 AI 编译'}
+                  {!isOnline ? '离线中，无法提交' : submitting ? '编译中...' : '送入 AI 编译'}
                 </button>
                 <button
                   className="modal-btn"

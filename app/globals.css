@@ -11558,3 +11558,36 @@ button,
   background: var(--bg-hover);
   color: var(--text-secondary);
 }
+
+/* Offline Banner */
+.offline-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--color-warning);
+  color: #1a1a18;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  animation: offline-slide-in var(--motion-duration-base) var(--motion-ease-emphasized);
+}
+.offline-banner-text {
+  font-weight: 600;
+}
+.offline-banner-hint {
+  opacity: 0.8;
+}
+@keyframes offline-slide-in {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}

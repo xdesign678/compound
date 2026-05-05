@@ -11,9 +11,10 @@ const DRAFT_SAVE_DEBOUNCE_MS = 1000;
 interface NoteEditorProps {
   onDone: (title: string, content: string) => void;
   onCancel: () => void;
+  disabled?: boolean;
 }
 
-export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
+export function NoteEditor({ onDone, onCancel, disabled = false }: NoteEditorProps) {
   const [text, setText] = useState('');
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [draftRestored, setDraftRestored] = useState(false);
@@ -121,10 +122,10 @@ export function NoteEditor({ onDone, onCancel }: NoteEditorProps) {
 
         <button
           className={`note-editor-done ${hasContent ? 'enabled' : ''}`}
-          disabled={!hasContent}
+          disabled={!hasContent || disabled}
           onClick={handleDone}
         >
-          完成
+          {disabled ? '离线中' : '完成'}
         </button>
       </div>
 
