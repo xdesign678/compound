@@ -361,12 +361,6 @@ export function RecapView() {
                 )}
               </div>
 
-              <div className="recap-swipe-hint" aria-hidden="true">
-                <span className="recap-swipe-arrow">←</span>
-                <span>左右滑动切换</span>
-                <span className="recap-swipe-arrow">→</span>
-              </div>
-
               <div className="recap-card-footer">
                 <button
                   className="recap-card-read-more"

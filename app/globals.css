@@ -11052,7 +11052,7 @@ button,
 
 /* Recap page root — exact viewport fit, no body scroll */
 .recap-root {
-  --recap-card-height: min(680px, calc(100dvh - 132px - env(safe-area-inset-bottom, 0px)));
+  --recap-card-height: min(760px, calc(100dvh - 96px - env(safe-area-inset-bottom, 0px)));
 
   display: flex;
   flex-direction: column;
@@ -11108,7 +11108,7 @@ button,
 .recap-stack-area {
   flex: 1;
   min-height: 0;
-  padding: 12px 14px calc(20px + env(safe-area-inset-bottom, 0px));
+  padding: 8px 14px calc(10px + env(safe-area-inset-bottom, 0px));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11216,7 +11216,7 @@ button,
   padding-right: 2px;
   margin-top: 4px;
   border-top: 1px solid var(--border-section);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-x: hidden;
@@ -11224,55 +11224,14 @@ button,
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }
-.recap-card-body-shell .concept-body-prose {
-  font-size: 14.5px;
-}
-.recap-card-body-shell .concept-body-prose p,
-.recap-card-body-shell .concept-body-prose li {
-  margin: 0 0 12px;
-  line-height: 1.72;
-}
 .recap-card-body-shell .concept-body-prose > *:last-child {
   margin-bottom: 0;
-}
-.recap-card-body-shell .concept-body-prose h1,
-.recap-card-body-shell .concept-body-prose h2,
-.recap-card-body-shell .concept-body-prose h3 {
-  margin: 1em 0 0.4em;
-  font-family: var(--font-sans);
-}
-.recap-card-body-shell .concept-body-prose h1 {
-  font-size: var(--text-lg);
-}
-.recap-card-body-shell .concept-body-prose h2 {
-  font-size: var(--text-md);
-}
-.recap-card-body-shell .concept-body-prose h3 {
-  font-size: var(--text-base);
 }
 .recap-card-empty {
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   color: var(--text-tertiary);
   margin: 0;
-}
-
-/* Swipe hint — subtle indicator at bottom of card */
-.recap-swipe-hint {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 6px 0 3px;
-  font-family: var(--font-sans);
-  font-size: var(--text-2xs);
-  color: var(--text-tertiary);
-  letter-spacing: 0.06em;
-  flex-shrink: 0;
-}
-.recap-swipe-hint .recap-swipe-arrow {
-  font-size: 14px;
-  opacity: 0.5;
 }
 
 /* Footer inside card */
