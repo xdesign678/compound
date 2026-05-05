@@ -3726,6 +3726,29 @@ button {
 .toast-close:hover {
   color: rgba(250, 249, 245, 1);
 }
+.toast-retry {
+  background: rgba(250, 249, 245, 0.12);
+  border: 1px solid rgba(250, 249, 245, 0.18);
+  color: rgba(250, 249, 245, 0.95);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard);
+}
+.toast-retry:hover:not(:disabled) {
+  background: rgba(250, 249, 245, 0.22);
+  border-color: rgba(250, 249, 245, 0.32);
+}
+.toast-retry:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
 @keyframes spin {
   to {
     transform: rotate(360deg);

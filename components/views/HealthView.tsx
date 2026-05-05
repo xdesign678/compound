@@ -101,6 +101,7 @@ export function HealthView() {
   const hydrateLastLintAt = useAppStore((s) => s.hydrateLastLintAt);
 
   const showToast = useAppStore((s) => s.showToast);
+  const showErrorToast = useAppStore((s) => s.showErrorToast);
 
   const [localFindings, setLocalFindings] = useState<Finding[]>([]);
   const [conceptTitleMap, setConceptTitleMap] = useState<Map<string, string>>(new Map());
@@ -412,12 +413,14 @@ export function HealthView() {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         setRepairError(message);
-        showToast(`启动修复失败：${message}`, false, true);
+        showErrorToast(`启动修复失败：${message.slice(0, 120)}`, () =>
+          triggerRepair(findingsToFix),
+        );
       } finally {
         setRepairStarting(false);
       }
     },
-    [repairStarting, showToast],
+    [repairStarting, showErrorToast, showToast],
   );
 
   const runLint = useCallback(async () => {
@@ -433,7 +436,7 @@ export function HealthView() {
       if (!res.runId) {
         setLintRunning(false);
         setLintBanner(null);
-        showToast('无法启动深度检查', false, true);
+        showErrorToast('无法启动深度检查', () => runLint());
         return;
       }
       try {
@@ -460,7 +463,7 @@ export function HealthView() {
         details: message,
       });
     }
-  }, [lintRunning, setLintBanner, setLintRunning, showToast]);
+  }, [lintRunning, setLintBanner, setLintRunning, showErrorToast]);
 
   const findingIcon = (type: Finding['type']) => {
     switch (type) {

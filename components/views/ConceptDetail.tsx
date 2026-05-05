@@ -40,6 +40,7 @@ export function ConceptDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
   const openSource = useAppStore((s) => s.openSource);
   const showToast = useAppStore((s) => s.showToast);
+  const showErrorToast = useAppStore((s) => s.showErrorToast);
   const markFresh = useAppStore((s) => s.markFresh);
   const freshIds = useAppStore((s) => s.freshConceptIds);
   const [, setHydrating] = useState(false);
@@ -221,7 +222,7 @@ export function ConceptDetail({ id }: { id: string }) {
       openConcept(resp.conceptId);
     } catch (err) {
       const message = err instanceof Error ? err.message : '创建失败';
-      showToast(message, false, true);
+      showErrorToast(message.slice(0, 120), () => handleCreateFromSelection());
     } finally {
       setCreatingFromSelection(false);
     }
@@ -233,6 +234,7 @@ export function ConceptDetail({ id }: { id: string }) {
     openConcept,
     selectionPopover.text,
     showToast,
+    showErrorToast,
   ]);
 
   useEffect(() => {

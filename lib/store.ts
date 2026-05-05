@@ -36,6 +36,8 @@ interface ToastState {
   text: string;
   loading: boolean;
   isError?: boolean;
+  retry?: () => void | Promise<void>;
+  retryLabel?: string;
 }
 
 interface LintBannerState {
@@ -123,6 +125,7 @@ interface AppState {
   openGithubSync: () => void;
   closeGithubSync: () => void;
   showToast: (text: string, loading?: boolean, isError?: boolean) => void;
+  showErrorToast: (text: string, retry?: () => void | Promise<void>, retryLabel?: string) => void;
   hideToast: () => void;
   markFresh: (ids: string[]) => void;
   clearFresh: () => void;
@@ -268,6 +271,22 @@ export const useAppStore = create<AppState>((set) => ({
         _toastTimer = null;
       }, 3000);
     }
+  },
+  showErrorToast: (text, retry, retryLabel = '重试') => {
+    if (_toastTimer) {
+      clearTimeout(_toastTimer);
+      _toastTimer = null;
+    }
+    set({
+      toast: {
+        visible: true,
+        text,
+        loading: false,
+        isError: true,
+        retry,
+        retryLabel,
+      },
+    });
   },
   hideToast: () => set((s) => ({ toast: { ...s.toast, visible: false } })),
   markFresh: (ids: string[]) =>

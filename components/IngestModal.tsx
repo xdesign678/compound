@@ -13,6 +13,7 @@ export function IngestModal() {
   const isOpen = useAppStore((s) => s.modalOpen);
   const close = useAppStore((s) => s.closeModal);
   const showToast = useAppStore((s) => s.showToast);
+  const showErrorToast = useAppStore((s) => s.showErrorToast);
   const hideToast = useAppStore((s) => s.hideToast);
   const markFresh = useAppStore((s) => s.markFresh);
 
@@ -118,8 +119,9 @@ export function IngestModal() {
       reset();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      showToast(`摄入失败: ${msg}`, false, true);
-      safeTimeout(() => hideToast(), 4500);
+      showErrorToast(`摄入失败: ${msg.slice(0, 160)}`, () =>
+        handleNoteEditorDone(noteTitle, noteContent),
+      );
       setSubmitting(false);
     }
   }

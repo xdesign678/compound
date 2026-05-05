@@ -98,6 +98,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   const openConcept = useAppStore((s) => s.openConcept);
   const detail = useAppStore((s) => s.detail);
   const showToast = useAppStore((s) => s.showToast);
+  const showErrorToast = useAppStore((s) => s.showErrorToast);
   const hideToast = useAppStore((s) => s.hideToast);
   const setSearchCollapsed = useAppStore((s) => s.setSearchCollapsed);
   const searchFocusNonce = useAppStore((s) => s.searchFocusNonce);
@@ -312,12 +313,11 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
       setTimeout(() => hideToast(), 3000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      showToast(`归类失败: ${msg.slice(0, 80)}`, false);
-      setTimeout(() => hideToast(), 4000);
+      showErrorToast(`归类失败: ${msg.slice(0, 120)}`, () => handleCategorize());
     } finally {
       setCategorizing(false);
     }
-  }, [categorizing, showToast, hideToast]);
+  }, [categorizing, showToast, showErrorToast, hideToast]);
 
   if (!concepts) {
     return <div className="empty-state">加载中...</div>;

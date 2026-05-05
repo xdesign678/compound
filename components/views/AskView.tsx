@@ -34,6 +34,7 @@ export function AskView() {
   const openConcept = useAppStore((s) => s.openConcept);
   const clearAskHistory = useAppStore((s) => s.clearAskHistory);
   const showToast = useAppStore((s) => s.showToast);
+  const showErrorToast = useAppStore((s) => s.showErrorToast);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [archiving, setArchiving] = useState<string | null>(null);
@@ -305,7 +306,7 @@ export function AskView() {
       await db.askHistory.update(msg.id, { savedAsConceptId: newId });
     } catch (err) {
       console.error(err);
-      showToast('归档失败，请重试', false, true);
+      showErrorToast('归档失败', () => handleArchive(msg, userQuestion));
     } finally {
       setArchiving(null);
     }

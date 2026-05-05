@@ -12,6 +12,7 @@ import { Icon } from '../Icons';
 export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
   const openConcept = useAppStore((s) => s.openConcept);
   const showToast = useAppStore((s) => s.showToast);
+  const showErrorToast = useAppStore((s) => s.showErrorToast);
   const hideToast = useAppStore((s) => s.hideToast);
   const clearFresh = useAppStore((s) => s.clearFresh);
 
@@ -40,7 +41,7 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
       safeTimeout(() => hideToast(), 3000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      showToast(`体检失败: ${msg}`, false, true);
+      showErrorToast(`体检失败: ${msg.slice(0, 120)}`, () => handleLint());
     } finally {
       setLintLoading(false);
     }
