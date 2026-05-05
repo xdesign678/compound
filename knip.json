@@ -6,7 +6,8 @@
     "app/**/route.ts",
     "app/**/global-error.tsx",
     "scripts/*.mjs",
-    "lib/**/*.test.ts"
+    "lib/**/*.test.ts",
+    "components/**/*.test.tsx"
   ],
   "project": [
     "app/**/*.ts",

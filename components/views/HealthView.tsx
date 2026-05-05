@@ -6,14 +6,14 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import {
-  failLintActivity,
   getRepairStatus,
-  lintWiki,
   pruneDeletedConcepts,
-  startLintActivity,
   startRepair,
+  startLintRun,
+  getLintStatus,
   type RepairFindingPayload,
   type RepairStatusResponse,
+  type LintRunStatusResponse,
 } from '@/lib/api-client';
 import { pullSnapshotFromCloud } from '@/lib/cloud-sync';
 import { formatRelativeTime } from '@/lib/format';
@@ -32,7 +32,8 @@ const FIXABLE_TYPES: RepairFindingType[] = ['duplicate', 'missing-link', 'orphan
 const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 const THIN_THRESHOLD = 200;
 const REPAIR_RUN_STORAGE_KEY = 'compound_active_repair_run';
-const REPAIR_POLL_MS = 3000;
+const LINT_RUN_STORAGE_KEY = 'compound_active_lint_run';
+const POLL_MS = 2000;
 
 function isFixable(type: Finding['type']): type is RepairFindingType {
   return (FIXABLE_TYPES as string[]).includes(type);
@@ -109,6 +110,12 @@ export function HealthView() {
   const [repairError, setRepairError] = useState('');
   const repairDoneRef = useRef<Set<string>>(new Set());
 
+  // async lint state (cloud-side)
+  const [lintRun, setLintRun] = useState<LintRunStatusResponse | null>(null);
+  const lintDoneRef = useRef<Set<string>>(new Set());
+  const lintRunId = lintRun?.id;
+  const hasLintRun = lintRun !== null;
+
   useEffect(() => {
     hydrateLastLintAt();
   }, [hydrateLastLintAt]);
@@ -157,12 +164,18 @@ export function HealthView() {
         try {
           localStorage.removeItem(REPAIR_RUN_STORAGE_KEY);
         } catch {
-          // ignore
+          /* ignore */
         }
         setRepairRun(null);
       }
       return null;
     }
+  }, []);
+
+  const pollLintRun = useCallback(async (runId: string): Promise<LintRunStatusResponse> => {
+    const status = await getLintStatus(runId);
+    setLintRun(status);
+    return status;
   }, []);
 
   const onRepairFinished = useCallback(
@@ -172,7 +185,7 @@ export function HealthView() {
       try {
         localStorage.removeItem(REPAIR_RUN_STORAGE_KEY);
       } catch {
-        // ignore
+        /* ignore */
       }
       try {
         await pruneDeletedConcepts(status.summary.deletedConceptIds || []);
@@ -184,13 +197,60 @@ export function HealthView() {
       const toastText = `一键修复完成：合并 ${s.merged}、建链 ${s.linked}、孤岛补 ${s.orphanFixed}、冲突入审 ${s.conflictQueued}`;
       showToast(toastText, false, status.status === 'failed');
       maybeNotify('Compound 一键修复完成', toastText);
-      // Refresh the lint findings so fixed items disappear and remaining ones re-render.
       setLintResult([]);
     },
     [setLintResult, showToast],
   );
 
-  // Poll active repair run (also resumes after page refresh).
+  const onLintFinished = useCallback(
+    async (status: LintRunStatusResponse) => {
+      if (lintDoneRef.current.has(status.id)) return;
+      lintDoneRef.current.add(status.id);
+      try {
+        localStorage.removeItem(LINT_RUN_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+
+      setLintRunning(false);
+
+      // Write activity log entry
+      const detail =
+        status.findings.length === 0
+          ? '未发现问题 · Wiki 结构健康'
+          : `发现 ${status.findings.length} 处问题需要关注`;
+      const activity: ActivityLog = {
+        id: 'a-' + nanoid(8),
+        type: 'lint',
+        title: status.status === 'failed' ? '深度检查失败' : '深度检查完成',
+        details: status.status === 'failed' ? (status.error ?? '未知错误').slice(0, 140) : detail,
+        status: status.status === 'failed' ? 'error' : 'success',
+        at: Date.now(),
+      };
+      await getDb().activity.put(activity);
+
+      if (status.status === 'failed') {
+        setLintBanner({
+          tone: 'error',
+          title: '深度检查失败',
+          details: status.error ?? '未知错误',
+        });
+        return;
+      }
+
+      setLintBanner(null);
+
+      // Merge local + server findings
+      const concepts = await getDb().concepts.toArray();
+      setConceptTitleMap(new Map(concepts.map((c) => [c.id, c.title])));
+      setLocalFindings(buildLocalFindings(concepts));
+      setLocalScanAt(Date.now());
+      setLintResult(status.findings);
+    },
+    [setLintResult, setLintRunning, setLintBanner],
+  );
+
+  // Poll active repair run
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const storedId = (() => {
@@ -211,7 +271,7 @@ export function HealthView() {
       const status = await pollRepairRun(activeId);
       if (cancelled || !status) return;
       if (status.status === 'running') {
-        timer = setTimeout(tick, REPAIR_POLL_MS);
+        timer = setTimeout(tick, POLL_MS);
       } else {
         await onRepairFinished(status);
       }
@@ -223,6 +283,92 @@ export function HealthView() {
       if (timer) clearTimeout(timer);
     };
   }, [repairRun?.id, pollRepairRun, onRepairFinished]);
+
+  // Poll active lint run (also resumes after page refresh)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const storedId = (() => {
+      try {
+        return localStorage.getItem(LINT_RUN_STORAGE_KEY);
+      } catch {
+        return null;
+      }
+    })();
+    const activeId = lintRunId ?? storedId;
+    if (!activeId) return;
+    if (!hasLintRun && storedId) {
+      setLintRunning(true);
+      setLintRun({
+        id: storedId,
+        status: 'running',
+        phase: 'loading_concepts',
+        conceptCount: 0,
+        findings: [],
+        startedAt: Date.now(),
+        finishedAt: null,
+        error: null,
+      });
+    }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const tick = async () => {
+      if (cancelled) return;
+      let status: LintRunStatusResponse;
+      try {
+        status = await pollLintRun(activeId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (/run not found/i.test(message)) {
+          try {
+            localStorage.removeItem(LINT_RUN_STORAGE_KEY);
+          } catch {
+            /* ignore */
+          }
+          setLintRun(null);
+          setLintRunning(false);
+          setLintBanner({
+            tone: 'error',
+            title: '深度检查已失效',
+            details: '找不到正在运行的检查任务，请重新启动。',
+          });
+          return;
+        }
+        setLintBanner({
+          tone: 'running',
+          title: '深度检查状态同步中',
+          details: `暂时无法获取进度：${message}`,
+        });
+        timer = setTimeout(tick, POLL_MS);
+        return;
+      }
+      if (cancelled) return;
+      if (status.status === 'running') {
+        // update banner with real progress from server
+        const phaseLabel =
+          status.phase === 'loading_concepts'
+            ? `正在读取 ${status.conceptCount} 个概念`
+            : status.phase === 'analyzing'
+              ? `正在分析 ${status.conceptCount} 个概念`
+              : '处理中...';
+        setLintBanner({
+          tone: 'running',
+          title: '深度检查进行中',
+          details: phaseLabel,
+        });
+        timer = setTimeout(tick, POLL_MS);
+      } else {
+        await onLintFinished(status);
+      }
+    };
+    void tick();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [hasLintRun, lintRunId, pollLintRun, onLintFinished, setLintBanner, setLintRunning]);
 
   const triggerRepair = useCallback(
     async (findingsToFix: Finding[]) => {
@@ -279,51 +425,42 @@ export function HealthView() {
     setLintRunning(true);
     setLintBanner({
       tone: 'running',
-      title: '正在运行深度检查',
-      details: '先读取本地概念，再检查缺链、矛盾和重复问题',
+      title: '启动深度检查',
+      details: '正在连接服务器...',
     });
-    let activityId: string | null = null;
     try {
-      activityId = await startLintActivity();
-      const concepts = await getDb().concepts.toArray();
-      setLintBanner({
-        tone: 'running',
-        title: '正在分析概念关系',
-        details: `已载入 ${concepts.length} 个概念，正在检查结构问题和潜在冲突`,
+      const res = await startLintRun();
+      if (!res.runId) {
+        setLintRunning(false);
+        setLintBanner(null);
+        showToast('无法启动深度检查', false, true);
+        return;
+      }
+      try {
+        localStorage.setItem(LINT_RUN_STORAGE_KEY, res.runId);
+      } catch {
+        /* ignore */
+      }
+      setLintRun({
+        id: res.runId,
+        status: 'running',
+        phase: 'loading_concepts',
+        conceptCount: 0,
+        findings: [],
+        startedAt: Date.now(),
+        finishedAt: null,
+        error: null,
       });
-      const result = await lintWiki(activityId);
-      setLintBanner({
-        tone: 'running',
-        title: '正在整理检查结果',
-        details: '本地结构扫描和 AI 检查结果正在合并',
-      });
-      setConceptTitleMap(new Map(concepts.map((concept) => [concept.id, concept.title])));
-      setLocalFindings(buildLocalFindings(concepts));
-      setLocalScanAt(Date.now());
-      setLintResult(result.findings);
     } catch (err) {
       setLintRunning(false);
       const message = err instanceof Error ? err.message : '未知错误';
-      if (activityId) {
-        await failLintActivity(activityId, message);
-      } else {
-        const fallbackActivity: ActivityLog = {
-          id: 'a-' + nanoid(8),
-          type: 'lint',
-          title: '健康检查失败',
-          details: `检查未完成 · ${message.slice(0, 140)}`,
-          status: 'error',
-          at: Date.now(),
-        };
-        await getDb().activity.put(fallbackActivity);
-      }
       setLintBanner({
         tone: 'error',
-        title: '深度检查失败',
+        title: '深度检查启动失败',
         details: message,
       });
     }
-  }, [lintRunning, setLintBanner, setLintResult, setLintRunning]);
+  }, [lintRunning, setLintBanner, setLintRunning, showToast]);
 
   const findingIcon = (type: Finding['type']) => {
     switch (type) {

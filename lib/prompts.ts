@@ -261,17 +261,6 @@ chunk: "它的革命性在于把可计算性变成了一个可以形式化的问
 # 输出
 直接输出情境前缀文本，不要任何包装、解释、JSON。`;
 
-export const FAITHFULNESS_RECHECK_PROMPT = `你是 Compound 的引用校验器。判断一段回答中的某个声明是否能在给定的参考概念里找到支撑。
-
-# 输出
-严格 JSON:
-
-{ "supported": true | false, "reason": "一句话中文说明" }
-
-# 质量
-- 严格判断：声明里的具体事实必须能在参考里追溯到
-- **严格禁止**在 JSON 字符串值中使用 ASCII 双引号`;
-
 export const CATEGORIZE_SYSTEM_PROMPT = `你是 Compound 的分类引擎。你的工作是为 Wiki 概念页分配分类标签,帮助用户按知识领域浏览。
 
 # 分类规则

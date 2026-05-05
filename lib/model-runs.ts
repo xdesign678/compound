@@ -99,21 +99,3 @@ export function recordModelRun(record: ModelRunRecord): void {
     });
   }
 }
-
-/** Retention helper — call from a daily cron or admin route. */
-export function pruneModelRuns(olderThanMs: number): number {
-  try {
-    ensureSchema();
-    if (!schemaReady) return 0;
-    const cutoff = Date.now() - olderThanMs;
-    const db = getServerDb();
-    const res = db.prepare('DELETE FROM model_runs WHERE created_at < ?').run(cutoff);
-    return typeof res.changes === 'number' ? res.changes : 0;
-  } catch (err) {
-    logger.warn('model_runs.prune_failed', {
-      olderThanMs,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return 0;
-  }
-}

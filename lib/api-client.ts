@@ -170,22 +170,6 @@ function buildLintActivity(
   };
 }
 
-export async function startLintActivity(): Promise<string> {
-  const db = getDb();
-  const activityId = 'a-' + nanoid(8);
-  await db.activity.put(
-    buildLintActivity(activityId, 'running', '正在扫描概念结构、关联关系和潜在重复问题'),
-  );
-  return activityId;
-}
-
-export async function failLintActivity(activityId: string, message: string): Promise<void> {
-  const db = getDb();
-  await db.activity.put(
-    buildLintActivity(activityId, 'error', `检查未完成 · ${message.slice(0, 140)}`),
-  );
-}
-
 /** Read all unique categoryKeys from Dexie for prompt injection. */
 export async function getExistingCategories(): Promise<string[]> {
   const db = getDb();
@@ -261,34 +245,7 @@ export async function ingestSource(input: {
   };
 }
 
-export async function askWiki(
-  question: string,
-  history: Array<{ role: 'user' | 'ai'; text: string }>,
-): Promise<QueryResponse> {
-  const db = getDb();
-  const conceptsToSend = await findClientConceptCandidates(question, QUERY_CANDIDATE_LIMIT);
-
-  const hydrated = await ensureConceptsHydrated(conceptsToSend.map((concept) => concept.id));
-  const hydratedMap = new Map(hydrated.map((concept) => [concept.id, concept]));
-
-  const req: QueryRequest = {
-    question,
-    concepts: conceptsToSend.map((c) => {
-      const full = hydratedMap.get(c.id) ?? c;
-      return {
-        id: c.id,
-        title: c.title,
-        summary: c.summary,
-        body: full.body,
-      };
-    }),
-    conversationHistory: history,
-  };
-
-  return postJSON<QueryResponse>('/api/query', req);
-}
-
-/** Streaming variant of askWiki. Calls onDelta for each text fragment, then resolves with the full response. */
+/** Ask the Wiki with streaming deltas, then resolve with the full response. */
 export async function askWikiStream(
   question: string,
   history: Array<{ role: 'user' | 'ai'; text: string }>,
@@ -578,6 +535,47 @@ export async function lintWiki(activityId?: string): Promise<LintResponse> {
   );
 
   return resp;
+}
+
+// ---- async lint (cloud-side) ----
+
+export interface LintRunStatusResponse {
+  id: string;
+  status: 'running' | 'done' | 'failed';
+  phase: 'loading_concepts' | 'analyzing' | 'done';
+  conceptCount: number;
+  findings: Array<{
+    type: 'contradiction' | 'orphan' | 'missing-link' | 'duplicate';
+    message: string;
+    conceptIds: string[];
+  }>;
+  startedAt: number;
+  finishedAt: number | null;
+  error: string | null;
+}
+
+export interface LintRunStartResponse {
+  runId: string;
+  ok: boolean;
+}
+
+/** Start a cloud-side async lint run. The server reads its own DB, no client data needed. */
+export async function startLintRun(): Promise<LintRunStartResponse> {
+  return postJSON<LintRunStartResponse>('/api/lint/run', {});
+}
+
+/** Poll the status of an async lint run. Throws on 404 (run not found). */
+export async function getLintStatus(runId: string): Promise<LintRunStatusResponse> {
+  const res = await fetch(`/api/lint/status?runId=${encodeURIComponent(runId)}`, {
+    headers: { 'X-Request-ID': generateClientRequestId(), ...getAdminAuthHeaders() },
+    cache: 'no-store',
+  });
+  if (res.status === 404) throw new Error('run not found');
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 200) || `状态查询失败 (${res.status})`);
+  }
+  return (await res.json()) as LintRunStatusResponse;
 }
 
 /**

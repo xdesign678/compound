@@ -162,14 +162,6 @@ export function getRequestId(): string | undefined {
   return storage.getStore()?.requestId;
 }
 
-export function getTraceId(): string | undefined {
-  return storage.getStore()?.traceId;
-}
-
-export function getSpanId(): string | undefined {
-  return storage.getStore()?.spanId;
-}
-
 /**
  * Mutate `headers` in place to expose the trace identifiers to upstream callers.
  * Adds:

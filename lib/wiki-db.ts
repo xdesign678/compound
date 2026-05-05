@@ -11,15 +11,6 @@ export type EvidenceKind =
   | 'quote'
   | 'contradiction'
   | 'support';
-export type RelationKind =
-  | 'supports'
-  | 'contradicts'
-  | 'extends'
-  | 'example_of'
-  | 'depends_on'
-  | 'similar_to'
-  | 'contrasts_with'
-  | 'related';
 
 export interface SourceChunk extends SourceChunkDraft {
   id: string;

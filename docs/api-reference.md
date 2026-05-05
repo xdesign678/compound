@@ -6,8 +6,8 @@
 
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
-- Routes: **31**
-- Handlers (HTTP methods): **37**
+- Routes: **33**
+- Handlers (HTTP methods): **39**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
@@ -27,6 +27,8 @@ This document is generated automatically from the Next.js Route Handlers under `
   - [`/api/ingest`](#api-ingest)
 - **lint**
   - [`/api/lint`](#api-lint)
+  - [`/api/lint/run`](#api-lint-run)
+  - [`/api/lint/status`](#api-lint-status)
 - **metrics**
   - [`/api/metrics`](#api-metrics)
 - **query**
@@ -243,6 +245,51 @@ Body: `LintRequest` — `concepts: Array<{ id, title, summary, related }>`
 
 Guards: admin token, LLM rate limit, 512KB body cap.
 
+### `/api/lint/run`
+
+Source: [`app/api/lint/run/route.ts`](../app/api/lint/run/route.ts)
+
+| Field       | Value                                                   |
+| ----------- | ------------------------------------------------------- |
+| Methods     | `POST`                                                  |
+| Runtime     | `nodejs`                                                |
+| maxDuration | 30                                                      |
+| Guards      | `admin-token`, `rate-limited`, `content-length-guarded` |
+
+#### POST
+
+Start an async deep-lint run. The server reads concepts from its own DB,
+runs LLM analysis in the background, and stores findings. The client polls
+GET /api/lint/status for progress and results.
+
+No request body required — the server uses its own data. Optional `llmConfig`
+overrides may be sent in headers or the JSON body for the initial worker.
+Returns `{ runId, ok: true }`.
+
+Guards: admin token, LLM rate limit, 16KB body cap.
+
+### `/api/lint/status`
+
+Source: [`app/api/lint/status/route.ts`](../app/api/lint/status/route.ts)
+
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | _unset_       |
+| Guards      | `admin-token` |
+
+#### GET
+
+Poll the status of an async deep-lint run.
+
+Query: `?runId=<id>`
+Returns: `LintRunStatusResponse` with phase, findings, conceptCount, etc.
+
+Also revives any pending lint runs that lost their worker (e.g. server restart).
+
+Guards: admin token.
+
 ## metrics
 
 ### `/api/metrics`
@@ -288,11 +335,18 @@ production-grade RAG pipeline:
 3. concept graph 1-hop expansion via `concept_relations`
 4. Reciprocal Rank Fusion across all retrievers
 5. LLM-as-reranker → top-K
-6. answer synthesis with citations
+6. answer synthesis with citations (streaming when client opts in)
 7. citation faithfulness check
 
 Body: `QueryRequest` — `question` is required (<= 2k chars). Optional
 `concepts` (<= 500) and `conversationHistory` (last 6 turns are kept).
+
+Streaming: when the request includes `Accept: text/event-stream` the
+response is an SSE stream. The stream emits:
+
+- `event: delta` — incremental answer text fragments
+- `event: done` — final JSON payload with citations, suggestedQuestions, etc.
+  Otherwise a regular JSON response is returned (backward compatible).
 
 Guards: admin token, LLM rate limit, 512KB body cap.
 

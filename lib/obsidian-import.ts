@@ -66,10 +66,6 @@ export function clearManifest(): void {
   localStorage.removeItem(MANIFEST_KEY);
 }
 
-export function getManifestSize(): number {
-  return Object.keys(loadManifest()).length;
-}
-
 // -------- 解析 --------
 
 function stripMdExtension(name: string): string {

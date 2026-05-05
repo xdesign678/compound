@@ -1,9 +1,9 @@
 # Profiling
 
 Compound has three local profiling paths: Node CPU profiles for build-time
-work, Clinic.js flame graphs for the production server, and Node heap profiles
-for memory pressure. Outputs are written under `tmp/profiles/`, which is
-ignored by Git.
+work, Node CPU profiles for the production server, and Node heap profiles for
+memory pressure. Outputs are written under `tmp/profiles/`, which is ignored by
+Git.
 
 ## Build CPU profile
 
@@ -19,7 +19,7 @@ files under `tmp/profiles/build/`. Open those files in Chrome DevTools when
 `next build` slows down or a dependency/config change causes build-time CPU
 spikes.
 
-## Server flame graph
+## Server CPU profile
 
 First build the app, then run:
 
@@ -29,9 +29,9 @@ npm run profile:server
 ```
 
 Open the app or run a small load test against `http://localhost:3000`, reproduce
-the slow path, then stop the process with `Ctrl+C`. Clinic.js will write the
-server flame graph under `tmp/profiles/server/`. This is the preferred runtime
-profile for slow API routes, sync jobs, or expensive page rendering.
+the slow path, then stop the process with `Ctrl+C`. Node will write `.cpuprofile`
+files under `tmp/profiles/server/`; open them in Chrome DevTools to inspect hot
+paths in API routes, sync jobs, or expensive page rendering.
 
 ## Build heap profile
 
@@ -54,5 +54,5 @@ Run:
 npm run validate:profiling
 ```
 
-The validator confirms that the profiling dependency, npm scripts, docs and
-ignored output paths still line up. `npm run check` runs it automatically.
+The validator confirms that the profiling npm scripts, docs and ignored output
+paths still line up. `npm run check` runs it automatically.

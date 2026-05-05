@@ -153,10 +153,6 @@ function kindForFinding(type: RepairFindingInput['type']): RepairJobKind | null 
   }
 }
 
-export function countFixableFindings(findings: RepairFindingInput[]): number {
-  return normalizeFindings(findings).filter((f) => kindForFinding(f.type)).length;
-}
-
 export interface CreateRepairRunResult {
   runId: string;
   total: number;

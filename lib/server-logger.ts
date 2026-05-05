@@ -103,10 +103,3 @@ export const logger = {
     emit('error', message, fields);
   },
 };
-
-/** Convenience helper for the common "logged + raised" error pattern. */
-export function logAndWrapError(message: string, err: unknown, fields?: LogFields): Error {
-  const detail = err instanceof Error ? err.message : String(err);
-  logger.error(message, { ...(fields ?? {}), error: detail });
-  return new Error(`${message}: ${detail}`);
-}

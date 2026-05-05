@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, createContext, useContext, type ReactNode } from 'react';
+import { useState, useCallback, createContext, useContext, type ReactNode } from 'react';
 
 export type ToastTone = 'success' | 'error' | 'info' | 'warn';
 
@@ -62,16 +62,4 @@ export function useToast(): ToastContextValue {
     };
   }
   return ctx;
-}
-
-/**
- * Render once on mount — used by SyncDashboard so the rest of the page can
- * call `useToast()` without rendering its own provider boundary every render.
- * Equivalent to `<ToastProvider>` but doesn't add any wrapper element.
- */
-export function ToastSlot() {
-  // The provider above handles rendering; this component is a no-op marker
-  // we kept just in case future callers want a sentinel.
-  useEffect(() => {}, []);
-  return null;
 }

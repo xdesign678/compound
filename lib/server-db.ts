@@ -80,10 +80,6 @@ export function getServerDb(): DB {
   return getHolder().db;
 }
 
-export function getServerDbPath(): string {
-  return getHolder().path;
-}
-
 // --------------------------------------------------------------------
 // Prepared statement cache
 // --------------------------------------------------------------------

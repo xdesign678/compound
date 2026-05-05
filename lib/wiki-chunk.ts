@@ -171,8 +171,3 @@ export function splitMarkdownIntoChunks(
 
   return chunks;
 }
-
-export function summarizeChunkForPrompt(chunk: SourceChunkDraft, maxChars = 900): string {
-  const suffix = chunk.content.length > maxChars ? '…' : '';
-  return `## Chunk ${chunk.chunkIndex + 1}: ${chunk.heading}\n${chunk.content.slice(0, maxChars)}${suffix}`;
-}

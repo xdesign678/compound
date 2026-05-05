@@ -14,16 +14,6 @@ export function hapticLight() {
   }
 }
 
-export function hapticMedium() {
-  try {
-    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      navigator.vibrate(18);
-    }
-  } catch {
-    /* ignore */
-  }
-}
-
 export function hapticSuccess() {
   try {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {

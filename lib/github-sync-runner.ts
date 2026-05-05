@@ -22,7 +22,6 @@ import {
   cancelAnalysisJobs,
   abortRun,
   recoverStaleAnalysisJobs,
-  getActiveWorkerCount,
 } from './analysis-worker';
 import { logger } from './logging';
 
@@ -563,27 +562,6 @@ export function cancelGithubSync(): {
       ? `已取消运行：${cancelledJobs} 个分析任务、${cancelledItems} 个文件回到 cancelled 状态`
       : '当前没有正在运行的同步任务',
   };
-}
-
-/**
- * Snapshot of a run's pipeline health used by the dashboard. We compute it
- * here rather than in `syncObs` because we also need the active worker count
- * (lives in the analysis worker module).
- */
-export function getRunHealth(runId: string | null | undefined): {
-  heartbeatAgeMs: number | null;
-  stalled: boolean;
-  activeWorkers: number;
-} {
-  if (!runId)
-    return { heartbeatAgeMs: null, stalled: false, activeWorkers: getActiveWorkerCount() };
-  const row = getServerDb()
-    .prepare(`SELECT heartbeat_at FROM sync_runs WHERE id = ? LIMIT 1`)
-    .get(runId) as { heartbeat_at: number | null } | undefined;
-  const heartbeatAgeMs =
-    row?.heartbeat_at != null ? Math.max(0, Date.now() - row.heartbeat_at) : null;
-  const stalled = heartbeatAgeMs != null && heartbeatAgeMs > 60_000;
-  return { heartbeatAgeMs, stalled, activeWorkers: getActiveWorkerCount() };
 }
 
 export interface SyncJobStatus {

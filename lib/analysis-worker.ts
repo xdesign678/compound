@@ -295,22 +295,6 @@ function claimJobs(limit: number): AnalysisJobRow[] {
   return claimed;
 }
 
-/**
- * Bump locked_at on a job mid-flight so the lease recovery cycle won't yank it
- * out from under us. Workers should call this every loop iteration.
- */
-export function heartbeatJobs(jobIds: string[]): void {
-  if (jobIds.length === 0) return;
-  ensureAnalysisWorkerSchema();
-  const ts = now();
-  const placeholders = jobIds.map(() => '?').join(',');
-  getServerDb()
-    .prepare(
-      `UPDATE analysis_jobs SET locked_at = ?, updated_at = ? WHERE id IN (${placeholders}) AND status = 'running'`,
-    )
-    .run(ts, ts, ...jobIds);
-}
-
 function finishJob(
   job: AnalysisJobRow,
   status: Extract<JobStatus, 'succeeded' | 'skipped' | 'cancelled'>,
@@ -847,10 +831,6 @@ export function startAnalysisWorker(reason = 'manual'): StartAnalysisWorkerResul
 }
 
 /** How many worker loops are currently in flight in this process. */
-export function getActiveWorkerCount(): number {
-  return activeWorkerCount;
-}
-
 /**
  * Check both the in-memory abort controller and the persisted run status. The
  * DB check is the source of truth across worker restarts; the controller lets
@@ -866,16 +846,6 @@ export function isRunCancelled(runId: string | null | undefined): boolean {
   return row?.status === 'cancelled' || row?.status === 'failed';
 }
 
-/** Register / fetch / release a per-run AbortController for cooperative cancel. */
-export function getRunAbortSignal(runId: string): AbortSignal {
-  let ctrl = cancelControllers.get(runId);
-  if (!ctrl) {
-    ctrl = new AbortController();
-    cancelControllers.set(runId, ctrl);
-  }
-  return ctrl.signal;
-}
-
 export function abortRun(runId: string, reason = 'cancelled by user'): boolean {
   const ctrl = cancelControllers.get(runId);
   if (!ctrl) return false;
@@ -886,10 +856,6 @@ export function abortRun(runId: string, reason = 'cancelled by user'): boolean {
   }
   cancelControllers.delete(runId);
   return true;
-}
-
-export function clearRunAbort(runId: string): void {
-  cancelControllers.delete(runId);
 }
 
 export function retryAnalysisJobs(

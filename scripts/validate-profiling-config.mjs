@@ -21,13 +21,13 @@ const profilingDocPath = path.join(repoRoot, 'docs', 'profiling.md');
 const profilingDoc = existsSync(profilingDocPath) ? readText(profilingDocPath) : '';
 
 const scripts = packageJson.scripts ?? {};
-const devDependencies = packageJson.devDependencies ?? {};
-const rootLockDeps = packageLock.packages?.['']?.devDependencies ?? {};
 
-expect(Boolean(devDependencies.clinic), 'package.json must include clinic in devDependencies.');
-expect(Boolean(rootLockDeps.clinic), 'package-lock.json must lock the root clinic devDependency.');
 expectScriptIncludes('profile:build', ['--cpu-prof', '--cpu-prof-dir=tmp/profiles/build']);
-expectScriptIncludes('profile:server', ['clinic flame', 'next start', 'tmp/profiles/server']);
+expectScriptIncludes('profile:server', [
+  '--cpu-prof',
+  '--cpu-prof-dir=tmp/profiles/server',
+  'next start',
+]);
 expectScriptIncludes('profile:heap:build', ['--heap-prof', '--heap-prof-dir=tmp/profiles/heap']);
 expectScriptIncludes('validate:profiling', ['scripts/validate-profiling-config.mjs']);
 expect(
@@ -44,8 +44,9 @@ for (const command of [
   expect(profilingDoc.includes(command), `docs/profiling.md must mention \`${command}\`.`);
 }
 expect(
-  /Clinic\.js|clinic/i.test(profilingDoc) && /heap profile|heap-prof/i.test(profilingDoc),
-  'docs/profiling.md must explain both Clinic.js flame graphs and heap profiles.',
+  /Node CPU profiles|--cpu-prof/i.test(profilingDoc) &&
+    /heap profile|heap-prof/i.test(profilingDoc),
+  'docs/profiling.md must explain both Node CPU profiles and heap profiles.',
 );
 
 if (errors.length > 0) {

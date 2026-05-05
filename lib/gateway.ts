@@ -277,13 +277,6 @@ function clearTimeoutsForModel(model: string): void {
   }
 }
 
-/** Exported for diagnostics endpoint / unit tests. */
-export function getModelFailureSnapshot(): Array<{ model: string; consecutiveTimeouts: number }> {
-  return Array.from(consecutiveTimeoutsByModel.entries())
-    .filter(([, count]) => count > 0)
-    .map(([model, consecutiveTimeouts]) => ({ model, consecutiveTimeouts }));
-}
-
 /**
  * Decide whether the gateway should swap models for the next call.
  *

@@ -7,7 +7,9 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 // Comma-separated list in env takes precedence. Fall back to safe defaults for
 // local dev + the canonical zeabur deployment so first-run still works.
-const allowedOrigins = (process.env.COMPOUND_ALLOWED_ORIGINS || 'localhost:8080,zhishiku.zeabur.app')
+const allowedOrigins = (
+  process.env.COMPOUND_ALLOWED_ORIGINS || 'localhost:8080,zhishiku.zeabur.app'
+)
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
@@ -16,9 +18,7 @@ const scriptSrc = isDev
   ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
   : "script-src 'self' 'unsafe-inline'";
 
-const connectSrc = isDev
-  ? "connect-src 'self' ws: wss:"
-  : "connect-src 'self'";
+const connectSrc = isDev ? "connect-src 'self' ws: wss:" : "connect-src 'self'";
 
 const csp = [
   "default-src 'self'",
@@ -89,9 +89,13 @@ const sentryWebpackPluginOptions = {
   },
   widenClientFileUpload: true,
   hideSourceMaps: true,
-  disableLogger: true,
   tunnelRoute: '/monitoring',
-  automaticVercelMonitors: false,
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true,
+    },
+    automaticVercelMonitors: false,
+  },
 };
 
 export default withSentryConfig(nextConfig, sentryWebpackPluginOptions);

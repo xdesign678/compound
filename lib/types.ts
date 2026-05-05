@@ -1,5 +1,3 @@
-import { toNormalizedCategoryKeys } from './category-normalization';
-
 export type SourceType = 'link' | 'text' | 'file' | 'article' | 'book' | 'pdf' | 'gist';
 export type ContentStatus = 'partial' | 'full';
 
@@ -199,9 +197,4 @@ export interface CategorizeResponse {
     id: string;
     categories: CategoryTag[];
   }>;
-}
-
-/** Derive flat categoryKeys from structured categories for Dexie MultiEntry index. */
-export function toCategoryKeys(categories: CategoryTag[]): string[] {
-  return toNormalizedCategoryKeys(categories);
 }
