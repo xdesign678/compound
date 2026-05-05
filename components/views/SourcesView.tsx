@@ -14,6 +14,7 @@ import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { Icon, SourceTypeIcon } from '../Icons';
+import { OnboardingCard } from '../OnboardingCard';
 import type { SourceType } from '@/lib/types';
 
 const PAGE_SIZE = 50;
@@ -181,16 +182,7 @@ export function SourcesView() {
           </p>
         </div>
         {(totalSourceCount ?? 0) === 0 ? (
-          <div className="empty-state empty-state-compact">
-            <div className="es-icon">
-              <Icon.Sources />
-            </div>
-            <h3>还没有资料</h3>
-            <p>添加文章、笔记或书籍节选。资料是不可变层,AI 只读不改。</p>
-            <button className="modal-btn primary empty-state-action" onClick={openModal}>
-              添加第一份资料
-            </button>
-          </div>
+          <OnboardingCard variant="compact" />
         ) : filteredSources.length === 0 ? (
           <div className="empty-state empty-state-compact search-empty-state">
             <div className="es-icon">

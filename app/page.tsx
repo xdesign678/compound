@@ -156,7 +156,7 @@ export default function Page() {
     [mounted],
   );
 
-  // Auto-seed on first run (no onboarding screen)
+  // Auto-seed on first run — mark as sample data so users can clear it
   const seedingRef = useRef(false);
   useEffect(() => {
     if (!mounted || conceptCount === undefined || sourceCount === undefined) return;
@@ -171,6 +171,7 @@ export default function Page() {
       await db.concepts.bulkPut(SEED_CONCEPTS);
       await db.activity.bulkPut(SEED_ACTIVITY);
       localStorage.setItem('compound_seeded', '1');
+      localStorage.setItem('compound_is_sample', '1');
     })();
   }, [mounted, conceptCount, sourceCount]);
 

@@ -15,10 +15,12 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
   const showErrorToast = useAppStore((s) => s.showErrorToast);
   const hideToast = useAppStore((s) => s.hideToast);
   const clearFresh = useAppStore((s) => s.clearFresh);
+  const isSample =
+    typeof window !== 'undefined' && localStorage.getItem('compound_is_sample') === '1';
 
   const [lintResult, setLintResult] = useState<LintResponse | null>(null);
   const [lintLoading, setLintLoading] = useState(false);
-  const [confirming, setConfirming] = useState<'seed' | 'clear' | null>(null);
+  const [confirming, setConfirming] = useState<'seed' | 'clear' | 'sample' | null>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const safeTimeout = useCallback((fn: () => void, ms: number) => {
@@ -65,10 +67,26 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
     await db.activity.clear();
     await db.askHistory.clear();
     clearFresh();
+    localStorage.removeItem('compound_is_sample');
     setLintResult(null);
     setConfirming(null);
     onCloseAction();
     showToast('已清空所有数据', false);
+    safeTimeout(() => hideToast(), 2500);
+  }
+
+  async function clearSample() {
+    const db = getDb();
+    await db.sources.clear();
+    await db.concepts.clear();
+    await db.activity.clear();
+    await db.askHistory.clear();
+    clearFresh();
+    localStorage.removeItem('compound_is_sample');
+    setLintResult(null);
+    setConfirming(null);
+    onCloseAction();
+    showToast('示例数据已清除', false);
     safeTimeout(() => hideToast(), 2500);
   }
 
@@ -184,8 +202,33 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
             取消
           </button>
         </div>
+      ) : confirming === 'sample' ? (
+        <div className="settings-confirm-block settings-confirm-danger">
+          <p className="modal-desc" style={{ color: 'var(--brand-clay)' }}>
+            清除示例数据并从空白知识库重新开始?
+          </p>
+          <button
+            className="modal-btn primary"
+            style={{ background: 'var(--brand-clay)' }}
+            onClick={clearSample}
+          >
+            确认清除
+          </button>
+          <button
+            className="modal-btn"
+            style={{ marginTop: 6 }}
+            onClick={() => setConfirming(null)}
+          >
+            取消
+          </button>
+        </div>
       ) : (
         <div className="settings-data-actions">
+          {isSample && (
+            <button className="modal-btn danger" onClick={() => setConfirming('sample')}>
+              清除示例数据
+            </button>
+          )}
           <button
             className="modal-btn settings-secondary-action"
             onClick={() => setConfirming('seed')}

@@ -32,6 +32,7 @@ import { categorizeConcepts } from '@/lib/api-client';
 import { formatCategorizeCompletionMessage } from '@/lib/categorize-status';
 import { getUnreviewedCount } from '@/lib/review-picks';
 import { Icon } from '../Icons';
+import { OnboardingCard } from '../OnboardingCard';
 import type { Concept, CategoryTag } from '@/lib/types';
 
 interface LibraryViewProps {
@@ -566,15 +567,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
 
       {filtered.length === 0 ? (
         concepts.length === 0 ? (
-          <div className="empty-state empty-state-spacious">
-            <div className="es-icon">
-              <Icon.Sparkle />
-            </div>
-            <h3>Wiki 还是空的</h3>
-            <p>
-              点击右下角 <strong>+</strong> 添加第一份资料，AI 会把它编译成你的第一批概念页。
-            </p>
-          </div>
+          <OnboardingCard />
         ) : (
           <div className="empty-state">没有匹配的概念</div>
         )
