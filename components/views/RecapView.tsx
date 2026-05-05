@@ -5,6 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
+import { ensureConceptsHydrated } from '@/lib/cloud-sync';
 import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
 import { pickReviewConcepts, markReviewed } from '@/lib/review-picks';
 import { Icon } from '../Icons';
@@ -27,10 +28,11 @@ export function RecapView() {
   const [mounted, setMounted] = useState(false);
 
   const cardRef = useRef<HTMLDivElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
   const dragXRef = useRef(0);
   const rafRef = useRef(0);
   const animatingRef = useRef(false);
+  const pickedIdsRef = useRef<string[] | null>(null);
+  const hydrationAttemptsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setMounted(true);
@@ -38,9 +40,61 @@ export function RecapView() {
 
   useEffect(() => {
     if (!allConcepts || !mounted) return;
-    setCards(pickReviewConcepts(allConcepts));
-    setCurrentIndex(0);
+    const conceptsById = new Map(allConcepts.map((concept) => [concept.id, concept]));
+
+    if (!pickedIdsRef.current || (pickedIdsRef.current.length === 0 && allConcepts.length > 0)) {
+      const picked = pickReviewConcepts(allConcepts);
+      pickedIdsRef.current = picked.map((concept) => concept.id);
+      setCards(picked);
+      setCurrentIndex(0);
+      return;
+    }
+
+    setCards((currentCards) =>
+      currentCards.map((concept) => conceptsById.get(concept.id) ?? concept),
+    );
   }, [allConcepts, mounted]);
+
+  useEffect(() => {
+    if (cards.length === 0) return;
+
+    const hydrationAttempts = hydrationAttemptsRef.current;
+    const idsToHydrate = cards
+      .filter(
+        (concept) =>
+          (concept.contentStatus !== 'full' || !(concept.body || '').trim()) &&
+          !hydrationAttempts.has(concept.id),
+      )
+      .map((concept) => concept.id);
+
+    if (idsToHydrate.length === 0) return;
+
+    idsToHydrate.forEach((id) => hydrationAttempts.add(id));
+
+    let cancelled = false;
+    let settled = false;
+    void ensureConceptsHydrated(idsToHydrate)
+      .then((hydratedConcepts) => {
+        if (cancelled || hydratedConcepts.length === 0) return;
+        const hydratedById = new Map(hydratedConcepts.map((concept) => [concept.id, concept]));
+        setCards((currentCards) =>
+          currentCards.map((concept) => hydratedById.get(concept.id) ?? concept),
+        );
+      })
+      .catch((err) => {
+        console.warn('[recap] concept hydration failed:', err);
+      })
+      .finally(() => {
+        settled = true;
+      });
+
+    return () => {
+      cancelled = true;
+      if (!settled) {
+        idsToHydrate.forEach((id) => hydrationAttempts.delete(id));
+      }
+    };
+  }, [cards]);
 
   // ---- direct DOM manipulation for drag (no setState during move) ----
 
@@ -102,13 +156,12 @@ export function RecapView() {
     [cards, currentIndex, animateExit, animateSpring],
   );
 
-  // ---- native touch events on the scrollable inner container ----
+  // ---- native touch events on the card ----
   // Using native listeners so we can call preventDefault() during horizontal
   // swipes (passive:false) while letting vertical scroll pass through.
   useEffect(() => {
-    const scrollEl = scrollRef.current;
     const cardEl = cardRef.current;
-    if (!scrollEl || !cardEl) return;
+    if (!cardEl) return;
 
     let startX = 0;
     let startY = 0;
@@ -179,16 +232,16 @@ export function RecapView() {
       }
     };
 
-    scrollEl.addEventListener('touchstart', onTouchStart, { passive: true });
-    scrollEl.addEventListener('touchmove', onTouchMove, { passive: false });
-    scrollEl.addEventListener('touchend', onTouchEnd, { passive: true });
-    scrollEl.addEventListener('touchcancel', onTouchCancel, { passive: true });
+    cardEl.addEventListener('touchstart', onTouchStart, { passive: true });
+    cardEl.addEventListener('touchmove', onTouchMove, { passive: false });
+    cardEl.addEventListener('touchend', onTouchEnd, { passive: true });
+    cardEl.addEventListener('touchcancel', onTouchCancel, { passive: true });
 
     return () => {
-      scrollEl.removeEventListener('touchstart', onTouchStart);
-      scrollEl.removeEventListener('touchmove', onTouchMove);
-      scrollEl.removeEventListener('touchend', onTouchEnd);
-      scrollEl.removeEventListener('touchcancel', onTouchCancel);
+      cardEl.removeEventListener('touchstart', onTouchStart);
+      cardEl.removeEventListener('touchmove', onTouchMove);
+      cardEl.removeEventListener('touchend', onTouchEnd);
+      cardEl.removeEventListener('touchcancel', onTouchCancel);
     };
   }, [applyCardTransform, animateSpring, advance]);
 
@@ -262,6 +315,7 @@ export function RecapView() {
   const currentCard = cards[currentIndex];
   const nextCard = cards[currentIndex + 1];
   const nextNextCard = cards[currentIndex + 2];
+  const currentCardMarkdown = (currentCard.body || '').trim() || (currentCard.summary || '').trim();
 
   return (
     <div className="recap-root">
@@ -281,7 +335,7 @@ export function RecapView() {
           {nextCard && <div className="recap-card recap-card-ghost-1" aria-hidden="true" />}
 
           <div ref={cardRef} className="recap-card recap-card-top" key={currentCard.id}>
-            <div className="recap-card-scroll" ref={scrollRef}>
+            <div className="recap-card-scroll">
               {/* fixed header zone */}
               {currentCard.categories && currentCard.categories.length > 0 && (
                 <div className="recap-card-tags">
@@ -296,14 +350,16 @@ export function RecapView() {
               <h2 className="recap-card-title">{currentCard.title}</h2>
 
               {/* full body — reuses ConceptDetail prose verbatim, scrollable inside card */}
-              {currentCard.body && (
-                <div className="recap-card-body-shell">
+              <div className="recap-card-body-shell">
+                {currentCardMarkdown ? (
                   <Prose
-                    markdown={formatConceptBodyForDisplay(currentCard.body)}
+                    markdown={formatConceptBodyForDisplay(currentCardMarkdown)}
                     className="concept-body-prose"
                   />
-                </div>
-              )}
+                ) : (
+                  <p className="recap-card-empty">正文同步中...</p>
+                )}
+              </div>
 
               <div className="recap-swipe-hint" aria-hidden="true">
                 <span className="recap-swipe-arrow">←</span>
