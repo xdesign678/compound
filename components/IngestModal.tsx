@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, type TaskItem } from '@/lib/store';
 import { ingestSource } from '@/lib/api-client';
 import { Icon } from './Icons';
 import { NoteEditor } from './NoteEditor';
@@ -17,6 +17,8 @@ export function IngestModal() {
   const hideToast = useAppStore((s) => s.hideToast);
   const markFresh = useAppStore((s) => s.markFresh);
   const isOnline = useAppStore((s) => s.isOnline);
+  const addTask = useAppStore((s) => s.addTask);
+  const updateTask = useAppStore((s) => s.updateTask);
 
   const modalRef = useRef<HTMLDivElement>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -103,8 +105,18 @@ export function IngestModal() {
   async function handleNoteEditorDone(noteTitle: string, noteContent: string) {
     setNoteEditorOpen(false);
     setSubmitting(true);
-    showToast('AI 正在分析并编译到 Wiki...', true);
+    const taskId = `ingest-${Date.now()}`;
+    const task: TaskItem = {
+      id: taskId,
+      kind: 'ingest',
+      label: noteTitle || '笔记',
+      status: 'running',
+      startedAt: Date.now(),
+      retry: () => handleNoteEditorDone(noteTitle, noteContent),
+    };
+    addTask(task);
     close();
+    reset();
     try {
       const result = await ingestSource({
         title: noteTitle,
@@ -112,18 +124,18 @@ export function IngestModal() {
         rawContent: noteContent,
       });
       markFresh(result.newConceptIds);
-      showToast(
-        `完成 · 新建 ${result.newConceptIds.length} 个概念，更新 ${result.updatedConceptIds.length} 个`,
-        false,
-      );
-      safeTimeout(() => hideToast(), 3500);
-      reset();
+      updateTask(taskId, {
+        status: 'success',
+        finishedAt: Date.now(),
+        result: `新建 ${result.newConceptIds.length} 个概念，更新 ${result.updatedConceptIds.length} 个`,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      showErrorToast(`摄入失败: ${msg.slice(0, 160)}`, () =>
-        handleNoteEditorDone(noteTitle, noteContent),
-      );
-      setSubmitting(false);
+      updateTask(taskId, {
+        status: 'error',
+        finishedAt: Date.now(),
+        error: msg.slice(0, 160),
+      });
     }
   }
 
@@ -147,28 +159,51 @@ export function IngestModal() {
     if (!content.trim() || !title.trim()) return;
     setSubmitting(true);
     setError(null);
-    showToast('AI 正在分析并编译到 Wiki...', true);
+    const taskId = `ingest-${Date.now()}`;
+    const capturedTitle = title.trim();
+    const capturedContent = content.trim();
+    const capturedAuthor = author.trim();
+    const capturedUrl = url.trim();
+    const task: TaskItem = {
+      id: taskId,
+      kind: 'ingest',
+      label: capturedTitle,
+      status: 'running',
+      startedAt: Date.now(),
+      retry: async () => {
+        await ingestSource({
+          title: capturedTitle,
+          type,
+          author: capturedAuthor || undefined,
+          url: capturedUrl || undefined,
+          rawContent: capturedContent,
+        });
+      },
+    };
+    addTask(task);
+    reset();
+    close();
     try {
       const result = await ingestSource({
-        title: title.trim(),
+        title: capturedTitle,
         type,
-        author: author.trim() || undefined,
-        url: url.trim() || undefined,
-        rawContent: content.trim(),
+        author: capturedAuthor || undefined,
+        url: capturedUrl || undefined,
+        rawContent: capturedContent,
       });
       markFresh(result.newConceptIds);
-      showToast(
-        `完成 · 新建 ${result.newConceptIds.length} 个概念,更新 ${result.updatedConceptIds.length} 个`,
-        false,
-      );
-      safeTimeout(() => hideToast(), 3500);
-      reset();
-      close();
+      updateTask(taskId, {
+        status: 'success',
+        finishedAt: Date.now(),
+        result: `新建 ${result.newConceptIds.length} 个概念，更新 ${result.updatedConceptIds.length} 个`,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      hideToast();
-      setError(`摄入失败: ${msg.slice(0, 80)}`);
-      setSubmitting(false);
+      updateTask(taskId, {
+        status: 'error',
+        finishedAt: Date.now(),
+        error: msg.slice(0, 160),
+      });
     }
   }
 

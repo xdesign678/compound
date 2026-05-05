@@ -13,6 +13,7 @@ import { TabBar } from '@/components/TabBar';
 import { Toast } from '@/components/Toast';
 import { CommandPalette } from '@/components/CommandPalette';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { TaskCenter } from '@/components/TaskCenter';
 import { useKeyboardShortcuts } from '@/lib/hooks/useKeyboardShortcuts';
 import { useOnlineStatus } from '@/lib/hooks/useOnlineStatus';
 import { SwipeBack } from '@/components/SwipeBack';
@@ -413,6 +414,7 @@ export default function Page() {
         {renderSettings && <SettingsDrawer />}
         {renderObsidianImport && <ObsidianImportModal />}
         {renderGithubSync && <GithubSyncModal />}
+        <TaskCenter />
       </div>
     );
   }
@@ -474,6 +476,7 @@ export default function Page() {
       )}
 
       <TabBar />
+      <TaskCenter />
       {renderModal && <IngestModal />}
       {renderSettings && <SettingsDrawer />}
       {renderObsidianImport && <ObsidianImportModal />}
