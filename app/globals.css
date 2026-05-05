@@ -6744,6 +6744,7 @@ button,
 
 .library-secondary-chip.active .library-secondary-chip-arrow {
   color: rgba(226, 146, 106, 0.55);
+  transform: rotate(90deg);
 }
 
 .library-secondary-chip-arrow.is-open {
@@ -11931,4 +11932,9 @@ button,
 }
 .tc-dismiss-btn:hover {
   color: var(--text-secondary);
+}
+.section-heading-count {
+  font-weight: 400;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
 }

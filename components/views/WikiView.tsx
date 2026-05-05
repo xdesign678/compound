@@ -191,7 +191,9 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
         <>
           {fresh.length > 0 && (
             <>
-              <div className="section-heading">刚更新</div>
+              <div className="section-heading">
+                刚更新 <span className="section-heading-count">({fresh.length})</span>
+              </div>
               <div className="concept-list">{fresh.map(renderCard)}</div>
             </>
           )}
