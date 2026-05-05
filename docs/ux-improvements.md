@@ -100,9 +100,9 @@
 - `if (!ready) { return renderPrimaryView(...) }` 直接给骨架一次。
 - cache name 拼上 `process.env.NEXT_PUBLIC_BUILD_ID` 或文件 hash。
 
-### 6. 错误文案 / Toast 体验 ✅ 部分完成
+### 6. 错误文案 / Toast 体验 ✅ 已完成
 
-> api-client 断网区分（网络已断开 vs 连接失败）；任务中心解决多任务并行覆盖问题。未完成：Toast 队列堆叠 + 相同错误 dedupe/debounce + error code→友好文案映射。
+> Toast 队列堆叠（最多 3 条）+ 相同错误 dedupe（2s）+ friendlyErrorMessage 映射（HTTP status→友好文案+操作建议）；api-client 429/401/403/500 全部给出具体可执行步骤。
 
 | 位置                                             | 问题                                                                                          |
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
@@ -134,7 +134,7 @@
 
 ### 8. 桌面端命令面板 + 快捷键 ✅ 已完成
 
-> Cmd/Ctrl+K 全局搜索概念/资料/命令；/ 聚焦搜索；g w/s/a/h 切 Tab；n 新建笔记；? 帮助；Escape 返回/关闭。
+> Cmd/Ctrl+K 全局搜索概念/资料/命令；/ 聚焦搜索；g w/s/a/h 切 Tab；n 新建笔记；? 帮助；Escape 返回/关闭；桌面双栏列宽可拖动；点选概念时高亮所属分类。
 
 桌面端是知识库的核心入口，但目前完全没有快捷键支持。
 
@@ -160,9 +160,9 @@
 - 进入空库时弹一个引导卡 → "导入示例 / 从 Obsidian 导入 / 从 GitHub 同步 / 直接开始"。
 - 空态补"先连 GitHub / 一键导入示例 / 粘贴一段网页"三选一。
 
-### 10. 移动端 / iOS 细节 ✅ 部分完成
+### 10. 移动端 / iOS 细节 ✅ 已完成
 
-> ViewportObserver: iOS 焦点 scrollIntoView({block:'center'})；PullToRefresh: 排除 modal/textarea 内触发 + await onRefresh()。未完成：安全区 CSS 变量统一管理。
+> ViewportObserver: iOS 焦点 scrollIntoView；PullToRefresh: 排除 modal/textarea + await onRefresh；安全区 CSS 变量统一管理（--safe-bottom）。
 
 | 位置                              | 问题                                                                                                                                                |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -178,9 +178,9 @@
 - PullToRefresh 判断 `if (!isRootScroll) return`。
 - Recap 用「角度阈值 + 锁轴」模式。
 
-### 11. 交互细节 / 动效 ✅ 部分完成
+### 11. 交互细节 / 动效 ✅ 已完成
 
-> 拖动中 pointer-events:none（RecapView）；SwipeBack 阈值 60→80px + 速度触发；PullToRefresh await onRefresh；Header search 条件渲染；IngestModal 支持 Escape 关闭；FAB focus-visible 样式。未完成：Ask mention 缓存、FAB 合并、选区气泡键盘触发。
+> 拖动中 pointer-events:none；SwipeBack 80px+速度触发；PullToRefresh await；Header search 条件渲染；IngestModal Escape；FAB focus-visible；Ask mention LRU 缓存；桌面端去掉冗余 FAB；选区气泡键盘触发（role=toolbar + onKeyDown）。
 
 | 位置                                         | 问题                                                                                                    |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -232,9 +232,9 @@
 
 ## P2 · 打磨
 
-### 14. 可访问性 / 键盘 ✅ 部分完成
+### 14. 可访问性 / 键盘 ✅ 已完成
 
-> FAB focus-visible；SettingsDrawer 移动端 role=tab + aria-selected；Header search 条件渲染。未完成：recap-entry-card 已是 button 无需改；颜色对比；prose lang=en。
+> FAB focus-visible；SettingsDrawer role=tab + aria-selected；Header search 条件渲染；--text-tertiary 颜色对比度修正（#b0aea5→#9a9890）；Prose lang="zh-CN"。
 
 | 位置                                      | 问题                                                                          |
 | ----------------------------------------- | ----------------------------------------------------------------------------- |
@@ -244,26 +244,26 @@
 | `.fab`                                    | 没有 focus-visible 状态                                                       |
 | prose 嵌入英文段                          | 缺 `lang="en"`，朗读体验差                                                    |
 
-### 15. 视觉 / 节奏 ✅ 部分完成
+### 15. 视觉 / 节奏 ✅ 已完成
 
-> WikiView 刚更新分组加数量角标；Library 二级 chip 选中时箭头旋转 90°。未完成：字号行距联动、骨架差异化。
+> WikiView 刚更新分组加数量角标；Library 二级 chip 选中时箭头旋转 90°；字号/行距最低留白联动（大字号+紧凑行距自动保底）；骨架卡按视图差异化（SourcesView .skeleton-sources 变体）。
 
 - 字号档位 5 档 + 行距 5 档共享同一组变量；用户调成"大字号 + 紧凑行距"会粘在一起。可以让两个值之间存在最低留白联动。
 - 列表骨架卡只有"标题/卡片/卡片"三块固定形状，可按视图差异化（Library 网格 / Sources 列表 / Ask 对话）。
 - `WikiView` 顶部"刚更新"分组只有标题不带数量，可以加角标 `(3)`。
 - Library 二级 chip 有 chevron icon 但点击后箭头不变方向，少了一个微反馈。
 
-### 16. 国际化 / 文案 ✅ 部分完成
+### 16. 国际化 / 文案 ✅ 部分完成（国际化待做）
 
-> 品牌 'X WIKI' 统一为 '知识库'。未完成：中文硬编码国际化、错误文案具体化。
+> 品牌 'X WIKI' 统一为 '知识库'；错误文案给出具体可执行步骤（429→切换模型，401→检查设置，502→查看日志）。未完成：整套中文硬编码国际化（大工程，独立排期）。
 
 - 整套 UI 是中文硬编码，未来要英文需要大改。
 - 顶部 brand "X WIKI" 与文档说的 "Compound" 不一致。
 - 错误文案里的「请稍后再试」太多次，缺乏具体可执行步骤（"打开设置 / 切换模型 / 查看 /sync 日志"）。
 
-### 17. 安全 / 隐私 ✅ 部分完成
+### 17. 安全 / 隐私 ✅ 已完成
 
-> ModelTab 新增「清除本地 LLM 凭据」按钮；format.ts 新增 setMarkdownBreaks/getMarkdownBreaks + GeneralTab 严格/宽松切换。
+> ModelTab「清除本地 LLM 凭据」按钮；apiKey 默认存 sessionStorage + 可勾选"记住凭据"（关闭浏览器后自动清除）；setLlmRemember/getLlmConfig/saveLlmConfig 自动选择存储；Markdown 换行严格/宽松切换。
 
 - LLM 配置（含 apiKey）存 `localStorage`，登出/共用电脑时残留。
   - 设置里加"清除本地 LLM 凭据"按钮（DataTab 大概率有，可检查是否显眼）。
