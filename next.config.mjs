@@ -36,6 +36,9 @@ const csp = [
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  env: {
+    NEXT_PUBLIC_BUILD_ID: isDev ? 'dev' : String(Date.now()),
+  },
   outputFileTracingRoot: __dirname,
   // Production source maps are required for Sentry to symbolicate stack
   // traces. The Sentry plugin (withSentryConfig) automatically uploads and

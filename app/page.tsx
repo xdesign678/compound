@@ -245,17 +245,13 @@ export default function Page() {
     }
   }, [detail, usesDetailOverlay, libraryOverlayDetail]);
 
-  const bootShell = (
-    <div className="app-shell">
-      <main className="app-main">
-        <div className="loading-skeleton" aria-label="正在加载..." aria-busy="true">
-          <div className="skeleton skeleton-header" />
-          <div className="skeleton skeleton-card" />
-          <div className="skeleton skeleton-card" />
-          <div className="skeleton skeleton-card" style={{ opacity: 0.7 }} />
-          <div className="skeleton skeleton-card" style={{ opacity: 0.4 }} />
-        </div>
-      </main>
+  const skeletonContent = (
+    <div className="loading-skeleton" aria-label="正在加载..." aria-busy="true">
+      <div className="skeleton skeleton-header" />
+      <div className="skeleton skeleton-card" />
+      <div className="skeleton skeleton-card" />
+      <div className="skeleton skeleton-card" style={{ opacity: 0.7 }} />
+      <div className="skeleton skeleton-card" style={{ opacity: 0.4 }} />
     </div>
   );
 
@@ -270,15 +266,7 @@ export default function Page() {
 
   function renderPrimaryView(scrollRootSelector?: string) {
     if (!ready) {
-      return (
-        <div className="loading-skeleton" aria-label="正在加载..." aria-busy="true">
-          <div className="skeleton skeleton-header" />
-          <div className="skeleton skeleton-card" />
-          <div className="skeleton skeleton-card" />
-          <div className="skeleton skeleton-card" style={{ opacity: 0.7 }} />
-          <div className="skeleton skeleton-card" style={{ opacity: 0.4 }} />
-        </div>
-      );
+      return skeletonContent;
     }
 
     if (tab === 'wiki') {
@@ -321,7 +309,11 @@ export default function Page() {
   }
 
   if (!mounted) {
-    return bootShell;
+    return (
+      <div className="app-shell">
+        <main className="app-main">{skeletonContent}</main>
+      </div>
+    );
   }
 
   if (isDesktop) {

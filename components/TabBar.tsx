@@ -10,6 +10,21 @@ const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
   { id: 'activity', label: '活动', icon: <Icon.Activity /> },
 ];
 
+// Preload view chunk when user hovers/focuses a tab
+const PRELOAD_MAP: Record<TabId, () => Promise<unknown>> = {
+  wiki: () => import('@/components/views/WikiView'),
+  sources: () => import('@/components/views/SourcesView'),
+  ask: () => import('@/components/views/AskView'),
+  activity: () => import('@/components/views/ActivityView'),
+};
+const preloaded = new Set<string>();
+
+function preloadView(id: TabId) {
+  if (preloaded.has(id)) return;
+  preloaded.add(id);
+  PRELOAD_MAP[id]().catch(() => {});
+}
+
 interface TabBarProps {
   variant?: 'bottom' | 'sidebar';
 }
@@ -30,6 +45,8 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
         aria-current={isActive ? 'page' : undefined}
         className={`tab-item${isActive ? ' active' : ''}${isSidebar ? ' sidebar' : ''}`}
         onClick={() => setTab(t.id)}
+        onMouseEnter={() => preloadView(t.id)}
+        onFocus={() => preloadView(t.id)}
       >
         {t.icon}
         <span>{t.label}</span>

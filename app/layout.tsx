@@ -19,14 +19,14 @@ const geistMono = JetBrains_Mono({
 const lora = Lora({
   subsets: ['latin'],
   variable: '--font-lora',
-  display: 'swap',
+  display: 'optional',
 });
 
 const notoSerifSC = Noto_Serif_SC({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
   variable: '--font-noto-serif-sc',
-  display: 'swap',
+  display: 'optional',
 });
 
 export const metadata: Metadata = {
