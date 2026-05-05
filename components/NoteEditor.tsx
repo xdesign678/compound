@@ -5,95 +5,106 @@ import { renderMarkdown } from '@/lib/format';
 import { useAppStore } from '@/lib/store';
 import DOMPurify from 'dompurify';
 
-const DRAFT_KEY = 'compound_note_draft';
+const DRAFT_KEY_PREFIX = 'compound_note_draft_';
+const DEFAULT_DRAFT_ID = 'default';
 const DRAFT_SAVE_DEBOUNCE_MS = 1000;
+
+interface DraftData {
+  title: string;
+  body: string;
+}
 
 interface NoteEditorProps {
   onDone: (title: string, content: string) => void;
   onCancel: () => void;
   disabled?: boolean;
+  draftId?: string;
 }
 
-export function NoteEditor({ onDone, onCancel, disabled = false }: NoteEditorProps) {
-  const [text, setText] = useState('');
+function loadDraft(id: string): DraftData | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY_PREFIX + id);
+    if (!raw) return null;
+    return JSON.parse(raw) as DraftData;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(id: string, data: DraftData) {
+  try {
+    if (data.title.trim() || data.body.trim()) {
+      localStorage.setItem(DRAFT_KEY_PREFIX + id, JSON.stringify(data));
+    } else {
+      localStorage.removeItem(DRAFT_KEY_PREFIX + id);
+    }
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function removeDraft(id: string) {
+  try {
+    localStorage.removeItem(DRAFT_KEY_PREFIX + id);
+  } catch {
+    // ignore
+  }
+}
+
+export function NoteEditor({ onDone, onCancel, disabled = false, draftId }: NoteEditorProps) {
+  const resolvedDraftId = draftId ?? DEFAULT_DRAFT_ID;
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [draftRestored, setDraftRestored] = useState(false);
+  const titleRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Restore draft on mount
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(DRAFT_KEY);
-      if (saved) {
-        setText(saved);
-        setDraftRestored(true);
-      }
-    } catch {
-      // ignore localStorage errors
+    const draft = loadDraft(resolvedDraftId);
+    if (draft) {
+      setTitle(draft.title);
+      setBody(draft.body);
+      setDraftRestored(true);
     }
-    textareaRef.current?.focus();
-  }, []);
+    titleRef.current?.focus();
+  }, [resolvedDraftId]);
 
-  // Debounced auto-save to localStorage
+  // Debounced auto-save
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      try {
-        if (text.trim()) {
-          localStorage.setItem(DRAFT_KEY, text);
-        } else {
-          localStorage.removeItem(DRAFT_KEY);
-        }
-      } catch {
-        // ignore localStorage errors
-      }
+      saveDraft(resolvedDraftId, { title, body });
     }, DRAFT_SAVE_DEBOUNCE_MS);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [text]);
+  }, [title, body, resolvedDraftId]);
 
   function handleDone() {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    // First non-empty line → title (strip leading # if any)
-    const lines = trimmed.split('\n');
-    const firstIdx = lines.findIndex((l) => l.trim());
-    const rawTitle = lines[firstIdx] ?? '';
-    const title = rawTitle.replace(/^#+\s*/, '').trim() || '无标题';
-    const body = lines
-      .slice(firstIdx + 1)
-      .join('\n')
-      .trim();
-    // Clear draft on successful submit
-    try {
-      localStorage.removeItem(DRAFT_KEY);
-    } catch {
-      /* ignore */
-    }
-    onDone(title, body ? trimmed : trimmed);
+    const trimmedTitle = title.trim() || '无标题';
+    const trimmedBody = body.trim();
+    if (!trimmedBody && !trimmedTitle) return;
+    removeDraft(resolvedDraftId);
+    onDone(trimmedTitle, trimmedBody);
   }
 
   function handleCancel() {
-    const hasDraft = (() => {
-      try {
-        return localStorage.getItem(DRAFT_KEY)?.trim();
-      } catch {
-        return '';
-      }
-    })();
-    if (hasDraft) {
+    const draft = loadDraft(resolvedDraftId);
+    if (draft && (draft.title.trim() || draft.body.trim())) {
       useAppStore.getState().showToast('草稿已保存，下次打开会自动恢复');
     }
     onCancel();
   }
 
+  const fullMarkdown = title.trim() ? `# ${title.trim()}\n\n${body}` : body;
   const rendered = useMemo(
-    () => (mode === 'preview' ? DOMPurify.sanitize(renderMarkdown(text || '')) : ''),
-    [text, mode],
+    () => (mode === 'preview' ? DOMPurify.sanitize(renderMarkdown(fullMarkdown || '')) : ''),
+    [fullMarkdown, mode],
   );
-  const hasContent = text.trim().length > 0;
+  const hasContent = title.trim().length > 0 || body.trim().length > 0;
 
   return (
     <div className="note-editor-overlay">
@@ -134,19 +145,27 @@ export function NoteEditor({ onDone, onCancel, disabled = false }: NoteEditorPro
       <div className="note-editor-scroll">
         {mode === 'edit' ? (
           <>
+            <input
+              ref={titleRef}
+              className="note-editor-title"
+              placeholder="标题"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              spellCheck={false}
+            />
             <div className="note-editor-hints">
-              <span># 标题</span>
               <span>- 列表</span>
               <span>&gt; 引用</span>
               <span>**粗体**</span>
               <span>*斜体*</span>
+              <span>`代码`</span>
             </div>
             <textarea
               ref={textareaRef}
               className="note-editor-textarea"
-              placeholder={'# 标题\n\n开始记录...'}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
+              placeholder="开始记录..."
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
               spellCheck={false}
             />
           </>

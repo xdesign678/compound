@@ -4532,6 +4532,25 @@ button {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
+/* Note editor title input */
+.note-editor-title {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-light);
+  padding: 12px 16px 8px;
+  font-family: var(--font-sans);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  outline: none;
+  caret-color: var(--brand-clay);
+}
+.note-editor-title::placeholder {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
 /* Raw markdown textarea */
 .note-editor-textarea {
   width: 100%;
