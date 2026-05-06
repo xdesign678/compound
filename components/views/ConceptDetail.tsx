@@ -35,6 +35,7 @@ const MAX_SELECTION_CHARS = 4_000;
 const POPOVER_ESTIMATED_WIDTH = 148;
 const POPOVER_ESTIMATED_HEIGHT = 36;
 const POPOVER_EDGE_PADDING = 8;
+const POPOVER_VERTICAL_GAP = 8;
 
 export function ConceptDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
@@ -62,6 +63,7 @@ export function ConceptDetail({ id }: { id: string }) {
   const [creatingFromSelection, setCreatingFromSelection] = useState(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const bodyShellRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   // 点击 popover 时浏览器会清除外部选区 -> selectionchange 触发 -> popover 被卸载 ->
   // onClick 无法触发。用一个短暂的抑制窗口，让 click 先落地。
   const suppressDismissRef = useRef(false);
@@ -138,20 +140,27 @@ export function ConceptDetail({ id }: { id: string }) {
         dismissSelectionPopover();
         return;
       }
-      // 用最后一行的 rect 做锚点，让按钮始终贴近用户选段末尾(即鼠标松开处附近)，
-      // 而不是整段 bounding box 的中心。
-      const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
-      const anchorRect = rects[rects.length - 1] ?? range.getBoundingClientRect();
-      if (!anchorRect || (anchorRect.width === 0 && anchorRect.height === 0)) {
+      // 取选段"末尾插入点"的 rect (collapse 到 end)，这样 popover 会精确贴在
+      // 用户最后一个被选中的字符旁边，而不是 last-line rect 的右边界
+      // (后者在长行/justified 文本下会被推到行尾，导致 popover 漂到视口右侧)。
+      const endRange = range.cloneRange();
+      endRange.collapse(false);
+      let endRect: DOMRect | null = endRange.getBoundingClientRect();
+      if (!endRect || (endRect.width === 0 && endRect.height === 0 && endRect.top === 0)) {
+        // 某些浏览器对折叠 range 返回空 rect，回退到最后一个非空行 rect。
+        const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
+        endRect = rects[rects.length - 1] ?? range.getBoundingClientRect();
+      }
+      if (!endRect) {
         dismissSelectionPopover();
         return;
       }
 
       const viewportW = window.innerWidth;
       const viewportH = window.innerHeight;
-      // 默认放到选段末尾的正下方。
-      let top = anchorRect.bottom + 6;
-      let left = anchorRect.right - POPOVER_ESTIMATED_WIDTH / 2;
+      // 默认放到选段末尾的正下方，并以末尾点为水平中心。
+      let top = endRect.bottom + POPOVER_VERTICAL_GAP;
+      let left = endRect.left + endRect.width / 2 - POPOVER_ESTIMATED_WIDTH / 2;
       // 水平越界时夹回视口内。
       left = Math.min(
         Math.max(left, POPOVER_EDGE_PADDING),
@@ -159,7 +168,10 @@ export function ConceptDetail({ id }: { id: string }) {
       );
       // 底部放不下时，改到选段上方。
       if (top + POPOVER_ESTIMATED_HEIGHT > viewportH - POPOVER_EDGE_PADDING) {
-        top = Math.max(POPOVER_EDGE_PADDING, anchorRect.top - POPOVER_ESTIMATED_HEIGHT - 6);
+        top = Math.max(
+          POPOVER_EDGE_PADDING,
+          endRect.top - POPOVER_ESTIMATED_HEIGHT - POPOVER_VERTICAL_GAP,
+        );
       }
 
       setSelectionPopover({
@@ -170,7 +182,13 @@ export function ConceptDetail({ id }: { id: string }) {
       });
     };
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (event: MouseEvent | TouchEvent) => {
+      // 如果鼠标是在 popover 上抬起的（即用户正在点击按钮），不要重新计算位置 /
+      // 重新渲染 popover —— 否则 click 事件可能在 re-render 期间丢失。
+      const target = event.target as Node | null;
+      if (target && popoverRef.current && popoverRef.current.contains(target)) {
+        return;
+      }
       window.setTimeout(updateFromSelection, 10);
     };
     const handleSelectionChange = () => {
@@ -182,7 +200,10 @@ export function ConceptDetail({ id }: { id: string }) {
         dismissSelectionPopover();
       }
     };
-    const handleScroll = () => dismissSelectionPopover();
+    const handleScroll = () => {
+      if (suppressDismissRef.current) return;
+      dismissSelectionPopover();
+    };
 
     document.addEventListener('mouseup', handlePointerUp);
     document.addEventListener('touchend', handlePointerUp);
@@ -404,6 +425,7 @@ export function ConceptDetail({ id }: { id: string }) {
 
       {selectionPopover.visible && (
         <div
+          ref={popoverRef}
           className="selection-popover"
           style={{ top: `${selectionPopover.top}px`, left: `${selectionPopover.left}px` }}
           role="toolbar"
@@ -414,13 +436,13 @@ export function ConceptDetail({ id }: { id: string }) {
             suppressDismissRef.current = true;
             window.setTimeout(() => {
               suppressDismissRef.current = false;
-            }, 200);
+            }, 400);
           }}
           onTouchStart={() => {
             suppressDismissRef.current = true;
             window.setTimeout(() => {
               suppressDismissRef.current = false;
-            }, 200);
+            }, 400);
           }}
         >
           <button
