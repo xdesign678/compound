@@ -7,6 +7,15 @@ const IS_LOCAL_DEV = ['localhost', '127.0.0.1', '0.0.0.0'].includes(location.hos
 // App shell files to precache
 const PRECACHE_URLS = ['/', '/offline', '/manifest.json'];
 
+// Trim cache to prevent unbounded growth
+async function trimCache(cacheName, maxEntries) {
+  const cache = await caches.open(cacheName);
+  const keys = await cache.keys();
+  if (keys.length > maxEntries) {
+    await Promise.all(keys.slice(0, keys.length - maxEntries).map((k) => cache.delete(k)));
+  }
+}
+
 // Install: precache app shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -35,7 +44,7 @@ self.addEventListener('activate', (event) => {
       })
       .then(() => {
         if (IS_LOCAL_DEV) return self.registration.unregister();
-        return self.clients.claim();
+        return trimCache(RUNTIME_CACHE, 150).then(() => self.clients.claim());
       }),
   );
 });
@@ -74,11 +83,21 @@ self.addEventListener('fetch', (event) => {
   // Navigation requests: network-first, fallback to cache, then offline page
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => {
-        return caches.match(request).then((cached) => {
-          return cached || caches.match('/') || caches.match('/offline');
-        });
-      }),
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            return response;
+          }
+          return caches.match(request).then((cached) => cached || caches.match('/offline'));
+        })
+        .catch(() => {
+          return caches
+            .match(request)
+            .then((cached) => cached || caches.match('/'))
+            .then((result) => result || caches.match('/offline'));
+        }),
     );
     return;
   }
@@ -103,14 +122,22 @@ self.addEventListener('fetch', (event) => {
   // Other same-origin: stale-while-revalidate
   event.respondWith(
     caches.match(request).then((cached) => {
-      const fetchPromise = fetch(request).then((response) => {
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, clone));
-        }
-        return response;
-      });
-      return cached || fetchPromise;
+      const fetchPromise = fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() => null);
+
+      // 有缓存返回缓存，同时后台更新
+      if (cached) {
+        fetchPromise; // 确保网络请求触发更新缓存
+        return cached;
+      }
+      return fetchPromise;
     }),
   );
 });
