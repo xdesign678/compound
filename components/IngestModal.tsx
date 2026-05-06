@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore, type TaskItem } from '@/lib/store';
 import { ingestSource } from '@/lib/api-client';
+import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 import { Icon } from './Icons';
 import { NoteEditor } from './NoteEditor';
 import type { SourceType } from '@/lib/types';
@@ -57,38 +58,16 @@ export function IngestModal() {
     };
   }, []);
 
+  useFocusTrap(modalRef, isOpen);
+
   useEffect(() => {
     const el = modalRef.current;
     if (!el || !isOpen) return;
-    const focusable = el.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    );
-    const first = focusable[0];
-    first?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         handleClose();
-        return;
-      }
-      if (e.key === 'Tab') {
-        const current = el.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-        );
-        const f = current[0];
-        const l = current[current.length - 1];
-        if (e.shiftKey) {
-          if (document.activeElement === f) {
-            e.preventDefault();
-            l?.focus();
-          }
-        } else {
-          if (document.activeElement === l) {
-            e.preventDefault();
-            f?.focus();
-          }
-        }
       }
     };
     el.addEventListener('keydown', handleKeyDown);

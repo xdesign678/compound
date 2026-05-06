@@ -1,40 +1,22 @@
 'use client';
 
-import {
-  useEffect,
-  useState,
-  useDeferredValue,
-  useMemo,
-  useCallback,
-  useRef,
-  useLayoutEffect,
-} from 'react';
+import { useEffect, useDeferredValue, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { Icon, SourceTypeIcon } from '../Icons';
 import { OnboardingCard } from '../OnboardingCard';
-import type { SourceType } from '@/lib/types';
+import { useScrollSpy } from '@/lib/hooks/useScrollSpy';
+import { SOURCE_TYPE_LABELS } from '@/lib/constants';
 
 const PAGE_SIZE = 50;
 const SCROLL_ROOT_SELECTOR = '.app-main';
-
-const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
-  link: '链接',
-  text: '文本',
-  file: '文件',
-  article: '文章',
-  book: '书籍',
-  pdf: 'PDF',
-  gist: '代码片段',
-};
 
 export function SourcesView() {
   const openSource = useAppStore((s) => s.openSource);
   const openModal = useAppStore((s) => s.openModal);
   const detail = useAppStore((s) => s.detail);
-  const setSearchCollapsed = useAppStore((s) => s.setSearchCollapsed);
   const searchFocusNonce = useAppStore((s) => s.searchFocusNonce);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -53,10 +35,18 @@ export function SourcesView() {
   );
 
   const deferredQuery = useDeferredValue(query);
-  const [scrolled, setScrolled] = useState(false);
   // Keep the user's current page size on first mount; only reset after they change the filter.
   const filterResetSkipRef = useRef(true);
   const scrollRestoredRef = useRef(false);
+
+  const handleScrollPersist = useCallback((scrollTop: number) => {
+    useAppStore.getState().setSourcesState({ scrollTop });
+  }, []);
+
+  const { scrolled } = useScrollSpy({
+    scrollRootSelector: SCROLL_ROOT_SELECTOR,
+    onScroll: handleScrollPersist,
+  });
 
   const sources = useLiveQuery(
     async () => getDb().sources.orderBy('ingestedAt').reverse().toArray(),
@@ -103,37 +93,6 @@ export function SourcesView() {
     }
     setVisibleCount(PAGE_SIZE);
   }, [deferredQuery, setVisibleCount]);
-
-  useEffect(() => {
-    const main = document.querySelector(SCROLL_ROOT_SELECTOR) as HTMLElement | null;
-    if (!main) return;
-    let raf = 0;
-    let pendingY: number | null = null;
-    const flush = () => {
-      raf = 0;
-      if (pendingY !== null) {
-        useAppStore.getState().setSourcesState({ scrollTop: pendingY });
-        pendingY = null;
-      }
-    };
-    const onScroll = () => {
-      const y = main.scrollTop;
-      setScrolled(y > 4);
-      setSearchCollapsed(y > 40);
-      pendingY = y;
-      if (!raf) raf = requestAnimationFrame(flush);
-    };
-    onScroll();
-    main.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      main.removeEventListener('scroll', onScroll);
-      setSearchCollapsed(false);
-      if (raf) cancelAnimationFrame(raf);
-      if (pendingY !== null) {
-        useAppStore.getState().setSourcesState({ scrollTop: pendingY });
-      }
-    };
-  }, [setSearchCollapsed]);
 
   // Restore the list scroll only once after Dexie has finished hydrating the source list.
   useLayoutEffect(() => {

@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useMemo, useEffect, useDeferredValue, useRef } from 'react';
+import { useState, useMemo, useEffect, useDeferredValue, useRef, memo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { getUnreviewedCountFromDb } from '@/lib/review-picks';
+import { useScrollSpy } from '@/lib/hooks/useScrollSpy';
 import { Icon } from '../Icons';
+import type { Concept } from '@/lib/types';
 
 interface WikiViewProps {
   scrollRootSelector?: string;
@@ -15,20 +17,52 @@ interface WikiViewProps {
 
 const PAGE_SIZE = 60;
 
+const WikiCard = memo(function WikiCard({
+  concept,
+  isFresh,
+  isActive,
+  onOpen,
+}: {
+  concept: Concept;
+  isFresh: boolean;
+  isActive: boolean;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <button
+      className={`concept-card${isFresh ? ' fresh' : ''}${isActive ? ' active' : ''}`}
+      onClick={() => onOpen(concept.id)}
+    >
+      <div className="title">{concept.title}</div>
+      <div className="summary">{concept.summary}</div>
+      <div className="meta">
+        <span className="badge-link">
+          <Icon.Link />
+          {concept.related.length} 链接
+        </span>
+        <span>·</span>
+        <span>来自 {concept.sources.length} 份资料</span>
+        <span>·</span>
+        <span className={isFresh ? 'updated' : ''}>{formatRelativeTime(concept.updatedAt)}</span>
+      </div>
+    </button>
+  );
+});
+
 export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   const router = useRouter();
   const openConcept = useAppStore((s) => s.openConcept);
   const freshIds = useAppStore((s) => s.freshConceptIds);
   const detail = useAppStore((s) => s.detail);
-  const setSearchCollapsed = useAppStore((s) => s.setSearchCollapsed);
   const searchFocusNonce = useAppStore((s) => s.searchFocusNonce);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [scrolled, setScrolled] = useState(false);
   const [unreviewedCount, setUnreviewedCount] = useState(0);
+
+  const { scrolled } = useScrollSpy({ scrollRootSelector });
 
   const concepts = useLiveQuery(async () => {
     const q = deferredQuery.trim().toLowerCase();
@@ -69,22 +103,6 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   }, [deferredQuery]);
 
   useEffect(() => {
-    const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
-    if (!main) return;
-    const onScroll = () => {
-      const y = main.scrollTop;
-      setScrolled(y > 4);
-      setSearchCollapsed(y > 40);
-    };
-    onScroll();
-    main.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      main.removeEventListener('scroll', onScroll);
-      setSearchCollapsed(false);
-    };
-  }, [scrollRootSelector, setSearchCollapsed]);
-
-  useEffect(() => {
     if (searchFocusNonce === 0) return;
     const id = window.setTimeout(() => searchInputRef.current?.focus(), 240);
     return () => window.clearTimeout(id);
@@ -103,27 +121,6 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   if (!concepts) {
     return <div className="empty-state">加载中...</div>;
   }
-
-  const renderCard = (c: (typeof concepts)[number]) => (
-    <button
-      key={c.id}
-      className={`concept-card${freshIds[c.id] ? ' fresh' : ''}${detail?.type === 'concept' && detail.id === c.id ? ' active' : ''}`}
-      onClick={() => openConcept(c.id)}
-    >
-      <div className="title">{c.title}</div>
-      <div className="summary">{c.summary}</div>
-      <div className="meta">
-        <span className="badge-link">
-          <Icon.Link />
-          {c.related.length} 链接
-        </span>
-        <span>·</span>
-        <span>来自 {c.sources.length} 份资料</span>
-        <span>·</span>
-        <span className={freshIds[c.id] ? 'updated' : ''}>{formatRelativeTime(c.updatedAt)}</span>
-      </div>
-    </button>
-  );
 
   const hasAnyConcepts = (totalConceptCount ?? 0) > 0;
   const hasMatches = (totalMatches ?? concepts.length) > 0;
@@ -194,13 +191,33 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
               <div className="section-heading">
                 刚更新 <span className="section-heading-count">({fresh.length})</span>
               </div>
-              <div className="concept-list">{fresh.map(renderCard)}</div>
+              <div className="concept-list">
+                {fresh.map((c) => (
+                  <WikiCard
+                    key={c.id}
+                    concept={c}
+                    isFresh={!!freshIds[c.id]}
+                    isActive={detail?.type === 'concept' && detail.id === c.id}
+                    onOpen={openConcept}
+                  />
+                ))}
+              </div>
             </>
           )}
           {others.length > 0 && (
             <>
               <div className="section-heading">全部概念</div>
-              <div className="concept-list">{others.map(renderCard)}</div>
+              <div className="concept-list">
+                {others.map((c) => (
+                  <WikiCard
+                    key={c.id}
+                    concept={c}
+                    isFresh={!!freshIds[c.id]}
+                    isActive={detail?.type === 'concept' && detail.id === c.id}
+                    onOpen={openConcept}
+                  />
+                ))}
+              </div>
             </>
           )}
           <div className="list-end-hint">

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useAppStore } from '@/lib/store';
+import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 import { GeneralTab } from './settings/GeneralTab';
 import { ModelTab } from './settings/ModelTab';
 import { DataTab } from './settings/DataTab';
@@ -80,33 +81,15 @@ export function SettingsDrawer() {
     hydrateColorMode();
   }, [hydrateColorMode]);
 
+  useFocusTrap(modalRef, isOpen);
+
   useEffect(() => {
     const el = modalRef.current;
     if (!el || !isOpen) return;
-    el.focus({ preventScroll: true });
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         close();
-        return;
-      }
-      if (e.key === 'Tab') {
-        const focusable = el.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-        );
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (e.shiftKey) {
-          if (document.activeElement === first) {
-            e.preventDefault();
-            last?.focus();
-          }
-        } else {
-          if (document.activeElement === last) {
-            e.preventDefault();
-            first?.focus();
-          }
-        }
       }
     };
     el.addEventListener('keydown', handleKeyDown);

@@ -32,6 +32,7 @@ import { formatRelativeTime } from '@/lib/format';
 import { categorizeConcepts } from '@/lib/api-client';
 import { formatCategorizeCompletionMessage } from '@/lib/categorize-status';
 import { getUnreviewedCountFromDb } from '@/lib/review-picks';
+import { useScrollSpy } from '@/lib/hooks/useScrollSpy';
 import { Icon } from '../Icons';
 import { OnboardingCard } from '../OnboardingCard';
 import type { Concept } from '@/lib/types';
@@ -140,7 +141,6 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   const showToast = useAppStore((s) => s.showToast);
   const showErrorToast = useAppStore((s) => s.showErrorToast);
   const hideToast = useAppStore((s) => s.hideToast);
-  const setSearchCollapsed = useAppStore((s) => s.setSearchCollapsed);
   const searchFocusNonce = useAppStore((s) => s.searchFocusNonce);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -183,7 +183,6 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   );
 
   const deferredQuery = useDeferredValue(query);
-  const [scrolled, setScrolled] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
   const [unreviewedCount, setUnreviewedCount] = useState(0);
   const [primaryRailState, setPrimaryRailState] = useState({
@@ -194,25 +193,12 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   const filterResetSkipRef = useRef(true);
   const scrollRestoredRef = useRef(false);
 
-  useEffect(() => {
-    const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
-    if (!main) return;
-    let raf = 0;
-    let pendingY: number | null = null;
-    const flush = () => {
-      raf = 0;
-      if (pendingY !== null) {
-        useAppStore.getState().setLibraryState({ scrollTop: pendingY });
-        pendingY = null;
-      }
-    };
-    const onScroll = () => {
-      const y = main.scrollTop;
-      setScrolled(y > 4);
-      setSearchCollapsed(y > 40);
-      pendingY = y;
-      if (!raf) raf = requestAnimationFrame(flush);
+  const handleLibraryScroll = useCallback(
+    (scrollTop: number) => {
+      useAppStore.getState().setLibraryState({ scrollTop });
       // Find the first visible concept card for anchor-based restore
+      const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
+      if (!main) return;
       const cards = main.querySelectorAll('[data-concept-id]');
       for (const card of cards) {
         const rect = card.getBoundingClientRect();
@@ -223,18 +209,14 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
           break;
         }
       }
-    };
-    onScroll();
-    main.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      main.removeEventListener('scroll', onScroll);
-      setSearchCollapsed(false);
-      if (raf) cancelAnimationFrame(raf);
-      if (pendingY !== null) {
-        useAppStore.getState().setLibraryState({ scrollTop: pendingY });
-      }
-    };
-  }, [scrollRootSelector, setSearchCollapsed]);
+    },
+    [scrollRootSelector],
+  );
+
+  const { scrolled } = useScrollSpy({
+    scrollRootSelector,
+    onScroll: handleLibraryScroll,
+  });
 
   useLayoutEffect(() => {
     if (scrollRestoredRef.current) return;
