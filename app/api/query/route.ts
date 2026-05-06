@@ -32,6 +32,14 @@ const MAX_HISTORY_MESSAGES = 6;
 const RECALL_TOP_K = Math.max(10, Number(process.env.COMPOUND_RECALL_TOP_K || 30));
 const FINAL_TOP_K = Math.max(3, Number(process.env.COMPOUND_FINAL_TOP_K || 8));
 
+function publicQueryErrorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  return raw
+    .replace(/sk-[A-Za-z0-9_-]{12,}/g, 'sk-...[redacted]')
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{12,}/gi, 'Bearer [redacted]')
+    .slice(0, 300);
+}
+
 function conceptFromRequest(c: QueryRequest['concepts'][number]): Concept {
   const now = Date.now();
   return {
@@ -398,8 +406,10 @@ export const POST = withRequestTracing(async (req: Request) => {
             controller.close();
           } catch (err) {
             clearInterval(keepaliveInterval);
-            const msg = err instanceof Error ? err.message : String(err);
-            sendSSE('error', { error: msg.slice(0, 300) });
+            sendSSE('error', {
+              error: publicQueryErrorMessage(err),
+              requestId: getRequestContext()?.requestId,
+            });
             controller.close();
           }
         },
@@ -471,10 +481,11 @@ export const POST = withRequestTracing(async (req: Request) => {
 
     return NextResponse.json(parsed);
   } catch (err) {
-    logger.error('query.failed', { error: err instanceof Error ? err.message : String(err) });
+    const error = publicQueryErrorMessage(err);
+    logger.error('query.failed', { error });
     return NextResponse.json(
       {
-        error: 'Query processing failed. Please check your API configuration.',
+        error,
         requestId: getRequestContext()?.requestId,
       },
       { status: 500 },

@@ -394,8 +394,14 @@ export async function askWikiStream(
     if (res.status === 429) throw new Error('请求过于频繁，请稍后重试（可切换模型或减少并发）');
     if (res.status === 401 || res.status === 403)
       throw new Error('认证失败，请在设置中检查 API Key 和 Admin Token');
-    if (res.status >= 500)
-      throw new Error('服务暂时不可用（502/503），请稍后重试或查看 /sync 日志');
+    if (res.status >= 500) {
+      const json = (await res.json().catch(() => null)) as {
+        error?: string;
+        requestId?: string;
+      } | null;
+      const detail = json?.error || '服务暂时不可用（502/503），请稍后重试或查看 /sync 日志';
+      throw new Error(json?.requestId ? `${detail} (requestId: ${json.requestId})` : detail);
+    }
     const text = await res.text().catch(() => '');
     throw new Error(text.slice(0, 200) || `请求失败 (${res.status})`);
   }

@@ -9,6 +9,14 @@ import { getEmbeddingMode } from '@/lib/embedding';
 
 export const runtime = 'nodejs';
 
+function cleanEnv(value: string | undefined): string {
+  return value?.replace(/^["'\s]+|["'\s]+$/g, '') || '';
+}
+
+function envSource(names: string[]): string | null {
+  return names.find((name) => Boolean(cleanEnv(process.env[name]))) ?? null;
+}
+
 /**
  * Liveness / configuration probe. Returns `{ status: 'ok' }` publicly.
  * Detailed configuration info (auth, llm, embedding, githubSync, data) is
@@ -48,7 +56,10 @@ export const GET = withRequestTracing(async (req: Request) => {
       enforced: shouldEnforceAdminAuth(),
     },
     llm: {
-      configured: Boolean(process.env.LLM_API_KEY || process.env.AI_GATEWAY_API_KEY),
+      configured: Boolean(envSource(['LLM_API_KEY', 'AI_GATEWAY_API_KEY'])),
+      keySource: envSource(['LLM_API_KEY', 'AI_GATEWAY_API_KEY']),
+      urlSource: envSource(['LLM_API_URL', 'AI_GATEWAY_URL']) ?? 'default',
+      model: cleanEnv(process.env.LLM_MODEL) || 'anthropic/claude-sonnet-4.6',
     },
     embedding: {
       mode: embeddingMode,

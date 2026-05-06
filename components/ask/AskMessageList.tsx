@@ -78,6 +78,7 @@ export function AskMessageList({
               const previous = history[index - 1];
               const userQuestion = previous?.role === 'user' ? previous.text : null;
               const failedAnswer = isAskFailureMessage(message.text);
+              const failureDetail = failedAnswer ? getAskFailureDetail(message.text) : '';
               return (
                 <div key={message.id} className="msg msg-ai-row">
                   <div className={`msg-ai-card${failedAnswer ? ' ask-failure-card' : ''}`}>
@@ -89,6 +90,7 @@ export function AskMessageList({
                           通常是模型 API
                           或服务端配置暂时不可用。你可以检查设置里的模型配置，或者稍后重新提问。
                         </p>
+                        {failureDetail && <pre className="ask-failure-detail">{failureDetail}</pre>}
                       </div>
                     ) : (
                       <Prose
@@ -204,4 +206,11 @@ function CitedList({ ids, onClick }: { ids: string[]; onClick: (id: string) => v
 function isAskFailureMessage(text: string) {
   const normalized = text.trim();
   return normalized.includes('问答失败') || normalized.includes('/api/query failed');
+}
+
+function getAskFailureDetail(text: string) {
+  return text
+    .replace(/^\*\*问答失败\*\*:\s*/u, '')
+    .replace(/\n\n请检查 API 配置[\s\S]*$/u, '')
+    .trim();
 }
