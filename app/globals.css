@@ -11501,6 +11501,88 @@ button,
   height: 12px;
 }
 
+/* ---- Web / tablet — give the card more breathing room ---- */
+@media (min-width: 768px) {
+  .recap-root {
+    --recap-card-height: min(820px, calc(100dvh - 112px - var(--safe-bottom)));
+  }
+  .recap-stack-area {
+    padding: 24px 28px calc(24px + var(--safe-bottom));
+  }
+  .recap-stack {
+    max-width: 720px;
+  }
+  .recap-card-ghost-1,
+  .recap-card-ghost-2,
+  .recap-card-top {
+    border-radius: 18px;
+  }
+  .recap-card-ghost-1 {
+    transform: translateX(14px) translateY(12px) rotate(1.2deg);
+  }
+  .recap-card-ghost-2 {
+    transform: translateX(-6px) translateY(22px) rotate(-0.6deg);
+  }
+  .recap-card-scroll {
+    padding: 36px 44px 24px;
+  }
+  .recap-card-tags {
+    gap: 8px;
+    margin-bottom: 18px;
+  }
+  .recap-card-tag {
+    font-size: var(--text-xs);
+    padding: 4px 12px;
+  }
+  .recap-card-title {
+    font-size: 22px;
+    margin: 0 0 10px;
+  }
+  .recap-card-body-shell {
+    padding-top: 20px;
+    margin-top: 8px;
+    margin-bottom: 14px;
+  }
+  .recap-card-body-shell .concept-body-prose {
+    --prose-line-height: 1.95;
+  }
+  .recap-card-body-shell .concept-body-prose p,
+  .recap-card-body-shell .concept-body-prose li {
+    font-size: 16px;
+  }
+  .recap-card-body-shell .concept-body-prose p {
+    margin: 0 0 26px;
+  }
+  .recap-card-body-shell .concept-body-prose li {
+    margin-bottom: 14px;
+  }
+  .recap-card-footer {
+    padding-top: 14px;
+  }
+  .recap-card-read-more {
+    font-size: var(--text-base);
+  }
+}
+
+@media (min-width: 1024px) {
+  .recap-stack {
+    max-width: 780px;
+  }
+  .recap-card-scroll {
+    padding: 44px 56px 28px;
+  }
+  .recap-card-title {
+    font-size: 24px;
+  }
+  .recap-card-body-shell .concept-body-prose p,
+  .recap-card-body-shell .concept-body-prose li {
+    font-size: 17px;
+  }
+  .recap-card-body-shell .concept-body-prose p {
+    margin: 0 0 28px;
+  }
+}
+
 /* Empty / complete / loading screens */
 .recap-state-screen {
   flex: 1;
