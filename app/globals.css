@@ -9819,8 +9819,8 @@ button,
     gap: 4px;
     padding: 5px;
     border-radius: 12px;
-    background: color-mix(in srgb, var(--brand-clay) 11%, var(--bg-muted));
-    border: 1px solid color-mix(in srgb, var(--brand-clay) 24%, var(--border-default));
+    background: var(--bg-muted);
+    border: 1px solid var(--border-default);
     box-shadow:
       inset 0 0 0 1px rgba(255, 255, 255, 0.32),
       0 1px 2px rgba(20, 20, 18, 0.05);
@@ -9833,12 +9833,12 @@ button,
     color: var(--text-primary);
   }
   .settings-modal .settings-mobile-tabs .settings-segmented button.active {
-    background: color-mix(in srgb, var(--brand-clay) 18%, var(--bg-card));
-    color: var(--brand-clay);
+    background: #111111;
+    color: #ffffff;
     font-weight: 750;
     box-shadow:
-      0 2px 8px rgba(91, 67, 55, 0.12),
-      0 0 0 1px color-mix(in srgb, var(--brand-clay) 28%, transparent);
+      0 2px 8px rgba(0, 0, 0, 0.18),
+      0 0 0 1px rgba(0, 0, 0, 0.22);
   }
   .settings-modal .settings-main {
     flex: 1;
