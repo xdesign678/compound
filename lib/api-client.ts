@@ -340,7 +340,6 @@ export async function askWikiStream(
   onDelta: (text: string) => void,
   options?: { signal?: AbortSignal },
 ): Promise<QueryResponse> {
-  const db = getDb();
   const conceptsToSend = await findClientConceptCandidates(question, QUERY_CANDIDATE_LIMIT);
 
   const hydrated = await ensureConceptsHydrated(conceptsToSend.map((concept) => concept.id));

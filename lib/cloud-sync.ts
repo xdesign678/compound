@@ -227,7 +227,7 @@ export async function ensureConceptsHydrated(ids: string[]): Promise<Concept[]> 
   if (uniqueIds.length === 0) return [];
 
   const existing = await db.concepts.bulkGet(uniqueIds);
-  const missingIds = uniqueIds.filter((id, index) => {
+  const missingIds = uniqueIds.filter((_id, index) => {
     const concept = existing[index];
     return !concept || concept.contentStatus !== 'full' || !concept.body.trim();
   });

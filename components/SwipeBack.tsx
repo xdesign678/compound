@@ -7,7 +7,6 @@ import { hapticLight, hapticSuccess } from '@/lib/haptic';
 const DEFAULT_EDGE_WIDTH = 36; // px from left edge to start
 const IOS_EDGE_WIDTH = 20; // Reduced to avoid iOS native back gesture conflict
 const MIN_DISTANCE = 80; // px to trigger back (raised from 60 to avoid iOS conflict)
-const MIN_VELOCITY = 0.3; // px/ms - fast swipe can trigger even below MIN_DISTANCE
 const MAX_Y_DRIFT = 100; // px vertical drift tolerance
 
 /** Detect iOS Safari (non-standalone PWA) where system back gesture conflicts */
@@ -93,7 +92,7 @@ export function SwipeBack() {
       } else if (start) {
         // Velocity-based trigger: fast swipe even below threshold
         const dt = Date.now() - start.t;
-        const endTouch = document.documentElement;
+        // velocity-based trigger using elapsed time
         // If we have a recent start and fast movement, trigger
         if (dt > 0 && dt < 400 && progressRef.current >= 0.5) {
           hapticSuccess();

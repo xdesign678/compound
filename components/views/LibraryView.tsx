@@ -31,10 +31,10 @@ import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { categorizeConcepts } from '@/lib/api-client';
 import { formatCategorizeCompletionMessage } from '@/lib/categorize-status';
-import { getUnreviewedCount, getUnreviewedCountFromDb } from '@/lib/review-picks';
+import { getUnreviewedCountFromDb } from '@/lib/review-picks';
 import { Icon } from '../Icons';
 import { OnboardingCard } from '../OnboardingCard';
-import type { Concept, CategoryTag } from '@/lib/types';
+import type { Concept } from '@/lib/types';
 
 interface LibraryViewProps {
   scrollRootSelector?: string;
