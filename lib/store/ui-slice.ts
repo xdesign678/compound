@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import type { AppState } from '../store';
+import type { AppState } from './types';
 
 export type TabId = 'wiki' | 'sources' | 'ask' | 'activity';
 export type ActivitySubTab = 'health' | 'log';

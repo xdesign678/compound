@@ -17,7 +17,7 @@ import {
   saveSelectedModelOnServer,
 } from '@/lib/llm-config';
 import type { InlineMention, MentionItem, MentionKind, ModelOption } from '@/components/ask/types';
-import type { AskMessage, Concept, LlmConfig, Source, SourceType } from '@/lib/types';
+import type { AskMessage, Concept, LlmConfig, Source } from '@/lib/types';
 import { SOURCE_TYPE_LABELS } from '@/lib/constants';
 
 /** LRU cache for @-mention lookups */

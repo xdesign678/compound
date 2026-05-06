@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import type { AppState } from '../store';
+import type { AppState } from './types';
 
 export type TaskStatus = 'running' | 'success' | 'error';
 export type TaskKind = 'ingest' | 'lint' | 'repair' | 'categorize' | 'query';

@@ -1142,6 +1142,34 @@ button {
     transform: translateY(0);
   }
 }
+/* "正在为选段建页…" 的迷你浮窗：贴在选段旁边，不占用全局 toast 通道。*/
+.selection-popover-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--bg-button);
+  color: var(--text-on-button);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: var(--shadow-md);
+  white-space: nowrap;
+}
+.selection-popover-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(250, 249, 245, 0.2);
+  border-top-color: var(--brand-clay);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+.selection-popover-loading-text {
+  line-height: 1;
+}
 
 /* ConceptDetail hydrate error */
 .concept-hydrate-error {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppStore, type TaskItem } from '@/lib/store';
 import { ingestSource } from '@/lib/api-client';
 import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
@@ -13,9 +13,6 @@ type Step = 'choose' | 'link' | 'processing';
 export function IngestModal() {
   const isOpen = useAppStore((s) => s.modalOpen);
   const close = useAppStore((s) => s.closeModal);
-  const showToast = useAppStore((s) => s.showToast);
-  const showErrorToast = useAppStore((s) => s.showErrorToast);
-  const hideToast = useAppStore((s) => s.hideToast);
   const markFresh = useAppStore((s) => s.markFresh);
   const isOnline = useAppStore((s) => s.isOnline);
   const addTask = useAppStore((s) => s.addTask);
@@ -44,12 +41,6 @@ export function IngestModal() {
       setVisible(false);
     }
   }, [isOpen]);
-
-  const safeTimeout = useCallback((fn: () => void, ms: number) => {
-    const id = setTimeout(fn, ms);
-    timersRef.current.push(id);
-    return id;
-  }, []);
 
   useEffect(() => {
     const timers = timersRef.current;

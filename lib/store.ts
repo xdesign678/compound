@@ -24,12 +24,13 @@ export type {
 export type { TaskStatus, TaskKind, TaskItem } from './store/task-slice';
 export type { LintFinding } from './store/lint-slice';
 
-import { createUISlice, type UISlice } from './store/ui-slice';
-import { createTaskSlice, type TaskSlice } from './store/task-slice';
-import { createLintSlice, type LintSlice } from './store/lint-slice';
-import { createPreferencesSlice, type PreferencesSlice } from './store/preferences-slice';
+import { createUISlice } from './store/ui-slice';
+import { createTaskSlice } from './store/task-slice';
+import { createLintSlice } from './store/lint-slice';
+import { createPreferencesSlice } from './store/preferences-slice';
 
-export type AppState = UISlice & TaskSlice & LintSlice & PreferencesSlice;
+export type { AppState } from './store/types';
+import type { AppState } from './store/types';
 
 export const useAppStore = create<AppState>((...a) => ({
   ...createUISlice(...a),

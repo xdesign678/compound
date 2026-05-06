@@ -94,10 +94,6 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
       .count();
   }, [deferredQuery]);
 
-  const sourceCount = useLiveQuery(async () => {
-    return getDb().sources.count();
-  }, []);
-
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [deferredQuery]);

@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import type { AppState } from '../store';
+import type { AppState } from './types';
 import type { HomeStyle, ColorMode, FontSize, LineHeight } from './ui-slice';
 import { FONT_SIZE_MAP, LINE_HEIGHT_MAP } from './ui-slice';
 

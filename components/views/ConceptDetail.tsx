@@ -195,6 +195,9 @@ export function ConceptDetail({ id }: { id: string }) {
       // 用户正点击 popover 时,浏览器可能瞬时把选区折叠;稍后会自动恢复。
       // 加一个抑制窗口,避免 popover 在 click 前被卸载导致"点击没反应"。
       if (suppressDismissRef.current) return;
+      // 正在为选段建页时，popover 已经切到 loading 浮窗形态，
+      // 不要因为选区变化把它吃掉。
+      if (creatingFromSelection) return;
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed) {
         dismissSelectionPopover();
@@ -202,6 +205,7 @@ export function ConceptDetail({ id }: { id: string }) {
     };
     const handleScroll = () => {
       if (suppressDismissRef.current) return;
+      if (creatingFromSelection) return;
       dismissSelectionPopover();
     };
 
@@ -225,8 +229,8 @@ export function ConceptDetail({ id }: { id: string }) {
     const text = selectionPopover.text.trim();
     if (!text) return;
     setCreatingFromSelection(true);
-    setSelectionPopover((state) => ({ ...state, visible: false }));
-    showToast('正在为选段建页…', true);
+    // 不再调用全局 toast：让 popover 原地变成迷你"正在建页"浮窗，
+    // 既保留了选段附近的位置感，也避免了全局横幅的喧闹。
     try {
       const resp = await createWikiFromSelection({
         selection: text,
@@ -234,6 +238,7 @@ export function ConceptDetail({ id }: { id: string }) {
         contextTitle: concept?.title,
       });
       if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
+      setSelectionPopover((state) => ({ ...state, visible: false }));
       if (resp.status === 'duplicate') {
         showToast('已有等价概念，已为你打开');
       } else {
@@ -242,6 +247,7 @@ export function ConceptDetail({ id }: { id: string }) {
       }
       openConcept(resp.conceptId);
     } catch (err) {
+      setSelectionPopover((state) => ({ ...state, visible: false }));
       const message = err instanceof Error ? err.message : '创建失败';
       showErrorToast(message.slice(0, 120), () => handleCreateFromSelection());
     } finally {
@@ -423,7 +429,7 @@ export function ConceptDetail({ id }: { id: string }) {
         )}
       </div>
 
-      {selectionPopover.visible && (
+      {(selectionPopover.visible || creatingFromSelection) && (
         <div
           ref={popoverRef}
           className="selection-popover"
@@ -445,30 +451,37 @@ export function ConceptDetail({ id }: { id: string }) {
             }, 400);
           }}
         >
-          <button
-            type="button"
-            className="selection-popover-btn"
-            disabled={creatingFromSelection}
-            onMouseDown={(event) => {
-              event.preventDefault();
-            }}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void handleCreateFromSelection();
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
+          {creatingFromSelection ? (
+            <div className="selection-popover-loading" role="status" aria-live="polite">
+              <span className="selection-popover-spinner" aria-hidden="true" />
+              <span className="selection-popover-loading-text">正在为选段建页…</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="selection-popover-btn"
+              disabled={creatingFromSelection}
+              onMouseDown={(event) => {
                 event.preventDefault();
+              }}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
                 void handleCreateFromSelection();
-              }
-            }}
-          >
-            <span className="selection-popover-icon" aria-hidden="true">
-              +
-            </span>
-            为这段创建 Wiki
-          </button>
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  void handleCreateFromSelection();
+                }
+              }}
+            >
+              <span className="selection-popover-icon" aria-hidden="true">
+                +
+              </span>
+              为这段创建 Wiki
+            </button>
+          )}
         </div>
       )}
 

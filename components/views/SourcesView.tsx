@@ -15,7 +15,6 @@ const SCROLL_ROOT_SELECTOR = '.app-main';
 
 export function SourcesView() {
   const openSource = useAppStore((s) => s.openSource);
-  const openModal = useAppStore((s) => s.openModal);
   const detail = useAppStore((s) => s.detail);
   const searchFocusNonce = useAppStore((s) => s.searchFocusNonce);
   const searchInputRef = useRef<HTMLInputElement | null>(null);

@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import type { AppState } from '../store';
+import type { AppState } from './types';
 
 export interface LintFinding {
   type: 'contradiction' | 'orphan' | 'missing-link' | 'duplicate';
