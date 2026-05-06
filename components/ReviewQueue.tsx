@@ -200,6 +200,7 @@ export default function ReviewQueue() {
   const [status, setStatus] = useState<'open' | 'all'>('open');
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState('');
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const load = useCallback(
     async (nextStatus = status) => {
@@ -216,8 +217,10 @@ export default function ReviewQueue() {
         setItems(json.items || []);
         setMetrics(json.metrics || {});
         setError('');
+        setInitialLoading(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
+        setInitialLoading(false);
       }
     },
     [status],
@@ -282,82 +285,152 @@ export default function ReviewQueue() {
 
       {error ? <div className="ops-alert">{error}</div> : null}
 
-      <section className="review-list">
-        {items.map((item) => {
-          const friendly = describeReviewItem(item);
-          const payload = prettyPayload(item.payload_json);
-          const busy = busyId === item.id;
-          const st = statusLabel(item.status);
-          return (
-            <article className={`review-card severity-${friendly.severity}`} key={item.id}>
+      {initialLoading ? (
+        <section className="review-list">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <article
+              key={i}
+              className="review-card"
+              style={{ opacity: 0.5, animation: 'pulse 1.5s ease-in-out infinite' }}
+            >
               <div className="review-card-head">
-                <span className="review-kind-tag">{friendly.kindLabel}</span>
-                <span className={`ops-badge tone-${st.tone}`}>{st.text}</span>
-                {typeof item.confidence === 'number' ? (
-                  <span className="review-conf">置信度 {item.confidence.toFixed(2)}</span>
-                ) : null}
+                <span
+                  className="review-kind-tag"
+                  style={{
+                    display: 'inline-block',
+                    width: 80,
+                    height: 20,
+                    background: 'var(--bg-skeleton, #e8e6e1)',
+                    borderRadius: 4,
+                  }}
+                />
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 50,
+                    height: 20,
+                    background: 'var(--bg-skeleton, #e8e6e1)',
+                    borderRadius: 4,
+                  }}
+                />
               </div>
-
-              <h2 className="review-headline">{friendly.headline}</h2>
-              <p className="review-why">{friendly.why}</p>
-
-              <dl className="review-facts">
-                {friendly.facts.map((f) => (
-                  <div className="review-fact" key={f.label}>
-                    <dt>{f.label}</dt>
-                    <dd title={f.value}>{f.value}</dd>
-                  </div>
-                ))}
-              </dl>
-
-              {item.status === 'open' ? (
-                <>
-                  <div className="review-decision">
-                    <span className="review-decision-label">需要你的决定</span>
-                    <span>{friendly.decision}</span>
-                  </div>
-                  <div className="review-actions">
-                    <button
-                      className="ops-btn good"
-                      disabled={busy}
-                      onClick={() => void resolve(item.id, 'approved')}
-                    >
-                      批准
-                    </button>
-                    <button
-                      className="ops-btn danger"
-                      disabled={busy}
-                      onClick={() => void resolve(item.id, 'rejected')}
-                    >
-                      拒绝
-                    </button>
-                    <button
-                      className="ops-btn subtle"
-                      disabled={busy}
-                      onClick={() => void resolve(item.id, 'resolved')}
-                    >
-                      稍后再说
-                    </button>
-                  </div>
-                </>
-              ) : null}
-
-              {payload ? (
-                <details className="review-raw">
-                  <summary>查看原始数据</summary>
-                  <pre>{payload}</pre>
-                </details>
-              ) : null}
+              <div style={{ marginTop: 12 }}>
+                <div
+                  style={{
+                    width: '70%',
+                    height: 18,
+                    background: 'var(--bg-skeleton, #e8e6e1)',
+                    borderRadius: 4,
+                    marginBottom: 8,
+                  }}
+                />
+                <div
+                  style={{
+                    width: '90%',
+                    height: 14,
+                    background: 'var(--bg-skeleton, #e8e6e1)',
+                    borderRadius: 4,
+                    marginBottom: 6,
+                  }}
+                />
+                <div
+                  style={{
+                    width: '60%',
+                    height: 14,
+                    background: 'var(--bg-skeleton, #e8e6e1)',
+                    borderRadius: 4,
+                  }}
+                />
+              </div>
             </article>
-          );
-        })}
+          ))}
+          <style
+            dangerouslySetInnerHTML={{
+              __html: `@keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 0.3; } }`,
+            }}
+          />
+        </section>
+      ) : (
+        <section className="review-list">
+          {items.map((item) => {
+            const friendly = describeReviewItem(item);
+            const payload = prettyPayload(item.payload_json);
+            const busy = busyId === item.id;
+            const st = statusLabel(item.status);
+            return (
+              <article className={`review-card severity-${friendly.severity}`} key={item.id}>
+                <div className="review-card-head">
+                  <span className="review-kind-tag">{friendly.kindLabel}</span>
+                  <span className={`ops-badge tone-${st.tone}`}>{st.text}</span>
+                  {typeof item.confidence === 'number' ? (
+                    <span className="review-conf">置信度 {item.confidence.toFixed(2)}</span>
+                  ) : null}
+                </div>
 
-        {items.length === 0 ? (
-          <div className="ops-panel ops-empty-panel">
-            <p>当前没有待审核的条目。系统认为最近的自动化变更都在阈值范围内。</p>
-          </div>
-        ) : null}
-      </section>
+                <h2 className="review-headline">{friendly.headline}</h2>
+                <p className="review-why">{friendly.why}</p>
+
+                <dl className="review-facts">
+                  {friendly.facts.map((f) => (
+                    <div className="review-fact" key={f.label}>
+                      <dt>{f.label}</dt>
+                      <dd title={f.value}>{f.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                {item.status === 'open' ? (
+                  <>
+                    <div className="review-decision">
+                      <span className="review-decision-label">需要你的决定</span>
+                      <span>{friendly.decision}</span>
+                    </div>
+                    <div className="review-actions">
+                      <button
+                        className={`ops-btn good${busy ? ' is-busy' : ''}`}
+                        disabled={busy}
+                        onClick={() => void resolve(item.id, 'approved')}
+                      >
+                        {busy && <span className="ops-btn-spinner" aria-hidden="true" />}
+                        批准
+                      </button>
+                      <button
+                        className={`ops-btn danger${busy ? ' is-busy' : ''}`}
+                        disabled={busy}
+                        onClick={() => void resolve(item.id, 'rejected')}
+                      >
+                        {busy && <span className="ops-btn-spinner" aria-hidden="true" />}
+                        拒绝
+                      </button>
+                      <button
+                        className={`ops-btn subtle${busy ? ' is-busy' : ''}`}
+                        disabled={busy}
+                        onClick={() => void resolve(item.id, 'resolved')}
+                      >
+                        {busy && <span className="ops-btn-spinner" aria-hidden="true" />}
+                        稍后再说
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+
+                {payload ? (
+                  <details className="review-raw">
+                    <summary>查看原始数据</summary>
+                    <pre>{payload}</pre>
+                  </details>
+                ) : null}
+              </article>
+            );
+          })}
+
+          {items.length === 0 ? (
+            <div className="ops-panel ops-empty-panel">
+              <p>当前没有待审核的条目。系统认为最近的自动化变更都在阈值范围内。</p>
+            </div>
+          ) : null}
+        </section>
+      )}
     </main>
   );
 }

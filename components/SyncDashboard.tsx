@@ -206,6 +206,36 @@ function DashboardInner() {
       </div>
 
       {loadError ? <div className="sync-v2-alert">{loadError}</div> : null}
+
+      {!dashboard && !loadError ? (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            padding: '64px 24px',
+            gap: 16,
+          }}
+        >
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              border: '3px solid var(--border-muted, #e0ddd8)',
+              borderTopColor: 'var(--text-primary, #141413)',
+              borderRadius: '50%',
+              animation: 'sync-spin 0.8s linear infinite',
+            }}
+          />
+          <p style={{ fontSize: 15, color: 'var(--text-secondary, #5e5d59)' }}>加载同步状态…</p>
+          <style
+            dangerouslySetInnerHTML={{
+              __html: `@keyframes sync-spin { to { transform: rotate(360deg); } }`,
+            }}
+          />
+        </div>
+      ) : null}
+
       {stalled ? (
         <div className="sync-v2-alert sync-v2-alert-warn">
           运行已停滞 {fmtDuration(stalledFor)}。点「立即同步」唤醒 worker，或检查上游 LLM 服务。
