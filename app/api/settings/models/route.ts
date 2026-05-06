@@ -47,8 +47,12 @@ export async function POST(req: Request) {
 
   const model =
     typeof (body as { model?: unknown }).model === 'string'
-      ? (body as { model: string }).model
+      ? (body as { model: string }).model.trim()
       : '';
+
+  if (!model) {
+    return NextResponse.json({ error: 'model must be a non-empty string' }, { status: 400 });
+  }
 
   saveCustomModel(model);
   return modelSettingsResponse();

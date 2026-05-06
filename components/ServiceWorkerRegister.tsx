@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useAppStore } from '@/lib/store';
 
 export function ServiceWorkerRegister() {
   useEffect(() => {
@@ -31,10 +32,10 @@ export function ServiceWorkerRegister() {
           const newWorker = reg.installing;
           newWorker?.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              // 新版本就绪，显示更新提示
-              if (window.confirm('有新版本可用，是否刷新？')) {
-                window.location.reload();
-              }
+              // 新版本就绪，使用 Toast 提示用户更新
+              useAppStore
+                .getState()
+                .showErrorToast('有新版本可用', () => window.location.reload(), '立即更新');
             }
           });
         });

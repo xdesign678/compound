@@ -21,6 +21,21 @@ export async function POST(req: Request) {
   const denied = requireAdmin(req);
   if (denied) return denied;
   const body = await req.json().catch(() => ({}));
+
+  // Validate required fields
+  if (!body.targetType || typeof body.targetType !== 'string') {
+    return NextResponse.json(
+      { error: 'targetType is required and must be a string' },
+      { status: 400 },
+    );
+  }
+  if (!body.targetId || typeof body.targetId !== 'string') {
+    return NextResponse.json(
+      { error: 'targetId is required and must be a string' },
+      { status: 400 },
+    );
+  }
+
   const id = createReviewItem({
     kind: body.kind || 'manual',
     title: body.title || 'Manual review item',

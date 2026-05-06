@@ -309,6 +309,15 @@ export const POST = withRequestTracing(async (req: Request) => {
             );
           }
 
+          // Send keepalive comments every 30s to prevent reverse proxy timeouts
+          const keepaliveInterval = setInterval(() => {
+            try {
+              controller.enqueue(encoder.encode(`:keepalive\n\n`));
+            } catch {
+              // Controller may already be closed
+            }
+          }, 30_000);
+
           try {
             const raw = await chat({
               messages: [
@@ -385,8 +394,10 @@ export const POST = withRequestTracing(async (req: Request) => {
               }
             }
 
+            clearInterval(keepaliveInterval);
             controller.close();
           } catch (err) {
+            clearInterval(keepaliveInterval);
             const msg = err instanceof Error ? err.message : String(err);
             sendSSE('error', { error: msg.slice(0, 300) });
             controller.close();

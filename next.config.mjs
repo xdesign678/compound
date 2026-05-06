@@ -43,7 +43,7 @@ const nextConfig = {
   // Production source maps are required for Sentry to symbolicate stack
   // traces. The Sentry plugin (withSentryConfig) automatically uploads and
   // then deletes them from the public bundle when an auth token is present.
-  productionBrowserSourceMaps: true,
+  productionBrowserSourceMaps: !!process.env.SENTRY_AUTH_TOKEN,
   // Native / Rust-binding modules — keep external so webpack doesn't try to
   // bundle their `.node` artifacts.
   serverExternalPackages: ['better-sqlite3', '@node-rs/jieba'],

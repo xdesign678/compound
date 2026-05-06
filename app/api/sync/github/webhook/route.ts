@@ -1,14 +1,10 @@
 import crypto from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { startGithubSync } from '@/lib/github-sync-runner';
+import { safeEqual } from '@/lib/server-auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
-
-function safeEqual(a: string, b: string): boolean {
-  if (!a || !b || a.length !== b.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-}
 
 async function verify(req: Request, rawBody: string): Promise<boolean> {
   const secret = process.env.GITHUB_WEBHOOK_SECRET?.trim();

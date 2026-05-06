@@ -19,6 +19,9 @@ export async function POST(req: Request) {
     if (!query) {
       return NextResponse.json({ error: 'query is required' }, { status: 400 });
     }
+    if (query.length > 2000) {
+      return NextResponse.json({ error: 'query too long (max 2000 characters)' }, { status: 400 });
+    }
 
     const context = wikiRepo.searchWikiContext(query, {
       conceptLimit: body.conceptLimit ?? 24,

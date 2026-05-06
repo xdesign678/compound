@@ -939,9 +939,9 @@ export const repo = {
     ).run(row);
   },
 
-  updateSyncJob(id: string, patch: Partial<SyncJobRow>): void {
+  updateSyncJob(id: string, patch: Partial<SyncJobRow>): boolean {
     const prev = repo.getSyncJob(id);
-    if (!prev) return;
+    if (!prev) return false;
     // Any update implicitly bumps heartbeat_at for running jobs unless caller
     // supplied an explicit value. Terminal status updates (done/failed) skip
     // the auto-bump to keep the final row immutable for audits.
@@ -950,13 +950,16 @@ export const repo = {
         ? Date.now()
         : (patch.heartbeat_at ?? prev.heartbeat_at ?? prev.started_at);
     const next: SyncJobRow = { ...prev, ...patch, heartbeat_at: autoHeartbeat };
-    cachedPrepare(
+    // Optimistic lock: only update if heartbeat_at hasn't changed since we read
+    const prevHeartbeat = prev.heartbeat_at ?? prev.started_at;
+    const result = cachedPrepare(
       `UPDATE sync_jobs SET
             status = @status, total = @total, done = @done, failed = @failed,
             current = @current, log = @log, error = @error, finished_at = @finished_at,
             heartbeat_at = @heartbeat_at
-          WHERE id = @id`,
-    ).run(next);
+          WHERE id = @id AND (heartbeat_at = @prev_heartbeat OR (heartbeat_at IS NULL AND @prev_heartbeat = started_at))`,
+    ).run({ ...next, prev_heartbeat: prevHeartbeat });
+    return result.changes > 0;
   },
 };
 

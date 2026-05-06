@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { hapticLight, hapticSuccess } from '@/lib/haptic';
+import { useAppStore } from '@/lib/store';
 
 const TRIGGER_DISTANCE = 72; // px pull to trigger refresh
 const MAX_PULL = 120; // visual clamp
@@ -146,7 +147,11 @@ export function PullToRefresh({
             setTimeout(() => rej(new Error('refresh timeout')), REFRESH_TIMEOUT),
           ),
         ])
-          .catch(() => {})
+          .catch(() => {
+            useAppStore
+              .getState()
+              .showErrorToast('刷新超时，请检查网络后重试', () => onRefresh?.(), '重试');
+          })
           .finally(() => {
             refreshingRef.current = false;
             updateIndicatorDOM(0, false, false);
