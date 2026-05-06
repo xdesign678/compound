@@ -11518,6 +11518,16 @@ button,
   height: 12px;
 }
 
+/* "深入阅读" side drawer on web — reuses .library-detail-overlay base, just retunes the size */
+.recap-peek-modal {
+  width: min(64vw, 960px);
+  max-width: calc(100vw - 24px);
+}
+.recap-peek-modal .library-detail-modal-scroll > .concept-detail {
+  padding-left: clamp(24px, 3vw, 40px);
+  padding-right: clamp(24px, 3vw, 40px);
+}
+
 /* ---- Web / tablet — give the card more breathing room ---- */
 @media (min-width: 768px) {
   .recap-root {

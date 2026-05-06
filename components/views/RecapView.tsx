@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
 import { getDb } from '@/lib/db';
@@ -8,24 +9,37 @@ import { useAppStore } from '@/lib/store';
 import { ensureConceptsHydrated } from '@/lib/cloud-sync';
 import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
 import { pickReviewConcepts, markReviewed } from '@/lib/review-picks';
+import { DESKTOP_LAYOUT_MIN_WIDTH } from '@/lib/responsive';
 import { Icon } from '../Icons';
 import { Prose } from '../Prose';
 import type { Concept } from '@/lib/types';
 
+const ConceptDetail = dynamic(
+  () => import('./ConceptDetail').then((m) => ({ default: m.ConceptDetail })),
+  { ssr: false },
+);
+
 const SWIPE_THRESHOLD = 64;
 const EXIT_DURATION_MS = 320;
 const SPRING_DURATION_MS = 360;
+const PEEK_TRANSITION_MS = 320;
 
 export function RecapView() {
   const router = useRouter();
   const openConcept = useAppStore((s) => s.openConcept);
   const setTab = useAppStore((s) => s.setTab);
+  const detail = useAppStore((s) => s.detail);
+  const back = useAppStore((s) => s.back);
 
   const allConcepts = useLiveQuery(async () => getDb().concepts.toArray(), []);
 
   const [cards, setCards] = useState<Concept[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [mounted, setMounted] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [peekConceptId, setPeekConceptId] = useState<string | null>(null);
+  const [peekVisible, setPeekVisible] = useState(false);
+  const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cardRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -38,6 +52,34 @@ export function RecapView() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Detect web/desktop viewport so we can swap "深入阅读" navigation for an inline drawer.
+  useEffect(() => {
+    const mq = window.matchMedia(`(min-width: ${DESKTOP_LAYOUT_MIN_WIDTH}px)`);
+    const sync = () => setIsDesktop(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
+    };
+  }, []);
+
+  // Related-concept chips inside ConceptDetail call the global `openConcept`
+  // store action, which sets `detail`. On /recap nothing renders `detail`, so
+  // we intercept it here: when the peek drawer is showing a concept and the
+  // store's detail changes to a different concept, swap the peek to that one
+  // and clear the global detail again (without leaving stale history state).
+  useEffect(() => {
+    if (!peekConceptId) return;
+    if (!detail || detail.type !== 'concept') return;
+    if (detail.id === peekConceptId) return;
+    setPeekConceptId(detail.id);
+    back();
+  }, [detail, peekConceptId, back]);
 
   useEffect(() => {
     if (!allConcepts || !mounted) return;
@@ -344,13 +386,33 @@ export function RecapView() {
     };
   }, [applyCardTransform, animateSpring, advance]);
 
+  const closePeek = useCallback(() => {
+    setPeekVisible(false);
+    if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
+    peekTimerRef.current = setTimeout(() => {
+      setPeekConceptId(null);
+      peekTimerRef.current = null;
+    }, PEEK_TRANSITION_MS);
+  }, []);
+
   const handleReadMore = useCallback(
     (id: string) => {
+      // On web, slide the concept detail in as a side drawer instead of
+      // navigating away — keeps the swipe deck in place behind the overlay.
+      if (isDesktop) {
+        if (peekTimerRef.current) {
+          clearTimeout(peekTimerRef.current);
+          peekTimerRef.current = null;
+        }
+        setPeekConceptId(id);
+        requestAnimationFrame(() => setPeekVisible(true));
+        return;
+      }
       setTab('wiki');
       openConcept(id);
       router.push('/');
     },
-    [openConcept, router, setTab],
+    [isDesktop, openConcept, router, setTab],
   );
 
   // ---- keyboard navigation for desktop (global listener) ----
@@ -360,6 +422,14 @@ export function RecapView() {
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
         return;
+      if (e.key === 'Escape' && peekConceptId) {
+        e.preventDefault();
+        closePeek();
+        return;
+      }
+      // While the peek drawer is open, leave arrow keys alone so users can
+      // scroll inside the detail without flipping cards behind it.
+      if (peekConceptId) return;
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
         advance('left');
@@ -370,7 +440,7 @@ export function RecapView() {
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [advance]);
+  }, [advance, peekConceptId, closePeek]);
 
   // ---- render helpers ----
 
@@ -496,6 +566,29 @@ export function RecapView() {
           </div>
         </div>
       </div>
+
+      {peekConceptId && (
+        <div
+          className={`library-detail-overlay recap-peek-overlay${peekVisible ? ' is-open' : ''}`}
+          aria-hidden={!peekVisible}
+          onClick={closePeek}
+        >
+          <div
+            className="library-detail-modal recap-peek-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="概念详情"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button className="library-detail-modal-close" onClick={closePeek} aria-label="关闭">
+              ✕
+            </button>
+            <div className="library-detail-modal-scroll">
+              <ConceptDetail id={peekConceptId} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
