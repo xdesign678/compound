@@ -879,6 +879,24 @@ button {
   opacity: 0.6;
 }
 
+/* Load-more footer — keeps the count + button stacked right below the cards
+   instead of letting `.list-end-hint`'s min-height push the button to the
+   bottom of the viewport. */
+.list-load-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 20px 40px;
+}
+.list-load-more-hint {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+  opacity: 0.6;
+}
+
 /* Concept detail */
 .concept-detail {
   padding: 24px 20px 108px;

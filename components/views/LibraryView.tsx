@@ -658,18 +658,25 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
               />
             ))}
           </div>
-          <div className="list-end-hint">
-            <span>
-              已显示 {visibleConcepts.length} / {filtered.length} 个概念
-            </span>
-          </div>
-          {visibleConcepts.length < filtered.length && (
-            <button
-              className="modal-btn"
-              onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
-            >
-              加载更多
-            </button>
+          {visibleConcepts.length < filtered.length ? (
+            <div className="list-load-more">
+              <span className="list-load-more-hint">
+                已显示 {visibleConcepts.length} / {filtered.length} 个概念
+              </span>
+              <button
+                type="button"
+                className="modal-btn"
+                onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+              >
+                加载更多
+              </button>
+            </div>
+          ) : (
+            <div className="list-end-hint">
+              <span>
+                已显示 {visibleConcepts.length} / {filtered.length} 个概念
+              </span>
+            </div>
           )}
         </>
       )}
