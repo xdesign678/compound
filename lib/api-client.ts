@@ -109,7 +109,73 @@ async function addBidirectionalLinks(
   });
 }
 
-async function postJSON<T>(path: string, body: unknown): Promise<T> {
+/** Build an AbortSignal with 30s timeout, optionally combined with an external signal. */
+function buildTimeoutSignal(externalSignal?: AbortSignal): AbortSignal {
+  const TIMEOUT_MS = 30_000;
+  try {
+    const timeoutSignal = AbortSignal.timeout(TIMEOUT_MS);
+    if (!externalSignal) return timeoutSignal;
+    // Combine external signal with timeout
+    if (typeof AbortSignal.any === 'function') {
+      return AbortSignal.any([externalSignal, timeoutSignal]);
+    }
+    // Fallback: manual combination
+    const ctrl = new AbortController();
+    const abort = () => ctrl.abort();
+    if (externalSignal.aborted) {
+      ctrl.abort();
+    } else {
+      externalSignal.addEventListener('abort', abort, { once: true });
+    }
+    const timer = setTimeout(abort, TIMEOUT_MS);
+    // Cleanup on abort
+    ctrl.signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        externalSignal.removeEventListener('abort', abort);
+      },
+      { once: true },
+    );
+    return ctrl.signal;
+  } catch {
+    // AbortSignal.timeout not supported — full fallback
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        ctrl.abort();
+      } else {
+        const abort = () => ctrl.abort();
+        externalSignal.addEventListener('abort', abort, { once: true });
+        ctrl.signal.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer);
+            externalSignal.removeEventListener('abort', abort);
+          },
+          { once: true },
+        );
+      }
+    }
+    ctrl.signal.addEventListener('abort', () => clearTimeout(timer), { once: true });
+    return ctrl.signal;
+  }
+}
+
+async function postJSON<T>(
+  path: string,
+  body: unknown,
+  options?: { signal?: AbortSignal; retries?: number },
+): Promise<T> {
+  // Offline check
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('网络已断开，请检查网络连接后重试');
+  }
+
+  const signal = buildTimeoutSignal(options?.signal);
+  const maxRetries = Math.min(options?.retries ?? 0, 3);
+
   const llmConfig = getLlmConfig();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -123,33 +189,52 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   // Also embed in body as fallback (some proxies strip custom headers)
   const hasConfig = !!(llmConfig.apiKey || llmConfig.model || llmConfig.apiUrl);
   const payload = hasConfig ? { ...(body as object), llmConfig } : body;
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      throw new Error('网络已断开，请检查连接后重试');
+
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delay = Math.min(1000 * 2 ** (attempt - 1), 8000);
+      await new Promise((r) => setTimeout(r, delay));
     }
-    throw new Error('网络连接失败');
+
+    let res: Response;
+    try {
+      res = await fetch(path, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal,
+      });
+    } catch {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        throw new Error('网络已断开，请检查网络连接后重试');
+      }
+      lastError = new Error('网络连接失败');
+      // Network error — retry if allowed
+      if (attempt < maxRetries) continue;
+      throw lastError;
+    }
+
+    if (!res.ok) {
+      if (res.status === 429) {
+        throw new Error('请求过于频繁，请稍后重试（可切换模型或减少并发）');
+      }
+      if (res.status === 401 || res.status === 403) {
+        throw new Error('认证失败，请在设置中检查 API Key 和 Admin Token');
+      }
+      // 5xx — retry if allowed
+      if (res.status >= 500) {
+        lastError = new Error('服务暂时不可用（502/503），请稍后重试或查看 /sync 日志');
+        if (attempt < maxRetries) continue;
+        throw lastError;
+      }
+      // 4xx — never retry
+      const text = await res.text().catch(() => '');
+      throw new Error(text.slice(0, 200) || `请求失败 (${res.status})`);
+    }
+    return (await res.json()) as T;
   }
-  if (!res.ok) {
-    if (res.status === 429) {
-      throw new Error('请求过于频繁，请稍后重试（可切换模型或减少并发）');
-    }
-    if (res.status === 401 || res.status === 403) {
-      throw new Error('认证失败，请在设置中检查 API Key 和 Admin Token');
-    }
-    if (res.status >= 500) {
-      throw new Error('服务暂时不可用（502/503），请稍后重试或查看 /sync 日志');
-    }
-    const text = await res.text().catch(() => '');
-    throw new Error(text.slice(0, 200) || `请求失败 (${res.status})`);
-  }
-  return (await res.json()) as T;
+  throw lastError ?? new Error('请求失败');
 }
 
 function buildLintActivity(
@@ -253,6 +338,7 @@ export async function askWikiStream(
   question: string,
   history: Array<{ role: 'user' | 'ai'; text: string }>,
   onDelta: (text: string) => void,
+  options?: { signal?: AbortSignal },
 ): Promise<QueryResponse> {
   const db = getDb();
   const conceptsToSend = await findClientConceptCandidates(question, QUERY_CANDIDATE_LIMIT);
@@ -288,16 +374,19 @@ export async function askWikiStream(
   const hasConfig = !!(llmConfig.apiKey || llmConfig.model || llmConfig.apiUrl);
   const payload = hasConfig ? { ...req, llmConfig } : req;
 
+  const streamSignal = buildTimeoutSignal(options?.signal);
+
   let res: Response;
   try {
     res = await fetch('/api/query', {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
+      signal: streamSignal,
     });
   } catch {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      throw new Error('网络已断开，请检查连接后重试');
+      throw new Error('网络已断开，请检查网络连接后重试');
     }
     throw new Error('网络连接失败');
   }
@@ -330,6 +419,7 @@ export async function askWikiStream(
 
   try {
     while (true) {
+      if (streamSignal.aborted) break;
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });

@@ -31,6 +31,9 @@ interface SnapshotResponse {
 
 const LAST_PULL_KEY = 'compound:lastSnapshotPull';
 
+/** In-flight deduplication for pullSnapshotFromCloud */
+let syncInFlight: Promise<PullResult> | null = null;
+
 export interface PullResult {
   pulledAt: number;
   applied: {
@@ -99,6 +102,17 @@ async function fetchSourceDetails(ids: string[]): Promise<Source[]> {
 }
 
 export async function pullSnapshotFromCloud(): Promise<PullResult> {
+  // In-flight deduplication: if a sync is already running, return that promise
+  if (syncInFlight) return syncInFlight;
+  syncInFlight = pullSnapshotFromCloudInner();
+  try {
+    return await syncInFlight;
+  } finally {
+    syncInFlight = null;
+  }
+}
+
+async function pullSnapshotFromCloudInner(): Promise<PullResult> {
   const since = getLastPullAt();
   const res = await fetch(buildSnapshotRequestPath(since), {
     cache: 'no-store',
