@@ -7334,6 +7334,31 @@ button,
   opacity: 0.55;
 }
 
+.ops-btn.is-busy,
+.ops-btn.is-loading {
+  position: relative;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.ops-btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: ops-spin 0.6s linear infinite;
+  vertical-align: middle;
+}
+
+@keyframes ops-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .ops-btn.primary {
   background: var(--bg-button);
   border-color: var(--bg-button);
@@ -10177,6 +10202,12 @@ button,
   cursor: not-allowed;
 }
 
+.sync-v2-btn.is-loading {
+  position: relative;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .sync-v2-btn-primary {
   background: var(--bg-button, #0f0f0e);
   color: var(--text-on-button, #faf9f5);
@@ -11692,6 +11723,26 @@ button,
 }
 .offline-banner-hint {
   opacity: 0.8;
+}
+.offline-banner-close {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.offline-banner-close:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.1);
 }
 @keyframes offline-slide-in {
   from {

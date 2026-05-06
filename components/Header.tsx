@@ -44,9 +44,12 @@ function OverflowMenu({
   onSettings: () => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const itemCount = 4;
 
   useEffect(() => {
     if (!open) return;
+    setFocusedIndex(-1);
     const handler = (e: PointerEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         onClose();
@@ -59,18 +62,39 @@ function OverflowMenu({
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setFocusedIndex((i) => (i + 1) % itemCount);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setFocusedIndex((i) => (i - 1 + itemCount) % itemCount);
+        return;
+      }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
+  useEffect(() => {
+    if (!open || focusedIndex < 0) return;
+    const items = menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]');
+    items?.[focusedIndex]?.focus();
+  }, [open, focusedIndex]);
+
   if (!open) return null;
 
   return (
-    <div className="overflow-menu" ref={menuRef}>
+    <div className="overflow-menu" ref={menuRef} role="menu" aria-label="更多选项">
       <button
         className="overflow-menu-item"
+        role="menuitem"
+        tabIndex={-1}
         onClick={() => {
           onClose();
           onGithubSync();
@@ -79,12 +103,20 @@ function OverflowMenu({
         <Icon.Github />
         <span>从 GitHub 同步</span>
       </button>
-      <Link className="overflow-menu-item" href="/sync" onClick={onClose}>
+      <Link
+        className="overflow-menu-item"
+        role="menuitem"
+        tabIndex={-1}
+        href="/sync"
+        onClick={onClose}
+      >
         <Icon.Activity />
         <span>同步控制台</span>
       </Link>
       <button
         className="overflow-menu-item"
+        role="menuitem"
+        tabIndex={-1}
         onClick={() => {
           onClose();
           onObsidianImport();
@@ -95,6 +127,8 @@ function OverflowMenu({
       </button>
       <button
         className="overflow-menu-item"
+        role="menuitem"
+        tabIndex={-1}
         onClick={() => {
           onClose();
           onSettings();

@@ -89,21 +89,23 @@ export default function HeroStatus({
         ) : (
           <button
             type="button"
-            className="sync-v2-btn sync-v2-btn-primary"
+            className={`sync-v2-btn sync-v2-btn-primary${busy ? ' is-loading' : ''}`}
             disabled={busy || nextAction === 'wait'}
             onClick={onPrimary}
           >
+            {busy && <span className="ops-btn-spinner" aria-hidden="true" />}
             {busy ? '处理中…' : primaryLabel}
           </button>
         )}
         {showCancel ? (
           <button
             type="button"
-            className="sync-v2-btn sync-v2-btn-danger"
+            className={`sync-v2-btn sync-v2-btn-danger${busy ? ' is-loading' : ''}`}
             disabled={busy}
             onClick={onCancel}
             title="终止当前运行"
           >
+            {busy && <span className="ops-btn-spinner" aria-hidden="true" />}
             取消
           </button>
         ) : null}

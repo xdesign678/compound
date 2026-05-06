@@ -112,10 +112,19 @@ export function CommandPalette() {
       if (!q) {
         return db.concepts.orderBy('updatedAt').reverse().limit(20).toArray();
       }
-      const all = await db.concepts.toArray();
-      return all
-        .filter((c) => c.title.toLowerCase().includes(q) || c.summary.toLowerCase().includes(q))
-        .slice(0, 20);
+      // Use DB-side filtering with limit for better performance
+      const byTitle = await db.concepts.where('title').startsWithIgnoreCase(q).limit(30).toArray();
+      const byTitleIds = new Set(byTitle.map((c) => c.id));
+      // Fallback: limited scan for substring matches not caught by startsWith
+      const byScan = await db.concepts
+        .filter(
+          (c) =>
+            !byTitleIds.has(c.id) &&
+            (c.title.toLowerCase().includes(q) || c.summary.toLowerCase().includes(q)),
+        )
+        .limit(20)
+        .toArray();
+      return [...byTitle, ...byScan].slice(0, 20);
     },
     [open, deferredQuery],
     [],
@@ -127,8 +136,15 @@ export function CommandPalette() {
       const q = deferredQuery.trim().toLowerCase();
       const db = getDb();
       if (!q) return [];
-      const all = await db.sources.toArray();
-      return all.filter((s) => s.title.toLowerCase().includes(q)).slice(0, 10);
+      // Use DB-side filtering with limit for better performance
+      const byTitle = await db.sources.where('title').startsWithIgnoreCase(q).limit(10).toArray();
+      if (byTitle.length >= 10) return byTitle;
+      const byTitleIds = new Set(byTitle.map((s) => s.id));
+      const byScan = await db.sources
+        .filter((s) => !byTitleIds.has(s.id) && s.title.toLowerCase().includes(q))
+        .limit(10 - byTitle.length)
+        .toArray();
+      return [...byTitle, ...byScan];
     },
     [open, deferredQuery],
     [],
@@ -239,7 +255,13 @@ export function CommandPalette() {
 
   return (
     <div className="cmd-overlay" onClick={handleClose}>
-      <div className="cmd-dialog" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="cmd-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="命令面板"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="cmd-input-row">
           <Icon.Search />
           <input

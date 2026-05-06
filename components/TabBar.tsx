@@ -40,8 +40,10 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
     return (
       <button
         key={t.id}
+        id={`tab-${t.id}`}
         role="tab"
         aria-selected={isActive}
+        aria-controls={`tabpanel-${t.id}`}
         aria-current={isActive ? 'page' : undefined}
         className={`tab-item${isActive ? ' active' : ''}${isSidebar ? ' sidebar' : ''}`}
         onClick={() => setTab(t.id)}

@@ -28,6 +28,7 @@ export function RecapView() {
   const [mounted, setMounted] = useState(false);
 
   const cardRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const dragXRef = useRef(0);
   const rafRef = useRef(0);
   const animatingRef = useRef(false);
@@ -251,6 +252,98 @@ export function RecapView() {
     };
   }, [applyCardTransform, animateSpring, advance]);
 
+  // ---- pointer (mouse) events for desktop drag ----
+  useEffect(() => {
+    const cardEl = cardRef.current;
+    if (!cardEl) return;
+
+    let startX = 0;
+    let startY = 0;
+    let isDragging = false;
+    let isHorizontal = false;
+    let directionDecided = false;
+
+    const onPointerDown = (e: PointerEvent) => {
+      // Only handle mouse; touch is handled above via touch events
+      if (e.pointerType !== 'mouse') return;
+      if (animatingRef.current) return;
+      // Ignore clicks on interactive elements (buttons, links)
+      const target = e.target as HTMLElement;
+      if (target.closest('button, a, [role="button"]')) return;
+
+      startX = e.clientX;
+      startY = e.clientY;
+      isDragging = true;
+      isHorizontal = false;
+      directionDecided = false;
+      dragXRef.current = 0;
+      cardEl.setPointerCapture(e.pointerId);
+      cardEl.style.cursor = 'grabbing';
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if (!directionDecided) {
+        const totalDrift = Math.abs(dx) + Math.abs(dy);
+        if (totalDrift < 10) return;
+
+        const angle = Math.abs(dy) / (Math.abs(dx) + Math.abs(dy) + 0.001);
+        directionDecided = true;
+        if (angle < 0.5) {
+          isHorizontal = true;
+        } else {
+          isDragging = false;
+          cardEl.style.cursor = 'grab';
+          return;
+        }
+      }
+
+      if (isHorizontal) {
+        e.preventDefault();
+        const damped = dx * 0.85;
+        dragXRef.current = damped;
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(() => {
+          applyCardTransform(damped, damped * 0.015);
+        });
+      }
+    };
+
+    const onPointerUp = (_e: PointerEvent) => {
+      if (!isDragging) return;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      cardEl.style.cursor = 'grab';
+      const wasHorizontal = isHorizontal;
+      isDragging = false;
+      isHorizontal = false;
+      directionDecided = false;
+
+      if (wasHorizontal) {
+        const dx = dragXRef.current;
+        if (Math.abs(dx) >= SWIPE_THRESHOLD) {
+          advance(dx > 0 ? 'right' : 'left');
+        } else {
+          animateSpring();
+        }
+      }
+    };
+
+    cardEl.addEventListener('pointerdown', onPointerDown);
+    cardEl.addEventListener('pointermove', onPointerMove);
+    cardEl.addEventListener('pointerup', onPointerUp);
+    cardEl.addEventListener('pointercancel', onPointerUp);
+
+    return () => {
+      cardEl.removeEventListener('pointerdown', onPointerDown);
+      cardEl.removeEventListener('pointermove', onPointerMove);
+      cardEl.removeEventListener('pointerup', onPointerUp);
+      cardEl.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [applyCardTransform, animateSpring, advance]);
+
   const handleReadMore = useCallback(
     (id: string) => {
       setTab('wiki');
@@ -259,6 +352,25 @@ export function RecapView() {
     },
     [openConcept, router, setTab],
   );
+
+  // ---- keyboard navigation for desktop (global listener) ----
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (animatingRef.current) return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+        return;
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        advance('left');
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        advance('right');
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [advance]);
 
   // ---- render helpers ----
 
@@ -324,7 +436,7 @@ export function RecapView() {
   const currentCardMarkdown = (currentCard.body || '').trim() || (currentCard.summary || '').trim();
 
   return (
-    <div className="recap-root">
+    <div className="recap-root" ref={containerRef} tabIndex={-1}>
       <header className="recap-header">
         <button className="recap-back-btn" onClick={() => router.push('/')} aria-label="返回">
           <Icon.Back />

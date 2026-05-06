@@ -370,7 +370,12 @@ export default function Page() {
             ref={desktopContentRef}
             className={`desktop-content${shouldShowDesktopDetail ? ' resizable' : ' single-pane'}`}
           >
-            <section className="desktop-primary-panel">
+            <section
+              className="desktop-primary-panel"
+              id={`tabpanel-${tab}`}
+              role="tabpanel"
+              aria-labelledby={`tab-${tab}`}
+            >
               <div className="desktop-primary-scroll">
                 {renderPrimaryView('.desktop-primary-scroll')}
               </div>
@@ -444,7 +449,13 @@ export default function Page() {
             {renderDetail()}
           </div>
         ) : (
-          <div key={tab} className={`tab-view${tab === 'ask' ? ' ask-tab' : ''}`}>
+          <div
+            key={tab}
+            id={`tabpanel-${tab}`}
+            role="tabpanel"
+            aria-labelledby={`tab-${tab}`}
+            className={`tab-view${tab === 'ask' ? ' ask-tab' : ''}`}
+          >
             {renderPrimaryView('.app-main')}
           </div>
         )}
