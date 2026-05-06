@@ -424,7 +424,6 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
               <span className="recap-entry-count">{unreviewedCount} 个待回顾</span>
             </span>
             <span className="recap-entry-action">
-              开始
               <Icon.Send />
             </span>
           </button>

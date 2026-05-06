@@ -11269,16 +11269,15 @@ button,
 .recap-entry-action {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   flex-shrink: 0;
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--brand-clay);
+  width: 20px;
+  height: 20px;
+  color: var(--text-tertiary);
 }
 .recap-entry-action svg {
-  width: 13px;
-  height: 13px;
+  width: 15px;
+  height: 15px;
 }
 
 /* Recap page root — exact viewport fit, no body scroll */
