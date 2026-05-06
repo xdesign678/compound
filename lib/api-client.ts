@@ -25,6 +25,8 @@ import type {
 const CLIENT_CANDIDATE_LIMIT = 320;
 const QUERY_CANDIDATE_LIMIT = 50;
 const MIN_DIRECT_TITLE_MENTION_LENGTH = 2;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const ASK_STREAM_TIMEOUT_MS = 180_000;
 
 function extractSearchTerms(text: string): string[] {
   return Array.from(
@@ -109,11 +111,13 @@ async function addBidirectionalLinks(
   });
 }
 
-/** Build an AbortSignal with 30s timeout, optionally combined with an external signal. */
-function buildTimeoutSignal(externalSignal?: AbortSignal): AbortSignal {
-  const TIMEOUT_MS = 30_000;
+/** Build an AbortSignal with a timeout, optionally combined with an external signal. */
+function buildTimeoutSignal(
+  externalSignal?: AbortSignal,
+  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+): AbortSignal {
   try {
-    const timeoutSignal = AbortSignal.timeout(TIMEOUT_MS);
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
     if (!externalSignal) return timeoutSignal;
     // Combine external signal with timeout
     if (typeof AbortSignal.any === 'function') {
@@ -127,7 +131,7 @@ function buildTimeoutSignal(externalSignal?: AbortSignal): AbortSignal {
     } else {
       externalSignal.addEventListener('abort', abort, { once: true });
     }
-    const timer = setTimeout(abort, TIMEOUT_MS);
+    const timer = setTimeout(abort, timeoutMs);
     // Cleanup on abort
     ctrl.signal.addEventListener(
       'abort',
@@ -141,7 +145,7 @@ function buildTimeoutSignal(externalSignal?: AbortSignal): AbortSignal {
   } catch {
     // AbortSignal.timeout not supported — full fallback
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     if (externalSignal) {
       if (externalSignal.aborted) {
         ctrl.abort();
@@ -161,6 +165,22 @@ function buildTimeoutSignal(externalSignal?: AbortSignal): AbortSignal {
     ctrl.signal.addEventListener('abort', () => clearTimeout(timer), { once: true });
     return ctrl.signal;
   }
+}
+
+function isAbortLikeError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const text = `${err.name}|${err.message}`.toLowerCase();
+  return (
+    text.includes('abort') ||
+    text.includes('aborted') ||
+    text.includes('timeout') ||
+    text.includes('fetch is aborted')
+  );
+}
+
+function askAbortMessage(externalSignal?: AbortSignal): string {
+  if (externalSignal?.aborted) return '问答已取消';
+  return `问答超时：模型超过 ${Math.round(ASK_STREAM_TIMEOUT_MS / 1000)} 秒仍未完成，请稍后重试或切换更快的模型。`;
 }
 
 async function postJSON<T>(
@@ -381,7 +401,7 @@ export async function askWikiStream(
   const hasConfig = !!(llmConfig.apiKey || llmConfig.model || llmConfig.apiUrl);
   const payload = hasConfig ? { ...req, llmConfig } : req;
 
-  const streamSignal = buildTimeoutSignal(options?.signal);
+  const streamSignal = buildTimeoutSignal(options?.signal, ASK_STREAM_TIMEOUT_MS);
 
   let res: Response;
   try {
@@ -391,9 +411,12 @@ export async function askWikiStream(
       body: JSON.stringify(payload),
       signal: streamSignal,
     });
-  } catch {
+  } catch (err) {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       throw new Error('网络已断开，请检查网络连接后重试');
+    }
+    if (streamSignal.aborted || isAbortLikeError(err)) {
+      throw new Error(askAbortMessage(options?.signal));
     }
     throw new Error('网络连接失败');
   }
@@ -432,7 +455,7 @@ export async function askWikiStream(
 
   try {
     while (true) {
-      if (streamSignal.aborted) break;
+      if (streamSignal.aborted) throw new Error(askAbortMessage(options?.signal));
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
@@ -481,6 +504,11 @@ export async function askWikiStream(
         }
       }
     }
+  } catch (err) {
+    if (streamSignal.aborted || isAbortLikeError(err)) {
+      throw new Error(askAbortMessage(options?.signal));
+    }
+    throw err;
   } finally {
     reader.releaseLock();
   }
