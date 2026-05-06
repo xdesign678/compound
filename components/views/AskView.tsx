@@ -13,6 +13,7 @@ export function AskView() {
         history={askState.history}
         loading={askState.loading}
         streamingText={askState.streamingText}
+        liveStages={askState.liveStages}
         conceptCount={askState.conceptCount}
         suggestions={askState.suggestions}
         archiving={askState.archiving}

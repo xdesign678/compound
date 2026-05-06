@@ -333,12 +333,20 @@ export async function ingestSource(input: {
   };
 }
 
+/** Pipeline stage event emitted by the server during a streaming query. */
+export interface AskStageEvent {
+  key: 'rewrite' | 'retrieve' | 'graph' | 'rerank' | 'synthesize';
+  status: 'start' | 'done';
+  detail?: string;
+  conceptTitles?: string[];
+}
+
 /** Ask the Wiki with streaming deltas, then resolve with the full response. */
 export async function askWikiStream(
   question: string,
   history: Array<{ role: 'user' | 'ai'; text: string }>,
   onDelta: (text: string) => void,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; onStage?: (event: AskStageEvent) => void },
 ): Promise<QueryResponse> {
   const conceptsToSend = await findClientConceptCandidates(question, QUERY_CANDIDATE_LIMIT);
 
@@ -447,6 +455,15 @@ export async function askWikiStream(
             onDelta(parsed.text);
           } catch {
             // skip malformed delta
+          }
+        } else if (eventType === 'stage') {
+          if (options?.onStage) {
+            try {
+              const parsed = JSON.parse(eventData) as AskStageEvent;
+              options.onStage(parsed);
+            } catch {
+              // skip malformed stage
+            }
           }
         } else if (eventType === 'done') {
           try {

@@ -63,6 +63,19 @@ export interface ActivityLog {
   at: number;
 }
 
+export type AskStageKey = 'rewrite' | 'retrieve' | 'graph' | 'rerank' | 'synthesize';
+
+export interface AskMessageStage {
+  key: AskStageKey;
+  status: 'running' | 'done';
+  /** Technical 副标 — short factual sentence ("召回 24 个概念") */
+  detail?: string;
+  /** Concept titles surfaced during retrieval (for chip display). */
+  conceptTitles?: string[];
+  startedAt?: number;
+  durationMs?: number;
+}
+
 export interface AskMessage {
   id: string;
   role: 'user' | 'ai';
@@ -72,6 +85,8 @@ export interface AskMessage {
   suggestedTitle?: string;
   suggestedSummary?: string;
   suggestedQuestions?: string[];
+  /** Captured RAG pipeline stages, when available. */
+  stages?: AskMessageStage[];
   at: number;
 }
 

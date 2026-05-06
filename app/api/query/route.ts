@@ -149,33 +149,73 @@ interface RetrievalResult {
   finalContext: QueryContext;
 }
 
+export type StageEventKey = 'rewrite' | 'retrieve' | 'graph' | 'rerank' | 'synthesize';
+
+export interface StageEvent {
+  key: StageEventKey;
+  status: 'start' | 'done';
+  detail?: string;
+  conceptTitles?: string[];
+}
+
+type StageEmitter = (event: StageEvent) => void;
+
 async function runRetrievalPipeline(opts: {
   question: string;
   history?: Array<{ role: 'user' | 'ai'; text: string }>;
   llmConfig?: LlmConfig;
   requestConcepts: Concept[];
+  onStage?: StageEmitter;
 }): Promise<RetrievalResult> {
+  const emit: StageEmitter = opts.onStage ?? (() => {});
+
   // Step 1: history-aware query rewrite
+  emit({ key: 'rewrite', status: 'start' });
   const { rewritten, used: rewriteUsed } = await rewriteQuery({
     question: opts.question,
     history: opts.history,
     llmConfig: opts.llmConfig,
   });
   const effectiveQuery = rewritten || opts.question;
+  emit({
+    key: 'rewrite',
+    status: 'done',
+    detail:
+      rewriteUsed === 'pass-through'
+        ? '原问题足够清晰'
+        : `已改写检索 query · ${rewriteUsed === 'llm' ? 'LLM 重写' : '回退方案'}`,
+  });
 
   // Step 2: hybrid retrieval (FTS + vector when configured)
+  emit({ key: 'retrieve', status: 'start' });
   const serverContext = await getServerContext(effectiveQuery);
   const embeddingMode = getEmbeddingMode();
   const retrievalMode: RetrievalResult['retrievalMode'] =
     embeddingMode === 'remote' ? 'remote-emb' : 'fts-only';
+  emit({
+    key: 'retrieve',
+    status: 'done',
+    detail: `${embeddingMode === 'remote' ? '混合检索 (FTS + 向量)' : 'FTS 全文检索'} · 召回 ${serverContext.concepts.length} 个概念，${serverContext.chunks.length} 段证据`,
+    conceptTitles: serverContext.concepts.slice(0, 12).map((c) => c.title),
+  });
 
   // Step 3: graph 1-hop expansion off the seed concepts
+  emit({ key: 'graph', status: 'start' });
   const seedConceptIds = serverContext.concepts.slice(0, 8).map((c) => c.id);
   const graph = graphExpand(seedConceptIds, 5);
   const graphConceptIds = new Set(graph.concepts.map((c) => c.id));
+  emit({
+    key: 'graph',
+    status: 'done',
+    detail:
+      graph.concepts.length === 0
+        ? '未发现相关邻居概念'
+        : `沿概念关系扩展 ${graph.concepts.length} 个邻居`,
+  });
 
   // Step 4: RRF fusion across (a) FTS-ordered concepts (b) request mentions
   // (c) graph-expanded neighbors. Chunks fuse separately.
+  emit({ key: 'rerank', status: 'start' });
   const conceptFused = reciprocalRankFusion<Concept>(
     [
       { name: 'mentioned', items: opts.requestConcepts, getId: (c) => c.id, weight: 1.5 },
@@ -205,6 +245,13 @@ async function runRetrievalPipeline(opts: {
   const conceptsById = new Map(concepts.map((c) => [c.id, c]));
   const chunksById = new Map(chunks.map((c) => [c.id, c]));
   const partitioned = partitionRanked(rerank.ranked, conceptsById, chunksById);
+
+  emit({
+    key: 'rerank',
+    status: 'done',
+    detail: `融合 ${candidates.length} 候选 · ${rerank.used === 'llm' ? 'LLM 重排' : '启发式排序'} 到 Top-${partitioned.concepts.length + partitioned.chunks.length}`,
+    conceptTitles: partitioned.concepts.slice(0, 8).map((c) => c.title),
+  });
 
   // Step 7: assemble final context. Always carry through evidence rows for
   // the chosen concepts so the answer prompt has factual handles.
@@ -242,6 +289,7 @@ async function runRetrievalPipeline(opts: {
  *
  * Streaming: when the request includes `Accept: text/event-stream` the
  * response is an SSE stream. The stream emits:
+ *   - `event: stage`  — pipeline progress: `{ key, status, detail?, conceptTitles? }`
  *   - `event: delta`  — incremental answer text fragments
  *   - `event: done`   — final JSON payload with citations, suggestedQuestions, etc.
  * Otherwise a regular JSON response is returned (backward compatible).
@@ -275,33 +323,30 @@ export const POST = withRequestTracing(async (req: Request) => {
     const requestConcepts = (body.concepts || []).map(conceptFromRequest);
     const history = body.conversationHistory?.slice(-MAX_HISTORY_MESSAGES);
 
-    const retrieval = await runRetrievalPipeline({
-      question,
-      history,
-      llmConfig,
-      requestConcepts,
-    });
+    function buildPromptInputs(retrieval: RetrievalResult) {
+      const concepts = mergeConcepts(requestConcepts, retrieval.finalContext.concepts).slice(
+        0,
+        MAX_CONCEPTS,
+      );
+      const wikiDump =
+        formatQueryContextForPrompt({
+          concepts,
+          evidence: retrieval.finalContext.evidence,
+          chunks: retrieval.finalContext.chunks,
+        }) || '(Wiki 为空)';
 
-    const concepts = mergeConcepts(requestConcepts, retrieval.finalContext.concepts).slice(
-      0,
-      MAX_CONCEPTS,
-    );
-    const wikiDump =
-      formatQueryContextForPrompt({
-        concepts,
-        evidence: retrieval.finalContext.evidence,
-        chunks: retrieval.finalContext.chunks,
-      }) || '(Wiki 为空)';
+      const historyBlock = history
+        ? history
+            .map((m) => `${m.role === 'user' ? '用户' : 'Wiki'}: ${m.text.slice(0, 2000)}`)
+            .join('\n')
+        : '';
 
-    const historyBlock = history
-      ? history
-          .map((m) => `${m.role === 'user' ? '用户' : 'Wiki'}: ${m.text.slice(0, 2000)}`)
-          .join('\n')
-      : '';
+      const userPrompt = `# 用户的 Wiki 检索上下文\n\n${wikiDump}\n\n---\n\n${
+        historyBlock ? `# 最近对话\n\n${historyBlock}\n\n---\n\n` : ''
+      }# 当前问题\n\n${question}\n\n${retrieval.rewrittenQuestion !== question ? `# 改写后的检索 query\n\n${retrieval.rewrittenQuestion}\n\n---\n\n` : ''}请优先基于「相关概念页」回答；当概念页不足时，再参考「证据链」和「原文片段候选」。按 system prompt 定义的 JSON schema 输出，只输出 JSON。`;
 
-    const userPrompt = `# 用户的 Wiki 检索上下文\n\n${wikiDump}\n\n---\n\n${
-      historyBlock ? `# 最近对话\n\n${historyBlock}\n\n---\n\n` : ''
-    }# 当前问题\n\n${question}\n\n${retrieval.rewrittenQuestion !== question ? `# 改写后的检索 query\n\n${retrieval.rewrittenQuestion}\n\n---\n\n` : ''}请优先基于「相关概念页」回答；当概念页不足时，再参考「证据链」和「原文片段候选」。按 system prompt 定义的 JSON schema 输出，只输出 JSON。`;
+      return { concepts, userPrompt };
+    }
 
     // ---- Streaming path ----
     if (wantStream) {
@@ -327,6 +372,23 @@ export const POST = withRequestTracing(async (req: Request) => {
           }, 30_000);
 
           try {
+            // Run the retrieval pipeline inline so we can forward each
+            // step's progress to the client as `event: stage` SSE messages.
+            const retrieval = await runRetrievalPipeline({
+              question,
+              history,
+              llmConfig,
+              requestConcepts,
+              onStage: (event) => {
+                sendSSE('stage', event);
+              },
+            });
+
+            const { concepts, userPrompt } = buildPromptInputs(retrieval);
+
+            // Synthesis stage covers the LLM answer call.
+            sendSSE('stage', { key: 'synthesize', status: 'start' });
+
             const raw = await chat({
               messages: [
                 { role: 'system', content: QUERY_SYSTEM_PROMPT },
@@ -368,6 +430,12 @@ export const POST = withRequestTracing(async (req: Request) => {
             parsed.rewrittenQuestion =
               retrieval.rewriteUsed === 'pass-through' ? undefined : retrieval.rewrittenQuestion;
             parsed.retrievalMode = retrieval.retrievalMode;
+
+            sendSSE('stage', {
+              key: 'synthesize',
+              status: 'done',
+              detail: `综合完成 · 引用 ${parsed.citedConceptIds.length} 个概念`,
+            });
 
             sendSSE('done', {
               citedConceptIds: parsed.citedConceptIds,
@@ -425,6 +493,14 @@ export const POST = withRequestTracing(async (req: Request) => {
     }
 
     // ---- Non-streaming path (backward compatible) ----
+    const retrieval = await runRetrievalPipeline({
+      question,
+      history,
+      llmConfig,
+      requestConcepts,
+    });
+    const { concepts, userPrompt } = buildPromptInputs(retrieval);
+
     const raw = await chat({
       messages: [
         { role: 'system', content: QUERY_SYSTEM_PROMPT },

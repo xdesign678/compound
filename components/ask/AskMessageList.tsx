@@ -4,15 +4,17 @@ import type { RefObject } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '../../lib/db';
 import { formatConceptBodyForDisplay } from '../../lib/concept-body-format';
-import type { AskMessage } from '../../lib/types';
+import type { AskMessage, AskMessageStage } from '../../lib/types';
 import { Icon } from '../Icons';
 import { Prose } from '../Prose';
 import { AskEmptyState } from './AskEmptyState';
+import { ThinkingPanel, ThinkingTrace } from './ThinkingPanel';
 
 export function AskMessageList({
   history,
   loading,
   streamingText,
+  liveStages,
   conceptCount,
   suggestions,
   archiving,
@@ -25,6 +27,7 @@ export function AskMessageList({
   history: AskMessage[] | undefined;
   loading: boolean;
   streamingText: string;
+  liveStages: AskMessageStage[];
   conceptCount: number | undefined;
   suggestions: string[];
   archiving: string | null;
@@ -83,6 +86,9 @@ export function AskMessageList({
                 <div key={message.id} className="msg msg-ai-row">
                   <div className={`msg-ai-card${failedAnswer ? ' ask-failure-card' : ''}`}>
                     <div className="msg-ai-label">Wiki 答案</div>
+                    {!failedAnswer && message.stages && message.stages.length > 0 && (
+                      <ThinkingTrace stages={message.stages} />
+                    )}
                     {failedAnswer ? (
                       <div className="ask-failure-copy">
                         <div className="ask-failure-title">问答暂时没成功</div>
@@ -162,6 +168,7 @@ export function AskMessageList({
               <div className="msg msg-ai-row">
                 <div className="msg-ai-card">
                   <div className="msg-ai-label loading">Wiki 答案</div>
+                  {liveStages.length > 0 && <ThinkingTrace stages={liveStages} />}
                   <Prose
                     markdown={formatConceptBodyForDisplay(streamingText)}
                     className="prose-answer"
@@ -172,8 +179,7 @@ export function AskMessageList({
             {loading && !streamingText && (
               <div className="msg msg-ai-row">
                 <div className="msg-ai-card loading">
-                  <div className="msg-ai-label loading">Wiki 思考中</div>
-                  <div className="msg-ai-body">正在从 {conceptCount} 个概念页中综合...</div>
+                  <ThinkingPanel stages={liveStages} conceptCount={conceptCount} />
                 </div>
               </div>
             )}

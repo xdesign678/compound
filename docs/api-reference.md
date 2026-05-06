@@ -153,6 +153,7 @@ Source: [`app/api/data/snapshot/route.ts`](../app/api/data/snapshot/route.ts)
 
 GET /api/data/snapshot
 Returns either the summary dataset or an incremental delta since `?since=...`.
+Supports `?limit=N&offset=M` for pagination (defaults: limit=5000, offset=0).
 Full concept bodies / source raw content are fetched on demand by detail views
 and heavy workflows such as ask / categorize.
 
@@ -187,13 +188,11 @@ Source: [`app/api/health/route.ts`](../app/api/health/route.ts)
 
 #### GET
 
-Liveness / configuration probe. Returns `{ status: 'ok' }` along with
-boolean flags describing whether admin auth, the LLM gateway, GitHub sync,
-and the persistent data directory are configured. Safe to call without
-authentication so platform health checks (Docker, Kubernetes, uptime
-monitors) can use it as a readiness signal.
+Liveness / configuration probe. Returns `{ status: 'ok' }` publicly.
+Detailed configuration info (auth, llm, embedding, githubSync, data) is
+only returned when the request carries a valid admin token.
 
-@returns 200 JSON with `status`, `service`, `auth`, `llm`, `githubSync`, `data`.
+@returns 200 JSON with `status` and optionally detailed config.
 
 ## ingest
 
@@ -344,6 +343,7 @@ Body: `QueryRequest` — `question` is required (<= 2k chars). Optional
 Streaming: when the request includes `Accept: text/event-stream` the
 response is an SSE stream. The stream emits:
 
+- `event: stage` — pipeline progress: `{ key, status, detail?, conceptTitles? }`
 - `event: delta` — incremental answer text fragments
 - `event: done` — final JSON payload with citations, suggestedQuestions, etc.
   Otherwise a regular JSON response is returned (backward compatible).

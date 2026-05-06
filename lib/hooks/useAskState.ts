@@ -17,7 +17,14 @@ import {
   saveSelectedModelOnServer,
 } from '@/lib/llm-config';
 import type { InlineMention, MentionItem, MentionKind, ModelOption } from '@/components/ask/types';
-import type { AskMessage, Concept, LlmConfig, Source } from '@/lib/types';
+import type {
+  AskMessage,
+  AskMessageStage,
+  AskStageKey,
+  Concept,
+  LlmConfig,
+  Source,
+} from '@/lib/types';
 import { SOURCE_TYPE_LABELS } from '@/lib/constants';
 
 /** LRU cache for @-mention lookups */
@@ -175,6 +182,7 @@ export function useAskState() {
   const [mounted, setMounted] = useState(false);
   const [conceptTitles, setConceptTitles] = useState<string[]>([]);
   const [streamingText, setStreamingText] = useState('');
+  const [liveStages, setLiveStages] = useState<AskMessageStage[]>([]);
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
@@ -378,6 +386,42 @@ export function useAskState() {
       autoResize();
       setLoading(true);
       setStreamingText('');
+      setLiveStages([]);
+
+      // Mutable buffer of stages observed during this request. We collect
+      // here (instead of relying on `liveStages` state) so we can persist
+      // the final list onto the AskMessage without races.
+      const stageBuffer: AskMessageStage[] = [];
+      function applyStage(event: {
+        key: AskStageKey;
+        status: 'start' | 'done';
+        detail?: string;
+        conceptTitles?: string[];
+      }) {
+        const idx = stageBuffer.findIndex((s) => s.key === event.key);
+        const now = Date.now();
+        if (idx === -1) {
+          stageBuffer.push({
+            key: event.key,
+            status: event.status === 'done' ? 'done' : 'running',
+            detail: event.detail,
+            conceptTitles: event.conceptTitles,
+            startedAt: now,
+            durationMs: event.status === 'done' ? 0 : undefined,
+          });
+        } else {
+          const prev = stageBuffer[idx];
+          stageBuffer[idx] = {
+            ...prev,
+            status: event.status === 'done' ? 'done' : prev.status,
+            detail: event.detail ?? prev.detail,
+            conceptTitles: event.conceptTitles ?? prev.conceptTitles,
+            durationMs:
+              event.status === 'done' && prev.startedAt ? now - prev.startedAt : prev.durationMs,
+          };
+        }
+        setLiveStages([...stageBuffer]);
+      }
 
       try {
         const resp = await askWikiStream(
@@ -386,6 +430,7 @@ export function useAskState() {
           (delta) => {
             setStreamingText((prev) => prev + delta);
           },
+          { onStage: applyStage },
         );
 
         const aiMsg: AskMessage = {
@@ -396,6 +441,7 @@ export function useAskState() {
           suggestedTitle: resp.archivable ? resp.suggestedTitle : undefined,
           suggestedSummary: resp.archivable ? resp.suggestedSummary : undefined,
           suggestedQuestions: resp.suggestedQuestions?.length ? resp.suggestedQuestions : undefined,
+          stages: stageBuffer.length > 0 ? stageBuffer : undefined,
           at: Date.now(),
         };
         await db.askHistory.put(aiMsg);
@@ -410,6 +456,7 @@ export function useAskState() {
       } finally {
         setLoading(false);
         setStreamingText('');
+        setLiveStages([]);
         requestAnimationFrame(() => textareaRef.current?.focus());
       }
     },
@@ -549,6 +596,7 @@ export function useAskState() {
     currentModelLabel,
     modelOptions,
     streamingText,
+    liveStages,
     history,
     conceptCount,
     suggestions,

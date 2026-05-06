@@ -2336,6 +2336,211 @@ button {
     transform: scale(0.7);
   }
 }
+
+/* ---- Thinking panel (live RAG pipeline progress) ---- */
+.thinking-panel {
+  font-family: var(--font-sans);
+  color: var(--text-secondary);
+}
+.thinking-panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.thinking-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+}
+.thinking-panel-spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--brand-clay);
+  box-shadow: 0 0 0 0 rgba(217, 119, 87, 0.45);
+  animation: thinking-pulse 1.4s ease-in-out infinite;
+}
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(217, 119, 87, 0.45);
+  }
+  50% {
+    transform: scale(0.7);
+    box-shadow: 0 0 0 6px rgba(217, 119, 87, 0);
+  }
+}
+.thinking-panel-meta {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.thinking-step-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.thinking-step {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 13.5px;
+  line-height: 1.45;
+  transition: opacity 200ms ease;
+}
+.thinking-step-pending {
+  opacity: 0.42;
+}
+.thinking-step-done {
+  opacity: 0.88;
+}
+.thinking-step-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--text-tertiary);
+}
+.thinking-step-marker svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.thinking-step-done .thinking-step-marker {
+  color: var(--brand-clay);
+}
+.thinking-step-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1.4px solid currentColor;
+  background: transparent;
+}
+.thinking-step-spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.6px solid var(--brand-clay-soft);
+  border-top-color: var(--brand-clay);
+  animation: thinking-spin 0.85s linear infinite;
+}
+@keyframes thinking-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.thinking-step-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.thinking-step-label {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.thinking-step-pending .thinking-step-label {
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+.thinking-step-detail {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.thinking-chips {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-light);
+}
+.thinking-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--brand-clay-soft);
+  color: var(--brand-clay);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(4px);
+  animation: thinking-chip-in 320ms ease-out forwards;
+}
+@keyframes thinking-chip-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---- Collapsed thinking trace (next to finished answers) ---- */
+.thinking-trace {
+  margin-bottom: 10px;
+  font-family: var(--font-sans);
+}
+.thinking-trace-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+.thinking-trace-toggle:hover {
+  background: var(--brand-clay-soft);
+  color: var(--brand-clay);
+}
+.thinking-trace-caret {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 160ms ease;
+  transform: rotate(-90deg);
+}
+.thinking-trace-caret.is-open {
+  transform: rotate(0);
+}
+.thinking-step-list-collapsed {
+  margin-top: 10px;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+}
+.thinking-trace-titles {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  font-style: italic;
+}
+
 .msg-ai-body {
   font-family: var(--font-reading);
   font-size: 15px;
