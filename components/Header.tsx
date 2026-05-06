@@ -47,13 +47,13 @@ function OverflowMenu({
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
+    const handler = (e: PointerEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         onClose();
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('pointerdown', handler);
+    return () => document.removeEventListener('pointerdown', handler);
   }, [open, onClose]);
 
   useEffect(() => {
@@ -116,6 +116,7 @@ export function Header(props: HeaderProps) {
   const openGithubSync = useAppStore((s) => s.openGithubSync);
   const searchCollapsed = useAppStore((s) => s.searchCollapsed);
   const triggerSearchFocus = useAppStore((s) => s.triggerSearchFocus);
+  const openCommandPalette = useAppStore((s) => s.openCommandPalette);
 
   const [overflowOpen, setOverflowOpen] = useState(false);
   const closeOverflow = useCallback(() => setOverflowOpen(false), []);
@@ -169,6 +170,17 @@ export function Header(props: HeaderProps) {
             className="icon-btn header-search-btn is-visible"
             onClick={handleExpandSearch}
             aria-label="展开搜索"
+          >
+            <Icon.Search />
+          </button>
+        )}
+        {/* Mobile: command palette trigger (visible when search icon is not shown) */}
+        {!showSearchIcon && (
+          <button
+            type="button"
+            className="icon-btn header-mobile-search-btn"
+            onClick={openCommandPalette}
+            aria-label="搜索"
           >
             <Icon.Search />
           </button>

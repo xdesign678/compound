@@ -6,6 +6,7 @@ import { hapticLight, hapticSuccess } from '@/lib/haptic';
 const TRIGGER_DISTANCE = 72; // px pull to trigger refresh
 const MAX_PULL = 120; // visual clamp
 const RESISTANCE = 0.45; // rubber-band feel
+const REFRESH_TIMEOUT = 15000; // 15s timeout for refresh promise
 
 interface PullToRefreshProps {
   /** CSS selector for the scroll container (default: .app-main) */
@@ -30,8 +31,32 @@ export function PullToRefresh({
   const containerRef = useRef<HTMLElement | null>(null);
   const canPullRef = useRef(false);
   const hasVibratedRef = useRef(false);
+  const indicatorElRef = useRef<HTMLDivElement>(null);
+  const indicatorBallRef = useRef<HTMLDivElement>(null);
 
   const forceRender = useCallback(() => setTick((t) => t + 1), []);
+
+  /** Directly update indicator DOM for smooth 60fps during pull */
+  const updateIndicatorDOM = useCallback(
+    (distance: number, pulling: boolean, refreshing: boolean) => {
+      const wrapper = indicatorElRef.current;
+      const ball = indicatorBallRef.current;
+      if (!wrapper || !ball) return;
+
+      const height = Math.max(distance, refreshing ? TRIGGER_DISTANCE : 0);
+      wrapper.style.height = `${height}px`;
+      wrapper.style.transition = pulling ? 'none' : 'height 260ms cubic-bezier(0.22, 1, 0.36, 1)';
+      wrapper.style.display = distance > 0 || refreshing ? 'flex' : 'none';
+
+      const progress = Math.min(distance / TRIGGER_DISTANCE, 1);
+      const opacity = refreshing ? 1 : Math.min(progress * 0.9, 0.9);
+      const scale = refreshing ? 1 : 0.5 + progress * 0.5;
+      ball.style.opacity = String(opacity);
+      ball.style.transform = `scale(${scale})`;
+      ball.style.transition = pulling ? 'none' : 'opacity 200ms ease, transform 200ms ease';
+    },
+    [],
+  );
 
   const getContainer = useCallback(() => {
     if (!containerRef.current) {
@@ -75,16 +100,32 @@ export function PullToRefresh({
       const dy = touch.clientY - startYRef.current;
       if (dy < 0) {
         // scrolling up, release pull
-        pullingRef.current = false;
-        distanceRef.current = 0;
-        canPullRef.current = false;
-        forceRender();
+        if (pullingRef.current) {
+          pullingRef.current = false;
+          distanceRef.current = 0;
+          canPullRef.current = false;
+          updateIndicatorDOM(0, false, refreshingRef.current);
+          forceRender();
+        }
         return;
       }
+
+      // Prevent default scroll when pulling down
+      e.preventDefault();
+
       const resisted = Math.min(dy * RESISTANCE, MAX_PULL);
+      const wasPulling = pullingRef.current;
       pullingRef.current = true;
       distanceRef.current = resisted;
-      forceRender();
+
+      // Direct DOM update for smooth 60fps — no React re-render
+      updateIndicatorDOM(resisted, true, false);
+
+      // Only trigger state update at key thresholds
+      if (!wasPulling) {
+        forceRender(); // Started pulling — show indicator
+      }
+
       if (resisted >= TRIGGER_DISTANCE && !hasVibratedRef.current) {
         hasVibratedRef.current = true;
         hapticLight();
@@ -98,21 +139,28 @@ export function PullToRefresh({
       if (distanceRef.current >= TRIGGER_DISTANCE && !refreshingRef.current) {
         refreshingRef.current = true;
         hapticSuccess();
-        // Wait for onRefresh to complete before hiding indicator
-        Promise.resolve(onRefresh())
+        // Wait for onRefresh with 15s timeout
+        Promise.race([
+          Promise.resolve(onRefresh()),
+          new Promise((_, rej) =>
+            setTimeout(() => rej(new Error('refresh timeout')), REFRESH_TIMEOUT),
+          ),
+        ])
           .catch(() => {})
           .finally(() => {
             refreshingRef.current = false;
+            updateIndicatorDOM(0, false, false);
             forceRender();
           });
       }
       distanceRef.current = 0;
       startYRef.current = null;
+      updateIndicatorDOM(0, false, refreshingRef.current);
       forceRender();
     };
 
     document.addEventListener('touchstart', onTouchStart, { passive: true });
-    document.addEventListener('touchmove', onTouchMove, { passive: true });
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
     document.addEventListener('touchend', onTouchEnd);
     document.addEventListener('touchcancel', onTouchEnd);
 
@@ -122,7 +170,7 @@ export function PullToRefresh({
       document.removeEventListener('touchend', onTouchEnd);
       document.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, [getContainer, onRefresh, maxWidth, forceRender]);
+  }, [getContainer, onRefresh, maxWidth, forceRender, updateIndicatorDOM]);
 
   const pulling = pullingRef.current;
   const distance = distanceRef.current;
@@ -131,11 +179,10 @@ export function PullToRefresh({
   if (!pulling && !refreshing && distance === 0) return null;
 
   const progress = Math.min(distance / TRIGGER_DISTANCE, 1);
-  const opacity = Math.min(progress * 0.9, 0.9);
-  const scale = 0.5 + progress * 0.5;
 
   return (
     <div
+      ref={indicatorElRef}
       aria-hidden="true"
       style={{
         position: 'fixed',
@@ -152,6 +199,7 @@ export function PullToRefresh({
       }}
     >
       <div
+        ref={indicatorBallRef}
         style={{
           width: 32,
           height: 32,
@@ -161,8 +209,8 @@ export function PullToRefresh({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          opacity: refreshing ? 1 : opacity,
-          transform: `scale(${refreshing ? 1 : scale})`,
+          opacity: refreshing ? 1 : Math.min(progress * 0.9, 0.9),
+          transform: `scale(${refreshing ? 1 : 0.5 + progress * 0.5})`,
           transition: pulling ? 'none' : 'opacity 200ms ease, transform 200ms ease',
           boxShadow: 'var(--shadow-sm)',
         }}

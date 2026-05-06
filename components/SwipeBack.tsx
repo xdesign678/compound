@@ -4,10 +4,19 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '@/lib/store';
 import { hapticLight, hapticSuccess } from '@/lib/haptic';
 
-const EDGE_WIDTH = 36; // px from left edge to start (was 24)
+const DEFAULT_EDGE_WIDTH = 36; // px from left edge to start
+const IOS_EDGE_WIDTH = 20; // Reduced to avoid iOS native back gesture conflict
 const MIN_DISTANCE = 80; // px to trigger back (raised from 60 to avoid iOS conflict)
 const MIN_VELOCITY = 0.3; // px/ms - fast swipe can trigger even below MIN_DISTANCE
 const MAX_Y_DRIFT = 100; // px vertical drift tolerance
+
+/** Detect iOS Safari (non-standalone PWA) where system back gesture conflicts */
+function getIsIOSSafariNonStandalone(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const isIOS = /iPhone|iPad/.test(navigator.userAgent);
+  const isStandalone = !!(window.navigator as any).standalone;
+  return isIOS && !isStandalone;
+}
 
 export function SwipeBack() {
   const back = useAppStore((s) => s.back);
@@ -18,6 +27,7 @@ export function SwipeBack() {
   const startRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const indicatorRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef(0);
+  const hasHapticRef = useRef(false);
 
   const canSwipe = detail && !modalOpen && !settingsOpen;
 
@@ -41,11 +51,14 @@ export function SwipeBack() {
       return;
     }
 
+    const isIOSSafari = getIsIOSSafariNonStandalone();
+    const edgeWidth = isIOSSafari ? IOS_EDGE_WIDTH : DEFAULT_EDGE_WIDTH;
+
     const onTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];
-      if (touch.clientX <= EDGE_WIDTH) {
+      if (touch.clientX <= edgeWidth) {
         startRef.current = { x: touch.clientX, y: touch.clientY, t: Date.now() };
-        hapticLight();
+        hasHapticRef.current = false;
       }
     };
 
@@ -63,6 +76,11 @@ export function SwipeBack() {
       }
 
       if (dx > 0) {
+        // Confirm horizontal swipe direction — fire haptic once
+        if (!hasHapticRef.current && dx > 10) {
+          hasHapticRef.current = true;
+          hapticLight();
+        }
         updateIndicator(dx / MIN_DISTANCE);
       }
     };
