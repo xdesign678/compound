@@ -106,11 +106,6 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-::selection {
-  background: rgba(217, 119, 87, 0.22);
-  color: var(--text-primary);
-}
-
 /* Prevent iOS Safari from zooming when focusing inputs on mobile. */
 @media (max-width: 767px) {
   input:not([type]),
@@ -12030,18 +12025,6 @@ button,
   font-size: var(--text-sm);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-/* Global reduced-motion override */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
