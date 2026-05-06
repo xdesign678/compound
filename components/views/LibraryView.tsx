@@ -178,9 +178,11 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   );
 
   const concepts = useLiveQuery(
-    async () => getDb().concepts.orderBy('updatedAt').reverse().limit(100).toArray(),
+    async () => getDb().concepts.orderBy('updatedAt').reverse().toArray(),
     [],
   );
+
+  const totalConceptCount = useLiveQuery(async () => getDb().concepts.count(), []);
 
   const deferredQuery = useDeferredValue(query);
   const [categorizing, setCategorizing] = useState(false);
@@ -489,7 +491,9 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                   <Grid2x2 size={28} strokeWidth={1.85} />
                 </span>
                 <span className="library-primary-card-title">全部</span>
-                <span className="library-primary-card-count">{concepts.length}</span>
+                <span className="library-primary-card-count">
+                  {totalConceptCount ?? concepts?.length ?? 0}
+                </span>
               </button>
               {categoryTree.map((cat) => {
                 const PrimaryIcon = getPrimaryCategoryIcon(cat.primary);
