@@ -4,6 +4,11 @@ import { withRequestId } from './trace-client';
 
 const STORAGE_KEY = 'compound_llm_config';
 const REMEMBER_KEY = 'compound_llm_remember';
+const LEGACY_STORAGE_KEYS = [
+  'compound_llm_api_key',
+  'compound_llm_api_url',
+  'compound_llm_model',
+] as const;
 
 export const PRESET_MODELS = [
   { label: 'Claude Sonnet 4.6', value: 'anthropic/claude-sonnet-4.6' },
@@ -54,6 +59,16 @@ export function saveLlmConfig(config: LlmConfig): void {
   // Clean up the other store to avoid stale data
   const otherStore = remember ? sessionStorage : localStorage;
   otherStore.removeItem(STORAGE_KEY);
+}
+
+export function clearLlmConfig(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(STORAGE_KEY);
+  sessionStorage.removeItem(STORAGE_KEY);
+  for (const key of LEGACY_STORAGE_KEYS) {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  }
 }
 
 export function isLlmRemembered(): boolean {

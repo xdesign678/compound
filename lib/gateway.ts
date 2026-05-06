@@ -125,18 +125,25 @@ async function validateApiUrl(url: string): Promise<void> {
 const HAPPYCAPY_GATEWAY = 'https://ai-gateway.happycapy.ai/api/v1/chat/completions';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
+function cleanEnv(value: string | undefined): string {
+  return value?.replace(/^["'\s]+|["'\s]+$/g, '') || '';
+}
+
 function getGatewayUrl(): string {
   // Explicit URL always wins
-  if (process.env.LLM_API_URL) return process.env.LLM_API_URL;
+  const llmApiUrl = cleanEnv(process.env.LLM_API_URL);
+  if (llmApiUrl) return llmApiUrl;
+  const legacyGatewayUrl = cleanEnv(process.env.AI_GATEWAY_URL);
+  if (legacyGatewayUrl) return legacyGatewayUrl;
   // If user has set LLM_API_KEY, they're using OpenRouter (or custom)
-  if (process.env.LLM_API_KEY) return OPENROUTER_URL;
+  if (cleanEnv(process.env.LLM_API_KEY)) return OPENROUTER_URL;
   // Legacy: AI_GATEWAY_API_KEY → internal HappyCapy gateway (sandbox only)
-  if (process.env.AI_GATEWAY_API_KEY) return HAPPYCAPY_GATEWAY;
+  if (cleanEnv(process.env.AI_GATEWAY_API_KEY)) return HAPPYCAPY_GATEWAY;
   return OPENROUTER_URL;
 }
 
 function getDefaultModel(): string {
-  return process.env.LLM_MODEL || 'anthropic/claude-sonnet-4.6';
+  return cleanEnv(process.env.LLM_MODEL) || 'anthropic/claude-sonnet-4.6';
 }
 
 function readPositiveInt(value: string | undefined, fallback: number): number {
@@ -436,10 +443,10 @@ async function drainSSEStream(
 
 export async function chat(opts: ChatOptions): Promise<string> {
   // Strip quotes/whitespace that some hosting panels add to env vars
-  const clean = (s?: string) => s?.replace(/^["'\s]+|["'\s]+$/g, '') || '';
-  const userApiKey = clean(opts.llmConfig?.apiKey);
-  const userApiUrl = clean(opts.llmConfig?.apiUrl);
-  const serverApiKey = clean(process.env.LLM_API_KEY) || clean(process.env.AI_GATEWAY_API_KEY);
+  const userApiKey = cleanEnv(opts.llmConfig?.apiKey);
+  const userApiUrl = cleanEnv(opts.llmConfig?.apiUrl);
+  const serverApiKey =
+    cleanEnv(process.env.LLM_API_KEY) || cleanEnv(process.env.AI_GATEWAY_API_KEY);
 
   let apiKey: string;
   let gatewayUrl: string;

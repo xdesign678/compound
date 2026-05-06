@@ -106,6 +106,49 @@ test(
   },
 );
 
+test('trims server api url and honors legacy gateway url', { concurrency: false }, async () => {
+  let requestedUrl = '';
+  let requestedModel = '';
+
+  await withEnv(
+    {
+      LLM_API_KEY: undefined,
+      LLM_API_URL: undefined,
+      LLM_MODEL: ' "legacy-model" ',
+      AI_GATEWAY_API_KEY: 'legacy-key',
+      AI_GATEWAY_URL: ' "https://legacy.example.com/v1/chat/completions" ',
+      COMPOUND_SKIP_DNS_GUARD: 'true',
+    },
+    async () => {
+      const mockFetch: typeof fetch = async (input, init) => {
+        requestedUrl = String(input);
+        requestedModel = JSON.parse(String(init?.body ?? '{}')).model;
+
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        );
+      };
+
+      await withMockFetch(mockFetch, async () => {
+        const result = await chat({
+          messages: [{ role: 'user', content: 'hi' }],
+          maxTokens: 10,
+        });
+
+        assert.equal(result, 'ok');
+        assert.equal(requestedUrl, 'https://legacy.example.com/v1/chat/completions');
+        assert.equal(requestedModel, 'legacy-model');
+      });
+    },
+  );
+});
+
 test('blocks private or loopback custom api urls', { concurrency: false }, async () => {
   await withEnv(
     {

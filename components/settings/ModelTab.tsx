@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, type CSSProperties } from 'react';
 import {
+  clearLlmConfig,
   fetchModelSettings,
   getLlmConfig,
   hidePresetModelOnServer,
@@ -275,11 +276,14 @@ export function ModelTab() {
         </button>
         <button
           className="modal-btn danger settings-secondary-action"
-          onClick={() => {
+          onClick={async () => {
+            clearLlmConfig();
             setLlmConfig({ apiKey: undefined, apiUrl: undefined, model: undefined });
-            localStorage.removeItem('compound_llm_api_key');
-            localStorage.removeItem('compound_llm_api_url');
-            localStorage.removeItem('compound_llm_model');
+            const settings = await saveSelectedModelOnServer('').catch(() => null);
+            if (settings) {
+              setCustomModels(settings.models);
+              setHiddenPresetModels(settings.hiddenPresetModels);
+            }
             setLlmSaved(true);
             safeTimeout(() => setLlmSaved(false), 2000);
           }}
