@@ -11447,6 +11447,23 @@ button,
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
+  /* Slim, low-contrast scrollbar so it stays out of the way of the prose */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(60, 50, 40, 0.18) transparent;
+}
+.recap-card-body-shell::-webkit-scrollbar {
+  width: 4px;
+}
+.recap-card-body-shell::-webkit-scrollbar-track {
+  background: transparent;
+}
+.recap-card-body-shell::-webkit-scrollbar-thumb {
+  background: rgba(60, 50, 40, 0.18);
+  border-radius: 999px;
+  transition: background var(--motion-duration-fast) var(--motion-ease-standard);
+}
+.recap-card-body-shell:hover::-webkit-scrollbar-thumb {
+  background: rgba(60, 50, 40, 0.3);
 }
 .recap-card-body-shell .concept-body-prose > *:last-child {
   margin-bottom: 0;
@@ -11543,19 +11560,6 @@ button,
     margin-top: 8px;
     margin-bottom: 14px;
   }
-  .recap-card-body-shell .concept-body-prose {
-    --prose-line-height: 1.95;
-  }
-  .recap-card-body-shell .concept-body-prose p,
-  .recap-card-body-shell .concept-body-prose li {
-    font-size: 16px;
-  }
-  .recap-card-body-shell .concept-body-prose p {
-    margin: 0 0 26px;
-  }
-  .recap-card-body-shell .concept-body-prose li {
-    margin-bottom: 14px;
-  }
   .recap-card-footer {
     padding-top: 14px;
   }
@@ -11573,13 +11577,6 @@ button,
   }
   .recap-card-title {
     font-size: 24px;
-  }
-  .recap-card-body-shell .concept-body-prose p,
-  .recap-card-body-shell .concept-body-prose li {
-    font-size: 17px;
-  }
-  .recap-card-body-shell .concept-body-prose p {
-    margin: 0 0 28px;
   }
 }
 
