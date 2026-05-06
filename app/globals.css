@@ -69,7 +69,7 @@
   --space-4xl: 44px;
 
   /* Safe area (unified reference for all safe-area-inset usages) */
-  --safe-bottom: var(--safe-bottom);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 
   /* Semantic Status Colors */
   --color-success: #2f6a47;
@@ -90,7 +90,7 @@
   --text-primary: #ece9e1;
   --text-body: rgba(236, 233, 225, 0.85);
   --text-secondary: #9b9b95;
-  --text-tertiary: #8a8a84;
+  --text-tertiary: #9a9a94;
   --text-on-button: #1a1a18;
 
   --border-light: rgba(236, 233, 225, 0.08);
@@ -131,6 +131,7 @@ html,
 body {
   height: 100%;
   overscroll-behavior: none;
+  touch-action: manipulation;
 }
 
 body {
@@ -441,7 +442,7 @@ button {
 }
 .tab-item span {
   font-family: var(--font-sans);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.01em;
 }
@@ -659,7 +660,7 @@ button {
     transform 240ms var(--motion-ease-emphasized);
 }
 .header-search-btn.is-visible {
-  width: 36px !important;
+  width: 44px !important;
   margin-right: 0 !important;
   opacity: 1;
   transform: translateX(0) scale(1);
@@ -785,6 +786,7 @@ button {
   border: 1px solid var(--border-light);
   border-radius: 12px;
   padding: 18px;
+  content-visibility: auto;
   transition:
     background var(--motion-duration-fast) var(--motion-ease-standard),
     border-color var(--motion-duration-fast) var(--motion-ease-standard),
@@ -1962,6 +1964,7 @@ button {
   padding: 18px;
   margin-bottom: 12px;
   cursor: pointer;
+  content-visibility: auto;
   transition:
     background var(--motion-duration-fast) var(--motion-ease-standard),
     border-color var(--motion-duration-fast) var(--motion-ease-standard),
@@ -2223,6 +2226,7 @@ button {
   border: 1px solid var(--border-light);
   border-radius: 12px;
   padding: 16px;
+  content-visibility: auto;
 }
 .msg-ai-card.loading {
   opacity: 0.72;
@@ -3679,7 +3683,7 @@ button {
 
 /* Toast */
 .toast-container {
-  position: absolute;
+  position: fixed;
   top: 70px;
   left: 50%;
   transform: translateX(-50%);
@@ -3690,15 +3694,13 @@ button {
   gap: 8px;
   pointer-events: none;
 }
-.desktop-shell .toast-container {
-  position: fixed;
-}
 .toast {
   position: relative;
   top: auto;
   left: auto;
   transform: translateY(-120%);
   background: var(--text-primary);
+  will-change: transform, opacity;
   color: var(--bg-primary);
   padding: 10px 16px;
   border-radius: 10px;
@@ -4509,6 +4511,7 @@ button {
 .note-editor-scroll {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
   padding: 20px 20px calc(40px + var(--safe-bottom));
   display: flex;
@@ -11519,7 +11522,7 @@ button,
   border: none;
   background: transparent;
   font-family: var(--font-sans);
-  font-size: var(--text-md);
+  font-size: 16px;
   color: var(--text-primary);
   outline: none;
 }
@@ -11538,6 +11541,7 @@ button,
 }
 .cmd-list {
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   padding: 6px 0;
   flex: 1;
 }
@@ -12006,4 +12010,27 @@ button,
   font-weight: 400;
   color: var(--text-tertiary);
   font-size: var(--text-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Global reduced-motion override */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

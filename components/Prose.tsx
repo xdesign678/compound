@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import DOMPurify from 'dompurify';
 import { renderMarkdown } from '@/lib/format';
 import { useAppStore } from '@/lib/store';
@@ -48,6 +48,11 @@ export function Prose({
   const openConcept = useAppStore((s) => s.openConcept);
   const openSource = useAppStore((s) => s.openSource);
   const showToast = useAppStore((s) => s.showToast);
+
+  const html = useMemo(() => {
+    if (!markdown) return '';
+    return DOMPurify.sanitize(renderMarkdown(markdown));
+  }, [markdown]);
 
   useEffect(() => {
     const el = ref.current;
@@ -158,7 +163,7 @@ export function Prose({
     <div
       ref={ref}
       className={className ? `prose ${className}` : 'prose'}
-      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(renderMarkdown(markdown)) }}
+      dangerouslySetInnerHTML={{ __html: html }}
       lang="zh-CN"
     />
   );

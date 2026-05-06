@@ -24,9 +24,10 @@ const lora = Lora({
 
 const notoSerifSC = Noto_Serif_SC({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+  weight: ['400', '600'],
   variable: '--font-noto-serif-sc',
-  display: 'optional',
+  display: 'swap',
+  preload: false,
 });
 
 export const metadata: Metadata = {

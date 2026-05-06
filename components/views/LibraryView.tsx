@@ -8,6 +8,7 @@ import {
   useCallback,
   useRef,
   useLayoutEffect,
+  memo,
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
@@ -62,6 +63,44 @@ function getPrimaryCategoryIcon(primary: string | null): LucideIcon {
   if (!primary) return Grid2x2;
   return PRIMARY_CATEGORY_ICON_RULES.find((rule) => rule.match.test(primary))?.icon ?? Grid2x2;
 }
+
+const ConceptCard = memo(function ConceptCard({
+  concept,
+  isActive,
+  onOpen,
+}: {
+  concept: Concept;
+  isActive: boolean;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <button
+      className={`concept-card${isActive ? ' active' : ''}`}
+      onClick={() => onOpen(concept.id)}
+      data-concept-id={concept.id}
+    >
+      <div className="title">{concept.title}</div>
+      <div className="summary">{concept.summary}</div>
+      {concept.categories && concept.categories.length > 0 && (
+        <div className="library-card-tags">
+          {concept.categories.map((cat) => (
+            <span key={`${cat.primary}-${cat.secondary ?? ''}`} className="library-card-tag">
+              {cat.secondary || cat.primary}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="meta">
+        <span className="badge-link">
+          <Icon.Link />
+          {concept.related.length} 链接
+        </span>
+        <span>·</span>
+        <span>{formatRelativeTime(concept.updatedAt)}</span>
+      </div>
+    </button>
+  );
+});
 
 function buildCategoryTree(concepts: Concept[]): CategoryTree[] {
   const primaryMap = new Map<string, Map<string, number>>();
@@ -139,7 +178,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   );
 
   const concepts = useLiveQuery(
-    async () => getDb().concepts.orderBy('updatedAt').reverse().toArray(),
+    async () => getDb().concepts.orderBy('updatedAt').reverse().limit(100).toArray(),
     [],
   );
 
@@ -611,35 +650,12 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
         <>
           <div className="library-grid">
             {visibleConcepts.map((c) => (
-              <button
+              <ConceptCard
                 key={c.id}
-                className={`concept-card${detail?.type === 'concept' && detail.id === c.id ? ' active' : ''}`}
-                onClick={() => openConcept(c.id)}
-                data-concept-id={c.id}
-              >
-                <div className="title">{c.title}</div>
-                <div className="summary">{c.summary}</div>
-                {c.categories && c.categories.length > 0 && (
-                  <div className="library-card-tags">
-                    {c.categories.map((cat) => (
-                      <span
-                        key={`${cat.primary}-${cat.secondary ?? ''}`}
-                        className="library-card-tag"
-                      >
-                        {cat.secondary || cat.primary}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <div className="meta">
-                  <span className="badge-link">
-                    <Icon.Link />
-                    {c.related.length} 链接
-                  </span>
-                  <span>·</span>
-                  <span>{formatRelativeTime(c.updatedAt)}</span>
-                </div>
-              </button>
+                concept={c}
+                isActive={detail?.type === 'concept' && detail.id === c.id}
+                onOpen={openConcept}
+              />
             ))}
           </div>
           <div className="list-end-hint">
