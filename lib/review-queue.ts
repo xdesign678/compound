@@ -6,6 +6,7 @@
  */
 import { nanoid } from 'nanoid';
 import { getServerDb } from './server-db';
+import { wikiRepo, type ConceptRelationKind } from './wiki-db';
 
 export type ReviewStatus = 'open' | 'approved' | 'rejected' | 'resolved';
 export type ReviewKind =
@@ -36,6 +37,56 @@ let schemaReady = false;
 
 function now(): number {
   return Date.now();
+}
+
+function parseReviewPayload<T>(value: string | null): T | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeRelationKind(value: unknown): ConceptRelationKind {
+  if (value === 'supports') return 'supports';
+  if (value === 'extends') return 'extends';
+  if (value === 'depends_on') return 'depends_on';
+  if (value === 'example_of') return 'example_of';
+  if (value === 'similar_to') return 'similar_to';
+  if (value === 'contradicts') return 'contradicts';
+  if (value === 'same_as') return 'same_as';
+  return 'related';
+}
+
+function applyApprovedReviewItem(item: ReviewItem): Record<string, unknown> | null {
+  if (item.kind !== 'relation_suggestion') return null;
+  const payload = parseReviewPayload<{
+    sourceConceptId?: string;
+    targetConceptId?: string;
+    kind?: string;
+    reason?: string;
+    confidence?: number;
+  }>(item.payload_json);
+  const sourceConceptId = payload?.sourceConceptId?.trim() || '';
+  const targetConceptId = payload?.targetConceptId?.trim() || '';
+  if (!sourceConceptId || !targetConceptId || sourceConceptId === targetConceptId) {
+    return { applied: false, reason: 'invalid relation payload' };
+  }
+  const relation = wikiRepo.upsertConceptRelation({
+    sourceConceptId,
+    targetConceptId,
+    kind: normalizeRelationKind(payload?.kind),
+    reason: payload?.reason,
+    confidence:
+      typeof payload?.confidence === 'number' ? Math.max(0, Math.min(1, payload.confidence)) : 0.6,
+  });
+  const concepts = wikiRepo.linkConceptPair(sourceConceptId, targetConceptId);
+  return {
+    applied: Boolean(relation),
+    relationId: relation?.id,
+    touchedConceptIds: concepts.map((concept) => concept.id),
+  };
 }
 
 export function ensureReviewQueueSchema(): void {
@@ -118,14 +169,33 @@ export function resolveReviewItem(
   resolution?: unknown,
 ): ReviewItem | null {
   ensureReviewQueueSchema();
+  const existing = getServerDb().prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as
+    | ReviewItem
+    | undefined;
+  if (!existing) return null;
+
   const ts = now();
+  const applied =
+    status === 'approved' && existing.status === 'open' ? applyApprovedReviewItem(existing) : null;
+  const resolutionPayload =
+    applied && resolution && typeof resolution === 'object'
+      ? { ...(resolution as Record<string, unknown>), application: applied }
+      : applied
+        ? { application: applied }
+        : resolution;
   getServerDb()
     .prepare(
       `UPDATE review_items
        SET status = ?, resolution_json = ?, resolved_at = ?, updated_at = ?
        WHERE id = ? AND status = 'open'`,
     )
-    .run(status, resolution === undefined ? null : JSON.stringify(resolution), ts, ts, id);
+    .run(
+      status,
+      resolutionPayload === undefined ? null : JSON.stringify(resolutionPayload),
+      ts,
+      ts,
+      id,
+    );
   return (
     (getServerDb().prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as
       | ReviewItem

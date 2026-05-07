@@ -833,6 +833,7 @@ export const syncObs = {
         : 0,
       concepts: safeCount(`SELECT COUNT(*) AS count FROM concepts`),
       conceptEvidence: safeCount(`SELECT COUNT(*) AS count FROM concept_evidence`),
+      conceptRelations: safeCount(`SELECT COUNT(*) AS count FROM concept_relations`),
       conceptVersions: safeCount(`SELECT COUNT(*) AS count FROM concept_versions`),
       modelRuns: tableExists('model_runs')
         ? safeCount(`SELECT COUNT(*) AS count FROM model_runs`)

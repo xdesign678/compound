@@ -52,6 +52,46 @@ const MODEL_CHIP_DELETE_STYLE: CSSProperties = {
   padding: 0,
 };
 
+interface ModelUsageSummary {
+  windowDays: number;
+  totals: {
+    runs: number;
+    inputTokens: number;
+    outputTokens: number;
+    costUsd: number;
+    avgLatencyMs: number | null;
+  };
+  byModel: Array<{
+    model: string;
+    runs: number;
+    inputTokens: number;
+    outputTokens: number;
+    costUsd: number;
+    avgLatencyMs: number | null;
+  }>;
+  byTask: Array<{
+    task: string;
+    runs: number;
+    costUsd: number;
+    avgLatencyMs: number | null;
+  }>;
+  recentFailures: Array<{
+    task: string;
+    model: string;
+    createdAt: number;
+  }>;
+}
+
+function formatUsd(value: number): string {
+  if (value <= 0) return '$0.00';
+  if (value < 0.01) return `$${value.toFixed(4)}`;
+  return `$${value.toFixed(2)}`;
+}
+
+function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat('zh-CN', { notation: 'compact' }).format(value);
+}
+
 export function ModelTab() {
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
   const [customModels, setCustomModels] = useState<string[]>([]);
@@ -61,6 +101,8 @@ export function ModelTab() {
   const [llmSaved, setLlmSaved] = useState(false);
   const [adminToken, setAdminToken] = useState('');
   const [adminSaved, setAdminSaved] = useState(false);
+  const [usage, setUsage] = useState<ModelUsageSummary | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const safeTimeout = useCallback((fn: () => void, ms: number) => {
@@ -88,6 +130,23 @@ export function ModelTab() {
       timers.forEach(clearTimeout);
     };
   }, []);
+
+  const loadUsage = useCallback(async () => {
+    setUsageLoading(true);
+    try {
+      const res = await fetch('/api/ops/model-runs?days=14', { method: 'GET' });
+      if (!res.ok) throw new Error(`usage status ${res.status}`);
+      setUsage((await res.json()) as ModelUsageSummary);
+    } catch {
+      setUsage(null);
+    } finally {
+      setUsageLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadUsage();
+  }, [loadUsage]);
 
   async function saveLlm() {
     saveLlmConfig(llmConfig);
@@ -299,12 +358,66 @@ export function ModelTab() {
             checked={llmRemember}
             onChange={(e) => {
               setLlmRemember(e.target.checked);
-              setLlmRemember(e.target.checked);
             }}
           />
           记住凭据（否则关闭浏览器后清除）
         </label>
       </div>
+
+      {/* 模型运行记忆 */}
+      <div className="settings-tab-divider" />
+
+      <div className="settings-card-head">
+        <div className="settings-card-icon">
+          <Icon.Sparkle />
+        </div>
+        <div>
+          <div className="settings-card-title">模型运行记忆</div>
+          <div className="settings-card-desc">近 14 天模型成本、token 和失败调用。</div>
+        </div>
+      </div>
+
+      <div className="settings-tool-row settings-card-head-adjacent">
+        <div>
+          <div className="settings-tool-title">
+            {usage
+              ? `${usage.totals.runs} 次调用 · ${formatUsd(usage.totals.costUsd)}`
+              : '暂无调用记录'}
+          </div>
+          <div className="settings-card-desc">
+            {usage
+              ? `${formatCompactNumber(usage.totals.inputTokens + usage.totals.outputTokens)} tokens · 平均 ${
+                  usage.totals.avgLatencyMs ? Math.round(usage.totals.avgLatencyMs) : 0
+                }ms`
+              : '等待服务端产生 model_runs 记录'}
+          </div>
+        </div>
+        <button className="modal-btn" onClick={() => void loadUsage()} disabled={usageLoading}>
+          {usageLoading ? '刷新中...' : '刷新'}
+        </button>
+      </div>
+
+      {usage && usage.byModel.length > 0 && (
+        <div className="settings-lint-results">
+          {usage.byModel.slice(0, 4).map((item) => (
+            <div key={item.model} className="settings-lint-finding">
+              <div className="settings-lint-finding-type">{formatUsd(item.costUsd)}</div>
+              <div className="settings-lint-finding-msg">
+                {modelLabel(item.model)} · {item.runs} 次 ·{' '}
+                {formatCompactNumber(item.inputTokens + item.outputTokens)} tokens
+              </div>
+            </div>
+          ))}
+          {usage.recentFailures.length > 0 && (
+            <div className="settings-lint-finding last">
+              <div className="settings-lint-finding-type">失败</div>
+              <div className="settings-lint-finding-msg">
+                {usage.recentFailures[0].task} · {modelLabel(usage.recentFailures[0].model)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 访问保护 */}
       <div className="settings-tab-divider" />

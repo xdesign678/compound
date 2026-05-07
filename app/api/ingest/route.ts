@@ -65,6 +65,41 @@ export const POST = withRequestTracing(async (req: Request) => {
       llmConfig,
     });
 
+    try {
+      const { queueAdvancedAnalysisJob, startAnalysisWorker } =
+        await import('@/lib/analysis-worker');
+      for (const stage of ['embedding', 'summarize', 'relations', 'qa_index'] as const) {
+        queueAdvancedAnalysisJob({
+          sourceId: result.sourceId,
+          sourcePath: result.source.title,
+          stage,
+          model:
+            stage === 'summarize' || stage === 'relations' ? process.env.LLM_MODEL || null : null,
+          promptVersion:
+            stage === 'summarize'
+              ? 'source-summary-v1'
+              : stage === 'relations'
+                ? 'concept-relations-v1'
+                : null,
+          priority:
+            stage === 'embedding'
+              ? 40
+              : stage === 'summarize'
+                ? 20
+                : stage === 'relations'
+                  ? 15
+                  : 10,
+          maxAttempts: stage === 'qa_index' ? 1 : 2,
+        });
+      }
+      startAnalysisWorker('manual_ingest');
+    } catch (error) {
+      logger.warn('ingest.post_jobs_queue_failed', {
+        sourceId: result.sourceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     return NextResponse.json(result);
   } catch (err) {
     logger.error('ingest.failed', { error: err instanceof Error ? err.message : String(err) });

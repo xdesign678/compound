@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { ensureSourceHydrated } from '@/lib/cloud-sync';
+import { updateSourceContent } from '@/lib/api-client';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime, renderMarkdown } from '@/lib/format';
 
@@ -342,7 +343,11 @@ export function SourceDetail({ id }: { id: string }) {
     if (!canEdit || !isDirty || saveStatus === 'saving') return;
     setSaveStatus('saving');
     try {
-      await getDb().sources.update(id, { rawContent: draftContent });
+      await updateSourceContent({
+        id,
+        title: source?.title,
+        rawContent: draftContent,
+      });
       renderedContentRef.current = draftContent;
       setIsDirty(false);
       setSaveStatus('saved');
@@ -350,7 +355,7 @@ export function SourceDetail({ id }: { id: string }) {
       console.warn('[source-detail] save failed:', err);
       setSaveStatus('error');
     }
-  }, [canEdit, draftContent, id, isDirty, saveStatus]);
+  }, [canEdit, draftContent, id, isDirty, saveStatus, source?.title]);
 
   useEffect(() => {
     if (!canEdit || !isDirty || saveStatus === 'saving') return;

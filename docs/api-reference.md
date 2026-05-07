@@ -6,8 +6,8 @@
 
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
-- Routes: **33**
-- Handlers (HTTP methods): **39**
+- Routes: **37**
+- Handlers (HTTP methods): **44**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
@@ -15,6 +15,7 @@ This document is generated automatically from the Next.js Route Handlers under `
 - **categorize**
   - [`/api/categorize`](#api-categorize)
 - **concepts**
+  - [`/api/concepts/archive-answer`](#api-concepts-archive-answer)
   - [`/api/concepts/from-selection`](#api-concepts-from-selection)
 - **data**
   - [`/api/data/concepts/{id}/versions`](#api-data-concepts--id--versions)
@@ -31,6 +32,8 @@ This document is generated automatically from the Next.js Route Handlers under `
   - [`/api/lint/status`](#api-lint-status)
 - **metrics**
   - [`/api/metrics`](#api-metrics)
+- **ops**
+  - [`/api/ops/model-runs`](#api-ops-model-runs)
 - **query**
   - [`/api/query`](#api-query)
 - **repair**
@@ -56,8 +59,10 @@ This document is generated automatically from the Next.js Route Handlers under `
 - **wiki**
   - [`/api/wiki/export`](#api-wiki-export)
   - [`/api/wiki/health`](#api-wiki-health)
+  - [`/api/wiki/import`](#api-wiki-import)
   - [`/api/wiki/rebuild-index`](#api-wiki-rebuild-index)
   - [`/api/wiki/search`](#api-wiki-search)
+  - [`/api/wiki/topics`](#api-wiki-topics)
 
 ## categorize
 
@@ -77,6 +82,23 @@ Source: [`app/api/categorize/route.ts`](../app/api/categorize/route.ts)
 _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` block in `app/api/categorize/route.ts` to document this endpoint._
 
 ## concepts
+
+### `/api/concepts/archive-answer`
+
+Source: [`app/api/concepts/archive-answer/route.ts`](../app/api/concepts/archive-answer/route.ts)
+
+| Field       | Value                                   |
+| ----------- | --------------------------------------- |
+| Methods     | `POST`                                  |
+| Runtime     | `nodejs`                                |
+| maxDuration | 30                                      |
+| Guards      | `admin-token`, `content-length-guarded` |
+
+#### POST
+
+Archive an Ask answer as a first-class server Wiki concept. The new concept
+is linked to the cited concepts, indexed into FTS, versioned, and mirrored
+back to the caller with all touched related concepts.
 
 ### `/api/concepts/from-selection`
 
@@ -161,17 +183,23 @@ and heavy workflows such as ask / categorize.
 
 Source: [`app/api/data/sources/route.ts`](../app/api/data/sources/route.ts)
 
-| Field       | Value         |
-| ----------- | ------------- |
-| Methods     | `GET`         |
-| Runtime     | `nodejs`      |
-| maxDuration | 30            |
-| Guards      | `admin-token` |
+| Field       | Value                                   |
+| ----------- | --------------------------------------- |
+| Methods     | `GET`, `PATCH`                          |
+| Runtime     | `nodejs`                                |
+| maxDuration | 30                                      |
+| Guards      | `admin-token`, `content-length-guarded` |
 
 #### GET
 
 GET /api/data/sources?ids=s-1,s-2
 Returns full source documents for on-demand hydration.
+
+#### PATCH
+
+PATCH /api/data/sources
+Updates a source document and recompiles retrieval artifacts for all
+concepts backed by that source. Body: `{ id, rawContent, title? }`.
 
 ## health
 
@@ -310,6 +338,25 @@ review-queue, embedding, and knowledge-base gauges for external monitoring
 systems such as Prometheus, Datadog, New Relic, or CloudWatch agents.
 
 Guards: admin token.
+
+## ops
+
+### `/api/ops/model-runs`
+
+Source: [`app/api/ops/model-runs/route.ts`](../app/api/ops/model-runs/route.ts)
+
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | 10            |
+| Guards      | `admin-token` |
+
+#### GET
+
+GET /api/ops/model-runs?days=14
+Returns aggregated LLM run telemetry: token totals, provider-reported cost,
+latency by model/task, daily spend, and recent failure markers.
 
 ## query
 
@@ -695,6 +742,23 @@ Source: [`app/api/wiki/health/route.ts`](../app/api/wiki/health/route.ts)
 
 _No JSDoc comment found above the `GET` handler. Add a leading `/** ... */` block in `app/api/wiki/health/route.ts` to document this endpoint._
 
+### `/api/wiki/import`
+
+Source: [`app/api/wiki/import/route.ts`](../app/api/wiki/import/route.ts)
+
+| Field       | Value                                   |
+| ----------- | --------------------------------------- |
+| Methods     | `POST`                                  |
+| Runtime     | `nodejs`                                |
+| maxDuration | 60                                      |
+| Guards      | `admin-token`, `content-length-guarded` |
+
+#### POST
+
+Import Markdown files previously produced by `/api/wiki/export`. The import
+updates existing concept pages by `frontmatter.id`, records versions, and
+rebuilds FTS/relation artifacts. Body: `{ files, dryRun? }`.
+
 ### `/api/wiki/rebuild-index`
 
 Source: [`app/api/wiki/rebuild-index/route.ts`](../app/api/wiki/rebuild-index/route.ts)
@@ -724,6 +788,23 @@ Source: [`app/api/wiki/search/route.ts`](../app/api/wiki/search/route.ts)
 #### POST
 
 _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` block in `app/api/wiki/search/route.ts` to document this endpoint._
+
+### `/api/wiki/topics`
+
+Source: [`app/api/wiki/topics/route.ts`](../app/api/wiki/topics/route.ts)
+
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | 10            |
+| Guards      | `admin-token` |
+
+#### GET
+
+GET /api/wiki/topics?limit=50
+Returns lightweight topic/community summaries derived from source analysis
+topics and entities, with related concept candidates for each topic.
 
 ---
 

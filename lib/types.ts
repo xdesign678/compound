@@ -140,6 +140,7 @@ export interface PersistedIngestResponse {
     evidence: number;
     conceptsIndexed: number;
     versions: number;
+    relations?: number;
   };
 }
 

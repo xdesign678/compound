@@ -21,6 +21,8 @@ const STRONG_RELATION_KINDS = new Set([
   'example_of',
   'similar_to',
   'related',
+  'same_as',
+  'contradicts',
 ]);
 
 export interface GraphExpandResult {
@@ -71,6 +73,17 @@ export function graphExpand(seedIds: string[], max = 5): GraphExpandResult {
       error: error instanceof Error ? error.message : String(error),
     });
     return { concepts: [], trace: {} };
+  }
+
+  if (rows.length === 0) {
+    const legacySeeds = repo.getConceptsByIds(seedIds);
+    rows = legacySeeds.flatMap((concept) =>
+      concept.related.map((targetId) => ({
+        source_concept_id: concept.id,
+        target_concept_id: targetId,
+        kind: 'related',
+      })),
+    );
   }
 
   // Count neighbor frequency: more incoming edges from seeds → higher rank

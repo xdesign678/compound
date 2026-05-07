@@ -42,6 +42,7 @@ export interface ServerIngestResult {
     evidence: number;
     conceptsIndexed: number;
     versions: number;
+    relations?: number;
   };
 }
 

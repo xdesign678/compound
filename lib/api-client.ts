@@ -91,26 +91,6 @@ async function findClientConceptCandidates(
   return [...candidates, ...fallback.filter((concept) => !seen.has(concept.id))].slice(0, limit);
 }
 
-async function addBidirectionalLinks(
-  db: ReturnType<typeof getDb>,
-  sourceId: string,
-  relatedIds: string[],
-  now: number,
-) {
-  const fetched = await db.concepts.bulkGet(relatedIds);
-  await db.transaction('rw', db.concepts, async () => {
-    for (let i = 0; i < relatedIds.length; i++) {
-      const c = fetched[i];
-      if (c && !c.related.includes(sourceId)) {
-        await db.concepts.update(relatedIds[i], {
-          related: [...c.related, sourceId],
-          updatedAt: now,
-        });
-      }
-    }
-  });
-}
-
 /** Build an AbortSignal with a timeout, optionally combined with an external signal. */
 function buildTimeoutSignal(
   externalSignal?: AbortSignal,
@@ -361,6 +341,36 @@ export interface AskStageEvent {
   conceptTitles?: string[];
 }
 
+export interface WikiSearchResult {
+  concepts: Concept[];
+  chunks: Array<{
+    id: string;
+    sourceId: string;
+    heading: string;
+    content: string;
+  }>;
+  evidence: Array<{
+    id: string;
+    conceptId: string;
+    sourceId: string;
+    claim: string;
+    quote?: string;
+    confidence: number;
+  }>;
+}
+
+export async function searchWikiContext(input: {
+  query: string;
+  conceptLimit?: number;
+  chunkLimit?: number;
+}): Promise<WikiSearchResult> {
+  return postJSON<WikiSearchResult>('/api/wiki/search', {
+    query: input.query,
+    conceptLimit: input.conceptLimit,
+    chunkLimit: input.chunkLimit,
+  });
+}
+
 /** Ask the Wiki with streaming deltas, then resolve with the full response. */
 export async function askWikiStream(
   question: string,
@@ -566,40 +576,76 @@ export async function archiveAnswerAsConcept(
   body: string,
   citedConceptIds: string[],
 ): Promise<string> {
-  const db = getDb();
-  const now = Date.now();
-  const id = 'c-' + nanoid(8);
-  const concept: Concept = {
-    id,
+  const resp = await postJSON<{
+    conceptId: string;
+    concepts: Concept[];
+    activity: ActivityLog;
+  }>('/api/concepts/archive-answer', {
     title,
     summary,
     body,
-    sources: [],
-    related: citedConceptIds,
-    createdAt: now,
-    updatedAt: now,
-    version: 1,
-    contentStatus: 'full',
-    categories: [],
-    categoryKeys: [],
+    citedConceptIds,
+  });
+
+  const db = getDb();
+  await db.transaction('rw', [db.concepts, db.activity], async () => {
+    if (resp.concepts.length > 0) {
+      await db.concepts.bulkPut(
+        resp.concepts.map((concept) => ({ ...concept, contentStatus: 'full' as const })),
+      );
+    }
+    await db.activity.put(resp.activity);
+  });
+
+  return resp.conceptId;
+}
+
+export async function updateSourceContent(input: {
+  id: string;
+  title?: string;
+  rawContent: string;
+}): Promise<{
+  source: Source;
+  concepts: Concept[];
+  activity?: ActivityLog;
+}> {
+  const res = await fetch('/api/data/sources', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Request-ID': generateClientRequestId(),
+      ...getAdminAuthHeaders(),
+    },
+    body: JSON.stringify(input),
+    signal: buildTimeoutSignal(undefined, DEFAULT_REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      throw new Error('认证失败，请在设置中检查 Admin Token');
+    }
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 200) || `保存失败 (${res.status})`);
+  }
+  const payload = (await res.json()) as {
+    source: Source;
+    concepts?: Concept[];
+    activity?: ActivityLog;
   };
-  await db.concepts.put(concept);
-
-  // Bidirectional links
-  await addBidirectionalLinks(db, id, citedConceptIds, now);
-
-  // Log
-  const activity: ActivityLog = {
-    id: 'a-' + nanoid(8),
-    type: 'query',
-    title: `归档问答为新概念 <em>${escapeHTML(title)}</em>`,
-    details: `基于 ${citedConceptIds.length} 个现有概念综合生成`,
-    relatedConceptIds: [id, ...citedConceptIds],
-    at: now,
+  const db = getDb();
+  await db.transaction('rw', [db.sources, db.concepts, db.activity], async () => {
+    await db.sources.put({ ...payload.source, contentStatus: 'full' });
+    if (payload.concepts?.length) {
+      await db.concepts.bulkPut(
+        payload.concepts.map((concept) => ({ ...concept, contentStatus: 'full' as const })),
+      );
+    }
+    if (payload.activity) await db.activity.put(payload.activity);
+  });
+  return {
+    source: payload.source,
+    concepts: payload.concepts ?? [],
+    activity: payload.activity,
   };
-  await db.activity.put(activity);
-
-  return id;
 }
 
 export interface RepairFindingPayload {
@@ -796,11 +842,4 @@ export async function categorizeConcepts(
   }
 
   return { total: uncategorized.length, failed, errors };
-}
-
-function escapeHTML(s: string): string {
-  return s.replace(
-    /[&<>"']/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
-  );
 }

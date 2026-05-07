@@ -441,6 +441,18 @@ async function drainSSEStream(
   return { content, finishReason, usage };
 }
 
+function usageNumber(usage: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = usage[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return undefined;
+}
+
 export async function chat(opts: ChatOptions): Promise<string> {
   // Strip quotes/whitespace that some hosting panels add to env vars
   const userApiKey = cleanEnv(opts.llmConfig?.apiKey);
@@ -667,10 +679,10 @@ export async function chat(opts: ChatOptions): Promise<string> {
     recordModelRun({
       model,
       task,
-      inputTokens: typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : undefined,
-      outputTokens:
-        typeof usage.completion_tokens === 'number' ? usage.completion_tokens : undefined,
+      inputTokens: usageNumber(usage, ['prompt_tokens', 'input_tokens']),
+      outputTokens: usageNumber(usage, ['completion_tokens', 'output_tokens']),
       latencyMs: Date.now() - startedAt,
+      costUsd: usageNumber(usage, ['cost', 'cost_usd', 'total_cost']),
     });
     return content;
   }

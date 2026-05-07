@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useDeferredValue, useRef, memo } from 're
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
 import { getDb } from '@/lib/db';
+import { searchWikiContext } from '@/lib/api-client';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { getUnreviewedCountFromDb } from '@/lib/review-picks';
@@ -61,10 +62,12 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   const deferredQuery = useDeferredValue(query);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [unreviewedCount, setUnreviewedCount] = useState(0);
+  const [serverConcepts, setServerConcepts] = useState<Concept[] | null>(null);
+  const [serverSearchLoading, setServerSearchLoading] = useState(false);
 
   const { scrolled } = useScrollSpy({ scrollRootSelector });
 
-  const concepts = useLiveQuery(async () => {
+  const localConcepts = useLiveQuery(async () => {
     const q = deferredQuery.trim().toLowerCase();
     const collection = getDb().concepts.orderBy('updatedAt').reverse();
     if (!q) {
@@ -99,6 +102,37 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   }, [deferredQuery]);
 
   useEffect(() => {
+    const q = deferredQuery.trim();
+    if (!q) {
+      setServerConcepts(null);
+      setServerSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setServerSearchLoading(true);
+    searchWikiContext({ query: q, conceptLimit: visibleCount, chunkLimit: 8 })
+      .then((result) => {
+        if (cancelled) return;
+        setServerConcepts(result.concepts);
+        if (result.concepts.length > 0) {
+          void getDb().concepts.bulkPut(
+            result.concepts.map((concept) => ({ ...concept, contentStatus: 'full' as const })),
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setServerConcepts(null);
+      })
+      .finally(() => {
+        if (!cancelled) setServerSearchLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [deferredQuery, visibleCount]);
+
+  useEffect(() => {
     if (searchFocusNonce === 0) return;
     const id = window.setTimeout(() => searchInputRef.current?.focus(), 240);
     return () => window.clearTimeout(id);
@@ -108,6 +142,7 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
     getUnreviewedCountFromDb().then(setUnreviewedCount);
   }, [totalConceptCount]);
 
+  const concepts = serverConcepts ?? localConcepts;
   const fresh = useMemo(() => (concepts ?? []).filter((c) => freshIds[c.id]), [concepts, freshIds]);
   const others = useMemo(
     () => (concepts ?? []).filter((c) => !freshIds[c.id]),
@@ -119,7 +154,10 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   }
 
   const hasAnyConcepts = (totalConceptCount ?? 0) > 0;
-  const hasMatches = (totalMatches ?? concepts.length) > 0;
+  const totalVisibleMatches = serverConcepts
+    ? serverConcepts.length
+    : (totalMatches ?? concepts.length);
+  const hasMatches = totalVisibleMatches > 0 || serverSearchLoading;
 
   return (
     <>
@@ -217,11 +255,11 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
           )}
           <div className="list-end-hint">
             <span>
-              已显示 {concepts.length} / {totalMatches ?? concepts.length} 个概念 · 点击 +
-              添加更多知识
+              {serverSearchLoading ? '服务端检索中 · ' : ''}已显示 {concepts.length} /{' '}
+              {totalVisibleMatches} 个概念 · 点击 + 添加更多知识
             </span>
           </div>
-          {concepts.length < (totalMatches ?? 0) && (
+          {concepts.length < totalVisibleMatches && (
             <button
               className="modal-btn"
               onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}

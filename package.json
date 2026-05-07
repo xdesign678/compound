@@ -26,6 +26,7 @@
     "alerts:check": "node scripts/generate-alert-rules.mjs --check",
     "validate:agents-md": "node scripts/validate-agents-md.mjs",
     "validate:profiling": "node scripts/validate-profiling-config.mjs",
+    "docs:code-map": "node scripts/generate-code-map.mjs",
     "docs:api": "node scripts/generate-api-docs.mjs",
     "docs:api:check": "node scripts/generate-api-docs.mjs --check",
     "check": "npm run format:check && npm run typecheck && npm run test:coverage && npm run quality:metrics && npm run quality:duplicates && npm run debt:check && npm run alerts:check && npm run validate:agents-md && npm run validate:profiling && npm run docs:api:check && npm run build",

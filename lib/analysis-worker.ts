@@ -14,6 +14,7 @@ import { embedSourceChunks } from './embedding';
 import { createReviewItem } from './review-queue';
 import { chat, parseJSON } from './gateway';
 import { now, parseJson } from './utils';
+import { wikiRepo, type ConceptRelationKind } from './wiki-db';
 
 export type AdvancedAnalysisStage =
   | 'github_ingest'
@@ -84,6 +85,24 @@ const WORKER_MAX_LOOPS = Math.max(
 const LEASE_MS = Math.max(60_000, Number(process.env.COMPOUND_ANALYSIS_LEASE_MS || 5 * 60_000));
 /** Max concurrent worker loops. We use DB lease + in-memory counter combined. */
 const MAX_PARALLEL_WORKERS = Math.max(1, Number(process.env.COMPOUND_ANALYSIS_MAX_WORKERS || 2));
+const RELATION_CONFIDENCE_AUTO_APPLY = Math.max(
+  0,
+  Math.min(1, Number(process.env.COMPOUND_RELATION_AUTO_APPLY_CONFIDENCE || 0.72)),
+);
+const MAX_RELATION_CONCEPTS = Math.max(
+  2,
+  Math.min(48, Number(process.env.COMPOUND_RELATION_MAX_CONCEPTS || 24)),
+);
+const RELATION_KINDS = new Set<ConceptRelationKind>([
+  'supports',
+  'extends',
+  'depends_on',
+  'example_of',
+  'similar_to',
+  'related',
+  'contradicts',
+  'same_as',
+]);
 
 let schemaReady = false;
 let activeWorkerCount = 0;
@@ -502,6 +521,18 @@ function queuePostIngestJobs(input: {
     sourceId: input.sourceId,
     sourceSha: input.sourceSha,
     sourcePath: input.sourcePath,
+    stage: 'relations',
+    model: process.env.LLM_MODEL || null,
+    promptVersion: 'concept-relations-v1',
+    priority: 15,
+    maxAttempts: 2,
+  });
+  queueAdvancedAnalysisJob({
+    runId: input.runId,
+    itemId: input.itemId,
+    sourceId: input.sourceId,
+    sourceSha: input.sourceSha,
+    sourcePath: input.sourcePath,
     stage: 'qa_index',
     priority: 10,
     maxAttempts: 1,
@@ -718,17 +749,171 @@ async function processQaIndex(job: AnalysisJobRow): Promise<void> {
   finishJob(job, 'succeeded');
 }
 
+interface RelationLLMSuggestion {
+  sourceConceptId?: string;
+  targetConceptId?: string;
+  kind?: string;
+  reason?: string;
+  confidence?: number;
+}
+
+function normalizeWorkerRelationKind(kind: unknown): ConceptRelationKind {
+  return RELATION_KINDS.has(kind as ConceptRelationKind)
+    ? (kind as ConceptRelationKind)
+    : 'related';
+}
+
+function hasConfiguredServerLlm(): boolean {
+  return Boolean(
+    (process.env.LLM_API_KEY || '').trim() || (process.env.AI_GATEWAY_API_KEY || '').trim(),
+  );
+}
+
+function buildRelationConceptBlock(
+  concepts: Array<{ id: string; title: string; summary: string; body: string }>,
+): string {
+  return concepts
+    .map((concept) => {
+      const body = concept.body.trim().slice(0, 700);
+      return `- [${concept.id}] ${concept.title}\n  摘要: ${concept.summary}\n  正文摘录: ${body || '(无正文)'}`;
+    })
+    .join('\n\n');
+}
+
+async function processRelations(job: AnalysisJobRow): Promise<void> {
+  const source = repo.getSource(job.source_id);
+  if (!source) {
+    finishJob(job, 'skipped', 'source not found');
+    return;
+  }
+
+  const sourceConcepts = repo
+    .listConcepts({ summariesOnly: false })
+    .filter((concept) => concept.sources.includes(source.id))
+    .slice(0, MAX_RELATION_CONCEPTS);
+
+  const synced = wikiRepo.syncRelatedConceptRelations(sourceConcepts, {
+    reason: `资料「${source.title}」关系抽取前同步。`,
+    confidence: 0.68,
+  });
+
+  if (sourceConcepts.length < 2) {
+    syncObs.recordEvent({
+      runId: job.run_id,
+      itemId: job.item_id,
+      level: 'success',
+      stage: 'relations',
+      path: job.source_path,
+      message: `关系同步完成：legacy related ${synced} 条，概念不足 2 个，跳过 LLM 抽取`,
+    });
+    finishJob(job, 'succeeded');
+    return;
+  }
+
+  if (process.env.COMPOUND_DISABLE_RELATION_WORKER === 'true' || !hasConfiguredServerLlm()) {
+    syncObs.recordEvent({
+      runId: job.run_id,
+      itemId: job.item_id,
+      level: 'success',
+      stage: 'relations',
+      path: job.source_path,
+      message: `关系同步完成：legacy related ${synced} 条，LLM 关系抽取未启用`,
+    });
+    finishJob(job, 'succeeded');
+    return;
+  }
+
+  const prompt = `请从下面同一资料生成的概念页中抽取概念关系，只输出严格 JSON。\n\nSchema: {"relations":[{"sourceConceptId":"c-...","targetConceptId":"c-...","kind":"supports|extends|depends_on|example_of|similar_to|related|contradicts|same_as","reason":"一句话说明证据","confidence":0.0}]}\n\n规则：\n- 只使用列表中存在的 concept id。\n- 不要输出自环。\n- 有明确方向时保留方向，例如 A depends_on B。\n- 没有明确语义但确实相关时才使用 related。\n- confidence 低于 0.55 的不要输出。\n\n资料标题：${source.title}\n\n概念列表：\n${buildRelationConceptBlock(sourceConcepts)}`;
+
+  const raw = await chat({
+    messages: [
+      { role: 'system', content: '你是知识图谱关系抽取器。只输出合法 JSON。' },
+      { role: 'user', content: prompt },
+    ],
+    responseFormat: 'json_object',
+    temperature: 0.2,
+    maxTokens: 1400,
+    task: 'relation_extract',
+  });
+  const parsed = parseJSON<{ relations?: RelationLLMSuggestion[] }>(raw);
+  const conceptIds = new Set(sourceConcepts.map((concept) => concept.id));
+  const titleById = new Map(sourceConcepts.map((concept) => [concept.id, concept.title]));
+
+  let applied = 0;
+  let queued = 0;
+  for (const suggestion of (parsed.relations ?? []).slice(0, 40)) {
+    const sourceConceptId = suggestion.sourceConceptId?.trim() || '';
+    const targetConceptId = suggestion.targetConceptId?.trim() || '';
+    if (
+      !conceptIds.has(sourceConceptId) ||
+      !conceptIds.has(targetConceptId) ||
+      sourceConceptId === targetConceptId
+    ) {
+      continue;
+    }
+    const kind = normalizeWorkerRelationKind(suggestion.kind);
+    const confidence =
+      typeof suggestion.confidence === 'number'
+        ? Math.max(0, Math.min(1, suggestion.confidence))
+        : 0.6;
+    const reason = suggestion.reason?.trim().slice(0, 500) || 'LLM 抽取的概念关系。';
+
+    if (confidence >= RELATION_CONFIDENCE_AUTO_APPLY) {
+      wikiRepo.upsertConceptRelation({
+        sourceConceptId,
+        targetConceptId,
+        kind,
+        reason,
+        confidence,
+      });
+      wikiRepo.linkConceptPair(sourceConceptId, targetConceptId);
+      applied += 1;
+    } else {
+      createReviewItem({
+        kind: 'relation_suggestion',
+        title: `关系建议：${titleById.get(sourceConceptId) ?? sourceConceptId} → ${
+          titleById.get(targetConceptId) ?? targetConceptId
+        }`,
+        targetType: 'concept_relation',
+        targetId: `${sourceConceptId}:${targetConceptId}:${kind}`,
+        sourceId: source.id,
+        confidence,
+        payload: {
+          sourceConceptId,
+          targetConceptId,
+          kind,
+          reason,
+          confidence,
+          sourceTitle: titleById.get(sourceConceptId),
+          targetTitle: titleById.get(targetConceptId),
+        },
+      });
+      queued += 1;
+    }
+  }
+
+  syncObs.recordEvent({
+    runId: job.run_id,
+    itemId: job.item_id,
+    level: 'success',
+    stage: 'relations',
+    path: job.source_path,
+    message: `关系抽取完成：自动写入 ${applied} 条，待审 ${queued} 条，legacy 同步 ${synced} 条`,
+  });
+  finishJob(job, 'succeeded');
+}
+
 async function processJob(job: AnalysisJobRow): Promise<void> {
   try {
     if (job.stage === 'github_ingest') await processGithubIngest(job);
     else if (job.stage === 'embedding') await processEmbedding(job);
     else if (job.stage === 'summarize') await processSummarize(job);
+    else if (job.stage === 'relations') await processRelations(job);
     else if (
       job.stage === 'qa_index' ||
       job.stage === 'chunk' ||
       job.stage === 'fts' ||
-      job.stage === 'concepts' ||
-      job.stage === 'relations'
+      job.stage === 'concepts'
     ) {
       await processQaIndex(job);
     } else {

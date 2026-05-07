@@ -1,3 +1,4 @@
+import { repo } from './server-db';
 import { wikiRepo, type ConceptEvidence } from './wiki-db';
 import type { Concept, Source } from './types';
 
@@ -54,7 +55,13 @@ export function compileWikiArtifactsAfterIngest(input: {
   createdConcepts: Concept[];
   updatedConcepts: Array<{ previous: Concept; next: Concept }>;
   activitySummary: string;
-}): { chunks: number; evidence: number; conceptsIndexed: number; versions: number } {
+}): {
+  chunks: number;
+  evidence: number;
+  conceptsIndexed: number;
+  versions: number;
+  relations: number;
+} {
   const chunks = wikiRepo.indexSource(input.source);
   const affected = [
     ...input.createdConcepts.map((concept) => ({ previous: undefined, next: concept })),
@@ -92,11 +99,96 @@ export function compileWikiArtifactsAfterIngest(input: {
     wikiRepo.addEvidenceBatch(evidence);
     evidenceCount += evidence.length;
   }
+  const relationCount = wikiRepo.syncRelatedConceptRelations(
+    affected.map((item) => item.next),
+    {
+      reason: `由资料「${input.source.title}」摄入时同步。`,
+      confidence: 0.68,
+    },
+  );
 
   return {
     chunks: chunks.length,
     evidence: evidenceCount,
     conceptsIndexed: affected.length,
     versions: versionCount,
+    relations: relationCount,
+  };
+}
+
+export function compileConceptArtifactsAfterManualChange(input: {
+  createdConcepts?: Concept[];
+  updatedConcepts?: Array<{ previous: Concept; next: Concept }>;
+  changeSummary: string;
+  sourceIds?: string[];
+}): { conceptsIndexed: number; versions: number; relations: number } {
+  const affected = [
+    ...(input.createdConcepts ?? []).map((concept) => ({ previous: undefined, next: concept })),
+    ...(input.updatedConcepts ?? []),
+  ];
+  let versionCount = 0;
+
+  for (const item of affected) {
+    wikiRepo.indexConcept(item.next);
+    wikiRepo.recordConceptVersion({
+      conceptId: item.next.id,
+      version: item.next.version,
+      previousBody: item.previous?.body,
+      nextBody: item.next.body,
+      sourceIds: input.sourceIds ?? item.next.sources,
+      changeSummary: input.changeSummary,
+    });
+    versionCount += 1;
+  }
+
+  const relationCount = wikiRepo.syncRelatedConceptRelations(
+    affected.map((item) => item.next),
+    {
+      reason: input.changeSummary,
+      confidence: 0.66,
+    },
+  );
+
+  return {
+    conceptsIndexed: affected.length,
+    versions: versionCount,
+    relations: relationCount,
+  };
+}
+
+export function recompileSourceArtifactsAfterEdit(input: {
+  source: Source;
+  changeSummary?: string;
+}): {
+  chunks: number;
+  evidence: number;
+  conceptsIndexed: number;
+  relations: number;
+  affectedConceptIds: string[];
+} {
+  const chunks = wikiRepo.indexSource(input.source);
+  const affectedConcepts = repo
+    .listConcepts({ summariesOnly: false })
+    .filter((concept) => concept.sources.includes(input.source.id));
+
+  let evidenceCount = 0;
+  for (const concept of affectedConcepts) {
+    wikiRepo.indexConcept(concept);
+    const evidence = evidenceForConcept(input.source, concept, chunks);
+    wikiRepo.addEvidenceBatch(evidence);
+    evidenceCount += evidence.length;
+  }
+
+  const relationCount = wikiRepo.syncRelatedConceptRelations(affectedConcepts, {
+    reason: input.changeSummary || `资料「${input.source.title}」编辑后同步。`,
+    confidence: 0.66,
+  });
+
+  return {
+    chunks: chunks.length,
+    evidence: evidenceCount,
+    conceptsIndexed: affectedConcepts.length,
+    relations: relationCount,
+    affectedConceptIds: affectedConcepts.map((concept) => concept.id),
   };
 }

@@ -9,6 +9,8 @@ import { getRequestContext, withRequestTracing } from '@/lib/request-context';
 import { logger } from '@/lib/server-logger';
 import { repo, getServerDb } from '@/lib/server-db';
 import { normalizeCategoryKeys, normalizeCategoryState } from '@/lib/category-normalization';
+import { compileConceptArtifactsAfterManualChange } from '@/lib/wiki-compiler';
+import { wikiRepo } from '@/lib/wiki-db';
 import { escapeHTML } from '@/lib/format';
 import type {
   ActivityLog,
@@ -177,13 +179,25 @@ ${categoryList}
         at: Date.now(),
       };
       const trx = getServerDb().transaction(() => {
+        if (sourceConceptId && sourceConceptId !== duplicate.id) {
+          wikiRepo.upsertConceptRelation({
+            sourceConceptId,
+            targetConceptId: duplicate.id,
+            kind: 'related',
+            reason: '选段命中已有概念后同步来源概念关系。',
+            confidence: 0.74,
+          });
+          wikiRepo.linkConceptPair(sourceConceptId, duplicate.id);
+        }
         repo.insertActivity(activity);
       });
       trx();
       return NextResponse.json<SelectionWikiResponse>({
         status: 'duplicate',
         conceptId: duplicate.id,
-        concepts: [duplicate],
+        concepts: repo.getConceptsByIds(
+          Array.from(new Set([duplicate.id, ...(sourceConceptId ? [sourceConceptId] : [])])),
+        ),
         activity,
       });
     }
@@ -220,6 +234,7 @@ ${categoryList}
 
     const relatedDocs = repo.getConceptsByIds(relatedIds);
     const relatedDocsById = new Map(relatedDocs.map((c) => [c.id, c]));
+    const previousRelatedDocsById = new Map(relatedDocs.map((c) => [c.id, c]));
     const biDirUpdates: Concept[] = [];
     for (const relId of relatedIds) {
       const concept = relatedDocsById.get(relId);
@@ -249,6 +264,18 @@ ${categoryList}
       for (const update of biDirUpdates) {
         repo.upsertConcept(update);
       }
+      compileConceptArtifactsAfterManualChange({
+        createdConcepts: [newConcept],
+        updatedConcepts: biDirUpdates
+          .map((next) => {
+            const previous = previousRelatedDocsById.get(next.id);
+            return previous ? { previous, next } : null;
+          })
+          .filter((pair): pair is { previous: Concept; next: Concept } => Boolean(pair)),
+        sourceIds: [],
+        changeSummary:
+          parsed.activitySummary || `从选段生成「${newConcept.title}」并同步相关概念链接。`,
+      });
       repo.insertActivity(activity);
     });
     trx();

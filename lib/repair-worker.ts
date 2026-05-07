@@ -17,6 +17,7 @@ import { CONFLICT_SYSTEM_PROMPT, MERGE_SYSTEM_PROMPT, ORPHAN_SYSTEM_PROMPT } fro
 import { createReviewItem } from './review-queue';
 import { getServerDb, repo } from './server-db';
 import { now, parseJson } from './utils';
+import { compileConceptArtifactsAfterManualChange } from './wiki-compiler';
 import type { ActivityLog, Concept } from './types';
 
 export type RepairJobKind = 'merge' | 'link' | 'orphan' | 'conflict';
@@ -350,6 +351,20 @@ async function runLinkJob(runId: string, job: RepairJobRow): Promise<void> {
       version: b.version + 1,
     });
   }
+  const updated = repo.getConceptsByIds([aId, bId]);
+  const previousById = new Map([
+    [a.id, a],
+    [b.id, b],
+  ]);
+  compileConceptArtifactsAfterManualChange({
+    updatedConcepts: updated
+      .map((next) => {
+        const previous = previousById.get(next.id);
+        return previous && previous.version !== next.version ? { previous, next } : null;
+      })
+      .filter((item): item is { previous: Concept; next: Concept } => Boolean(item)),
+    changeSummary: '一键修复缺失链接。',
+  });
   const summary = readSummary(runId);
   summary.linked += 1;
   summary.touchedConceptIds = mergeArrays(summary.touchedConceptIds, [aId, bId]);
@@ -411,7 +426,7 @@ async function runMergeJob(runId: string, job: RepairJobRow): Promise<void> {
     if (!mergedCategoriesMap.has(key)) mergedCategoriesMap.set(key, cat);
   });
 
-  repo.upsertConcept({
+  const mergedConcept: Concept = {
     ...primary,
     title: mergedTitle,
     summary: mergedSummary,
@@ -422,11 +437,17 @@ async function runMergeJob(runId: string, job: RepairJobRow): Promise<void> {
     categoryKeys: Array.from(mergedCategoryKeysSet),
     updatedAt: ts,
     version: primary.version + 1,
-  });
+  };
+  repo.upsertConcept(mergedConcept);
 
   // Rewrite all references from secondary → primary, then delete secondary.
   repo.replaceRelatedId(secondary.id, primary.id, ts);
   repo.deleteConcept(secondary.id);
+  const nextPrimary = repo.getConcept(primary.id) ?? mergedConcept;
+  compileConceptArtifactsAfterManualChange({
+    updatedConcepts: [{ previous: primary, next: nextPrimary }],
+    changeSummary: `合并重复概念「${secondary.title}」。`,
+  });
 
   const summary = readSummary(runId);
   summary.merged += 1;
@@ -494,9 +515,11 @@ async function runOrphanJob(runId: string, job: RepairJobRow): Promise<void> {
     version: target.version + 1,
   });
 
+  const previousRelatedById = new Map<string, Concept>();
   for (const rid of relatedIds) {
     const other = repo.getConcept(rid);
     if (!other || other.related.includes(targetId)) continue;
+    previousRelatedById.set(rid, other);
     repo.upsertConcept({
       ...other,
       related: Array.from(new Set([...other.related, targetId])),
@@ -504,6 +527,18 @@ async function runOrphanJob(runId: string, job: RepairJobRow): Promise<void> {
       version: other.version + 1,
     });
   }
+  const updated = repo.getConceptsByIds([targetId, ...relatedIds]);
+  const previousById = new Map<string, Concept>([[target.id, target]]);
+  for (const [rid, previous] of previousRelatedById) previousById.set(rid, previous);
+  compileConceptArtifactsAfterManualChange({
+    updatedConcepts: updated
+      .map((next) => {
+        const previous = previousById.get(next.id);
+        return previous && previous.version !== next.version ? { previous, next } : null;
+      })
+      .filter((item): item is { previous: Concept; next: Concept } => Boolean(item)),
+    changeSummary: '一键修复孤岛概念链接。',
+  });
 
   const summary = readSummary(runId);
   summary.orphanFixed += 1;
@@ -558,6 +593,20 @@ async function runConflictJob(runId: string, job: RepairJobRow): Promise<void> {
     body: `${b.body}${block}`.trim(),
     updatedAt: ts,
     version: b.version + 1,
+  });
+  const conflictUpdated = repo.getConceptsByIds([a.id, b.id]);
+  const conflictPreviousById = new Map([
+    [a.id, a],
+    [b.id, b],
+  ]);
+  compileConceptArtifactsAfterManualChange({
+    updatedConcepts: conflictUpdated
+      .map((next) => {
+        const previous = conflictPreviousById.get(next.id);
+        return previous ? { previous, next } : null;
+      })
+      .filter((item): item is { previous: Concept; next: Concept } => Boolean(item)),
+    changeSummary: '一键修复追加冲突待确认说明。',
   });
 
   createReviewItem({

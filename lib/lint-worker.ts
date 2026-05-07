@@ -48,7 +48,10 @@ export interface LintRunStatusResponse {
   error: string | null;
 }
 
-const MAX_CONCEPTS = 500;
+const MAX_CONCEPTS = Math.max(
+  100,
+  Math.min(1500, Number(process.env.COMPOUND_LINT_MAX_CONCEPTS || 800)),
+);
 
 export function ensureLintSchema(): void {
   getServerDb().exec(`

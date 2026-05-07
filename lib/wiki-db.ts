@@ -12,6 +12,16 @@ export type EvidenceKind =
   | 'contradiction'
   | 'support';
 
+export type ConceptRelationKind =
+  | 'supports'
+  | 'extends'
+  | 'depends_on'
+  | 'example_of'
+  | 'similar_to'
+  | 'related'
+  | 'contradicts'
+  | 'same_as';
+
 export interface SourceChunk extends SourceChunkDraft {
   id: string;
   sourceId: string;
@@ -29,6 +39,17 @@ export interface ConceptEvidence {
   kind: EvidenceKind;
   confidence: number;
   createdAt: number;
+}
+
+export interface ConceptRelation {
+  id: string;
+  sourceConceptId: string;
+  targetConceptId: string;
+  kind: ConceptRelationKind;
+  reason?: string;
+  confidence: number;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface QueryContext {
@@ -302,6 +323,30 @@ function rowToEvidence(row: Record<string, unknown>): ConceptEvidence {
   };
 }
 
+function normalizeRelationKind(kind: unknown): ConceptRelationKind {
+  if (kind === 'supports') return 'supports';
+  if (kind === 'extends') return 'extends';
+  if (kind === 'depends_on') return 'depends_on';
+  if (kind === 'example_of') return 'example_of';
+  if (kind === 'similar_to') return 'similar_to';
+  if (kind === 'contradicts') return 'contradicts';
+  if (kind === 'same_as') return 'same_as';
+  return 'related';
+}
+
+function rowToRelation(row: Record<string, unknown>): ConceptRelation {
+  return {
+    id: String(row.id),
+    sourceConceptId: String(row.source_concept_id),
+    targetConceptId: String(row.target_concept_id),
+    kind: normalizeRelationKind(row.kind),
+    reason: row.reason ? String(row.reason) : undefined,
+    confidence: Number(row.confidence),
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
+  };
+}
+
 function uniqueById<T extends { id: string }>(items: T[]): T[] {
   const seen = new Set<string>();
   const out: T[] = [];
@@ -457,6 +502,7 @@ export const wikiRepo = {
     chunks: number;
     concepts: number;
     evidence: number;
+    relations: number;
     fts: boolean;
   } {
     ensureWikiCompilerSchema();
@@ -498,12 +544,17 @@ export const wikiRepo = {
         evidenceCount += evidence.length;
       }
     }
+    const relationCount = this.syncRelatedConceptRelations(concepts, {
+      reason: '重建 Wiki 索引时从 related 字段同步。',
+      confidence: 0.66,
+    });
 
     return {
       sources: sources.length,
       chunks: chunkCount,
       concepts: concepts.length,
       evidence: evidenceCount,
+      relations: relationCount,
       fts: hasFts(),
     };
   },
@@ -535,6 +586,165 @@ export const wikiRepo = {
       }
     });
     runBatch();
+  },
+
+  upsertConceptRelation(input: {
+    sourceConceptId: string;
+    targetConceptId: string;
+    kind?: ConceptRelationKind;
+    reason?: string;
+    confidence?: number;
+    now?: number;
+  }): ConceptRelation | null {
+    ensureWikiCompilerSchema();
+    const sourceConceptId = input.sourceConceptId.trim();
+    const targetConceptId = input.targetConceptId.trim();
+    if (!sourceConceptId || !targetConceptId || sourceConceptId === targetConceptId) return null;
+
+    const kind = normalizeRelationKind(input.kind);
+    const now = input.now ?? Date.now();
+    const confidence =
+      typeof input.confidence === 'number' ? Math.max(0, Math.min(1, input.confidence)) : 0.65;
+    const db = getServerDb();
+    db.prepare(
+      `
+        INSERT INTO concept_relations
+          (id, source_concept_id, target_concept_id, kind, reason, confidence, created_at, updated_at)
+        VALUES
+          (@id, @source_concept_id, @target_concept_id, @kind, @reason, @confidence, @created_at, @updated_at)
+        ON CONFLICT(source_concept_id, target_concept_id, kind) DO UPDATE SET
+          reason = COALESCE(excluded.reason, concept_relations.reason),
+          confidence = MAX(concept_relations.confidence, excluded.confidence),
+          updated_at = excluded.updated_at
+      `,
+    ).run({
+      id: `cr-${nanoid(10)}`,
+      source_concept_id: sourceConceptId,
+      target_concept_id: targetConceptId,
+      kind,
+      reason: input.reason?.trim() || null,
+      confidence,
+      created_at: now,
+      updated_at: now,
+    });
+
+    const row = db
+      .prepare(
+        `SELECT * FROM concept_relations
+         WHERE source_concept_id = ? AND target_concept_id = ? AND kind = ?`,
+      )
+      .get(sourceConceptId, targetConceptId, kind) as Record<string, unknown> | undefined;
+    return row ? rowToRelation(row) : null;
+  },
+
+  addRelationBatch(
+    items: Array<{
+      sourceConceptId: string;
+      targetConceptId: string;
+      kind?: ConceptRelationKind;
+      reason?: string;
+      confidence?: number;
+    }>,
+  ): number {
+    ensureWikiCompilerSchema();
+    let changed = 0;
+    const now = Date.now();
+    for (const item of items) {
+      if (this.upsertConceptRelation({ ...item, now })) changed += 1;
+    }
+    return changed;
+  },
+
+  linkConceptPair(sourceConceptId: string, targetConceptId: string, now = Date.now()): Concept[] {
+    const concepts = repo.getConceptsByIds([sourceConceptId, targetConceptId]);
+    const byId = new Map(concepts.map((concept) => [concept.id, concept]));
+    const source = byId.get(sourceConceptId);
+    const target = byId.get(targetConceptId);
+    if (!source || !target || source.id === target.id) return concepts;
+
+    const updates: Concept[] = [];
+    if (!source.related.includes(target.id)) {
+      updates.push({
+        ...source,
+        related: [...source.related, target.id],
+        updatedAt: now,
+      });
+    }
+    if (!target.related.includes(source.id)) {
+      updates.push({
+        ...target,
+        related: [...target.related, source.id],
+        updatedAt: now,
+      });
+    }
+
+    for (const update of updates) {
+      repo.upsertConcept(update);
+      this.indexConcept(update);
+    }
+
+    return updates.length > 0
+      ? repo.getConceptsByIds([sourceConceptId, targetConceptId])
+      : concepts;
+  },
+
+  syncRelatedConceptRelations(
+    concepts: Concept[],
+    options: { reason?: string; confidence?: number } = {},
+  ): number {
+    ensureWikiCompilerSchema();
+    const conceptIds = new Set(concepts.map((concept) => concept.id));
+    const rows: Array<{
+      sourceConceptId: string;
+      targetConceptId: string;
+      kind: ConceptRelationKind;
+      reason: string;
+      confidence: number;
+    }> = [];
+
+    for (const concept of concepts) {
+      for (const targetId of concept.related) {
+        if (!targetId || targetId === concept.id) continue;
+        rows.push({
+          sourceConceptId: concept.id,
+          targetConceptId: targetId,
+          kind: 'related',
+          reason: options.reason || '由概念 related 字段同步。',
+          confidence: options.confidence ?? (conceptIds.has(targetId) ? 0.68 : 0.6),
+        });
+      }
+    }
+    return this.addRelationBatch(rows);
+  },
+
+  getRelationsForConcepts(conceptIds: string[], limit = 200): ConceptRelation[] {
+    ensureWikiCompilerSchema();
+    const uniqueIds = Array.from(new Set(conceptIds.filter(Boolean)));
+    if (uniqueIds.length === 0) return [];
+    const placeholders = uniqueIds.map(() => '?').join(', ');
+    const normalizedLimit = Math.max(1, Math.min(1000, Math.trunc(limit)));
+    const rows = getServerDb()
+      .prepare(
+        `SELECT *
+         FROM concept_relations
+         WHERE source_concept_id IN (${placeholders}) OR target_concept_id IN (${placeholders})
+         ORDER BY confidence DESC, updated_at DESC
+         LIMIT ?`,
+      )
+      .all(...uniqueIds, ...uniqueIds, normalizedLimit) as Array<Record<string, unknown>>;
+    return rows.map(rowToRelation);
+  },
+
+  listConceptRelations(limit = 5000): ConceptRelation[] {
+    ensureWikiCompilerSchema();
+    const rows = getServerDb()
+      .prepare(
+        `SELECT * FROM concept_relations
+         ORDER BY confidence DESC, updated_at DESC
+         LIMIT ?`,
+      )
+      .all(Math.max(1, Math.min(20000, Math.trunc(limit)))) as Array<Record<string, unknown>>;
+    return rows.map(rowToRelation);
   },
 
   recordConceptVersion(input: {
@@ -705,6 +915,7 @@ export const wikiRepo = {
       concepts: scalar(`SELECT COUNT(*) AS count FROM concepts`),
       sourceChunks: scalar(`SELECT COUNT(*) AS count FROM source_chunks`),
       conceptEvidence: scalar(`SELECT COUNT(*) AS count FROM concept_evidence`),
+      conceptRelations: scalar(`SELECT COUNT(*) AS count FROM concept_relations`),
       conceptVersions: scalar(`SELECT COUNT(*) AS count FROM concept_versions`),
     };
   },

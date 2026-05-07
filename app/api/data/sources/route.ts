@@ -1,12 +1,19 @@
+import { nanoid } from 'nanoid';
 import { NextResponse } from 'next/server';
+import { escapeHTML } from '@/lib/format';
 import { logger } from '@/lib/logging';
-import { repo } from '@/lib/server-db';
+import { enforceContentLength } from '@/lib/request-guards';
+import { getServerDb, repo } from '@/lib/server-db';
 import { requireAdmin } from '@/lib/server-auth';
+import { recompileSourceArtifactsAfterEdit } from '@/lib/wiki-compiler';
+import type { ActivityLog } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 const MAX_IDS = 200;
+const MAX_PATCH_BODY_BYTES = 512_000;
+const MAX_RAW_CONTENT_CHARS = 120_000;
 
 function parseIdsParam(value: string | null): string[] {
   if (!value) return [];
@@ -47,6 +54,118 @@ export async function GET(req: Request) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('data.sources_failed', { error: message });
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+function clampString(value: unknown, max: number): string {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
+}
+
+function clampText(value: unknown, max: number): string {
+  if (typeof value !== 'string') return '';
+  return value.length > max ? value.slice(0, max) : value;
+}
+
+/**
+ * PATCH /api/data/sources
+ * Updates a source document and recompiles retrieval artifacts for all
+ * concepts backed by that source. Body: `{ id, rawContent, title? }`.
+ */
+export async function PATCH(req: Request) {
+  const denied = requireAdmin(req) || enforceContentLength(req, MAX_PATCH_BODY_BYTES);
+  if (denied) return denied;
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const id = clampString(body.id, 120);
+    const rawContent = clampText(body.rawContent, MAX_RAW_CONTENT_CHARS);
+    const title = clampString(body.title, 180);
+    if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    if (!rawContent) {
+      return NextResponse.json({ error: 'rawContent is required' }, { status: 400 });
+    }
+
+    const existing = repo.getSource(id);
+    if (!existing) return NextResponse.json({ error: 'source not found' }, { status: 404 });
+
+    const nextSource = {
+      ...existing,
+      title: title || existing.title,
+      rawContent,
+    };
+    const activity: ActivityLog = {
+      id: `a-${nanoid(8)}`,
+      type: 'ingest',
+      title: `更新资料 <em>${escapeHTML(nextSource.title)}</em>`,
+      details: '手动编辑资料正文后重建 chunk、证据链与检索索引。',
+      relatedSourceIds: [nextSource.id],
+      at: Date.now(),
+    };
+
+    let compiler: ReturnType<typeof recompileSourceArtifactsAfterEdit> | undefined;
+    const trx = getServerDb().transaction(() => {
+      repo.insertSource(nextSource);
+      compiler = recompileSourceArtifactsAfterEdit({
+        source: nextSource,
+        changeSummary: `资料「${nextSource.title}」手动编辑后重建索引。`,
+      });
+      repo.insertActivity({
+        ...activity,
+        relatedConceptIds: compiler?.affectedConceptIds ?? [],
+      });
+    });
+    trx();
+
+    try {
+      const { queueAdvancedAnalysisJob, startAnalysisWorker } =
+        await import('@/lib/analysis-worker');
+      for (const stage of ['embedding', 'summarize', 'relations', 'qa_index'] as const) {
+        queueAdvancedAnalysisJob({
+          sourceId: nextSource.id,
+          sourcePath: nextSource.title,
+          stage,
+          model:
+            stage === 'summarize' || stage === 'relations' ? process.env.LLM_MODEL || null : null,
+          promptVersion:
+            stage === 'summarize'
+              ? 'source-summary-v1'
+              : stage === 'relations'
+                ? 'concept-relations-v1'
+                : null,
+          priority:
+            stage === 'embedding'
+              ? 40
+              : stage === 'summarize'
+                ? 20
+                : stage === 'relations'
+                  ? 15
+                  : 10,
+          maxAttempts: stage === 'qa_index' ? 1 : 2,
+        });
+      }
+      startAnalysisWorker('source_edit');
+    } catch (error) {
+      logger.warn('data.sources_post_jobs_queue_failed', {
+        sourceId: nextSource.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    return NextResponse.json({
+      source: repo.getSource(nextSource.id) ?? nextSource,
+      concepts: repo.getConceptsByIds(compiler?.affectedConceptIds ?? []),
+      activity: {
+        ...activity,
+        relatedConceptIds: compiler?.affectedConceptIds ?? [],
+      },
+      compiler,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('data.sources_patch_failed', { error: message });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
