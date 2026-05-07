@@ -157,6 +157,12 @@ function withAuthCookie(req: NextRequest, res: NextResponse, token: string): Nex
 
 export function middleware(req: NextRequest) {
   const trace = readTraceMeta(req);
+  const isApiRequest = req.nextUrl.pathname.startsWith('/api/');
+
+  if (!isApiRequest) {
+    return nextWithTrace(req, trace);
+  }
+
   const token = getAdminToken();
 
   if (!token) {
@@ -175,20 +181,8 @@ export function middleware(req: NextRequest) {
     return withAuthCookie(req, nextWithTrace(req, trace), token);
   }
 
-  if (req.nextUrl.pathname.startsWith('/api/')) {
-    return withTraceHeaders(
-      NextResponse.json({ error: 'Unauthorized', requestId: trace.requestId }, { status: 401 }),
-      trace,
-    );
-  }
-
   return withTraceHeaders(
-    new NextResponse('Authentication required.', {
-      status: 401,
-      headers: {
-        'WWW-Authenticate': 'Basic realm="Compound", charset="UTF-8"',
-      },
-    }),
+    NextResponse.json({ error: 'Unauthorized', requestId: trace.requestId }, { status: 401 }),
     trace,
   );
 }
