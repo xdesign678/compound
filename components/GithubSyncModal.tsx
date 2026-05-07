@@ -12,6 +12,7 @@ import {
   getCurrentFileDisplay,
   getSyncStatusCopy,
 } from '@/lib/github-sync-ui';
+import { ImportProgress, rememberRecentImport } from './ImportProgress';
 import { useModalKeyboard } from '@/lib/hooks/useModalKeyboard';
 import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 
@@ -154,6 +155,11 @@ export function GithubSyncModal() {
     setPhase('starting');
     setError(null);
     setPollIssue(null);
+    rememberRecentImport({
+      kind: 'github',
+      label: 'GitHub Markdown 同步',
+      detail: '远端仓库增量同步',
+    });
     try {
       const res = await fetch('/api/sync/github/run', {
         method: 'POST',
@@ -172,6 +178,20 @@ export function GithubSyncModal() {
       setPhase('failed');
     }
   }, [pollOnce]);
+
+  const cancel = useCallback(async () => {
+    try {
+      await fetch('/api/sync/cancel', {
+        method: 'POST',
+        headers: withRequestId(getAdminAuthHeaders()),
+      });
+      setPhase('failed');
+      setError('同步已取消');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setPhase('failed');
+    }
+  }, []);
 
   const canClose = phase !== 'starting';
   const progressPct =
@@ -227,6 +247,17 @@ export function GithubSyncModal() {
 
         {(phase === 'running' || phase === 'done' || phase === 'failed') && job && (
           <>
+            <ImportProgress
+              title="GitHub 同步"
+              stage={statusCopy.eyebrow}
+              detail={currentFile.path ?? statusCopy.description}
+              progress={progressPct}
+              running={phase === 'running' || pulling}
+              error={phase === 'failed' ? error : null}
+              onCancel={phase === 'running' ? cancel : undefined}
+              onRetry={phase === 'failed' ? start : undefined}
+              onClose={close}
+            />
             <section className="gh-sync-panel gh-sync-stage-card">
               <div className="gh-sync-panel-head">
                 <div>

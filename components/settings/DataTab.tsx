@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useAppStore } from '@/lib/store';
 import { lintWiki } from '@/lib/api-client';
@@ -8,9 +8,13 @@ import { getDb } from '@/lib/db';
 import { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } from '@/lib/seed';
 import type { LintResponse } from '@/lib/types';
 import { Icon } from '../Icons';
+import { readRecentImports, type RecentImportEntry } from '../ImportProgress';
 
 export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
   const openConcept = useAppStore((s) => s.openConcept);
+  const openModal = useAppStore((s) => s.openModal);
+  const openObsidianImport = useAppStore((s) => s.openObsidianImport);
+  const openGithubSync = useAppStore((s) => s.openGithubSync);
   const showToast = useAppStore((s) => s.showToast);
   const showErrorToast = useAppStore((s) => s.showErrorToast);
   const hideToast = useAppStore((s) => s.hideToast);
@@ -21,7 +25,12 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
   const [lintResult, setLintResult] = useState<LintResponse | null>(null);
   const [lintLoading, setLintLoading] = useState(false);
   const [confirming, setConfirming] = useState<'seed' | 'clear' | 'sample' | null>(null);
+  const [recentImports, setRecentImports] = useState<RecentImportEntry[]>([]);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    setRecentImports(readRecentImports());
+  }, []);
 
   const safeTimeout = useCallback((fn: () => void, ms: number) => {
     const id = setTimeout(fn, ms);
@@ -152,6 +161,40 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
       )}
 
       {/* 数据管理 */}
+      <div className="settings-tab-divider" />
+
+      <div className="settings-card-head">
+        <div className="settings-card-icon">
+          <Icon.File />
+        </div>
+        <div>
+          <div className="settings-card-title">最近导入</div>
+          <div className="settings-card-desc">最多保留 5 条，点击后重新打开对应入口。</div>
+        </div>
+      </div>
+
+      <div className="settings-data-actions">
+        {recentImports.length === 0 ? (
+          <div className="settings-card-desc">还没有导入记录。</div>
+        ) : (
+          recentImports.map((entry) => (
+            <button
+              key={entry.id}
+              className="modal-btn settings-secondary-action"
+              onClick={() => {
+                onCloseAction();
+                if (entry.kind === 'ingest') openModal();
+                else if (entry.kind === 'obsidian') openObsidianImport();
+                else openGithubSync();
+              }}
+            >
+              {entry.label}
+              {entry.detail ? ` · ${entry.detail}` : ''}
+            </button>
+          ))
+        )}
+      </div>
+
       <div className="settings-tab-divider" />
 
       <div className="settings-card-head">

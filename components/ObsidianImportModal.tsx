@@ -13,6 +13,7 @@ import {
   type ObsidianFile,
   type FileStatus,
 } from '@/lib/obsidian-import';
+import { ImportProgress, rememberRecentImport } from './ImportProgress';
 
 type Stage = 'idle' | 'selected' | 'running' | 'done';
 
@@ -155,6 +156,7 @@ export function ObsidianImportModal() {
     }
     return c;
   }, [files]);
+  const firstFailedFile = useMemo(() => files.find((f) => f.status === 'failed'), [files]);
 
   const toggleSelect = (id: string) => {
     if (stage === 'running') return;
@@ -216,6 +218,11 @@ export function ObsidianImportModal() {
 
     // 快照一份要处理的队列（按当前选择）
     const queue = files.filter((f) => f.selected && f.status === 'pending');
+    rememberRecentImport({
+      kind: 'obsidian',
+      label: `${queue.length} 个 Obsidian 文件`,
+      detail: queue[0]?.path,
+    });
 
     await runImportQueue({
       files: queue,
@@ -377,6 +384,33 @@ export function ObsidianImportModal() {
         {/* 阶段 2/3/4：列表 + 控制 */}
         {stage !== 'idle' && (
           <>
+            <ImportProgress
+              title="Obsidian 导入"
+              stage={
+                stage === 'running'
+                  ? '正在逐个编译 Markdown'
+                  : stage === 'done'
+                    ? counts.failed > 0
+                      ? '部分文件导入失败'
+                      : '导入完成'
+                    : '等待开始'
+              }
+              detail={
+                stage === 'running'
+                  ? files.find((f) => f.status === 'running')?.path
+                  : firstFailedFile?.error
+                    ? firstFailedFile.path
+                    : `已选择 ${counts.selected} 篇`
+              }
+              progress={
+                counts.total > 0 ? ((counts.success + counts.failed) / counts.total) * 100 : 0
+              }
+              running={stage === 'running'}
+              error={stage === 'done' && firstFailedFile?.error ? firstFailedFile.error : null}
+              onCancel={stopImport}
+              onRetry={counts.pending > 0 ? startImport : undefined}
+              onClose={handleClose}
+            />
             {/* 统计条 */}
             <div className="obsidian-import-stats">
               <span>

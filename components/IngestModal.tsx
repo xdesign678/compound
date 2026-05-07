@@ -5,6 +5,7 @@ import { useAppStore, type TaskItem } from '@/lib/store';
 import { ingestSource, isOfflineError } from '@/lib/api-client';
 import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 import { Icon } from './Icons';
+import { ImportProgress, rememberRecentImport } from './ImportProgress';
 import { NoteEditor } from './NoteEditor';
 import type { SourceType } from '@/lib/types';
 
@@ -157,8 +158,11 @@ export function IngestModal() {
       },
     };
     addTask(task);
-    reset();
-    close();
+    rememberRecentImport({
+      kind: 'ingest',
+      label: capturedTitle,
+      detail: capturedUrl || '手动粘贴正文',
+    });
     try {
       const result = await ingestSource({
         title: capturedTitle,
@@ -173,8 +177,12 @@ export function IngestModal() {
         finishedAt: Date.now(),
         result: `新建 ${result.newConceptIds.length} 个概念，更新 ${result.updatedConceptIds.length} 个`,
       });
+      reset();
+      close();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      setError(isOfflineError(err) ? '离线暂停，联网后可重试。' : msg.slice(0, 160));
+      setSubmitting(false);
       updateTask(taskId, {
         status: isOfflineError(err) ? 'paused-offline' : 'error',
         finishedAt: isOfflineError(err) ? undefined : Date.now(),
@@ -267,6 +275,18 @@ export function IngestModal() {
                 <p className="modal-desc">
                   当前版本需要你把目标页面的正文一起贴进来(浏览器无法跨域抓取)。AI 会基于正文编译。
                 </p>
+                {(submitting || error) && (
+                  <ImportProgress
+                    title="资料导入"
+                    stage={submitting ? '正在送入 AI 编译' : '导入失败'}
+                    detail={title || '等待提交'}
+                    progress={submitting ? 35 : 0}
+                    running={submitting}
+                    error={error}
+                    onRetry={() => handleSubmit('link')}
+                    onClose={() => setError(null)}
+                  />
+                )}
                 <div className="form-field">
                   <label htmlFor="link-title">标题</label>
                   <input
