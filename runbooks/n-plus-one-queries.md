@@ -71,3 +71,9 @@ N+1 detection path and the batched-fetch happy path; rerun it with
 - [`lib/observability/query-analyzer.ts`](../lib/observability/query-analyzer.ts)
 - [`lib/server-db.ts`](../lib/server-db.ts)
 - [SQLite data persistence runbook](data-persistence.md)
+
+## 演练记录
+
+| 日期 | 演练人 | 触发情境（真实 / 演练） | 用时 | 备注 |
+| ---- | ------ | ----------------------- | ---- | ---- |
+| —    | —      | —                       | —    | —    |

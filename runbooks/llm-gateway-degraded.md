@@ -52,3 +52,9 @@ the OpenAI-compatible model endpoint is unavailable or misconfigured.
 - Do not bypass SSRF protection to make a custom endpoint work.
 - Do not send the server-owned API key to user-supplied endpoints.
 - Do not retry large batches before a small model call succeeds.
+
+## 演练记录
+
+| 日期 | 演练人 | 触发情境（真实 / 演练） | 用时 | 备注 |
+| ---- | ------ | ----------------------- | ---- | ---- |
+| —    | —      | —                       | —    | —    |

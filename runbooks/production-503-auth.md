@@ -56,3 +56,9 @@ configured. This protects private knowledge from accidental public exposure.
 - Do not paste the token into issue comments, PR descriptions, screenshots, or
   logs.
 - Do not reuse an old token if you suspect it was exposed.
+
+## 演练记录
+
+| 日期 | 演练人 | 触发情境（真实 / 演练） | 用时 | 备注 |
+| ---- | ------ | ----------------------- | ---- | ---- |
+| —    | —      | —                       | —    | —    |

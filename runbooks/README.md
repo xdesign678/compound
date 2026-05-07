@@ -47,6 +47,18 @@ starts with impact, signals to check, and a safe recovery path.
 | [SQLite data persistence](data-persistence.md)           | Data disappears after deploys, writes fail, or `DATA_DIR` / volume configuration is suspect.       |
 | [N+1 query detection](n-plus-one-queries.md)             | A `db.n_plus_one_detected` log fires or per-route SQL counters spike unexpectedly.                 |
 
+## 最近演练时间
+
+| Runbook                        | 最近一次演练 | 责任人 |
+| ------------------------------ | ------------ | ------ |
+| General incident response      | —            | —      |
+| Production 503 or auth lockout | —            | —      |
+| GitHub sync stuck or failing   | —            | —      |
+| LLM gateway degraded           | —            | —      |
+| LLM uniform timeouts           | —            | —      |
+| SQLite data persistence        | —            | —      |
+| N+1 query detection            | —            | —      |
+
 ## Handoff template
 
 ```text

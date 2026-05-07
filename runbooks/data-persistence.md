@@ -44,3 +44,9 @@ out of sync with the UI.
 
 Escalate before deleting, replacing, or manually editing `compound.db`. Capture
 a backup copy first whenever possible.
+
+## 演练记录
+
+| 日期 | 演练人 | 触发情境（真实 / 演练） | 用时 | 备注 |
+| ---- | ------ | ----------------------- | ---- | ---- |
+| —    | —      | —                       | —    | —    |

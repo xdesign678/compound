@@ -54,3 +54,9 @@ Escalate if any of these are true:
 - SQLite volume may be detached, overwritten, or corrupted.
 - Recovery requires manually editing production SQLite data.
 - A rollback would lose newly ingested notes.
+
+## 演练记录
+
+| 日期 | 演练人 | 触发情境（真实 / 演练） | 用时 | 备注 |
+| ---- | ------ | ----------------------- | ---- | ---- |
+| —    | —      | —                       | —    | —    |

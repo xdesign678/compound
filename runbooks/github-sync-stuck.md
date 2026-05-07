@@ -62,3 +62,9 @@ appearing, `/sync` shows failures, or a sync run never completes.
 
 Escalate before manually editing SQLite sync tables. The runner stores run and
 file state in SQLite; direct edits can make the UI disagree with worker state.
+
+## 演练记录
+
+| 日期 | 演练人 | 触发情境（真实 / 演练） | 用时 | 备注 |
+| ---- | ------ | ----------------------- | ---- | ---- |
+| —    | —      | —                       | —    | —    |
