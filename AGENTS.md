@@ -5,6 +5,12 @@
 - 完成改动后直接 `git commit` 并 `git push origin main`，不要创建功能分支或 PR。
 - 仅在用户明确要求时，才可以新建分支或开 PR。
 
+## UI 交互调试约定
+
+- 遇到选区、拖拽、浮窗、弹层定位、hover/click 状态、滚动跟随、移动端手势这类真实浏览器交互问题时，默认先用浏览器复现，不要只靠代码推断。
+- 复现时优先核对真实状态：用户实际选中的文本、目标元素矩形、浮窗/按钮矩形、滚动容器位置、是否发生 React 重渲染或 DOM 替换。
+- 修复顺序先保证原生交互不被前端打断，再保证状态不被重渲染清掉，最后再调视觉位置和样式。
+
 ## Naming conventions
 
 Naming rules are enforced via `@typescript-eslint/naming-convention` in `.eslintrc.json`.
