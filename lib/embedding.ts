@@ -9,19 +9,29 @@ import { getServerDb } from './server-db';
 import { wikiRepo, type QueryContext, type SourceChunk } from './wiki-db';
 import { CircuitBreakerOpenError, getCircuitBreaker } from './circuit-breaker';
 import { logger } from './logging';
+import { LRUMap } from './lru-cache';
+import {
+  observeEmbeddingBatchSize,
+  recordEmbeddingCacheHit,
+  recordEmbeddingCacheMiss,
+} from './observability/prometheus';
 
 type Vector = number[];
 
 let schemaReady = false;
+let schemaDb: ReturnType<typeof getServerDb> | null = null;
+const EMBEDDING_CACHE_MAX_SIZE = 1000;
+const embeddingVectorCache = new LRUMap<string, Vector>(EMBEDDING_CACHE_MAX_SIZE);
 
 function now(): number {
   return Date.now();
 }
 
 function ensureEmbeddingSchema(): void {
-  if (schemaReady) return;
+  const db = getServerDb();
+  if (schemaReady && schemaDb === db) return;
   wikiRepo.ensureSchema();
-  getServerDb().exec(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS chunk_embeddings (
       chunk_id TEXT PRIMARY KEY,
       source_id TEXT NOT NULL,
@@ -37,6 +47,7 @@ function ensureEmbeddingSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_model ON chunk_embeddings(model, updated_at DESC);
   `);
   schemaReady = true;
+  schemaDb = db;
 }
 
 function clean(value?: string): string {
@@ -222,6 +233,68 @@ async function embedTexts(
   };
 }
 
+function textForChunk(chunk: Record<string, unknown>): string {
+  return `${chunk.heading}\n${chunk.content}`;
+}
+
+async function embedChunkBatch(
+  batch: Array<Record<string, unknown>>,
+): Promise<{ vectors: Vector[]; provider: string; model: string }> {
+  if (getEmbeddingMode() !== 'remote') {
+    return embedTexts(batch.map(textForChunk));
+  }
+
+  const model = embeddingModel();
+  const vectors = new Array<Vector>(batch.length);
+  const misses = new Map<
+    string,
+    { cacheKey: string; contentHash: string; text: string; indexes: number[] }
+  >();
+
+  batch.forEach((chunk, index) => {
+    const contentHash = String(chunk.content_hash);
+    const cacheKey = `${model}:${contentHash}`;
+    const cached = embeddingVectorCache.get(cacheKey);
+    if (cached) {
+      recordEmbeddingCacheHit({ model });
+      vectors[index] = cached;
+      return;
+    }
+
+    recordEmbeddingCacheMiss({ model });
+    const existing = misses.get(cacheKey);
+    if (existing) {
+      existing.indexes.push(index);
+    } else {
+      misses.set(cacheKey, {
+        cacheKey,
+        contentHash,
+        text: textForChunk(chunk),
+        indexes: [index],
+      });
+    }
+  });
+
+  const uniqueMisses = Array.from(misses.values());
+  if (uniqueMisses.length === 0) {
+    return { vectors, provider: 'remote', model };
+  }
+
+  observeEmbeddingBatchSize({ model, size: uniqueMisses.length });
+  const result = await embedTexts(uniqueMisses.map((item) => item.text));
+  uniqueMisses.forEach((item, index) => {
+    const vector = result.vectors[index];
+    if (result.provider === 'remote') {
+      embeddingVectorCache.set(`${result.model}:${item.contentHash}`, vector);
+    }
+    item.indexes.forEach((batchIndex) => {
+      vectors[batchIndex] = vector;
+    });
+  });
+
+  return { vectors, provider: result.provider, model: result.model };
+}
+
 /**
  * Returns the configured embedding mode without actually calling the API.
  *
@@ -284,8 +357,7 @@ export async function embedSourceChunks(
   `);
   for (let i = 0; i < chunks.length; i += batchSize) {
     const batch = chunks.slice(i, i + batchSize);
-    const texts = batch.map((chunk) => `${chunk.heading}\n${chunk.content}`);
-    const result = await embedTexts(texts);
+    const result = await embedChunkBatch(batch);
     provider = result.provider;
     model = result.model;
     const ts = now();

@@ -71,3 +71,95 @@ test('embedding 默认不复用聊天模型 key，而是走本地 fallback', asy
     rmSync(tempDir, { recursive: true, force: true });
   });
 });
+
+test('remote embedding batches unique chunk texts and reuses duplicate vectors', async (t) => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'compound-embedding-remote-'));
+  const previousEnv = new Map<string, string | undefined>();
+  const envKeys = [
+    'DATA_DIR',
+    'LLM_API_KEY',
+    'COMPOUND_EMBEDDING_PROVIDER',
+    'COMPOUND_EMBEDDING_API_KEY',
+    'COMPOUND_EMBEDDING_API_URL',
+    'COMPOUND_EMBEDDING_BATCH_SIZE',
+  ];
+
+  for (const key of envKeys) previousEnv.set(key, process.env[key]);
+  process.env.DATA_DIR = tempDir;
+  process.env.COMPOUND_EMBEDDING_PROVIDER = 'remote';
+  process.env.COMPOUND_EMBEDDING_API_KEY = 'embedding-key';
+  process.env.COMPOUND_EMBEDDING_API_URL = 'https://example.com/v1/embeddings';
+  process.env.COMPOUND_EMBEDDING_BATCH_SIZE = '200';
+  delete process.env.LLM_API_KEY;
+  closeServerDbGlobal();
+
+  const requestedInputs: string[][] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url, init) => {
+    const body = JSON.parse(String(init?.body || '{}')) as { input?: string[] };
+    const input = body.input || [];
+    requestedInputs.push(input);
+    return new Response(
+      JSON.stringify({
+        data: input.map((text, index) => ({
+          embedding: [1, index + 1, text.length],
+        })),
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  }) as typeof fetch;
+
+  const { getServerDb } = await import('./server-db');
+  const { wikiRepo } = await import('./wiki-db');
+  const { embedSourceChunks } = await import('./embedding');
+  wikiRepo.ensureSchema();
+
+  const now = Date.now();
+  const insert = getServerDb().prepare(`
+    INSERT INTO source_chunks
+      (id, source_id, chunk_index, heading, heading_path, content, token_count, content_hash, created_at, updated_at, contextual_prefix)
+    VALUES
+      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (let i = 0; i < 100; i += 1) {
+    const contentIndex = i === 99 ? 0 : i;
+    insert.run(
+      `chunk-${i}`,
+      's-remote',
+      i,
+      'Remote Heading',
+      JSON.stringify(['Remote Heading']),
+      `remote embedding text ${contentIndex}`,
+      4,
+      `hash-${contentIndex}`,
+      now,
+      now,
+      null,
+    );
+  }
+
+  const result = await embedSourceChunks('s-remote');
+  const stored = getServerDb()
+    .prepare(`SELECT COUNT(*) AS count FROM chunk_embeddings WHERE source_id = ?`)
+    .get('s-remote') as { count: number };
+
+  assert.equal(result.provider, 'remote');
+  assert.equal(result.embedded, 100);
+  assert.equal(stored.count, 100);
+  assert.equal(requestedInputs.length, 1);
+  assert.equal(requestedInputs[0].length, 99);
+  assert.equal(new Set(requestedInputs[0]).size, 99);
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    closeServerDbGlobal();
+    for (const [key, value] of previousEnv) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+});

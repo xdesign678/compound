@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 
 import {
   normalizeMetricRoute,
+  observeEmbeddingBatchSize,
   observeHttpRequest,
+  recordEmbeddingCacheHit,
+  recordEmbeddingCacheMiss,
   recordLlmRetry,
   recordLlmSsrfBlock,
   renderPrometheusMetrics,
@@ -150,5 +153,21 @@ test('renderPrometheusMetrics includes domain gauges and collector errors', () =
   assert.match(
     body,
     /compound_metrics_collection_error\{collector="sync",message="database unavailable"\} 1/,
+  );
+});
+
+test('renderPrometheusMetrics exposes embedding cache and batch metrics', () => {
+  resetPrometheusMetricsForTests();
+  recordEmbeddingCacheHit({ model: 'text-embedding-3-small' });
+  recordEmbeddingCacheMiss({ model: 'text-embedding-3-small' });
+  observeEmbeddingBatchSize({ model: 'text-embedding-3-small', size: 99 });
+
+  const body = renderPrometheusMetrics();
+
+  assert.match(body, /compound_embedding_cache_hits_total\{model="text-embedding-3-small"\} 1/);
+  assert.match(body, /compound_embedding_cache_misses_total\{model="text-embedding-3-small"\} 1/);
+  assert.match(
+    body,
+    /compound_embedding_batch_size_bucket\{model="text-embedding-3-small",le="100"\} 1/,
   );
 });

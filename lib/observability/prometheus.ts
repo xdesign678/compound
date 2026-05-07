@@ -48,10 +48,14 @@ const HTTP_DURATION_BUCKETS_SECONDS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5,
 const RAG_STAGE_DURATION_BUCKETS_SECONDS = [
   0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60,
 ];
+const EMBEDDING_BATCH_SIZE_BUCKETS = [1, 2, 4, 8, 16, 32, 64, 100, 128, 256, 512, 1024];
 const httpSamples = new Map<string, HttpSample>();
 const ragStageSamples = new Map<string, HistogramSample<{ stage: string }>>();
+const embeddingBatchSamples = new Map<string, HistogramSample<{ model: string }>>();
 const llmRetries = new Map<string, { labels: { host: string; reason: string }; count: number }>();
 const llmSsrfBlocks = new Map<string, { labels: { host: string }; count: number }>();
+const embeddingCacheHits = new Map<string, { labels: { model: string }; count: number }>();
+const embeddingCacheMisses = new Map<string, { labels: { model: string }; count: number }>();
 
 function escapeLabel(value: LabelValue): string {
   return String(value).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"');
@@ -153,6 +157,41 @@ export function recordLlmSsrfBlock(labels: { host: string }): void {
   const existing = llmSsrfBlocks.get(key) ?? { labels, count: 0 };
   existing.count += 1;
   llmSsrfBlocks.set(key, existing);
+}
+
+export function recordEmbeddingCacheHit(labels: { model: string }): void {
+  const key = labeledKey(labels);
+  const existing = embeddingCacheHits.get(key) ?? { labels, count: 0 };
+  existing.count += 1;
+  embeddingCacheHits.set(key, existing);
+}
+
+export function recordEmbeddingCacheMiss(labels: { model: string }): void {
+  const key = labeledKey(labels);
+  const existing = embeddingCacheMisses.get(key) ?? { labels, count: 0 };
+  existing.count += 1;
+  embeddingCacheMisses.set(key, existing);
+}
+
+export function observeEmbeddingBatchSize(input: { model: string; size: number }): void {
+  const labels = { model: input.model };
+  const key = labeledKey(labels);
+  const existing =
+    embeddingBatchSamples.get(key) ??
+    ({
+      labels,
+      count: 0,
+      durationSecondsSum: 0,
+      bucketCounts: new Array(EMBEDDING_BATCH_SIZE_BUCKETS.length).fill(0),
+    } satisfies HistogramSample<{ model: string }>);
+
+  const size = Math.max(0, input.size);
+  existing.count += 1;
+  existing.durationSecondsSum += size;
+  EMBEDDING_BATCH_SIZE_BUCKETS.forEach((bucket, index) => {
+    if (size <= bucket) existing.bucketCounts[index] += 1;
+  });
+  embeddingBatchSamples.set(key, existing);
 }
 
 class PrometheusTextBuilder {
@@ -367,17 +406,62 @@ function addEmbeddingMetrics(
 ): void {
   const provider = metrics.embeddingProvider;
   const model = metrics.embeddingModel;
-  if (typeof provider !== 'string' && typeof model !== 'string') return;
+  if (typeof provider === 'string' || typeof model === 'string') {
+    out.metric(
+      'compound_embedding_provider_info',
+      'gauge',
+      'Configured embedding provider and model.',
+    );
+    out.sample('compound_embedding_provider_info', 1, {
+      provider: typeof provider === 'string' ? provider : 'unknown',
+      model: typeof model === 'string' ? model : 'unknown',
+    });
+  }
 
   out.metric(
-    'compound_embedding_provider_info',
-    'gauge',
-    'Configured embedding provider and model.',
+    'compound_embedding_cache_hits_total',
+    'counter',
+    'Embedding vector cache hits by model.',
   );
-  out.sample('compound_embedding_provider_info', 1, {
-    provider: typeof provider === 'string' ? provider : 'unknown',
-    model: typeof model === 'string' ? model : 'unknown',
-  });
+  for (const item of Array.from(embeddingCacheHits.values()).sort((a, b) =>
+    labeledKey(a.labels).localeCompare(labeledKey(b.labels)),
+  )) {
+    out.sample('compound_embedding_cache_hits_total', item.count, item.labels);
+  }
+
+  out.metric(
+    'compound_embedding_cache_misses_total',
+    'counter',
+    'Embedding vector cache misses by model.',
+  );
+  for (const item of Array.from(embeddingCacheMisses.values()).sort((a, b) =>
+    labeledKey(a.labels).localeCompare(labeledKey(b.labels)),
+  )) {
+    out.sample('compound_embedding_cache_misses_total', item.count, item.labels);
+  }
+
+  out.metric(
+    'compound_embedding_batch_size',
+    'histogram',
+    'Unique remote embedding request batch size by model.',
+  );
+  const samples = Array.from(embeddingBatchSamples.values()).sort((a, b) =>
+    labeledKey(a.labels).localeCompare(labeledKey(b.labels)),
+  );
+  for (const sample of samples) {
+    EMBEDDING_BATCH_SIZE_BUCKETS.forEach((bucket, index) => {
+      out.sample('compound_embedding_batch_size_bucket', sample.bucketCounts[index], {
+        ...sample.labels,
+        le: bucket,
+      });
+    });
+    out.sample('compound_embedding_batch_size_bucket', sample.count, {
+      ...sample.labels,
+      le: '+Inf',
+    });
+    out.sample('compound_embedding_batch_size_sum', sample.durationSecondsSum, sample.labels);
+    out.sample('compound_embedding_batch_size_count', sample.count, sample.labels);
+  }
 }
 
 function addCollectionErrors(
@@ -467,7 +551,7 @@ export function renderPrometheusMetrics(input: PrometheusRenderInput = {}): stri
   addQueryAnalyzerMetrics(out);
   if (input.syncDashboard) addSyncMetrics(out, input.syncDashboard);
   if (input.reviewMetrics) addReviewMetrics(out, input.reviewMetrics);
-  if (input.embeddingMetrics) addEmbeddingMetrics(out, input.embeddingMetrics);
+  addEmbeddingMetrics(out, input.embeddingMetrics ?? {});
   if (input.collectionErrors?.length) addCollectionErrors(out, input.collectionErrors);
   return out.toString();
 }
@@ -475,6 +559,9 @@ export function renderPrometheusMetrics(input: PrometheusRenderInput = {}): stri
 export function resetPrometheusMetricsForTests(): void {
   httpSamples.clear();
   ragStageSamples.clear();
+  embeddingBatchSamples.clear();
   llmRetries.clear();
   llmSsrfBlocks.clear();
+  embeddingCacheHits.clear();
+  embeddingCacheMisses.clear();
 }
