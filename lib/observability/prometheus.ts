@@ -23,6 +23,13 @@ interface HttpSample {
   bucketCounts: number[];
 }
 
+interface HistogramSample<TLabels extends Labels> {
+  labels: TLabels;
+  count: number;
+  durationSecondsSum: number;
+  bucketCounts: number[];
+}
+
 export interface HttpObservation {
   method: string;
   route: string;
@@ -38,7 +45,11 @@ export interface PrometheusRenderInput {
 }
 
 const HTTP_DURATION_BUCKETS_SECONDS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
+const RAG_STAGE_DURATION_BUCKETS_SECONDS = [
+  0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60,
+];
 const httpSamples = new Map<string, HttpSample>();
+const ragStageSamples = new Map<string, HistogramSample<{ stage: string }>>();
 const llmRetries = new Map<string, { labels: { host: string; reason: string }; count: number }>();
 const llmSsrfBlocks = new Map<string, { labels: { host: string }; count: number }>();
 
@@ -107,6 +118,27 @@ export function observeHttpRequest(observation: HttpObservation): void {
     if (durationSeconds <= bucket) existing.bucketCounts[index] += 1;
   });
   httpSamples.set(key, existing);
+}
+
+export function observeRagStageDuration(input: { stage: string; durationMs: number }): void {
+  const labels = { stage: input.stage };
+  const key = labeledKey(labels);
+  const existing =
+    ragStageSamples.get(key) ??
+    ({
+      labels,
+      count: 0,
+      durationSecondsSum: 0,
+      bucketCounts: new Array(RAG_STAGE_DURATION_BUCKETS_SECONDS.length).fill(0),
+    } satisfies HistogramSample<{ stage: string }>);
+
+  const durationSeconds = Math.max(0, input.durationMs / 1000);
+  existing.count += 1;
+  existing.durationSecondsSum += durationSeconds;
+  RAG_STAGE_DURATION_BUCKETS_SECONDS.forEach((bucket, index) => {
+    if (durationSeconds <= bucket) existing.bucketCounts[index] += 1;
+  });
+  ragStageSamples.set(key, existing);
 }
 
 export function recordLlmRetry(labels: { host: string; reason: string }): void {
@@ -236,6 +268,32 @@ function addLlmMetrics(out: PrometheusTextBuilder): void {
     labeledKey(a.labels).localeCompare(labeledKey(b.labels)),
   )) {
     out.sample('compound_llm_ssrf_blocks_total', item.count, item.labels);
+  }
+}
+
+function addRagMetrics(out: PrometheusTextBuilder): void {
+  out.metric(
+    'compound_rag_stage_duration_seconds',
+    'histogram',
+    'RAG pipeline stage duration in seconds.',
+  );
+
+  const samples = Array.from(ragStageSamples.values()).sort((a, b) =>
+    labeledKey(a.labels).localeCompare(labeledKey(b.labels)),
+  );
+  for (const sample of samples) {
+    RAG_STAGE_DURATION_BUCKETS_SECONDS.forEach((bucket, index) => {
+      out.sample('compound_rag_stage_duration_seconds_bucket', sample.bucketCounts[index], {
+        ...sample.labels,
+        le: bucket,
+      });
+    });
+    out.sample('compound_rag_stage_duration_seconds_bucket', sample.count, {
+      ...sample.labels,
+      le: '+Inf',
+    });
+    out.sample('compound_rag_stage_duration_seconds_sum', sample.durationSecondsSum, sample.labels);
+    out.sample('compound_rag_stage_duration_seconds_count', sample.count, sample.labels);
   }
 }
 
@@ -405,6 +463,7 @@ export function renderPrometheusMetrics(input: PrometheusRenderInput = {}): stri
   addProcessMetrics(out);
   addHttpMetrics(out);
   addLlmMetrics(out);
+  addRagMetrics(out);
   addQueryAnalyzerMetrics(out);
   if (input.syncDashboard) addSyncMetrics(out, input.syncDashboard);
   if (input.reviewMetrics) addReviewMetrics(out, input.reviewMetrics);
@@ -415,6 +474,7 @@ export function renderPrometheusMetrics(input: PrometheusRenderInput = {}): stri
 
 export function resetPrometheusMetricsForTests(): void {
   httpSamples.clear();
+  ragStageSamples.clear();
   llmRetries.clear();
   llmSsrfBlocks.clear();
 }

@@ -12,6 +12,7 @@ import {
   type ConceptEvidence,
 } from '@/lib/wiki-db';
 import { getEmbeddingMode, hybridSearchWikiContext } from '@/lib/embedding';
+import { observeRagStageDuration } from '@/lib/observability/prometheus';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
 import { logger } from '@/lib/server-logger';
 import { rewriteQuery } from '@/lib/retrieval/query-rewrite';
@@ -150,6 +151,7 @@ interface RetrievalResult {
 }
 
 export type StageEventKey = 'rewrite' | 'retrieve' | 'graph' | 'rerank' | 'synthesize';
+export type StageDurations = Record<StageEventKey, number>;
 
 export interface StageEvent {
   key: StageEventKey;
@@ -159,6 +161,56 @@ export interface StageEvent {
 }
 
 type StageEmitter = (event: StageEvent) => void;
+type StageDurationSnapshot = Partial<StageDurations>;
+
+const STAGE_KEYS: StageEventKey[] = ['rewrite', 'retrieve', 'graph', 'rerank', 'synthesize'];
+
+function emptyStageDurations(): StageDurationSnapshot {
+  return {};
+}
+
+function roundedDurationMs(durationMs: number): number {
+  return Math.max(0, Math.round(durationMs));
+}
+
+function createStageTelemetry(onSnapshot: (durations: StageDurationSnapshot) => void) {
+  const startedAt = new Map<StageEventKey, number>();
+  const durations: StageDurationSnapshot = emptyStageDurations();
+
+  function snapshot(): StageDurationSnapshot {
+    const now = performance.now();
+    const current: StageDurationSnapshot = { ...durations };
+    for (const key of STAGE_KEYS) {
+      const start = startedAt.get(key);
+      if (start !== undefined && current[key] === undefined) {
+        current[key] = roundedDurationMs(now - start);
+      }
+    }
+    return current;
+  }
+
+  function publish(): void {
+    onSnapshot(snapshot());
+  }
+
+  return {
+    start(key: StageEventKey) {
+      startedAt.set(key, performance.now());
+      publish();
+    },
+    finish(key: StageEventKey) {
+      const start = startedAt.get(key);
+      if (start === undefined) return snapshot();
+      const durationMs = roundedDurationMs(performance.now() - start);
+      startedAt.delete(key);
+      durations[key] = durationMs;
+      observeRagStageDuration({ stage: key, durationMs });
+      publish();
+      return snapshot();
+    },
+    snapshot,
+  };
+}
 
 async function runRetrievalPipeline(opts: {
   question: string;
@@ -166,10 +218,13 @@ async function runRetrievalPipeline(opts: {
   llmConfig?: LlmConfig;
   requestConcepts: Concept[];
   onStage?: StageEmitter;
+  stageTelemetry?: ReturnType<typeof createStageTelemetry>;
 }): Promise<RetrievalResult> {
   const emit: StageEmitter = opts.onStage ?? (() => {});
+  const stageTelemetry = opts.stageTelemetry ?? createStageTelemetry(() => {});
 
   // Step 1: history-aware query rewrite
+  stageTelemetry.start('rewrite');
   emit({ key: 'rewrite', status: 'start' });
   const { rewritten, used: rewriteUsed } = await rewriteQuery({
     question: opts.question,
@@ -185,8 +240,10 @@ async function runRetrievalPipeline(opts: {
         ? '原问题足够清晰'
         : `已改写检索 query · ${rewriteUsed === 'llm' ? 'LLM 重写' : '回退方案'}`,
   });
+  stageTelemetry.finish('rewrite');
 
   // Step 2: hybrid retrieval (FTS + vector when configured)
+  stageTelemetry.start('retrieve');
   emit({ key: 'retrieve', status: 'start' });
   const serverContext = await getServerContext(effectiveQuery);
   const embeddingMode = getEmbeddingMode();
@@ -198,8 +255,10 @@ async function runRetrievalPipeline(opts: {
     detail: `${embeddingMode === 'remote' ? '混合检索 (FTS + 向量)' : 'FTS 全文检索'} · 召回 ${serverContext.concepts.length} 个概念，${serverContext.chunks.length} 段证据`,
     conceptTitles: serverContext.concepts.slice(0, 12).map((c) => c.title),
   });
+  stageTelemetry.finish('retrieve');
 
   // Step 3: graph 1-hop expansion off the seed concepts
+  stageTelemetry.start('graph');
   emit({ key: 'graph', status: 'start' });
   const seedConceptIds = serverContext.concepts.slice(0, 8).map((c) => c.id);
   const graph = graphExpand(seedConceptIds, 5);
@@ -212,9 +271,11 @@ async function runRetrievalPipeline(opts: {
         ? '未发现相关邻居概念'
         : `沿概念关系扩展 ${graph.concepts.length} 个邻居`,
   });
+  stageTelemetry.finish('graph');
 
   // Step 4: RRF fusion across (a) FTS-ordered concepts (b) request mentions
   // (c) graph-expanded neighbors. Chunks fuse separately.
+  stageTelemetry.start('rerank');
   emit({ key: 'rerank', status: 'start' });
   const conceptFused = reciprocalRankFusion<Concept>(
     [
@@ -252,6 +313,7 @@ async function runRetrievalPipeline(opts: {
     detail: `融合 ${candidates.length} 候选 · ${rerank.used === 'llm' ? 'LLM 重排' : '启发式排序'} 到 Top-${partitioned.concepts.length + partitioned.chunks.length}`,
     conceptTitles: partitioned.concepts.slice(0, 8).map((c) => c.title),
   });
+  stageTelemetry.finish('rerank');
 
   // Step 7: assemble final context. Always carry through evidence rows for
   // the chosen concepts so the answer prompt has factual handles.
@@ -302,6 +364,10 @@ export const POST = withRequestTracing(async (req: Request) => {
   if (denied) return denied;
 
   const wantStream = req.headers.get('accept') === 'text/event-stream';
+  let stageDurations: StageDurationSnapshot = emptyStageDurations();
+  const stageTelemetry = createStageTelemetry((snapshot) => {
+    stageDurations = snapshot;
+  });
 
   try {
     const body = (await req.json()) as QueryRequest;
@@ -379,6 +445,7 @@ export const POST = withRequestTracing(async (req: Request) => {
               history,
               llmConfig,
               requestConcepts,
+              stageTelemetry,
               onStage: (event) => {
                 sendSSE('stage', event);
               },
@@ -387,6 +454,7 @@ export const POST = withRequestTracing(async (req: Request) => {
             const { concepts, userPrompt } = buildPromptInputs(retrieval);
 
             // Synthesis stage covers the LLM answer call.
+            stageTelemetry.start('synthesize');
             sendSSE('stage', { key: 'synthesize', status: 'start' });
 
             const raw = await chat({
@@ -407,7 +475,11 @@ export const POST = withRequestTracing(async (req: Request) => {
             // as delta events for a progressive feel, then emit the full metadata
             // in the `done` event.
             const parsed = parseJSON<
-              QueryResponse & { rewrittenQuestion?: string; retrievalMode?: string }
+              QueryResponse & {
+                rewrittenQuestion?: string;
+                retrievalMode?: string;
+                stageDurations?: StageDurationSnapshot;
+              }
             >(raw);
             parsed.citedConceptIds = parsed.citedConceptIds || [];
             parsed.answer = parsed.answer || '(无回答)';
@@ -430,6 +502,7 @@ export const POST = withRequestTracing(async (req: Request) => {
             parsed.rewrittenQuestion =
               retrieval.rewriteUsed === 'pass-through' ? undefined : retrieval.rewrittenQuestion;
             parsed.retrievalMode = retrieval.retrievalMode;
+            stageTelemetry.finish('synthesize');
 
             sendSSE('stage', {
               key: 'synthesize',
@@ -445,6 +518,7 @@ export const POST = withRequestTracing(async (req: Request) => {
               suggestedQuestions: parsed.suggestedQuestions,
               rewrittenQuestion: parsed.rewrittenQuestion,
               retrievalMode: parsed.retrievalMode,
+              stageDurations,
             });
 
             // Faithfulness check (log-only)
@@ -474,6 +548,10 @@ export const POST = withRequestTracing(async (req: Request) => {
             controller.close();
           } catch (err) {
             clearInterval(keepaliveInterval);
+            logger.error('query.failed', {
+              error: publicQueryErrorMessage(err),
+              stageDurations: stageTelemetry.snapshot(),
+            });
             sendSSE('error', {
               error: publicQueryErrorMessage(err),
               requestId: getRequestContext()?.requestId,
@@ -498,9 +576,11 @@ export const POST = withRequestTracing(async (req: Request) => {
       history,
       llmConfig,
       requestConcepts,
+      stageTelemetry,
     });
     const { concepts, userPrompt } = buildPromptInputs(retrieval);
 
+    stageTelemetry.start('synthesize');
     const raw = await chat({
       messages: [
         { role: 'system', content: QUERY_SYSTEM_PROMPT },
@@ -514,7 +594,11 @@ export const POST = withRequestTracing(async (req: Request) => {
     });
 
     const parsed = parseJSON<
-      QueryResponse & { rewrittenQuestion?: string; retrievalMode?: string }
+      QueryResponse & {
+        rewrittenQuestion?: string;
+        retrievalMode?: string;
+        stageDurations?: StageDurationSnapshot;
+      }
     >(raw);
     parsed.citedConceptIds = parsed.citedConceptIds || [];
     parsed.answer = parsed.answer || '(无回答)';
@@ -554,11 +638,13 @@ export const POST = withRequestTracing(async (req: Request) => {
     parsed.rewrittenQuestion =
       retrieval.rewriteUsed === 'pass-through' ? undefined : retrieval.rewrittenQuestion;
     parsed.retrievalMode = retrieval.retrievalMode;
+    stageTelemetry.finish('synthesize');
+    parsed.stageDurations = stageDurations;
 
     return NextResponse.json(parsed);
   } catch (err) {
     const error = publicQueryErrorMessage(err);
-    logger.error('query.failed', { error });
+    logger.error('query.failed', { error, stageDurations: stageTelemetry.snapshot() });
     return NextResponse.json(
       {
         error,
