@@ -55,6 +55,8 @@ docs/plans/
 playwright-screenshot*.png
 screenshot-*.png
 screenshots/
+tests/e2e/.results/
+playwright-report/
 
 # Build performance metrics produced by scripts/measure-build.mjs
 tmp/build-metrics.json
