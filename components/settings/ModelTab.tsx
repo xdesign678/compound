@@ -309,7 +309,7 @@ export function ModelTab() {
                 <span>API Key</span>
                 <input
                   type="password"
-                  placeholder="sk-... 或 OpenRouter key"
+                  placeholder="sk-… 或 OpenRouter key"
                   value={llmConfig.apiKey || ''}
                   onChange={(e) => setLlmConfig((c) => ({ ...c, apiKey: e.target.value }))}
                 />

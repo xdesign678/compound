@@ -169,7 +169,9 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
             <input
               ref={searchInputRef}
               className="search-input"
-              placeholder="搜索概念、资料、引用..."
+              name="wiki-search"
+              autoComplete="off"
+              placeholder="搜索概念、资料、引用…"
               aria-label="搜索概念"
               value={query}
               onChange={(e) => setQuery(e.target.value)}

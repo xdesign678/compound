@@ -71,11 +71,16 @@ function buildSnapshotRequestPath(since: number | null): string {
   return `/api/data/snapshot?${search.toString()}`;
 }
 
+function buildSameOriginRequestUrl(path: string): string {
+  if (typeof window === 'undefined') return path;
+  return new URL(path, window.location.origin).toString();
+}
+
 async function fetchConceptDetails(ids: string[]): Promise<Concept[]> {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
   if (uniqueIds.length === 0) return [];
   const search = new URLSearchParams({ ids: uniqueIds.join(',') });
-  const res = await fetch(`/api/data/concepts?${search.toString()}`, {
+  const res = await fetch(buildSameOriginRequestUrl(`/api/data/concepts?${search.toString()}`), {
     cache: 'no-store',
     headers: withRequestId(getAdminAuthHeaders()),
   });
@@ -90,7 +95,7 @@ async function fetchSourceDetails(ids: string[]): Promise<Source[]> {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
   if (uniqueIds.length === 0) return [];
   const search = new URLSearchParams({ ids: uniqueIds.join(',') });
-  const res = await fetch(`/api/data/sources?${search.toString()}`, {
+  const res = await fetch(buildSameOriginRequestUrl(`/api/data/sources?${search.toString()}`), {
     cache: 'no-store',
     headers: withRequestId(getAdminAuthHeaders()),
   });
@@ -114,7 +119,7 @@ export async function pullSnapshotFromCloud(): Promise<PullResult> {
 
 async function pullSnapshotFromCloudInner(): Promise<PullResult> {
   const since = getLastPullAt();
-  const res = await fetch(buildSnapshotRequestPath(since), {
+  const res = await fetch(buildSameOriginRequestUrl(buildSnapshotRequestPath(since)), {
     cache: 'no-store',
     headers: withRequestId(getAdminAuthHeaders()),
   });

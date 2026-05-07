@@ -267,7 +267,7 @@ export function CommandPalette() {
           <input
             ref={inputRef}
             className="cmd-input"
-            placeholder="搜索概念、资料或输入命令..."
+            placeholder="搜索概念、资料或输入命令…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}

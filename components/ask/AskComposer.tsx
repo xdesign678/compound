@@ -137,7 +137,9 @@ export function AskComposer({
           <textarea
             ref={textareaRef}
             className="ask-textarea"
-            placeholder="问点什么... 输入 @ 引用概念或资料"
+            name="ask-question"
+            aria-label="输入问题"
+            placeholder="问点什么… 输入 @ 引用概念或资料"
             rows={1}
             value={input}
             onChange={(event) => {
@@ -265,9 +267,12 @@ function ReferencePicker({
           <Icon.Search />
           <input
             ref={pickerSearchRef}
+            name="ask-reference-search"
             value={pickerSearch}
             onChange={(event) => setPickerSearch(event.target.value)}
-            placeholder={referenceMode === 'concept' ? '搜索概念页...' : '搜索资料或文件...'}
+            placeholder={referenceMode === 'concept' ? '搜索概念页…' : '搜索资料或文件…'}
+            aria-label={referenceMode === 'concept' ? '搜索概念页' : '搜索资料或文件'}
+            autoComplete="off"
           />
         </div>
         <MentionResults

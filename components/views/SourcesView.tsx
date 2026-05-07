@@ -132,7 +132,9 @@ export function SourcesView() {
             <input
               ref={searchInputRef}
               className="search-input"
-              placeholder="搜索标题、作者..."
+              name="source-search"
+              autoComplete="off"
+              placeholder="搜索标题、作者…"
               aria-label="搜索资料"
               value={query}
               onChange={(e) => setQuery(e.target.value)}

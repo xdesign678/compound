@@ -291,7 +291,7 @@ export function IngestModal() {
                   <input
                     id="link-url"
                     className="form-input"
-                    placeholder="https://..."
+                    placeholder="https://…"
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                   />
@@ -302,7 +302,7 @@ export function IngestModal() {
                     id="link-content"
                     className="form-textarea"
                     rows={8}
-                    placeholder="把页面正文粘贴到这里..."
+                    placeholder="把页面正文粘贴到这里…"
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
                   />

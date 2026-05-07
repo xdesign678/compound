@@ -163,7 +163,7 @@ export function NoteEditor({ onDone, onCancel, disabled = false, draftId }: Note
             <textarea
               ref={textareaRef}
               className="note-editor-textarea"
-              placeholder="开始记录..."
+              placeholder="开始记录…"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               spellCheck={false}
