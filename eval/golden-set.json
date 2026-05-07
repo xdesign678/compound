@@ -1,47 +1,434 @@
 {
-  "_help": "Add 30–50 questions across 'definition', 'comparison', 'multi-hop', 'follow-up', 'unknown'. Either expectedConceptIds (stable) or expectedConceptTitles (easier to author) is required for hit@k / MRR. Keywords are optional but free wins. Items without any expectations only contribute latency stats. See lib/eval/metrics.ts for the schema.",
+  "_help": "Golden questions for repeatable RAG evaluation. Five categories keep coverage balanced: definition, comparison, multi-hop, follow-up, unknown. Either expectedConceptIds or expectedConceptTitles is required for hit@k / MRR. Unknown items should set shouldAnswer=false and use expectedKeywords that reward honest refusal.",
   "items": [
     {
       "id": "definition-001",
       "category": "definition",
-      "question": "什么是 LLM Wiki 这个概念？",
-      "expectedConceptTitles": ["LLM Wiki", "Karpathy", "知识库"],
-      "expectedKeywords": ["概念页", "预合成"]
+      "question": "什么是 LLM Wiki 模式？",
+      "expectedConceptTitles": ["LLM Wiki 模式"],
+      "expectedKeywords": ["Markdown Wiki", "预先综合", "持续维护"]
+    },
+    {
+      "id": "definition-002",
+      "category": "definition",
+      "question": "RAG 的结构性缺陷是什么？",
+      "expectedConceptTitles": ["RAG 的结构性缺陷"],
+      "expectedKeywords": ["没有积累", "每次查询", "遗忘"]
+    },
+    {
+      "id": "definition-003",
+      "category": "definition",
+      "question": "LLM Wiki 的三层架构分别是什么？",
+      "expectedConceptTitles": ["三层架构"],
+      "expectedKeywords": ["Raw Sources", "Wiki", "Schema"]
+    },
+    {
+      "id": "definition-004",
+      "category": "definition",
+      "question": "Ingest、Query、Lint 在这个系统里各自负责什么？",
+      "expectedConceptTitles": ["Ingest · Query · Lint"],
+      "expectedKeywords": ["摄入", "查询", "体检"]
+    },
+    {
+      "id": "definition-005",
+      "category": "definition",
+      "question": "Bookkeeping 洞察指的是什么？",
+      "expectedConceptTitles": ["Bookkeeping 洞察"],
+      "expectedKeywords": ["交叉引用", "维护", "反人性"]
+    },
+    {
+      "id": "definition-006",
+      "category": "definition",
+      "question": "知识复利在 LLM Wiki 中是什么意思？",
+      "expectedConceptTitles": ["知识复利"],
+      "expectedKeywords": ["归档", "新页面", "越丰富"]
+    },
+    {
+      "id": "definition-007",
+      "category": "definition",
+      "question": "Memex 是什么，它和 LLM Wiki 有什么关系？",
+      "expectedConceptTitles": ["Memex · Vannevar Bush"],
+      "expectedKeywords": ["关联路径", "精神祖先", "1945"]
+    },
+    {
+      "id": "definition-008",
+      "category": "definition",
+      "question": "Context Engineering 的核心思想是什么？",
+      "expectedConceptTitles": ["Context Engineering"],
+      "expectedKeywords": ["结构化上下文", "prompt", "工程化"]
+    },
+    {
+      "id": "definition-009",
+      "category": "definition",
+      "question": "Zettelkasten 的 AI 兑现是什么意思？",
+      "expectedConceptTitles": ["Zettelkasten 的 AI 兑现"],
+      "expectedKeywords": ["原子化笔记", "双向链接", "AI 执行"]
+    },
+    {
+      "id": "definition-010",
+      "category": "definition",
+      "question": "Raw Sources 在 LLM Wiki 里承担什么角色？",
+      "expectedConceptTitles": ["三层架构", "LLM Wiki 模式"],
+      "expectedKeywords": ["不可变", "原始资料", "人类负责策划"]
     },
     {
       "id": "comparison-001",
       "category": "comparison",
-      "question": "RAG 和 GraphRAG 有什么区别？",
-      "expectedConceptTitles": ["RAG", "GraphRAG"],
-      "expectedKeywords": ["检索", "图"]
+      "question": "LLM Wiki 和传统 RAG 的最大区别是什么？",
+      "expectedConceptTitles": ["LLM Wiki 模式", "RAG 的结构性缺陷"],
+      "expectedKeywords": ["预先综合", "临时检索", "积累"]
     },
     {
-      "id": "follow-up-001",
-      "category": "follow-up",
-      "question": "那它和普通的相比有什么优势？",
-      "history": [
-        { "role": "user", "text": "什么是 GraphRAG ？" },
-        {
-          "role": "ai",
-          "text": "GraphRAG 是把知识组织成图谱再做检索的 RAG 变体。"
-        }
+      "id": "comparison-002",
+      "category": "comparison",
+      "question": "Context Engineering 和 Prompt Engineering 有什么不同？",
+      "expectedConceptTitles": ["Context Engineering"],
+      "expectedKeywords": ["上下文", "措辞", "结构化"]
+    },
+    {
+      "id": "comparison-003",
+      "category": "comparison",
+      "question": "Memex 和 Zettelkasten 的共同点是什么？",
+      "expectedConceptTitles": [
+        "Memex · Vannevar Bush",
+        "Zettelkasten 的 AI 兑现"
       ],
-      "expectedConceptTitles": ["GraphRAG"],
-      "expectedKeywords": ["图", "关系"]
+      "expectedKeywords": ["关联", "链接", "维护成本"]
+    },
+    {
+      "id": "comparison-004",
+      "category": "comparison",
+      "question": "Ingest 和 Query 在知识库循环中有什么区别？",
+      "expectedConceptTitles": ["Ingest · Query · Lint", "知识复利"],
+      "expectedKeywords": ["摄入", "查询", "归档"]
+    },
+    {
+      "id": "comparison-005",
+      "category": "comparison",
+      "question": "Wiki 层和 Raw Sources 层为什么要分开？",
+      "expectedConceptTitles": ["三层架构"],
+      "expectedKeywords": ["原始资料", "LLM 编译", "只读"]
+    },
+    {
+      "id": "comparison-006",
+      "category": "comparison",
+      "question": "知识复利和 RAG 的一次性回答有什么差别？",
+      "expectedConceptTitles": ["知识复利", "RAG 的结构性缺陷"],
+      "expectedKeywords": ["更新知识库", "回答本身", "正反馈"]
+    },
+    {
+      "id": "comparison-007",
+      "category": "comparison",
+      "question": "人类和 LLM 在 bookkeeping 这件事上的优势有什么不同？",
+      "expectedConceptTitles": ["Bookkeeping 洞察"],
+      "expectedKeywords": ["人类", "LLM", "并行维护"]
+    },
+    {
+      "id": "comparison-008",
+      "category": "comparison",
+      "question": "LLM Wiki 和 AI 版 Zettelkasten 为什么说是同构的？",
+      "expectedConceptTitles": ["LLM Wiki 模式", "Zettelkasten 的 AI 兑现"],
+      "expectedKeywords": ["链接", "维护", "知识系统"]
+    },
+    {
+      "id": "comparison-009",
+      "category": "comparison",
+      "question": "Schema 层和普通文档说明有什么差别？",
+      "expectedConceptTitles": ["三层架构"],
+      "expectedKeywords": ["配置", "命名约定", "工作流"]
+    },
+    {
+      "id": "comparison-010",
+      "category": "comparison",
+      "question": "Lint 和人工整理知识库相比，优势在哪里？",
+      "expectedConceptTitles": ["Ingest · Query · Lint", "Bookkeeping 洞察"],
+      "expectedKeywords": ["矛盾", "孤立页面", "缺失链接"]
     },
     {
       "id": "multi-hop-001",
       "category": "multi-hop",
-      "question": "用户体验设计如何被认知心理学影响？",
-      "expectedConceptTitles": ["用户体验", "认知"],
-      "expectedKeywords": ["认知负荷"]
+      "question": "为什么说 LLM Wiki 同时继承了 Memex 和 Zettelkasten 的问题意识？",
+      "expectedConceptTitles": [
+        "LLM Wiki 模式",
+        "Memex · Vannevar Bush",
+        "Zettelkasten 的 AI 兑现"
+      ],
+      "expectedKeywords": ["关联维护", "链接", "AI"]
+    },
+    {
+      "id": "multi-hop-002",
+      "category": "multi-hop",
+      "question": "RAG 为什么无法自然产生知识复利？",
+      "expectedConceptTitles": ["RAG 的结构性缺陷", "知识复利"],
+      "expectedKeywords": ["遗忘", "归档", "知识库更新"]
+    },
+    {
+      "id": "multi-hop-003",
+      "category": "multi-hop",
+      "question": "三层架构如何支撑 Ingest、Query、Lint 三个动作？",
+      "expectedConceptTitles": ["三层架构", "Ingest · Query · Lint"],
+      "expectedKeywords": ["Raw Sources", "Wiki", "Schema"]
+    },
+    {
+      "id": "multi-hop-004",
+      "category": "multi-hop",
+      "question": "Context Engineering 为什么可以解释 LLM Wiki 的价值？",
+      "expectedConceptTitles": ["Context Engineering", "LLM Wiki 模式"],
+      "expectedKeywords": ["上下文", "预先综合", "知识操作系统"]
+    },
+    {
+      "id": "multi-hop-005",
+      "category": "multi-hop",
+      "question": "为什么 bookkeeping 成本下降后，个人知识系统才更可行？",
+      "expectedConceptTitles": [
+        "Bookkeeping 洞察",
+        "Memex · Vannevar Bush",
+        "Zettelkasten 的 AI 兑现"
+      ],
+      "expectedKeywords": ["交叉引用", "维护成本", "LLM"]
+    },
+    {
+      "id": "multi-hop-006",
+      "category": "multi-hop",
+      "question": "Query 回答被归档后，会怎样反过来改善后续查询？",
+      "expectedConceptTitles": ["知识复利", "Ingest · Query · Lint"],
+      "expectedKeywords": ["新页面", "正反馈", "Wiki"]
+    },
+    {
+      "id": "multi-hop-007",
+      "category": "multi-hop",
+      "question": "为什么 Raw Sources 只读、Wiki 可变，是一个重要设计？",
+      "expectedConceptTitles": ["三层架构", "LLM Wiki 模式"],
+      "expectedKeywords": ["不可变", "编译", "双重身份"]
+    },
+    {
+      "id": "multi-hop-008",
+      "category": "multi-hop",
+      "question": "如果一个系统只做检索不做 Lint，会错过哪些维护能力？",
+      "expectedConceptTitles": ["Ingest · Query · Lint", "RAG 的结构性缺陷"],
+      "expectedKeywords": ["矛盾", "孤立页面", "缺失链接"]
+    },
+    {
+      "id": "multi-hop-009",
+      "category": "multi-hop",
+      "question": "为什么说 LLM Wiki 是 context engineering 的具体形态，而不只是笔记软件？",
+      "expectedConceptTitles": [
+        "Context Engineering",
+        "LLM Wiki 模式",
+        "三层架构"
+      ],
+      "expectedKeywords": ["结构化", "上下文", "Schema"]
+    },
+    {
+      "id": "multi-hop-010",
+      "category": "multi-hop",
+      "question": "从 Memex 到 AI Zettelkasten，中间最大的未解决瓶颈是什么？",
+      "expectedConceptTitles": [
+        "Memex · Vannevar Bush",
+        "Zettelkasten 的 AI 兑现",
+        "Bookkeeping 洞察"
+      ],
+      "expectedKeywords": ["关联", "维护成本", "交叉引用"]
+    },
+    {
+      "id": "follow-up-001",
+      "category": "follow-up",
+      "question": "那它为什么比普通检索更适合长期使用？",
+      "history": [
+        { "role": "user", "text": "什么是 LLM Wiki 模式？" },
+        {
+          "role": "ai",
+          "text": "LLM Wiki 是由 LLM 持续维护的持久化知识 Wiki。"
+        }
+      ],
+      "expectedConceptTitles": [
+        "LLM Wiki 模式",
+        "RAG 的结构性缺陷",
+        "知识复利"
+      ],
+      "expectedKeywords": ["积累", "预先综合", "归档"]
+    },
+    {
+      "id": "follow-up-002",
+      "category": "follow-up",
+      "question": "这个缺陷会怎么影响跨文档综合？",
+      "history": [
+        { "role": "user", "text": "RAG 的结构性缺陷是什么？" },
+        { "role": "ai", "text": "RAG 每次查询都临时检索、拼接回答，然后遗忘。" }
+      ],
+      "expectedConceptTitles": ["RAG 的结构性缺陷"],
+      "expectedKeywords": ["跨文档", "从零", "综合"]
+    },
+    {
+      "id": "follow-up-003",
+      "category": "follow-up",
+      "question": "第三层主要管什么？",
+      "history": [
+        { "role": "user", "text": "LLM Wiki 的三层架构是什么？" },
+        { "role": "ai", "text": "三层是 Raw Sources、Wiki、Schema。" }
+      ],
+      "expectedConceptTitles": ["三层架构"],
+      "expectedKeywords": ["Schema", "命名", "工作流"]
+    },
+    {
+      "id": "follow-up-004",
+      "category": "follow-up",
+      "question": "这里哪个动作最像体检？",
+      "history": [
+        { "role": "user", "text": "Ingest、Query、Lint 是什么？" },
+        {
+          "role": "ai",
+          "text": "它们分别负责摄入资料、查询知识、检查和修复知识库。"
+        }
+      ],
+      "expectedConceptTitles": ["Ingest · Query · Lint"],
+      "expectedKeywords": ["Lint", "体检", "矛盾"]
+    },
+    {
+      "id": "follow-up-005",
+      "category": "follow-up",
+      "question": "为什么这件事对人类特别痛苦？",
+      "history": [
+        { "role": "user", "text": "Bookkeeping 洞察是什么？" },
+        { "role": "ai", "text": "它说维护知识库最累的是交叉引用和整理。" }
+      ],
+      "expectedConceptTitles": ["Bookkeeping 洞察"],
+      "expectedKeywords": ["交叉引用", "反人性", "维护"]
+    },
+    {
+      "id": "follow-up-006",
+      "category": "follow-up",
+      "question": "它和回答归档有什么关系？",
+      "history": [
+        { "role": "user", "text": "知识复利是什么意思？" },
+        { "role": "ai", "text": "知识复利是查询也会生产新的知识页面。" }
+      ],
+      "expectedConceptTitles": ["知识复利"],
+      "expectedKeywords": ["归档", "新页面", "正反馈"]
+    },
+    {
+      "id": "follow-up-007",
+      "category": "follow-up",
+      "question": "这个想法为什么长期没有真正兑现？",
+      "history": [
+        { "role": "user", "text": "Memex 是什么？" },
+        {
+          "role": "ai",
+          "text": "Memex 是一种按思想路径连接资料的个人知识机器设想。"
+        }
+      ],
+      "expectedConceptTitles": ["Memex · Vannevar Bush", "Bookkeeping 洞察"],
+      "expectedKeywords": ["关联维护", "成本", "LLM"]
+    },
+    {
+      "id": "follow-up-008",
+      "category": "follow-up",
+      "question": "它在 LLM Wiki 里对应什么具体东西？",
+      "history": [
+        { "role": "user", "text": "Context Engineering 是什么？" },
+        {
+          "role": "ai",
+          "text": "Context Engineering 是工程化地设计 LLM 看到的上下文。"
+        }
+      ],
+      "expectedConceptTitles": ["Context Engineering", "LLM Wiki 模式"],
+      "expectedKeywords": ["Wiki", "上下文", "结构化"]
+    },
+    {
+      "id": "follow-up-009",
+      "category": "follow-up",
+      "question": "为什么 AI 适合接手它？",
+      "history": [
+        { "role": "user", "text": "Zettelkasten 的 AI 兑现是什么意思？" },
+        { "role": "ai", "text": "它指让 AI 执行原子化笔记之间的链接和维护。" }
+      ],
+      "expectedConceptTitles": ["Zettelkasten 的 AI 兑现", "Bookkeeping 洞察"],
+      "expectedKeywords": ["链接", "维护", "LLM"]
+    },
+    {
+      "id": "follow-up-010",
+      "category": "follow-up",
+      "question": "这些页面之间最核心的共同问题是什么？",
+      "history": [
+        { "role": "user", "text": "Memex 和 Zettelkasten 有什么共同点？" },
+        { "role": "ai", "text": "它们都依赖大量关联和链接。" }
+      ],
+      "expectedConceptTitles": [
+        "Memex · Vannevar Bush",
+        "Zettelkasten 的 AI 兑现",
+        "Bookkeeping 洞察"
+      ],
+      "expectedKeywords": ["维护成本", "关联", "交叉引用"]
     },
     {
       "id": "unknown-001",
       "category": "unknown",
       "question": "请解释一下 1973 年东京证券交易所的开盘价",
       "shouldAnswer": false,
-      "expectedKeywords": ["Wiki 中没有", "建议"]
+      "expectedKeywords": ["Wiki 中没有", "没有相关资料", "无法确认"]
+    },
+    {
+      "id": "unknown-002",
+      "category": "unknown",
+      "question": "这个 Wiki 里有没有讲量子色动力学的重整化群方程？",
+      "shouldAnswer": false,
+      "expectedKeywords": ["Wiki 中没有", "没有相关资料", "无法确认"]
+    },
+    {
+      "id": "unknown-003",
+      "category": "unknown",
+      "question": "请总结拿破仑在滑铁卢战役的骑兵部署细节",
+      "shouldAnswer": false,
+      "expectedKeywords": ["Wiki 中没有", "没有相关资料", "无法确认"]
+    },
+    {
+      "id": "unknown-004",
+      "category": "unknown",
+      "question": "资料里是否记录了某位用户的家庭住址？",
+      "shouldAnswer": false,
+      "expectedKeywords": ["Wiki 中没有", "没有相关资料", "无法确认"]
+    },
+    {
+      "id": "unknown-005",
+      "category": "unknown",
+      "question": "这个知识库有没有介绍 PostgreSQL VACUUM 的参数调优？",
+      "shouldAnswer": false,
+      "expectedKeywords": ["Wiki 中没有", "没有相关资料", "无法确认"]
+    },
+    {
+      "id": "unknown-006",
+      "category": "unknown",
+      "question": "请根据 Wiki 说明 2024 年巴黎奥运会奖牌榜最终排名",
+      "shouldAnswer": false,
+      "expectedKeywords": ["Wiki 中没有", "没有相关资料", "无法确认"]
+    },
+    {
+      "id": "unknown-007",
+      "category": "unknown",
+      "question": "资料中有没有 Rust borrow checker 的生命周期例子？",
+      "shouldAnswer": false,
+      "expectedKeywords": ["Wiki 中没有", "没有相关资料", "无法确认"]
+    },
+    {
+      "id": "unknown-008",
+      "category": "unknown",
+      "question": "这个 Wiki 能否回答某家上市公司的最新财报收入？",
+      "shouldAnswer": false,
+      "expectedKeywords": ["Wiki 中没有", "没有相关资料", "无法确认"]
+    },
+    {
+      "id": "unknown-009",
+      "category": "unknown",
+      "question": "请解释一个不存在的概念：蓝色拓扑蒸馏法",
+      "shouldAnswer": false,
+      "expectedKeywords": ["Wiki 中没有", "没有相关资料", "无法确认"]
+    },
+    {
+      "id": "unknown-010",
+      "category": "unknown",
+      "question": "资料里是否有关于 Kubernetes HPA 指标配置的步骤？",
+      "shouldAnswer": false,
+      "expectedKeywords": ["Wiki 中没有", "没有相关资料", "无法确认"]
     }
   ]
 }
