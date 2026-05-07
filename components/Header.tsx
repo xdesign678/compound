@@ -9,16 +9,18 @@ import { Icon } from './Icons';
 interface HeaderProps {
   conceptCount: number;
   sourceCount: number;
+  loading?: boolean;
 }
 
 const TAB_TITLES: Record<string, { t: string; s: (h: HeaderProps) => string }> = {
   wiki: {
     t: '我的 Wiki',
-    s: (h) => `${h.conceptCount} 个概念 · ${h.sourceCount} 份资料`,
+    s: (h) =>
+      h.loading ? '正在同步本地知识库' : `${h.conceptCount} 个概念 · ${h.sourceCount} 份资料`,
   },
   sources: {
     t: '原始资料',
-    s: (h) => `${h.sourceCount} 份 · AI 只读不改`,
+    s: (h) => (h.loading ? '正在同步资料' : `${h.sourceCount} 份 · AI 只读不改`),
   },
   ask: {
     t: '向 Wiki 提问',

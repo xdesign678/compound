@@ -29,6 +29,10 @@ const ViewSkeleton = () => (
     aria-label="正在加载内容"
     aria-busy="true"
   >
+    <div className="loading-copy">
+      <span>正在同步本地知识库</span>
+      <strong>稍等一下，内容马上出来。</strong>
+    </div>
     <div className="skeleton skeleton-header" />
     <div className="skeleton skeleton-card" />
     <div className="skeleton skeleton-card" style={{ opacity: 0.7 }} />
@@ -252,6 +256,10 @@ export default function Page() {
 
   const skeletonContent = (
     <div className="loading-skeleton" aria-label="正在加载..." aria-busy="true">
+      <div className="loading-copy">
+        <span>正在同步本地知识库</span>
+        <strong>稍等一下，内容马上出来。</strong>
+      </div>
       <div className="skeleton skeleton-header" />
       <div className="skeleton skeleton-card" />
       <div className="skeleton skeleton-card" />
@@ -439,7 +447,7 @@ export default function Page() {
           useAppStore.getState().showToast('数据已刷新');
         }}
       />
-      <Header conceptCount={conceptCount ?? 0} sourceCount={sourceCount ?? 0} />
+      <Header conceptCount={conceptCount ?? 0} sourceCount={sourceCount ?? 0} loading={!ready} />
 
       <main className="app-main">
         {!ready ? (
