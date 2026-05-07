@@ -43,14 +43,46 @@ test('selection popover flips to the left when the right side would overflow', (
   assert.equal(position.top, 98);
 });
 
+test('selection popover uses the selection start when flipping left', () => {
+  const position = computeSelectionPopoverPosition({
+    anchorRect: {
+      left: 984,
+      right: 1050,
+      top: 219,
+      bottom: 239,
+      width: 66,
+      height: 20,
+    },
+    viewport: { width: 1200, height: 900 },
+    popover: { width: 180, height: 44 },
+  });
+
+  assert.equal(position.left, 792);
+  assert.equal(position.top, 207);
+});
+
 test('selectionchange refreshes the popover for a new active selection', () => {
   assert.equal(
     getSelectionChangeAction({
       creatingFromSelection: false,
       hasSelection: true,
       isCollapsed: false,
+      selectionInProgress: false,
       suppressDismiss: false,
     }),
     'refresh',
+  );
+});
+
+test('selectionchange does not refresh the popover while text is still being dragged', () => {
+  assert.equal(
+    getSelectionChangeAction({
+      creatingFromSelection: false,
+      hasSelection: true,
+      isCollapsed: false,
+      selectionInProgress: true,
+      suppressDismiss: false,
+    }),
+    'ignore',
   );
 });

@@ -54,15 +54,18 @@ export function getSelectionChangeAction({
   creatingFromSelection,
   hasSelection,
   isCollapsed,
+  selectionInProgress,
   suppressDismiss,
 }: {
   creatingFromSelection: boolean;
   hasSelection: boolean;
   isCollapsed: boolean;
+  selectionInProgress: boolean;
   suppressDismiss: boolean;
 }): SelectionChangeAction {
   if (suppressDismiss || creatingFromSelection) return 'ignore';
-  return hasSelection && !isCollapsed ? 'refresh' : 'dismiss';
+  if (!hasSelection || isCollapsed) return 'dismiss';
+  return selectionInProgress ? 'ignore' : 'refresh';
 }
 
 function clamp(value: number, min: number, max: number): number {

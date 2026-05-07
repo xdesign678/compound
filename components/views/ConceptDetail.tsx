@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { ensureConceptHydrated } from '@/lib/cloud-sync';
@@ -115,15 +116,29 @@ function getSelectionAnchorRect(
   range: Range,
   shell: HTMLElement,
 ): RectLike | null {
+  const backward = isSelectionBackward(selection);
+  const selectionLineRect = Array.from(range.getClientRects())
+    .filter(isUsefulRect)
+    .at(backward ? 0 : -1);
+  const expandBoundaryToSelectionLine = (boundary: RectLike): RectLike => {
+    if (!selectionLineRect) return boundary;
+    const left = backward ? boundary.left : Math.min(selectionLineRect.left, boundary.left);
+    const right = backward ? Math.max(selectionLineRect.right, boundary.right) : boundary.right;
+    return {
+      ...boundary,
+      left,
+      right,
+      width: Math.max(0, right - left),
+    };
+  };
+
   const rangeEndRect = getRangeEndBoundaryRect(range, shell);
-  if (rangeEndRect) return rangeEndRect;
+  if (rangeEndRect) return expandBoundaryToSelectionLine(rangeEndRect);
 
   const focusRect = getFocusBoundaryRect(selection, shell);
-  if (focusRect) return focusRect;
+  if (focusRect) return expandBoundaryToSelectionLine(focusRect);
 
-  const backward = isSelectionBackward(selection);
-  const rects = Array.from(range.getClientRects()).filter(isUsefulRect);
-  const rect = backward ? rects[0] : rects[rects.length - 1];
+  const rect = selectionLineRect;
   if (rect) return boundaryFromRect(rect, backward);
 
   const fallback = range.getBoundingClientRect();
@@ -159,6 +174,7 @@ export function ConceptDetail({ id }: { id: string }) {
   // 点击 popover 时浏览器会清除外部选区 -> selectionchange 触发 -> popover 被卸载 ->
   // onClick 无法触发。用一个短暂的抑制窗口，让 click 先落地。
   const suppressDismissRef = useRef(false);
+  const selectionInProgressRef = useRef(false);
 
   const concept = useLiveQuery(async () => getDb().concepts.get(id), [id]);
   const sources = useLiveQuery(async () => {
@@ -261,6 +277,21 @@ export function ConceptDetail({ id }: { id: string }) {
       selectionUpdateTimer = window.setTimeout(updateFromSelection, delay);
     };
 
+    const markSelectionInProgress = (target: Node | null) => {
+      if (target && popoverRef.current && popoverRef.current.contains(target)) return;
+      const shell = bodyShellRef.current;
+      if (!target || !shell || !shell.contains(target)) return;
+
+      selectionInProgressRef.current = true;
+      if (selectionUpdateTimer) clearTimeout(selectionUpdateTimer);
+      dismissSelectionPopover();
+    };
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      markSelectionInProgress(event.target as Node | null);
+    };
+    const handleSelectStart = (event: Event) => {
+      markSelectionInProgress(event.target as Node | null);
+    };
     const handlePointerUp = (event: MouseEvent | TouchEvent) => {
       // 如果鼠标是在 popover 上抬起的（即用户正在点击按钮），不要重新计算位置 /
       // 重新渲染 popover —— 否则 click 事件可能在 re-render 期间丢失。
@@ -268,7 +299,11 @@ export function ConceptDetail({ id }: { id: string }) {
       if (target && popoverRef.current && popoverRef.current.contains(target)) {
         return;
       }
-      scheduleUpdateFromSelection(10);
+      selectionInProgressRef.current = false;
+      scheduleUpdateFromSelection(30);
+    };
+    const handlePointerCancel = () => {
+      selectionInProgressRef.current = false;
     };
     const handleSelectionChange = () => {
       const sel = window.getSelection();
@@ -276,6 +311,7 @@ export function ConceptDetail({ id }: { id: string }) {
         creatingFromSelection,
         hasSelection: Boolean(sel),
         isCollapsed: Boolean(sel?.isCollapsed),
+        selectionInProgress: selectionInProgressRef.current,
         suppressDismiss: suppressDismissRef.current,
       });
 
@@ -294,9 +330,13 @@ export function ConceptDetail({ id }: { id: string }) {
       scheduleUpdateFromSelection(10);
     };
 
+    document.addEventListener('mousedown', handlePointerDown);
     document.addEventListener('mouseup', handlePointerUp);
+    document.addEventListener('touchstart', handlePointerDown);
     document.addEventListener('touchend', handlePointerUp);
+    document.addEventListener('selectstart', handleSelectStart);
     document.addEventListener('selectionchange', handleSelectionChange);
+    document.addEventListener('pointercancel', handlePointerCancel);
     window.addEventListener('scroll', handleScroll, true);
     window.addEventListener('resize', handleScroll);
     window.visualViewport?.addEventListener('resize', handleViewportChange);
@@ -304,9 +344,13 @@ export function ConceptDetail({ id }: { id: string }) {
 
     return () => {
       if (selectionUpdateTimer) clearTimeout(selectionUpdateTimer);
+      document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('mouseup', handlePointerUp);
+      document.removeEventListener('touchstart', handlePointerDown);
       document.removeEventListener('touchend', handlePointerUp);
+      document.removeEventListener('selectstart', handleSelectStart);
       document.removeEventListener('selectionchange', handleSelectionChange);
+      document.removeEventListener('pointercancel', handlePointerCancel);
       window.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('resize', handleScroll);
       window.visualViewport?.removeEventListener('resize', handleViewportChange);
@@ -503,61 +547,64 @@ export function ConceptDetail({ id }: { id: string }) {
         )}
       </div>
 
-      {(selectionPopover.visible || creatingFromSelection) && (
-        <div
-          ref={popoverRef}
-          className="selection-popover"
-          style={{ top: `${selectionPopover.top}px`, left: `${selectionPopover.left}px` }}
-          role="toolbar"
-          aria-label="选区操作"
-          onMouseDown={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            suppressDismissRef.current = true;
-            window.setTimeout(() => {
-              suppressDismissRef.current = false;
-            }, 400);
-          }}
-          onTouchStart={() => {
-            suppressDismissRef.current = true;
-            window.setTimeout(() => {
-              suppressDismissRef.current = false;
-            }, 400);
-          }}
-        >
-          {creatingFromSelection ? (
-            <div className="selection-popover-loading" role="status" aria-live="polite">
-              <span className="selection-popover-spinner" aria-hidden="true" />
-              <span className="selection-popover-loading-text">正在启动后台任务...</span>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="selection-popover-btn"
-              disabled={creatingFromSelection}
-              onMouseDown={(event) => {
-                event.preventDefault();
-              }}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                void handleCreateFromSelection();
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
+      {(selectionPopover.visible || creatingFromSelection) &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            className="selection-popover"
+            style={{ top: `${selectionPopover.top}px`, left: `${selectionPopover.left}px` }}
+            role="toolbar"
+            aria-label="选区操作"
+            onMouseDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              suppressDismissRef.current = true;
+              window.setTimeout(() => {
+                suppressDismissRef.current = false;
+              }, 400);
+            }}
+            onTouchStart={() => {
+              suppressDismissRef.current = true;
+              window.setTimeout(() => {
+                suppressDismissRef.current = false;
+              }, 400);
+            }}
+          >
+            {creatingFromSelection ? (
+              <div className="selection-popover-loading" role="status" aria-live="polite">
+                <span className="selection-popover-spinner" aria-hidden="true" />
+                <span className="selection-popover-loading-text">正在启动后台任务...</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="selection-popover-btn"
+                disabled={creatingFromSelection}
+                onMouseDown={(event) => {
                   event.preventDefault();
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
                   void handleCreateFromSelection();
-                }
-              }}
-            >
-              <span className="selection-popover-icon" aria-hidden="true">
-                +
-              </span>
-              为这段创建 Wiki
-            </button>
-          )}
-        </div>
-      )}
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    void handleCreateFromSelection();
+                  }
+                }}
+              >
+                <span className="selection-popover-icon" aria-hidden="true">
+                  +
+                </span>
+                为这段创建 Wiki
+              </button>
+            )}
+          </div>,
+          document.body,
+        )}
 
       {versionDialog.open && (
         <div className="modal-overlay visible" onClick={closeVersionDialog}>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useMemo } from 'react';
+import { memo, useEffect, useRef, useMemo } from 'react';
 import DOMPurify from 'dompurify';
 import { renderMarkdown } from '@/lib/format';
 import { useAppStore } from '@/lib/store';
@@ -35,7 +35,7 @@ function isSpecialScheme(href: string): boolean {
  * Renders markdown and wires up inline concept links / citation pills
  * to the app store navigation.
  */
-export function Prose({
+function ProseComponent({
   markdown,
   citedConceptIds,
   className,
@@ -168,3 +168,5 @@ export function Prose({
     />
   );
 }
+
+export const Prose = memo(ProseComponent);
