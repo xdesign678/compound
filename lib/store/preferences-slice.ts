@@ -3,6 +3,19 @@ import type { AppState } from './types';
 import type { HomeStyle, ColorMode, FontSize, LineHeight } from './ui-slice';
 import { FONT_SIZE_MAP, LINE_HEIGHT_MAP } from './ui-slice';
 import { DEFAULT_LOCALE, type Locale } from '../i18n/dict';
+import { parseJson } from '../utils';
+
+const RECENT_COMMAND_ITEMS_KEY = 'compound_recent_command_items';
+const MAX_RECENT_COMMAND_ITEMS = 10;
+
+export type RecentCommandItemKind = 'concept' | 'source';
+
+export interface RecentCommandItem {
+  kind: RecentCommandItemKind;
+  id: string;
+  title: string;
+  at: number;
+}
 
 function readStoredHomeStyle(): HomeStyle {
   if (typeof window === 'undefined') return 'library';
@@ -33,6 +46,34 @@ function readStoredLineHeight(): LineHeight {
 function readStoredLocale(): Locale {
   if (typeof window === 'undefined') return DEFAULT_LOCALE;
   return localStorage.getItem('compound_locale') === 'en' ? 'en' : DEFAULT_LOCALE;
+}
+
+function readStoredRecentItems(): RecentCommandItem[] {
+  if (typeof window === 'undefined') return [];
+  const parsed = parseJson<unknown>(localStorage.getItem(RECENT_COMMAND_ITEMS_KEY), []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter(isRecentCommandItem).slice(0, MAX_RECENT_COMMAND_ITEMS);
+}
+
+function isRecentCommandItem(value: unknown): value is RecentCommandItem {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<RecentCommandItem>;
+  return (
+    (item.kind === 'concept' || item.kind === 'source') &&
+    typeof item.id === 'string' &&
+    typeof item.title === 'string' &&
+    typeof item.at === 'number'
+  );
+}
+
+export function mergeRecentCommandItem(
+  current: RecentCommandItem[],
+  next: RecentCommandItem,
+): RecentCommandItem[] {
+  return [
+    next,
+    ...current.filter((item) => !(item.kind === next.kind && item.id === next.id)),
+  ].slice(0, MAX_RECENT_COMMAND_ITEMS);
 }
 
 function applyColorMode(mode: ColorMode) {
@@ -71,6 +112,7 @@ export interface PreferencesSlice {
   fontSize: FontSize;
   lineHeight: LineHeight;
   locale: Locale;
+  recentItems: RecentCommandItem[];
 
   setHomeStyle: (s: HomeStyle) => void;
   hydrateHomeStyle: () => void;
@@ -82,6 +124,8 @@ export interface PreferencesSlice {
   hydrateLineHeight: () => void;
   setLocale: (locale: Locale) => void;
   hydrateLocale: () => void;
+  rememberRecentItem: (item: Omit<RecentCommandItem, 'at'> & { at?: number }) => void;
+  hydrateRecentItems: () => void;
 }
 
 export const createPreferencesSlice: StateCreator<AppState, [], [], PreferencesSlice> = (
@@ -93,6 +137,7 @@ export const createPreferencesSlice: StateCreator<AppState, [], [], PreferencesS
   fontSize: 'md',
   lineHeight: 'standard',
   locale: readStoredLocale(),
+  recentItems: readStoredRecentItems(),
 
   setHomeStyle: (s) => {
     localStorage.setItem('compound_home_style', s);
@@ -137,4 +182,16 @@ export const createPreferencesSlice: StateCreator<AppState, [], [], PreferencesS
     set({ locale });
   },
   hydrateLocale: () => set({ locale: readStoredLocale() }),
+  rememberRecentItem: (item) => {
+    const nextItem: RecentCommandItem = {
+      ...item,
+      title: item.title.trim(),
+      at: item.at ?? Date.now(),
+    };
+    if (!nextItem.title) return;
+    const recentItems = mergeRecentCommandItem(get().recentItems, nextItem);
+    localStorage.setItem(RECENT_COMMAND_ITEMS_KEY, JSON.stringify(recentItems));
+    set({ recentItems });
+  },
+  hydrateRecentItems: () => set({ recentItems: readStoredRecentItems() }),
 });

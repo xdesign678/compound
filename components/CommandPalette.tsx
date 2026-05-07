@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useDeferredValue, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { useAppStore, type TabId } from '@/lib/store';
+import { scoreCommandMatch } from '@/lib/utils';
 import { Icon } from './Icons';
 
 interface CommandItem {
@@ -97,6 +98,7 @@ const HELP_ITEMS = [
 export function CommandPalette() {
   const open = useAppStore((s) => s.commandPaletteOpen);
   const closeCommandPalette = useAppStore((s) => s.closeCommandPalette);
+  const recentItems = useAppStore((s) => s.recentItems);
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -109,13 +111,9 @@ export function CommandPalette() {
       if (!open) return [];
       const q = deferredQuery.trim().toLowerCase();
       const db = getDb();
-      if (!q) {
-        return db.concepts.orderBy('updatedAt').reverse().limit(20).toArray();
-      }
-      // Use DB-side filtering with limit for better performance
+      if (!q) return [];
       const byTitle = await db.concepts.where('title').startsWithIgnoreCase(q).limit(30).toArray();
       const byTitleIds = new Set(byTitle.map((c) => c.id));
-      // Fallback: limited scan for substring matches not caught by startsWith
       const byScan = await db.concepts
         .filter(
           (c) =>
@@ -124,7 +122,9 @@ export function CommandPalette() {
         )
         .limit(20)
         .toArray();
-      return [...byTitle, ...byScan].slice(0, 20);
+      const byRecent = await db.concepts.orderBy('updatedAt').reverse().limit(80).toArray();
+      const candidates = new Map([...byTitle, ...byScan, ...byRecent].map((c) => [c.id, c]));
+      return Array.from(candidates.values()).slice(0, 100);
     },
     [open, deferredQuery],
     [],
@@ -136,15 +136,15 @@ export function CommandPalette() {
       const q = deferredQuery.trim().toLowerCase();
       const db = getDb();
       if (!q) return [];
-      // Use DB-side filtering with limit for better performance
       const byTitle = await db.sources.where('title').startsWithIgnoreCase(q).limit(10).toArray();
-      if (byTitle.length >= 10) return byTitle;
       const byTitleIds = new Set(byTitle.map((s) => s.id));
       const byScan = await db.sources
         .filter((s) => !byTitleIds.has(s.id) && s.title.toLowerCase().includes(q))
-        .limit(10 - byTitle.length)
+        .limit(20)
         .toArray();
-      return [...byTitle, ...byScan];
+      const byRecent = await db.sources.orderBy('updatedAt').reverse().limit(40).toArray();
+      const candidates = new Map([...byTitle, ...byScan, ...byRecent].map((s) => [s.id, s]));
+      return Array.from(candidates.values()).slice(0, 60);
     },
     [open, deferredQuery],
     [],
@@ -152,57 +152,103 @@ export function CommandPalette() {
 
   const items = useMemo<CommandItem[]>(() => {
     const store = useAppStore;
-    const result: CommandItem[] = [];
+    const q = deferredQuery.trim();
 
-    // Quick actions when query is empty or matches
-    const q = deferredQuery.trim().toLowerCase();
-    const filteredActions = q
-      ? QUICK_ACTIONS.filter((a) => a.label.toLowerCase().includes(q))
-      : QUICK_ACTIONS;
-    for (const a of filteredActions) {
-      result.push({
-        id: a.id,
-        type: 'action',
-        label: a.label,
-        icon: a.icon,
-        action: () => a.action(store),
+    if (!q) {
+      return [
+        ...recentItems.map<CommandItem>((item) => ({
+          id: `recent-${item.kind}-${item.id}`,
+          type: item.kind,
+          label: item.title,
+          sublabel: item.kind === 'concept' ? '最近访问 · 概念' : '最近访问 · 资料',
+          action: () => {
+            store.getState().closeCommandPalette();
+            store.getState().rememberRecentItem({
+              kind: item.kind,
+              id: item.id,
+              title: item.title,
+            });
+            if (item.kind === 'concept') {
+              store.getState().openConcept(item.id);
+            } else {
+              store.getState().openSource(item.id);
+            }
+          },
+        })),
+        ...QUICK_ACTIONS.map<CommandItem>((a) => ({
+          id: a.id,
+          type: 'action',
+          label: a.label,
+          icon: a.icon,
+          action: () => a.action(store),
+        })),
+      ];
+    }
+
+    const scoredItems: Array<{ item: CommandItem; score: number }> = [];
+
+    for (const a of QUICK_ACTIONS) {
+      const score = scoreCommandMatch(q, a.label);
+      if (score <= 0) continue;
+      scoredItems.push({
+        score,
+        item: {
+          id: a.id,
+          type: 'action',
+          label: a.label,
+          icon: a.icon,
+          action: () => a.action(store),
+        },
       });
     }
 
-    // Concepts
     for (const c of concepts ?? []) {
-      result.push({
-        id: `concept-${c.id}`,
-        type: 'concept',
-        label: c.title,
-        sublabel: c.summary.slice(0, 60),
-        action: () => {
-          store.getState().closeCommandPalette();
-          store.getState().openConcept(c.id);
+      const score = scoreCommandMatch(q, c.title, c.summary);
+      if (score <= 0) continue;
+      scoredItems.push({
+        score,
+        item: {
+          id: `concept-${c.id}`,
+          type: 'concept',
+          label: c.title,
+          sublabel: c.summary.slice(0, 60),
+          action: () => {
+            store.getState().closeCommandPalette();
+            store.getState().rememberRecentItem({ kind: 'concept', id: c.id, title: c.title });
+            store.getState().openConcept(c.id);
+          },
         },
       });
     }
 
-    // Sources
     for (const s of sources ?? []) {
-      result.push({
-        id: `source-${s.id}`,
-        type: 'source',
-        label: s.title,
-        sublabel: s.type,
-        action: () => {
-          store.getState().closeCommandPalette();
-          store.getState().openSource(s.id);
+      const score = scoreCommandMatch(q, s.title, s.type);
+      if (score <= 0) continue;
+      scoredItems.push({
+        score,
+        item: {
+          id: `source-${s.id}`,
+          type: 'source',
+          label: s.title,
+          sublabel: s.type,
+          action: () => {
+            store.getState().closeCommandPalette();
+            store.getState().rememberRecentItem({ kind: 'source', id: s.id, title: s.title });
+            store.getState().openSource(s.id);
+          },
         },
       });
     }
 
-    return result;
-  }, [deferredQuery, concepts, sources]);
+    return scoredItems
+      .sort((a, b) => b.score - a.score || a.item.label.localeCompare(b.item.label))
+      .slice(0, 40)
+      .map(({ item }) => item);
+  }, [deferredQuery, recentItems, concepts, sources]);
 
   useEffect(() => {
     setSelectedIndex(0);
-  }, [deferredQuery]);
+  }, [deferredQuery, items.length]);
 
   useEffect(() => {
     if (open) {
@@ -236,7 +282,7 @@ export function CommandPalette() {
     }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex((i) => Math.min(i + 1, items.length - 1));
+      setSelectedIndex((i) => Math.min(i + 1, Math.max(0, items.length - 1)));
       return;
     }
     if (e.key === 'ArrowUp') {
