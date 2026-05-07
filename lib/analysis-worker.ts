@@ -282,6 +282,11 @@ export function recoverStaleAnalysisJobs(): { jobs: number; items: number } {
       level: 'warn',
       stage: 'llm',
       message: `自动回收孤儿任务：analysis_jobs ${jobsRes.changes} · sync_run_items ${itemsRes.changes}`,
+      meta: {
+        event: 'sync.lease_recovered',
+        jobs: Number(jobsRes.changes ?? 0),
+        items: Number(itemsRes.changes ?? 0),
+      },
     });
   }
   return { jobs: Number(jobsRes.changes ?? 0), items: Number(itemsRes.changes ?? 0) };
