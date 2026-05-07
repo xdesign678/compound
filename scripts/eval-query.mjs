@@ -109,6 +109,7 @@ const agg = aggregate(scores);
 const tmpDir = path.join(root, 'tmp', 'eval');
 mkdirSync(tmpDir, { recursive: true });
 const latestPath = path.join(tmpDir, 'latest.json');
+const latestMarkdownPath = path.join(tmpDir, 'latest.md');
 const baselinePath = path.join(tmpDir, 'baseline.json');
 
 const latest = {
@@ -119,7 +120,9 @@ const latest = {
   items: scores,
 };
 writeFileSync(latestPath, `${JSON.stringify(latest, null, 2)}\n`);
+writeFileSync(latestMarkdownPath, renderMarkdownSummary(latest, scores));
 console.log(`\n[eval] wrote ${path.relative(root, latestPath)}`);
+console.log(`[eval] wrote ${path.relative(root, latestMarkdownPath)}`);
 
 let exitCode = 0;
 const baseline = existsSync(baselinePath)
@@ -265,6 +268,42 @@ function printDiff(diffs) {
       `  ${arrow} ${d.metric.padEnd(18)} ${d.before.toFixed(3)} → ${d.after.toFixed(3)} (${sign}${d.delta.toFixed(3)})`,
     );
   }
+}
+
+function renderMarkdownSummary(latest, scores) {
+  const { aggregate: agg } = latest;
+  const fmt = (n) => (typeof n === 'number' ? n.toFixed(3) : n);
+  const lines = [
+    '# Compound Eval Summary',
+    '',
+    `- Ran at: ${latest.ranAt}`,
+    `- Base URL: ${latest.baseUrl}`,
+    `- Golden set: ${latest.goldenPath}`,
+    `- Items: ${scores.length} (errored ${agg.errored})`,
+    '',
+    '| Metric | Value |',
+    '| --- | ---: |',
+    `| hit@1 | ${fmt(agg.hitAt1)} |`,
+    `| hit@3 | ${fmt(agg.hitAt3)} |`,
+    `| hit@8 | ${fmt(agg.hitAt8)} |`,
+    `| MRR | ${fmt(agg.mrr)} |`,
+    `| keyword recall | ${fmt(agg.keywordRecall)} |`,
+    `| avg latency | ${Math.round(agg.latency.avg)} ms |`,
+    `| p95 latency | ${Math.round(agg.latency.p95)} ms |`,
+    '',
+    '| ID | Category | hit@8 | keyword recall | latency | error |',
+    '| --- | --- | ---: | ---: | ---: | --- |',
+  ];
+
+  for (const score of scores) {
+    lines.push(
+      `| ${score.id} | ${score.category || ''} | ${score.hitSkipped ? '-' : score.hitAt8 ? '1' : '0'} | ${
+        score.keywordSkipped ? '-' : fmt(score.keywordRecall)
+      } | ${score.latencyMs} ms | ${score.error ? score.error.replace(/\|/g, '/') : ''} |`,
+    );
+  }
+
+  return `${lines.join('\n')}\n`;
 }
 
 function parseArgs(argv) {
