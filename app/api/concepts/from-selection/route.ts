@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
 import { NextResponse } from 'next/server';
 import { chat, parseJSON } from '@/lib/gateway';
-import { SELECTION_WIKI_SYSTEM_PROMPT } from '@/lib/prompts';
+import { SELECTION_WIKI_SYSTEM_PROMPT, SELECTION_WIKI_SYSTEM_PROMPT_VERSION } from '@/lib/prompts';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
@@ -146,6 +146,7 @@ ${categoryList}
       maxTokens: 2400,
       llmConfig,
       task: 'selection-wiki',
+      promptVersion: SELECTION_WIKI_SYSTEM_PROMPT_VERSION,
     });
 
     const parsed = parseJSON<SelectionLLMResponse>(raw);

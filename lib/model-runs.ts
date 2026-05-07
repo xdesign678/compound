@@ -12,6 +12,7 @@
 
 import { nanoid } from 'nanoid';
 import { logger } from './logging';
+import { recordLlmRun } from './observability/prometheus';
 import { getServerDb } from './server-db';
 
 let schemaReady = false;
@@ -33,11 +34,25 @@ function ensureSchema(): void {
         latency_ms INTEGER,
         cost_usd REAL,
         prompt_hash TEXT,
+        prompt_version TEXT,
         output_hash TEXT,
         created_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_model_runs_task ON model_runs(task, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_model_runs_created ON model_runs(created_at DESC);
+    `);
+    const columns = db.prepare(`PRAGMA table_info(model_runs)`).all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'prompt_version')) {
+      try {
+        db.exec(`ALTER TABLE model_runs ADD COLUMN prompt_version TEXT;`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!message.includes('duplicate column name')) throw err;
+      }
+    }
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_model_runs_prompt_version
+        ON model_runs(task, prompt_version, created_at DESC);
     `);
     schemaReady = true;
     schemaDb = db;
@@ -59,6 +74,7 @@ export interface ModelRunRecord {
   latencyMs?: number;
   costUsd?: number;
   promptHash?: string;
+  promptVersion?: string;
   outputHash?: string;
   /** Non-null marker for failure runs (finish_length / gateway_5xx / unexpected_shape). */
   error?: string;
@@ -111,11 +127,12 @@ export function recordModelRun(record: ModelRunRecord): void {
     const db = getServerDb();
     const stmt = db.prepare(
       `INSERT INTO model_runs
-       (id, job_id, provider, model, task, input_tokens, output_tokens, latency_ms, cost_usd, prompt_hash, output_hash, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, job_id, provider, model, task, input_tokens, output_tokens, latency_ms, cost_usd, prompt_hash, prompt_version, output_hash, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     // `error` is folded into `task` with a suffix so we don't need an extra column.
     const task = record.error ? `${record.task}:${record.error}` : record.task;
+    const promptVersion = record.promptVersion ?? 'unknown';
     stmt.run(
       nanoid(),
       record.jobId ?? null,
@@ -127,9 +144,11 @@ export function recordModelRun(record: ModelRunRecord): void {
       record.latencyMs ?? null,
       record.costUsd ?? null,
       record.promptHash ?? null,
+      promptVersion,
       record.outputHash ?? null,
       Date.now(),
     );
+    recordLlmRun({ task: record.task, promptVersion });
   } catch (err) {
     logger.warn('model_runs.insert_failed', {
       task: record.task,

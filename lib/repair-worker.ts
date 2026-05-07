@@ -13,7 +13,14 @@
 import { nanoid } from 'nanoid';
 import { chat, parseJSON } from './gateway';
 import { logger } from './logging';
-import { CONFLICT_SYSTEM_PROMPT, MERGE_SYSTEM_PROMPT, ORPHAN_SYSTEM_PROMPT } from './prompts';
+import {
+  CONFLICT_SYSTEM_PROMPT,
+  CONFLICT_SYSTEM_PROMPT_VERSION,
+  MERGE_SYSTEM_PROMPT,
+  MERGE_SYSTEM_PROMPT_VERSION,
+  ORPHAN_SYSTEM_PROMPT,
+  ORPHAN_SYSTEM_PROMPT_VERSION,
+} from './prompts';
 import { createReviewItem } from './review-queue';
 import { getServerDb, repo } from './server-db';
 import { now, parseJson } from './utils';
@@ -397,6 +404,7 @@ async function runMergeJob(runId: string, job: RepairJobRow): Promise<void> {
       temperature: 0.3,
       maxTokens: 1500,
       task: 'repair_merge',
+      promptVersion: MERGE_SYSTEM_PROMPT_VERSION,
     });
     const parsed = parseJSON<{ title?: string; summary?: string; body?: string }>(raw);
     if (parsed.title && parsed.title.trim()) mergedTitle = parsed.title.trim().slice(0, 80);
@@ -489,6 +497,7 @@ async function runOrphanJob(runId: string, job: RepairJobRow): Promise<void> {
       temperature: 0.2,
       maxTokens: 500,
       task: 'repair_orphan',
+      promptVersion: ORPHAN_SYSTEM_PROMPT_VERSION,
     });
     const parsed = parseJSON<{ relatedIds?: string[] }>(raw);
     const valid = new Set(candidates.map((c) => c.id));
@@ -569,6 +578,7 @@ async function runConflictJob(runId: string, job: RepairJobRow): Promise<void> {
       temperature: 0.3,
       maxTokens: 800,
       task: 'repair_conflict',
+      promptVersion: CONFLICT_SYSTEM_PROMPT_VERSION,
     });
     const parsed = parseJSON<{ verdict?: string; reasoning?: string }>(raw);
     if (parsed.verdict && parsed.verdict.trim()) verdict = parsed.verdict.trim();

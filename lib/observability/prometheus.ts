@@ -54,6 +54,10 @@ const ragStageSamples = new Map<string, HistogramSample<{ stage: string }>>();
 const embeddingBatchSamples = new Map<string, HistogramSample<{ model: string }>>();
 const llmRetries = new Map<string, { labels: { host: string; reason: string }; count: number }>();
 const llmSsrfBlocks = new Map<string, { labels: { host: string }; count: number }>();
+const llmRuns = new Map<
+  string,
+  { labels: { task: string; prompt_version: string }; count: number }
+>();
 const embeddingCacheHits = new Map<string, { labels: { model: string }; count: number }>();
 const embeddingCacheMisses = new Map<string, { labels: { model: string }; count: number }>();
 
@@ -157,6 +161,17 @@ export function recordLlmSsrfBlock(labels: { host: string }): void {
   const existing = llmSsrfBlocks.get(key) ?? { labels, count: 0 };
   existing.count += 1;
   llmSsrfBlocks.set(key, existing);
+}
+
+export function recordLlmRun(labels: { task: string; promptVersion: string }): void {
+  const normalizedLabels = {
+    task: labels.task || 'chat',
+    prompt_version: labels.promptVersion || 'unknown',
+  };
+  const key = labeledKey(normalizedLabels);
+  const existing = llmRuns.get(key) ?? { labels: normalizedLabels, count: 0 };
+  existing.count += 1;
+  llmRuns.set(key, existing);
 }
 
 export function recordEmbeddingCacheHit(labels: { model: string }): void {
@@ -307,6 +322,13 @@ function addLlmMetrics(out: PrometheusTextBuilder): void {
     labeledKey(a.labels).localeCompare(labeledKey(b.labels)),
   )) {
     out.sample('compound_llm_ssrf_blocks_total', item.count, item.labels);
+  }
+
+  out.metric('compound_llm_runs_total', 'counter', 'LLM calls grouped by task and prompt version.');
+  for (const item of Array.from(llmRuns.values()).sort((a, b) =>
+    labeledKey(a.labels).localeCompare(labeledKey(b.labels)),
+  )) {
+    out.sample('compound_llm_runs_total', item.count, item.labels);
   }
 }
 
@@ -562,6 +584,7 @@ export function resetPrometheusMetricsForTests(): void {
   embeddingBatchSamples.clear();
   llmRetries.clear();
   llmSsrfBlocks.clear();
+  llmRuns.clear();
   embeddingCacheHits.clear();
   embeddingCacheMisses.clear();
 }

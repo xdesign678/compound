@@ -7,6 +7,7 @@ import {
   observeHttpRequest,
   recordEmbeddingCacheHit,
   recordEmbeddingCacheMiss,
+  recordLlmRun,
   recordLlmRetry,
   recordLlmSsrfBlock,
   renderPrometheusMetrics,
@@ -63,6 +64,23 @@ test('renderPrometheusMetrics exposes LLM retry and SSRF counters', () => {
   );
   assert.match(body, /# TYPE compound_llm_ssrf_blocks_total counter/);
   assert.match(body, /compound_llm_ssrf_blocks_total\{host="169\.254\.169\.254"\} 1/);
+});
+
+test('renderPrometheusMetrics exposes LLM run counts by task and prompt version', () => {
+  resetPrometheusMetricsForTests();
+
+  recordLlmRun({ task: 'query', promptVersion: 'query-v3-2026-05' });
+  recordLlmRun({ task: 'query', promptVersion: 'query-v3-2026-05' });
+  recordLlmRun({ task: 'rerank', promptVersion: 'rerank-v1-2026-05' });
+
+  const body = renderPrometheusMetrics();
+
+  assert.match(body, /# TYPE compound_llm_runs_total counter/);
+  assert.match(body, /compound_llm_runs_total\{task="query",prompt_version="query-v3-2026-05"\} 2/);
+  assert.match(
+    body,
+    /compound_llm_runs_total\{task="rerank",prompt_version="rerank-v1-2026-05"\} 1/,
+  );
 });
 
 test('renderPrometheusMetrics includes domain gauges and collector errors', () => {

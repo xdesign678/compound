@@ -5,6 +5,20 @@
  * LLM maintains a linked Markdown wiki as new sources arrive.
  */
 
+export const INGEST_SYSTEM_PROMPT_VERSION = 'ingest-v2-2026-05';
+export const QUERY_SYSTEM_PROMPT_VERSION = 'query-v3-2026-05';
+export const LINT_SYSTEM_PROMPT_VERSION = 'lint-v2-2026-05';
+export const MERGE_SYSTEM_PROMPT_VERSION = 'merge-v2-2026-05';
+export const ORPHAN_SYSTEM_PROMPT_VERSION = 'orphan-v2-2026-05';
+export const CONFLICT_SYSTEM_PROMPT_VERSION = 'conflict-v2-2026-05';
+export const SELECTION_WIKI_SYSTEM_PROMPT_VERSION = 'selection-wiki-v2-2026-05';
+export const QUERY_REWRITE_PROMPT_VERSION = 'query-rewrite-v2-2026-05';
+export const RERANK_SYSTEM_PROMPT_VERSION = 'rerank-v1-2026-05';
+export const CONTEXTUALIZE_CHUNK_PROMPT_VERSION = 'contextualize-chunk-v1-2026-05';
+export const CATEGORIZE_SYSTEM_PROMPT_VERSION = 'categorize-v2-2026-05';
+export const SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION = 'source-summary-v2-2026-05';
+export const RELATION_EXTRACT_SYSTEM_PROMPT_VERSION = 'relation-extract-v2-2026-05';
+
 export const INGEST_SYSTEM_PROMPT = `你是 Compound 的 Wiki 编辑器,遵循 Karpathy 的 LLM Wiki 理念维护用户的个人知识库。
 
 # 你的角色
@@ -293,3 +307,7 @@ export const CATEGORIZE_SYSTEM_PROMPT = `你是 Compound 的分类引擎。你�
 - 分类要准确反映概念的核心领域,不要为了多样性硬凑
 - 跨领域概念可以有多个标签,但要确实相关
 - 二级分类要具体到有区分度,不要太笼统(如「其他」)`;
+
+export const SOURCE_SUMMARY_SYSTEM_PROMPT = '你是知识库文档分析器。只输出合法 JSON。';
+
+export const RELATION_EXTRACT_SYSTEM_PROMPT = '你是知识图谱关系抽取器。只输出合法 JSON。';

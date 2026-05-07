@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { chat, parseJSON, isReasoningModel } from '@/lib/gateway';
-import { QUERY_SYSTEM_PROMPT } from '@/lib/prompts';
+import { QUERY_SYSTEM_PROMPT, QUERY_SYSTEM_PROMPT_VERSION } from '@/lib/prompts';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
@@ -467,6 +467,7 @@ export const POST = withRequestTracing(async (req: Request) => {
               maxTokens: 2200,
               llmConfig,
               task: 'query',
+              promptVersion: QUERY_SYSTEM_PROMPT_VERSION,
               stream: true,
             });
 
@@ -595,6 +596,7 @@ export const POST = withRequestTracing(async (req: Request) => {
       maxTokens: 2200,
       llmConfig,
       task: 'query',
+      promptVersion: QUERY_SYSTEM_PROMPT_VERSION,
     });
 
     const parsed = parseJSON<

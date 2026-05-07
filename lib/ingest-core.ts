@@ -8,7 +8,7 @@
 
 import { chat, parseJSON } from './gateway';
 import { normalizeCategoryKeys, normalizeCategoryState } from './category-normalization';
-import { INGEST_SYSTEM_PROMPT } from './prompts';
+import { INGEST_SYSTEM_PROMPT, INGEST_SYSTEM_PROMPT_VERSION } from './prompts';
 import type { IngestResponse, SourceType } from './types';
 
 export interface IngestLLMInput {
@@ -119,6 +119,8 @@ ${categoryList}
     temperature: 0.5,
     maxTokens: 4000,
     llmConfig: input.llmConfig,
+    task: 'ingest',
+    promptVersion: INGEST_SYSTEM_PROMPT_VERSION,
   });
 
   const parsed = parseJSON<IngestResponse>(raw);

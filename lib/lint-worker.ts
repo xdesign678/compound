@@ -11,7 +11,7 @@
 
 import { nanoid } from 'nanoid';
 import { chat, parseJSON } from './gateway';
-import { LINT_SYSTEM_PROMPT } from './prompts';
+import { LINT_SYSTEM_PROMPT, LINT_SYSTEM_PROMPT_VERSION } from './prompts';
 import { getServerDb, repo } from './server-db';
 import { now, parseJson } from './utils';
 import { logger } from './logging';
@@ -157,6 +157,7 @@ ${listing}
       maxTokens: 2000,
       llmConfig,
       task: 'lint',
+      promptVersion: LINT_SYSTEM_PROMPT_VERSION,
     });
 
     const parsed = parseJSON<{ findings: LintFinding[] }>(raw);

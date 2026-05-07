@@ -8,7 +8,7 @@
  * 失败时直接回落到原 query，保证健壮性。
  */
 
-import { QUERY_REWRITE_PROMPT } from '../prompts';
+import { QUERY_REWRITE_PROMPT, QUERY_REWRITE_PROMPT_VERSION } from '../prompts';
 import { logger } from '../logging';
 import type { LlmConfig } from '../types';
 
@@ -89,6 +89,7 @@ export async function rewriteQuery(input: QueryRewriteInput): Promise<{
       llmConfig: input.llmConfig,
       model: input.rewriteModel || process.env.COMPOUND_QUERY_REWRITE_MODEL,
       task: 'query-rewrite',
+      promptVersion: QUERY_REWRITE_PROMPT_VERSION,
     });
     const cleaned = raw
       .trim()

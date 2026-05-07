@@ -386,6 +386,8 @@ export interface ChatOptions {
   llmConfig?: LlmConfigOverride;
   /** Short label identifying the pipeline stage for cost/telemetry (e.g. 'extract', 'synth'). */
   task?: string;
+  /** Version of the system prompt used for this call. */
+  promptVersion?: string;
   /**
    * Force streaming on/off. Default: streaming auto-enabled for reasoning
    * models (controlled by COMPOUND_LLM_STREAM_REASONING). Set explicitly to
@@ -546,6 +548,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
 
   const startedAt = Date.now();
   const task = opts.task ?? 'chat';
+  const promptVersion = opts.promptVersion ?? 'unknown';
   const breaker = getCircuitBreaker({
     name: circuitNameForGateway(gatewayUrl),
     failureThreshold: readPositiveInt(process.env.COMPOUND_LLM_CIRCUIT_FAILURE_THRESHOLD, 3),
@@ -612,6 +615,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
           recordModelRun({
             model,
             task,
+            promptVersion,
             latencyMs: Date.now() - startedAt,
             error: `gateway_${response.status}`,
           });
@@ -635,6 +639,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
       recordModelRun({
         model,
         task,
+        promptVersion,
         latencyMs: Date.now() - startedAt,
         error: 'circuit_open',
       });
@@ -647,6 +652,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
       recordModelRun({
         model,
         task,
+        promptVersion,
         latencyMs: Date.now() - startedAt,
         error: 'gateway_timeout',
       });
@@ -692,6 +698,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
     recordModelRun({
       model,
       task,
+      promptVersion,
       inputTokens: usageNumber(usage, ['prompt_tokens', 'input_tokens']),
       outputTokens: usageNumber(usage, ['completion_tokens', 'output_tokens']),
       latencyMs: Date.now() - startedAt,
@@ -705,6 +712,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
     recordModelRun({
       model,
       task,
+      promptVersion,
       latencyMs: Date.now() - startedAt,
       error: 'finish_length',
     });
@@ -717,6 +725,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
   recordModelRun({
     model,
     task,
+    promptVersion,
     latencyMs: Date.now() - startedAt,
     error: 'unexpected_shape',
   });

@@ -6,6 +6,10 @@ import { enforceContentLength } from '@/lib/request-guards';
 import { getServerDb, repo } from '@/lib/server-db';
 import { requireAdmin } from '@/lib/server-auth';
 import { recompileSourceArtifactsAfterEdit } from '@/lib/wiki-compiler';
+import {
+  RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
+  SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
+} from '@/lib/prompts';
 import type { ActivityLog } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -131,9 +135,9 @@ export async function PATCH(req: Request) {
             stage === 'summarize' || stage === 'relations' ? process.env.LLM_MODEL || null : null,
           promptVersion:
             stage === 'summarize'
-              ? 'source-summary-v1'
+              ? SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION
               : stage === 'relations'
-                ? 'concept-relations-v1'
+                ? RELATION_EXTRACT_SYSTEM_PROMPT_VERSION
                 : null,
           priority:
             stage === 'embedding'

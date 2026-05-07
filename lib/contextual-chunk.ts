@@ -12,7 +12,7 @@
  * - 长文档（>32k chars）只取首尾片段做情境，避免单次调用爆 token
  */
 
-import { CONTEXTUALIZE_CHUNK_PROMPT } from './prompts';
+import { CONTEXTUALIZE_CHUNK_PROMPT, CONTEXTUALIZE_CHUNK_PROMPT_VERSION } from './prompts';
 import { logger } from './logging';
 import type { LlmConfig } from './types';
 
@@ -55,6 +55,7 @@ export async function contextualizeChunk(input: ContextualizeChunkInput): Promis
       llmConfig: input.llmConfig,
       model: input.contextualizeModel || process.env.COMPOUND_CONTEXTUALIZE_MODEL,
       task: 'contextualize-chunk',
+      promptVersion: CONTEXTUALIZE_CHUNK_PROMPT_VERSION,
     });
     const cleaned = raw
       .trim()

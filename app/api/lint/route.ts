@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { chat, parseJSON } from '@/lib/gateway';
-import { LINT_SYSTEM_PROMPT } from '@/lib/prompts';
+import { LINT_SYSTEM_PROMPT, LINT_SYSTEM_PROMPT_VERSION } from '@/lib/prompts';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
@@ -68,6 +68,8 @@ ${listing}
       temperature: 0.3,
       maxTokens: 2000,
       llmConfig,
+      task: 'lint',
+      promptVersion: LINT_SYSTEM_PROMPT_VERSION,
     });
 
     const parsed = parseJSON<LintResponse>(raw);

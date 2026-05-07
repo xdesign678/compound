@@ -8,7 +8,7 @@
  * 失败时直接回落到原顺序，保证健壮性。
  */
 
-import { RERANK_SYSTEM_PROMPT } from '../prompts';
+import { RERANK_SYSTEM_PROMPT, RERANK_SYSTEM_PROMPT_VERSION } from '../prompts';
 import { logger } from '../logging';
 import type { LlmConfig } from '../types';
 
@@ -81,6 +81,7 @@ export async function llmRerank(input: RerankInput): Promise<{
       llmConfig: input.llmConfig,
       model: input.rerankModel || process.env.COMPOUND_RERANK_MODEL,
       task: 'rerank',
+      promptVersion: RERANK_SYSTEM_PROMPT_VERSION,
     });
     const parsed = parseJSON<{ scores: RerankScore[] }>(raw);
     if (!Array.isArray(parsed?.scores)) {

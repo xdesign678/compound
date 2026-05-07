@@ -13,6 +13,12 @@ import { syncObs, ensureSyncObservabilitySchema } from './sync-observability';
 import { embedSourceChunks } from './embedding';
 import { createReviewItem } from './review-queue';
 import { chat, parseJSON } from './gateway';
+import {
+  RELATION_EXTRACT_SYSTEM_PROMPT,
+  RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
+  SOURCE_SUMMARY_SYSTEM_PROMPT,
+  SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
+} from './prompts';
 import { now, parseJson } from './utils';
 import { wikiRepo, type ConceptRelationKind } from './wiki-db';
 
@@ -516,7 +522,7 @@ function queuePostIngestJobs(input: {
     sourcePath: input.sourcePath,
     stage: 'summarize',
     model: process.env.LLM_MODEL || null,
-    promptVersion: 'source-summary-v1',
+    promptVersion: SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
     priority: 20,
     maxAttempts: 2,
   });
@@ -528,7 +534,7 @@ function queuePostIngestJobs(input: {
     sourcePath: input.sourcePath,
     stage: 'relations',
     model: process.env.LLM_MODEL || null,
-    promptVersion: 'concept-relations-v1',
+    promptVersion: RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
     priority: 15,
     maxAttempts: 2,
   });
@@ -698,13 +704,14 @@ async function processSummarize(job: AnalysisJobRow): Promise<void> {
   const prompt = `请把下面 Markdown 文档分析成严格 JSON，只输出 JSON。\n\nSchema: {"summary":"100字以内摘要","topics":["主题"],"entities":["实体"],"confidence":0.0}\n\n标题：${source.title}\n\n内容：\n${source.rawContent.slice(0, 12000)}`;
   const raw = await chat({
     messages: [
-      { role: 'system', content: '你是知识库文档分析器。只输出合法 JSON。' },
+      { role: 'system', content: SOURCE_SUMMARY_SYSTEM_PROMPT },
       { role: 'user', content: prompt },
     ],
     responseFormat: 'json_object',
     temperature: 0.2,
     maxTokens: 900,
     task: 'source_summarize',
+    promptVersion: job.prompt_version ?? SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
   });
   const parsed = parseJSON<{
     summary?: string;
@@ -729,7 +736,7 @@ async function processSummarize(job: AnalysisJobRow): Promise<void> {
       JSON.stringify(Array.isArray(parsed.entities) ? parsed.entities.slice(0, 24) : []),
       confidence,
       process.env.LLM_MODEL || null,
-      'source-summary-v1',
+      job.prompt_version ?? SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
       now(),
     );
 
@@ -832,13 +839,14 @@ async function processRelations(job: AnalysisJobRow): Promise<void> {
 
   const raw = await chat({
     messages: [
-      { role: 'system', content: '你是知识图谱关系抽取器。只输出合法 JSON。' },
+      { role: 'system', content: RELATION_EXTRACT_SYSTEM_PROMPT },
       { role: 'user', content: prompt },
     ],
     responseFormat: 'json_object',
     temperature: 0.2,
     maxTokens: 1400,
     task: 'relation_extract',
+    promptVersion: job.prompt_version ?? RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
   });
   const parsed = parseJSON<{ relations?: RelationLLMSuggestion[] }>(raw);
   const conceptIds = new Set(sourceConcepts.map((concept) => concept.id));

@@ -5,6 +5,10 @@ import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
 import { logger } from '@/lib/server-logger';
+import {
+  RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
+  SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
+} from '@/lib/prompts';
 import type { IngestRequest } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -77,9 +81,9 @@ export const POST = withRequestTracing(async (req: Request) => {
             stage === 'summarize' || stage === 'relations' ? process.env.LLM_MODEL || null : null,
           promptVersion:
             stage === 'summarize'
-              ? 'source-summary-v1'
+              ? SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION
               : stage === 'relations'
-                ? 'concept-relations-v1'
+                ? RELATION_EXTRACT_SYSTEM_PROMPT_VERSION
                 : null,
           priority:
             stage === 'embedding'
