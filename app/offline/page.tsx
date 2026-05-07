@@ -1,6 +1,37 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { getDb } from '@/lib/db';
+
+interface OfflineCounts {
+  sources: number;
+  concepts: number;
+}
 
 export default function OfflinePage() {
+  const [counts, setCounts] = useState<OfflineCounts | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCounts() {
+      try {
+        const db = getDb();
+        const [sources, concepts] = await Promise.all([db.sources.count(), db.concepts.count()]);
+        if (!cancelled) setCounts({ sources, concepts });
+      } catch {
+        if (!cancelled) setCounts({ sources: 0, concepts: 0 });
+      }
+    }
+
+    void loadCounts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div
       style={{
@@ -51,6 +82,43 @@ export default function OfflinePage() {
       >
         当前无法连接网络。你可以继续浏览已缓存的知识库内容。写入操作（摄入、修复、归类）将在恢复连接后可用。
       </p>
+      <section
+        aria-label="本地缓存概览"
+        style={{
+          marginTop: '24px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: '12px',
+          width: 'min(100%, 360px)',
+        }}
+      >
+        <div
+          style={{
+            border: '1px solid rgba(120, 112, 99, 0.22)',
+            borderRadius: '8px',
+            padding: '14px',
+          }}
+        >
+          <span style={{ color: 'var(--offline-muted, #5e5d59)', fontSize: '13px' }}>
+            已缓存资料
+          </span>
+          <strong style={{ display: 'block', marginTop: '4px', fontSize: '28px' }}>
+            {counts ? counts.sources : '...'}
+          </strong>
+        </div>
+        <div
+          style={{
+            border: '1px solid rgba(120, 112, 99, 0.22)',
+            borderRadius: '8px',
+            padding: '14px',
+          }}
+        >
+          <span style={{ color: 'var(--offline-muted, #5e5d59)', fontSize: '13px' }}>可读概念</span>
+          <strong style={{ display: 'block', marginTop: '4px', fontSize: '28px' }}>
+            {counts ? counts.concepts : '...'}
+          </strong>
+        </div>
+      </section>
       <Link
         href="/"
         aria-label="返回知识库首页"

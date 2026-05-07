@@ -35,16 +35,7 @@ export function useOnlineStatus() {
     const onOnline = () => {
       window.localStorage.removeItem(OFFLINE_SINCE_KEY);
       setOnline(true);
-      const { tasks, updateTask } = useAppStore.getState();
-      tasks
-        .filter((task) => task.status === 'paused-offline')
-        .forEach((task) => {
-          updateTask(task.id, {
-            status: 'queued',
-            error: '网络已恢复，可继续重试。',
-            result: undefined,
-          });
-        });
+      void useAppStore.getState().replayPausedOfflineTasks();
       // 恢复在线时自动同步
       triggerSync();
     };

@@ -1,7 +1,7 @@
 // Compound PWA Service Worker
 // IMPORTANT: Bump version numbers below when deploying new builds
-const CACHE_NAME = 'compound-v9';
-const RUNTIME_CACHE = 'compound-runtime-v9';
+const CACHE_NAME = 'compound-v10';
+const RUNTIME_CACHE = 'compound-runtime-v10';
 const IS_LOCAL_DEV = ['localhost', '127.0.0.1', '0.0.0.0'].includes(location.hostname);
 
 // App shell files to precache
@@ -77,6 +77,7 @@ self.addEventListener('fetch', (event) => {
 
   // API routes: network-only
   if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request));
     return;
   }
 

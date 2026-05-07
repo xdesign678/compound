@@ -30,6 +30,17 @@ interface SnapshotResponse {
 }
 
 const LAST_PULL_KEY = 'compound:lastSnapshotPull';
+export const OFFLINE_WRITE_MAX_BYTES = 256 * 1024;
+
+export function getOfflineWritePayloadBytes(payload: unknown): number {
+  const serialized = JSON.stringify(payload) ?? '';
+  if (typeof Blob === 'undefined') return serialized.length;
+  return new Blob([serialized]).size;
+}
+
+export function canQueueOfflineWrite(payload: unknown): boolean {
+  return getOfflineWritePayloadBytes(payload) <= OFFLINE_WRITE_MAX_BYTES;
+}
 
 /** In-flight deduplication for pullSnapshotFromCloud */
 let syncInFlight: Promise<PullResult> | null = null;
