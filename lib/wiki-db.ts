@@ -58,6 +58,17 @@ export interface QueryContext {
   evidence: ConceptEvidence[];
 }
 
+export interface OrphanIntegrityCount {
+  count: number;
+  examples: string[];
+}
+
+export interface WikiIntegrityCounts {
+  orphanEvidence: OrphanIntegrityCount;
+  orphanRelations: OrphanIntegrityCount;
+  orphanChunkEmbeddings: OrphanIntegrityCount;
+}
+
 let migrationsReady = false;
 let ftsReady: boolean | null = null;
 let migrationsDb: unknown = null;
@@ -356,6 +367,27 @@ function uniqueById<T extends { id: string }>(items: T[]): T[] {
     out.push(item);
   }
   return out;
+}
+
+function tableExists(tableName: string): boolean {
+  const row = getServerDb()
+    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`)
+    .get(tableName) as { name?: string } | undefined;
+  return Boolean(row?.name);
+}
+
+function countWithExamples(
+  countSql: string,
+  examplesSql: string,
+  params: unknown[] = [],
+): OrphanIntegrityCount {
+  const db = getServerDb();
+  const count = Number((db.prepare(countSql).get(...params) as { count?: number })?.count ?? 0);
+  const rows = db.prepare(examplesSql).all(...params) as Array<{ id?: string }>;
+  return {
+    count,
+    examples: rows.map((row) => String(row.id)).filter(Boolean),
+  };
 }
 
 export const wikiRepo = {
@@ -909,6 +941,7 @@ export const wikiRepo = {
     const db = getServerDb();
     const scalar = (sql: string) =>
       Number((db.prepare(sql).get() as { count?: number } | undefined)?.count ?? 0);
+    const integrity = this.getIntegrityCounts();
     return {
       ftsReady: hasFts(),
       sources: scalar(`SELECT COUNT(*) AS count FROM sources`),
@@ -917,6 +950,92 @@ export const wikiRepo = {
       conceptEvidence: scalar(`SELECT COUNT(*) AS count FROM concept_evidence`),
       conceptRelations: scalar(`SELECT COUNT(*) AS count FROM concept_relations`),
       conceptVersions: scalar(`SELECT COUNT(*) AS count FROM concept_versions`),
+      orphanEvidence: integrity.orphanEvidence.count,
+      orphanRelations: integrity.orphanRelations.count,
+      orphanChunkEmbeddings: integrity.orphanChunkEmbeddings.count,
+    };
+  },
+
+  countOrphanEvidence(): OrphanIntegrityCount {
+    ensureWikiCompilerSchema();
+    return countWithExamples(
+      `
+        SELECT COUNT(*) AS count
+        FROM concept_evidence ev
+        LEFT JOIN concepts c ON c.id = ev.concept_id
+        LEFT JOIN sources s ON s.id = ev.source_id
+        LEFT JOIN source_chunks ch ON ch.id = ev.chunk_id
+        WHERE c.id IS NULL
+           OR s.id IS NULL
+           OR (ev.chunk_id IS NOT NULL AND ch.id IS NULL)
+      `,
+      `
+        SELECT ev.id
+        FROM concept_evidence ev
+        LEFT JOIN concepts c ON c.id = ev.concept_id
+        LEFT JOIN sources s ON s.id = ev.source_id
+        LEFT JOIN source_chunks ch ON ch.id = ev.chunk_id
+        WHERE c.id IS NULL
+           OR s.id IS NULL
+           OR (ev.chunk_id IS NOT NULL AND ch.id IS NULL)
+        ORDER BY ev.created_at DESC
+        LIMIT 10
+      `,
+    );
+  },
+
+  countOrphanRelations(): OrphanIntegrityCount {
+    ensureWikiCompilerSchema();
+    return countWithExamples(
+      `
+        SELECT COUNT(*) AS count
+        FROM concept_relations rel
+        LEFT JOIN concepts source ON source.id = rel.source_concept_id
+        LEFT JOIN concepts target ON target.id = rel.target_concept_id
+        WHERE source.id IS NULL OR target.id IS NULL
+      `,
+      `
+        SELECT rel.id
+        FROM concept_relations rel
+        LEFT JOIN concepts source ON source.id = rel.source_concept_id
+        LEFT JOIN concepts target ON target.id = rel.target_concept_id
+        WHERE source.id IS NULL OR target.id IS NULL
+        ORDER BY rel.updated_at DESC
+        LIMIT 10
+      `,
+    );
+  },
+
+  countOrphanChunkEmbeddings(): OrphanIntegrityCount {
+    ensureWikiCompilerSchema();
+    if (!tableExists('chunk_embeddings')) {
+      return { count: 0, examples: [] };
+    }
+    return countWithExamples(
+      `
+        SELECT COUNT(*) AS count
+        FROM chunk_embeddings emb
+        LEFT JOIN source_chunks ch ON ch.id = emb.chunk_id
+        LEFT JOIN sources s ON s.id = emb.source_id
+        WHERE ch.id IS NULL OR s.id IS NULL
+      `,
+      `
+        SELECT emb.chunk_id AS id
+        FROM chunk_embeddings emb
+        LEFT JOIN source_chunks ch ON ch.id = emb.chunk_id
+        LEFT JOIN sources s ON s.id = emb.source_id
+        WHERE ch.id IS NULL OR s.id IS NULL
+        ORDER BY emb.updated_at DESC
+        LIMIT 10
+      `,
+    );
+  },
+
+  getIntegrityCounts(): WikiIntegrityCounts {
+    return {
+      orphanEvidence: this.countOrphanEvidence(),
+      orphanRelations: this.countOrphanRelations(),
+      orphanChunkEmbeddings: this.countOrphanChunkEmbeddings(),
     };
   },
 };
