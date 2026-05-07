@@ -13,9 +13,8 @@ import { startWikiFromSelection } from '@/lib/api-client';
 import { rememberSelectionWikiRun } from '@/lib/selection-wiki-runs';
 import {
   computeSelectionPopoverPosition,
-  rectsToSelectionHighlights,
+  getSelectionChangeAction,
   type RectLike,
-  type SelectionHighlightRect,
 } from '@/lib/selection-popover-position';
 import { getVisibleViewportBottom } from '@/lib/hooks/useSelectionPopover';
 import type { ConceptVersion } from '@/lib/types';
@@ -35,7 +34,6 @@ type SelectionPopoverState = {
   top: number;
   left: number;
   text: string;
-  highlights: SelectionHighlightRect[];
 };
 
 // 中文用户常选 2-4 字的词语，阈值过高会让按钮"经常无法触发"。
@@ -153,7 +151,6 @@ export function ConceptDetail({ id }: { id: string }) {
     top: 0,
     left: 0,
     text: '',
-    highlights: [],
   });
   const [creatingFromSelection, setCreatingFromSelection] = useState(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -204,13 +201,11 @@ export function ConceptDetail({ id }: { id: string }) {
       error: null,
       versions: [],
     });
-    setSelectionPopover({ visible: false, top: 0, left: 0, text: '', highlights: [] });
+    setSelectionPopover({ visible: false, top: 0, left: 0, text: '' });
   }, [id]);
 
   const dismissSelectionPopover = useCallback(() => {
-    setSelectionPopover((state) =>
-      state.visible ? { ...state, visible: false, highlights: [] } : state,
-    );
+    setSelectionPopover((state) => (state.visible ? { ...state, visible: false } : state));
   }, []);
 
   useEffect(() => {
@@ -237,7 +232,6 @@ export function ConceptDetail({ id }: { id: string }) {
         dismissSelectionPopover();
         return;
       }
-      const highlightRects = rectsToSelectionHighlights(Array.from(range.getClientRects()));
       const anchorRect = getSelectionAnchorRect(sel, range, shell);
       if (!anchorRect) {
         dismissSelectionPopover();
@@ -258,8 +252,13 @@ export function ConceptDetail({ id }: { id: string }) {
         top,
         left,
         text,
-        highlights: highlightRects,
       });
+    };
+
+    let selectionUpdateTimer: number | undefined;
+    const scheduleUpdateFromSelection = (delay = 16) => {
+      if (selectionUpdateTimer) clearTimeout(selectionUpdateTimer);
+      selectionUpdateTimer = window.setTimeout(updateFromSelection, delay);
     };
 
     const handlePointerUp = (event: MouseEvent | TouchEvent) => {
@@ -269,19 +268,22 @@ export function ConceptDetail({ id }: { id: string }) {
       if (target && popoverRef.current && popoverRef.current.contains(target)) {
         return;
       }
-      window.setTimeout(updateFromSelection, 10);
+      scheduleUpdateFromSelection(10);
     };
     const handleSelectionChange = () => {
-      // 用户正点击 popover 时,浏览器可能瞬时把选区折叠;稍后会自动恢复。
-      // 加一个抑制窗口,避免 popover 在 click 前被卸载导致"点击没反应"。
-      if (suppressDismissRef.current) return;
-      // 正在为选段建页时，popover 已经切到 loading 浮窗形态，
-      // 不要因为选区变化把它吃掉。
-      if (creatingFromSelection) return;
       const sel = window.getSelection();
-      if (!sel || sel.isCollapsed) {
+      const action = getSelectionChangeAction({
+        creatingFromSelection,
+        hasSelection: Boolean(sel),
+        isCollapsed: Boolean(sel?.isCollapsed),
+        suppressDismiss: suppressDismissRef.current,
+      });
+
+      if (action === 'dismiss') {
         dismissSelectionPopover();
+        return;
       }
+      if (action === 'refresh') scheduleUpdateFromSelection();
     };
     const handleScroll = () => {
       if (suppressDismissRef.current) return;
@@ -289,7 +291,7 @@ export function ConceptDetail({ id }: { id: string }) {
       dismissSelectionPopover();
     };
     const handleViewportChange = () => {
-      window.setTimeout(updateFromSelection, 10);
+      scheduleUpdateFromSelection(10);
     };
 
     document.addEventListener('mouseup', handlePointerUp);
@@ -301,6 +303,7 @@ export function ConceptDetail({ id }: { id: string }) {
     window.visualViewport?.addEventListener('scroll', handleViewportChange);
 
     return () => {
+      if (selectionUpdateTimer) clearTimeout(selectionUpdateTimer);
       document.removeEventListener('mouseup', handlePointerUp);
       document.removeEventListener('touchend', handlePointerUp);
       document.removeEventListener('selectionchange', handleSelectionChange);
@@ -324,10 +327,10 @@ export function ConceptDetail({ id }: { id: string }) {
       });
       rememberSelectionWikiRun(run);
       if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
-      setSelectionPopover((state) => ({ ...state, visible: false, highlights: [] }));
+      setSelectionPopover((state) => ({ ...state, visible: false }));
       showToast('已开始后台创建 Wiki');
     } catch (err) {
-      setSelectionPopover((state) => ({ ...state, visible: false, highlights: [] }));
+      setSelectionPopover((state) => ({ ...state, visible: false }));
       const message = err instanceof Error ? err.message : '创建失败';
       showErrorToast(message.slice(0, 120), () => handleCreateFromSelection());
     } finally {
@@ -499,25 +502,6 @@ export function ConceptDetail({ id }: { id: string }) {
           </div>
         )}
       </div>
-
-      {selectionPopover.visible &&
-        selectionPopover.highlights.map((rect, index) => (
-          <div
-            key={`${rect.left}-${rect.top}-${index}`}
-            style={{
-              position: 'fixed',
-              zIndex: 55,
-              pointerEvents: 'none',
-              borderRadius: '2px',
-              background: 'color-mix(in srgb, var(--brand-clay) 34%, transparent)',
-              top: `${rect.top}px`,
-              left: `${rect.left}px`,
-              width: `${rect.width}px`,
-              height: `${rect.height}px`,
-            }}
-            aria-hidden="true"
-          />
-        ))}
 
       {(selectionPopover.visible || creatingFromSelection) && (
         <div

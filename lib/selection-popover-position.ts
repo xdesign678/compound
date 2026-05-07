@@ -7,13 +7,6 @@ export interface RectLike {
   height: number;
 }
 
-export interface SelectionHighlightRect {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
 interface SizeLike {
   width: number;
   height: number;
@@ -55,15 +48,21 @@ export function computeSelectionPopoverPosition({
   return { top, left: clamp(Math.round(centered), edgePadding, maxLeft) };
 }
 
-export function rectsToSelectionHighlights(rects: RectLike[]): SelectionHighlightRect[] {
-  return rects
-    .filter((rect) => rect.width > 0 && rect.height > 0)
-    .map((rect) => ({
-      left: Math.round(rect.left),
-      top: Math.round(rect.top),
-      width: Math.round(rect.width),
-      height: Math.round(rect.height),
-    }));
+export type SelectionChangeAction = 'dismiss' | 'ignore' | 'refresh';
+
+export function getSelectionChangeAction({
+  creatingFromSelection,
+  hasSelection,
+  isCollapsed,
+  suppressDismiss,
+}: {
+  creatingFromSelection: boolean;
+  hasSelection: boolean;
+  isCollapsed: boolean;
+  suppressDismiss: boolean;
+}): SelectionChangeAction {
+  if (suppressDismiss || creatingFromSelection) return 'ignore';
+  return hasSelection && !isCollapsed ? 'refresh' : 'dismiss';
 }
 
 function clamp(value: number, min: number, max: number): number {
