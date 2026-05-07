@@ -10,6 +10,7 @@
 
 import { RERANK_SYSTEM_PROMPT, RERANK_SYSTEM_PROMPT_VERSION } from '../prompts';
 import { logger } from '../logging';
+import { recordRagRerankOutcome, setRagRerankFailureRate } from '../observability/prometheus';
 import type { LlmConfig } from '../types';
 
 export interface RerankCandidate {
@@ -34,10 +35,78 @@ export interface RerankInput {
 const MAX_CANDIDATES = 30;
 const MAX_SNIPPET_CHARS = 600;
 const MAX_TITLE_CHARS = 80;
+const RERANK_FAILURE_WINDOW_MS = 5 * 60 * 1000;
+const RERANK_COOLDOWN_FAILURE_RATE = 0.3;
+const RERANK_MIN_WINDOW_SAMPLES = 10;
 
 interface RerankScore {
   id: string;
   score: number;
+}
+
+interface RerankAttempt {
+  at: number;
+  failed: boolean;
+}
+
+interface RerankGateway {
+  chat: typeof import('../gateway').chat;
+  parseJSON: typeof import('../gateway').parseJSON;
+}
+
+const rerankAttempts: RerankAttempt[] = [];
+let gatewayForTests: RerankGateway | null = null;
+
+function fallbackResult(
+  candidates: RerankCandidate[],
+  topK: number | undefined,
+): { ranked: RerankCandidate[]; used: 'fallback' } {
+  return {
+    ranked: candidates.slice(0, topK ?? candidates.length),
+    used: 'fallback',
+  };
+}
+
+function pruneRerankAttempts(now: number): void {
+  while (rerankAttempts.length > 0 && now - rerankAttempts[0].at > RERANK_FAILURE_WINDOW_MS) {
+    rerankAttempts.shift();
+  }
+}
+
+function getRerankFailureRate(now = Date.now()): number {
+  pruneRerankAttempts(now);
+  if (rerankAttempts.length === 0) return 0;
+  return rerankAttempts.filter((attempt) => attempt.failed).length / rerankAttempts.length;
+}
+
+function recordRerankAttempt(failed: boolean, now = Date.now()): void {
+  pruneRerankAttempts(now);
+  rerankAttempts.push({ at: now, failed });
+  setRagRerankFailureRate(getRerankFailureRate(now));
+}
+
+function shouldSkipRerank(now = Date.now()): boolean {
+  const failureRate = getRerankFailureRate(now);
+  setRagRerankFailureRate(failureRate);
+  return (
+    rerankAttempts.length >= RERANK_MIN_WINDOW_SAMPLES && failureRate > RERANK_COOLDOWN_FAILURE_RATE
+  );
+}
+
+async function loadRerankGateway(): Promise<RerankGateway> {
+  if (gatewayForTests) return gatewayForTests;
+  const { chat, parseJSON } = await import('../gateway');
+  return { chat, parseJSON };
+}
+
+export function resetRerankHealthForTests(): void {
+  rerankAttempts.length = 0;
+  gatewayForTests = null;
+  setRagRerankFailureRate(0);
+}
+
+export function setRerankGatewayForTests(gateway: RerankGateway | null): void {
+  gatewayForTests = gateway;
 }
 
 function buildRerankPrompt(query: string, candidates: RerankCandidate[]): string {
@@ -57,19 +126,24 @@ export async function llmRerank(input: RerankInput): Promise<{
   used: 'llm' | 'fallback';
 }> {
   if (input.candidates.length === 0) {
+    recordRagRerankOutcome({ outcome: 'fallback' });
+    setRagRerankFailureRate(getRerankFailureRate());
     return { ranked: [], used: 'fallback' };
   }
   if (process.env.COMPOUND_RERANK === 'off') {
-    return {
-      ranked: input.candidates.slice(0, input.topK ?? input.candidates.length),
-      used: 'fallback',
-    };
+    recordRagRerankOutcome({ outcome: 'fallback' });
+    setRagRerankFailureRate(getRerankFailureRate());
+    return fallbackResult(input.candidates, input.topK);
   }
 
   const candidates = input.candidates.slice(0, MAX_CANDIDATES);
+  if (shouldSkipRerank()) {
+    recordRagRerankOutcome({ outcome: 'cooldown' });
+    return fallbackResult(candidates, input.topK);
+  }
 
   try {
-    const { chat, parseJSON } = await import('../gateway');
+    const { chat, parseJSON } = await loadRerankGateway();
     const raw = await chat({
       messages: [
         { role: 'system', content: RERANK_SYSTEM_PROMPT },
@@ -85,10 +159,9 @@ export async function llmRerank(input: RerankInput): Promise<{
     });
     const parsed = parseJSON<{ scores: RerankScore[] }>(raw);
     if (!Array.isArray(parsed?.scores)) {
-      return {
-        ranked: candidates.slice(0, input.topK ?? candidates.length),
-        used: 'fallback',
-      };
+      recordRerankAttempt(true);
+      recordRagRerankOutcome({ outcome: 'fallback' });
+      return fallbackResult(candidates, input.topK);
     }
     const byId = new Map(candidates.map((c) => [c.id, c]));
     const ranked = parsed.scores
@@ -102,17 +175,18 @@ export async function llmRerank(input: RerankInput): Promise<{
     for (const c of candidates) {
       if (!seen.has(c.id)) ranked.push(c);
     }
+    recordRerankAttempt(false);
+    recordRagRerankOutcome({ outcome: 'success' });
     return {
       ranked: ranked.slice(0, input.topK ?? ranked.length),
       used: 'llm',
     };
   } catch (error) {
+    recordRerankAttempt(true);
+    recordRagRerankOutcome({ outcome: 'fallback' });
     logger.warn('llm_rerank.failed', {
       error: error instanceof Error ? error.message : String(error),
     });
-    return {
-      ranked: candidates.slice(0, input.topK ?? candidates.length),
-      used: 'fallback',
-    };
+    return fallbackResult(candidates, input.topK);
   }
 }

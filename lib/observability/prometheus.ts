@@ -60,6 +60,11 @@ const llmRuns = new Map<
 >();
 const embeddingCacheHits = new Map<string, { labels: { model: string }; count: number }>();
 const embeddingCacheMisses = new Map<string, { labels: { model: string }; count: number }>();
+const ragRerankOutcomes = new Map<
+  string,
+  { labels: { outcome: 'success' | 'fallback' | 'cooldown' }; count: number }
+>();
+let ragRerankFailureRate = 0;
 
 function escapeLabel(value: LabelValue): string {
   return String(value).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"');
@@ -172,6 +177,19 @@ export function recordLlmRun(labels: { task: string; promptVersion: string }): v
   const existing = llmRuns.get(key) ?? { labels: normalizedLabels, count: 0 };
   existing.count += 1;
   llmRuns.set(key, existing);
+}
+
+export function recordRagRerankOutcome(labels: {
+  outcome: 'success' | 'fallback' | 'cooldown';
+}): void {
+  const key = labeledKey(labels);
+  const existing = ragRerankOutcomes.get(key) ?? { labels, count: 0 };
+  existing.count += 1;
+  ragRerankOutcomes.set(key, existing);
+}
+
+export function setRagRerankFailureRate(rate: number): void {
+  ragRerankFailureRate = Math.max(0, Math.min(1, Number.isFinite(rate) ? rate : 0));
 }
 
 export function recordEmbeddingCacheHit(labels: { model: string }): void {
@@ -356,6 +374,20 @@ function addRagMetrics(out: PrometheusTextBuilder): void {
     out.sample('compound_rag_stage_duration_seconds_sum', sample.durationSecondsSum, sample.labels);
     out.sample('compound_rag_stage_duration_seconds_count', sample.count, sample.labels);
   }
+
+  out.metric('compound_rag_rerank_total', 'counter', 'LLM rerank outcomes.');
+  for (const item of Array.from(ragRerankOutcomes.values()).sort((a, b) =>
+    labeledKey(a.labels).localeCompare(labeledKey(b.labels)),
+  )) {
+    out.sample('compound_rag_rerank_total', item.count, item.labels);
+  }
+
+  out.metric(
+    'compound_rag_rerank_failure_rate',
+    'gauge',
+    'Rolling LLM rerank failure rate over the current in-memory window.',
+  );
+  out.sample('compound_rag_rerank_failure_rate', ragRerankFailureRate);
 }
 
 function latestRun(dashboard: SyncDashboard): SyncRunRow | null {
@@ -587,4 +619,6 @@ export function resetPrometheusMetricsForTests(): void {
   llmRuns.clear();
   embeddingCacheHits.clear();
   embeddingCacheMisses.clear();
+  ragRerankOutcomes.clear();
+  ragRerankFailureRate = 0;
 }
