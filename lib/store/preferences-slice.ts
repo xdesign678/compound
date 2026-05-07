@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand';
 import type { AppState } from './types';
 import type { HomeStyle, ColorMode, FontSize, LineHeight } from './ui-slice';
 import { FONT_SIZE_MAP, LINE_HEIGHT_MAP } from './ui-slice';
+import { DEFAULT_LOCALE, type Locale } from '../i18n/dict';
 
 function readStoredHomeStyle(): HomeStyle {
   if (typeof window === 'undefined') return 'library';
@@ -27,6 +28,11 @@ function readStoredLineHeight(): LineHeight {
   const raw = localStorage.getItem('compound_line_height');
   if (raw && raw in LINE_HEIGHT_MAP) return raw as LineHeight;
   return 'standard';
+}
+
+function readStoredLocale(): Locale {
+  if (typeof window === 'undefined') return DEFAULT_LOCALE;
+  return localStorage.getItem('compound_locale') === 'en' ? 'en' : DEFAULT_LOCALE;
 }
 
 function applyColorMode(mode: ColorMode) {
@@ -64,6 +70,7 @@ export interface PreferencesSlice {
   colorMode: ColorMode;
   fontSize: FontSize;
   lineHeight: LineHeight;
+  locale: Locale;
 
   setHomeStyle: (s: HomeStyle) => void;
   hydrateHomeStyle: () => void;
@@ -73,6 +80,8 @@ export interface PreferencesSlice {
   hydrateFontSize: () => void;
   setLineHeight: (lh: LineHeight) => void;
   hydrateLineHeight: () => void;
+  setLocale: (locale: Locale) => void;
+  hydrateLocale: () => void;
 }
 
 export const createPreferencesSlice: StateCreator<AppState, [], [], PreferencesSlice> = (
@@ -83,6 +92,7 @@ export const createPreferencesSlice: StateCreator<AppState, [], [], PreferencesS
   colorMode: 'light',
   fontSize: 'md',
   lineHeight: 'standard',
+  locale: readStoredLocale(),
 
   setHomeStyle: (s) => {
     localStorage.setItem('compound_home_style', s);
@@ -122,4 +132,9 @@ export const createPreferencesSlice: StateCreator<AppState, [], [], PreferencesS
     applyLineHeight(lh);
     set({ lineHeight: lh });
   },
+  setLocale: (locale) => {
+    localStorage.setItem('compound_locale', locale);
+    set({ locale });
+  },
+  hydrateLocale: () => set({ locale: readStoredLocale() }),
 });

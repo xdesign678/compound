@@ -23,6 +23,7 @@ export type {
 } from './store/ui-slice';
 export type { TaskStatus, TaskKind, TaskItem } from './store/task-slice';
 export type { LintFinding } from './store/lint-slice';
+export type { Locale } from './i18n';
 
 import { createUISlice } from './store/ui-slice';
 import { createTaskSlice } from './store/task-slice';

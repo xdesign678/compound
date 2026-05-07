@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ListTree } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
+import { t, useLocale } from '@/lib/i18n';
 import { Icon } from './Icons';
 
 interface HeaderProps {
@@ -12,25 +13,31 @@ interface HeaderProps {
   loading?: boolean;
 }
 
-const TAB_TITLES: Record<string, { t: string; s: (h: HeaderProps) => string }> = {
-  wiki: {
-    t: '我的 Wiki',
-    s: (h) =>
-      h.loading ? '正在同步本地知识库' : `${h.conceptCount} 个概念 · ${h.sourceCount} 份资料`,
-  },
-  sources: {
-    t: '原始资料',
-    s: (h) => (h.loading ? '正在同步资料' : `${h.sourceCount} 份 · AI 只读不改`),
-  },
-  ask: {
-    t: '向 Wiki 提问',
-    s: () => '答案来自你的知识库',
-  },
-  activity: {
-    t: 'Wiki 维护',
-    s: () => '健康检查与活动日志',
-  },
-};
+function getTabMeta(tab: string, props: HeaderProps) {
+  if (tab === 'sources') {
+    return {
+      title: t('header.sources.title'),
+      subtitle: props.loading
+        ? t('header.sources.subtitle.loading')
+        : t('header.sources.subtitle.ready', { sourceCount: props.sourceCount }),
+    };
+  }
+  if (tab === 'ask') {
+    return { title: t('header.ask.title'), subtitle: t('header.ask.subtitle') };
+  }
+  if (tab === 'activity') {
+    return { title: t('header.activity.title'), subtitle: t('header.activity.subtitle') };
+  }
+  return {
+    title: t('header.wiki.title'),
+    subtitle: props.loading
+      ? t('header.wiki.subtitle.loading')
+      : t('header.wiki.subtitle.ready', {
+          conceptCount: props.conceptCount,
+          sourceCount: props.sourceCount,
+        }),
+  };
+}
 
 function OverflowMenu({
   open,
@@ -45,6 +52,7 @@ function OverflowMenu({
   onObsidianImport: () => void;
   onSettings: () => void;
 }) {
+  useLocale();
   const menuRef = useRef<HTMLDivElement>(null);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const itemCount = 4;
@@ -92,7 +100,7 @@ function OverflowMenu({
   if (!open) return null;
 
   return (
-    <div className="overflow-menu" ref={menuRef} role="menu" aria-label="更多选项">
+    <div className="overflow-menu" ref={menuRef} role="menu" aria-label={t('header.more')}>
       <button
         className="overflow-menu-item"
         role="menuitem"
@@ -103,7 +111,7 @@ function OverflowMenu({
         }}
       >
         <Icon.Github />
-        <span>从 GitHub 同步</span>
+        <span>{t('header.githubSync')}</span>
       </button>
       <Link
         className="overflow-menu-item"
@@ -113,7 +121,7 @@ function OverflowMenu({
         onClick={onClose}
       >
         <Icon.Activity />
-        <span>同步控制台</span>
+        <span>{t('header.syncConsole')}</span>
       </Link>
       <button
         className="overflow-menu-item"
@@ -125,7 +133,7 @@ function OverflowMenu({
         }}
       >
         <Icon.Ingest />
-        <span>从 Obsidian 批量导入</span>
+        <span>{t('header.obsidianImport')}</span>
       </button>
       <button
         className="overflow-menu-item"
@@ -137,13 +145,14 @@ function OverflowMenu({
         }}
       >
         <Icon.Settings />
-        <span>设置</span>
+        <span>{t('header.settings')}</span>
       </button>
     </div>
   );
 }
 
 export function Header(props: HeaderProps) {
+  useLocale();
   const tab = useAppStore((s) => s.tab);
   const detail = useAppStore((s) => s.detail);
   const back = useAppStore((s) => s.back);
@@ -172,7 +181,7 @@ export function Header(props: HeaderProps) {
       <header className="header detail-header">
         <button className="back-btn" onClick={back}>
           <Icon.Back />
-          <span>返回</span>
+          <span>{t('header.back')}</span>
         </button>
         {detail.type === 'source' && (
           <div className="header-actions detail-header-actions">
@@ -180,8 +189,8 @@ export function Header(props: HeaderProps) {
               type="button"
               className="icon-btn detail-toc-btn"
               onClick={handleOpenSourceToc}
-              aria-label="显示目录"
-              title="显示目录"
+              aria-label={t('header.toc')}
+              title={t('header.toc')}
             >
               <ListTree />
             </button>
@@ -191,13 +200,13 @@ export function Header(props: HeaderProps) {
     );
   }
 
-  const meta = TAB_TITLES[tab];
+  const meta = getTabMeta(tab, props);
   return (
     <header className="header">
       <div className="header-copy">
         <div className="header-kicker">Compound</div>
-        <div className="header-title">{meta.t}</div>
-        <div className="header-subtitle">{meta.s(props)}</div>
+        <div className="header-title">{meta.title}</div>
+        <div className="header-subtitle">{meta.subtitle}</div>
       </div>
       <div className="header-actions">
         {showSearchIcon && (
@@ -205,7 +214,7 @@ export function Header(props: HeaderProps) {
             type="button"
             className="icon-btn header-search-btn is-visible"
             onClick={handleExpandSearch}
-            aria-label="展开搜索"
+            aria-label={t('header.search.expand')}
           >
             <Icon.Search />
           </button>
@@ -216,7 +225,7 @@ export function Header(props: HeaderProps) {
             type="button"
             className="icon-btn header-mobile-search-btn"
             onClick={openCommandPalette}
-            aria-label="搜索"
+            aria-label={t('header.search')}
           >
             <Icon.Search />
           </button>
@@ -225,28 +234,32 @@ export function Header(props: HeaderProps) {
         <button
           className="icon-btn header-desktop-action"
           onClick={openGithubSync}
-          aria-label="从 GitHub 同步"
-          title="从 GitHub 同步 Obsidian 笔记"
+          aria-label={t('header.githubSync')}
+          title={t('header.githubSync')}
         >
           <Icon.Github />
         </button>
         <Link
           className="icon-btn header-desktop-action"
           href="/sync"
-          aria-label="同步控制台"
-          title="同步控制台"
+          aria-label={t('header.syncConsole')}
+          title={t('header.syncConsole')}
         >
           <Icon.Activity />
         </Link>
         <button
           className="icon-btn header-desktop-action"
           onClick={openObsidianImport}
-          aria-label="从 Obsidian 批量导入"
-          title="从本地 Obsidian 文件夹批量导入"
+          aria-label={t('header.obsidianImport')}
+          title={t('header.obsidianImport')}
         >
           <Icon.Ingest />
         </button>
-        <button className="icon-btn header-desktop-action" onClick={openSettings} aria-label="设置">
+        <button
+          className="icon-btn header-desktop-action"
+          onClick={openSettings}
+          aria-label={t('header.settings')}
+        >
           <Icon.Settings />
         </button>
         {/* Mobile: single overflow menu */}
@@ -254,7 +267,7 @@ export function Header(props: HeaderProps) {
           <button
             className={`icon-btn${overflowOpen ? ' is-active' : ''}`}
             onClick={() => setOverflowOpen((v) => !v)}
-            aria-label="更多操作"
+            aria-label={t('header.more')}
             aria-expanded={overflowOpen}
           >
             <Icon.Overflow />

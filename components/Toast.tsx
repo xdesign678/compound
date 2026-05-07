@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useAppStore, type ToastState } from '@/lib/store';
+import { t, useLocale } from '@/lib/i18n';
 
 function ToastSlot({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   const [retrying, setRetrying] = useState(false);
@@ -37,11 +38,11 @@ function ToastSlot({ toast, onDismiss }: { toast: ToastState; onDismiss: () => v
           disabled={retrying}
           type="button"
         >
-          {retrying ? '重试中…' : (toast.retryLabel ?? '重试')}
+          {retrying ? t('toast.retrying') : (toast.retryLabel ?? t('toast.retry'))}
         </button>
       )}
       {toast.isError && (
-        <button className="toast-close" onClick={onDismiss} aria-label="关闭">
+        <button className="toast-close" onClick={onDismiss} aria-label={t('toast.close')}>
           ×
         </button>
       )}
@@ -50,6 +51,7 @@ function ToastSlot({ toast, onDismiss }: { toast: ToastState; onDismiss: () => v
 }
 
 export function Toast() {
+  useLocale();
   const primaryToast = useAppStore((s) => s.toast);
   const toastQueue = useAppStore((s) => s.toastQueue);
   const isOnline = useAppStore((s) => s.isOnline);
@@ -72,7 +74,9 @@ export function Toast() {
       {!isOnline && (
         <div className="toast visible toast-error" role="status" aria-live="polite">
           <span className="toast-text">
-            离线中，写入已暂停{pausedCount > 0 ? ` · ${pausedCount} 个任务待恢复` : ''}
+            {pausedCount > 0
+              ? t('toast.offlineWithTasks', { count: pausedCount })
+              : t('toast.offline')}
           </span>
         </div>
       )}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useAppStore } from '@/lib/store';
+import { t, useLocale, type I18nKey } from '@/lib/i18n';
 import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 import { GeneralTab } from './settings/GeneralTab';
 import { ModelTab } from './settings/ModelTab';
@@ -52,16 +53,18 @@ function IconData() {
   );
 }
 
-const TABS: { id: SettingsTabId; label: string; icon: () => ReactNode }[] = [
-  { id: 'general', label: '通用', icon: IconGeneral },
-  { id: 'model', label: '模型', icon: IconModel },
-  { id: 'data', label: '数据', icon: IconData },
+const TABS: { id: SettingsTabId; labelKey: I18nKey; icon: () => ReactNode }[] = [
+  { id: 'general', labelKey: 'settings.general', icon: IconGeneral },
+  { id: 'model', labelKey: 'settings.model', icon: IconModel },
+  { id: 'data', labelKey: 'settings.data', icon: IconData },
 ];
 
 export function SettingsDrawer() {
+  useLocale();
   const isOpen = useAppStore((s) => s.settingsOpen);
   const close = useAppStore((s) => s.closeSettings);
   const hydrateColorMode = useAppStore((s) => s.hydrateColorMode);
+  const hydrateLocale = useAppStore((s) => s.hydrateLocale);
 
   const [activeTab, setActiveTab] = useState<SettingsTabId>('general');
   const [visible, setVisible] = useState(false);
@@ -79,7 +82,8 @@ export function SettingsDrawer() {
 
   useEffect(() => {
     hydrateColorMode();
-  }, [hydrateColorMode]);
+    hydrateLocale();
+  }, [hydrateColorMode, hydrateLocale]);
 
   useFocusTrap(modalRef, isOpen);
 
@@ -112,18 +116,18 @@ export function SettingsDrawer() {
         {/* Header */}
         <div className="settings-hero">
           <div>
-            <div className="settings-kicker">Compound 设置</div>
-            <h3 id="settings-drawer-title">设置</h3>
+            <div className="settings-kicker">{t('settings.kicker')}</div>
+            <h3 id="settings-drawer-title">{t('settings.title')}</h3>
           </div>
-          <button className="settings-close-btn" onClick={close} aria-label="关闭设置">
-            关闭
+          <button className="settings-close-btn" onClick={close} aria-label={t('settings.close')}>
+            {t('settings.close')}
           </button>
         </div>
 
         {/* 响应式导航 + 内容 */}
         <div className="settings-layout">
           {/* 桌面端侧栏导航（≥768px 显示） */}
-          <nav className="settings-sidebar" role="tablist" aria-label="设置分类">
+          <nav className="settings-sidebar" role="tablist" aria-label={t('settings.categories')}>
             {TABS.map((tab) => {
               const TabIcon = tab.icon;
               return (
@@ -137,7 +141,7 @@ export function SettingsDrawer() {
                   <span className="settings-sidebar-icon">
                     <TabIcon />
                   </span>
-                  {tab.label}
+                  {t(tab.labelKey)}
                 </button>
               );
             })}
@@ -149,7 +153,7 @@ export function SettingsDrawer() {
               <div
                 className="settings-segmented settings-segmented-three"
                 role="tablist"
-                aria-label="设置分类"
+                aria-label={t('settings.categories')}
               >
                 {TABS.map((tab) => (
                   <button
@@ -159,7 +163,7 @@ export function SettingsDrawer() {
                     className={activeTab === tab.id ? 'active' : ''}
                     onClick={() => setActiveTab(tab.id)}
                   >
-                    {tab.label}
+                    {t(tab.labelKey)}
                   </button>
                 ))}
               </div>

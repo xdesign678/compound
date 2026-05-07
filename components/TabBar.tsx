@@ -1,13 +1,14 @@
 'use client';
 
 import { useAppStore, type TabId } from '@/lib/store';
+import { t, useLocale, type I18nKey } from '@/lib/i18n';
 import { Icon } from './Icons';
 
-const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
-  { id: 'wiki', label: 'Wiki', icon: <Icon.Wiki /> },
-  { id: 'sources', label: '资料', icon: <Icon.Sources /> },
-  { id: 'ask', label: '问答', icon: <Icon.Ask /> },
-  { id: 'activity', label: '活动', icon: <Icon.Activity /> },
+const TABS: Array<{ id: TabId; labelKey: I18nKey; icon: React.ReactNode }> = [
+  { id: 'wiki', labelKey: 'tab.wiki', icon: <Icon.Wiki /> },
+  { id: 'sources', labelKey: 'tab.sources', icon: <Icon.Sources /> },
+  { id: 'ask', labelKey: 'tab.ask', icon: <Icon.Ask /> },
+  { id: 'activity', labelKey: 'tab.activity', icon: <Icon.Activity /> },
 ];
 
 // Preload view chunk when user hovers/focuses a tab
@@ -30,35 +31,36 @@ interface TabBarProps {
 }
 
 export function TabBar({ variant = 'bottom' }: TabBarProps) {
+  useLocale();
   const tab = useAppStore((s) => s.tab);
   const setTab = useAppStore((s) => s.setTab);
   const openModal = useAppStore((s) => s.openModal);
   const isSidebar = variant === 'sidebar';
 
-  const renderTab = (t: (typeof TABS)[number]) => {
-    const isActive = tab === t.id;
+  const renderTab = (item: (typeof TABS)[number]) => {
+    const isActive = tab === item.id;
     return (
       <button
-        key={t.id}
-        id={`tab-${t.id}`}
+        key={item.id}
+        id={`tab-${item.id}`}
         role="tab"
         aria-selected={isActive}
-        aria-controls={`tabpanel-${t.id}`}
+        aria-controls={`tabpanel-${item.id}`}
         aria-current={isActive ? 'page' : undefined}
         className={`tab-item${isActive ? ' active' : ''}${isSidebar ? ' sidebar' : ''}`}
-        onClick={() => setTab(t.id)}
-        onMouseEnter={() => preloadView(t.id)}
-        onFocus={() => preloadView(t.id)}
+        onClick={() => setTab(item.id)}
+        onMouseEnter={() => preloadView(item.id)}
+        onFocus={() => preloadView(item.id)}
       >
-        {t.icon}
-        <span>{t.label}</span>
+        {item.icon}
+        <span>{t(item.labelKey)}</span>
       </button>
     );
   };
 
   if (isSidebar) {
     return (
-      <nav className="tabbar tabbar-sidebar" aria-label="主导航">
+      <nav className="tabbar tabbar-sidebar" aria-label={t('tab.navLabel')}>
         <div role="tablist">{TABS.map(renderTab)}</div>
       </nav>
     );
@@ -67,13 +69,13 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
   const [first, second, ...rest] = TABS;
 
   return (
-    <nav className="tabbar" aria-label="主导航">
+    <nav className="tabbar" aria-label={t('tab.navLabel')}>
       <div role="tablist" className="tabbar-tabs">
         {renderTab(first)}
         {renderTab(second)}
         {rest.map(renderTab)}
       </div>
-      <button type="button" className="tab-add" aria-label="添加新资料" onClick={openModal}>
+      <button type="button" className="tab-add" aria-label={t('tab.addSource')} onClick={openModal}>
         <span className="tab-add-btn">
           <Icon.Plus />
         </span>
