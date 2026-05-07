@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
 import { withRequestId } from '@/lib/trace-client';
+import { useAppStore } from '@/lib/store';
 
 type ReviewItem = {
   id: string;
@@ -182,6 +183,9 @@ function describeReviewItem(item: ReviewItem): Friendly {
 }
 
 async function postJson(path: string, body: unknown) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('当前离线，审核决定已暂停，请联网后重试。');
+  }
   const res = await fetch(path, {
     method: 'POST',
     headers: withRequestId({ ...getAdminAuthHeaders(), 'Content-Type': 'application/json' }),
@@ -201,6 +205,7 @@ export default function ReviewQueue() {
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState('');
   const [initialLoading, setInitialLoading] = useState(true);
+  const isOnline = useAppStore((s) => s.isOnline);
 
   const load = useCallback(
     async (nextStatus = status) => {
@@ -230,6 +235,9 @@ export default function ReviewQueue() {
     async (id: string, next: 'approved' | 'rejected' | 'resolved') => {
       setBusyId(id);
       try {
+        if (!isOnline) {
+          throw new Error('当前离线，审核决定已暂停，请联网后重试。');
+        }
         await postJson(`/api/review/queue/${id}`, { status: next });
         await load();
       } catch (err) {
@@ -238,7 +246,7 @@ export default function ReviewQueue() {
         setBusyId('');
       }
     },
-    [load],
+    [isOnline, load],
   );
 
   useEffect(() => {
@@ -284,6 +292,7 @@ export default function ReviewQueue() {
       </header>
 
       {error ? <div className="ops-alert">{error}</div> : null}
+      {!isOnline ? <div className="ops-alert">离线中，审核决定会先暂停。</div> : null}
 
       {initialLoading ? (
         <section className="review-list">
@@ -388,7 +397,7 @@ export default function ReviewQueue() {
                     <div className="review-actions">
                       <button
                         className={`ops-btn good${busy ? ' is-busy' : ''}`}
-                        disabled={busy}
+                        disabled={busy || !isOnline}
                         onClick={() => void resolve(item.id, 'approved')}
                       >
                         {busy && <span className="ops-btn-spinner" aria-hidden="true" />}
@@ -396,7 +405,7 @@ export default function ReviewQueue() {
                       </button>
                       <button
                         className={`ops-btn danger${busy ? ' is-busy' : ''}`}
-                        disabled={busy}
+                        disabled={busy || !isOnline}
                         onClick={() => void resolve(item.id, 'rejected')}
                       >
                         {busy && <span className="ops-btn-spinner" aria-hidden="true" />}
@@ -404,7 +413,7 @@ export default function ReviewQueue() {
                       </button>
                       <button
                         className={`ops-btn subtle${busy ? ' is-busy' : ''}`}
-                        disabled={busy}
+                        disabled={busy || !isOnline}
                         onClick={() => void resolve(item.id, 'resolved')}
                       >
                         {busy && <span className="ops-btn-spinner" aria-hidden="true" />}

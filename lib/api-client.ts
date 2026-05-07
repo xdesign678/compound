@@ -28,6 +28,29 @@ const MIN_DIRECT_TITLE_MENTION_LENGTH = 2;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const ASK_STREAM_TIMEOUT_MS = 180_000;
 
+export class OfflineError extends Error {
+  readonly offlineSince?: number;
+
+  constructor(message = '当前离线，写入操作已暂停，请联网后重试。', offlineSince?: number) {
+    super(message);
+    this.name = 'OfflineError';
+    this.offlineSince = offlineSince;
+  }
+}
+
+export function isOfflineError(error: unknown): error is OfflineError {
+  return error instanceof OfflineError || (error instanceof Error && error.name === 'OfflineError');
+}
+
+function assertOnlineForWrite(): void {
+  if (typeof navigator === 'undefined' || navigator.onLine) return;
+  const offlineSince =
+    typeof window !== 'undefined'
+      ? Number(window.localStorage.getItem('compound:offline-since') || 0) || undefined
+      : undefined;
+  throw new OfflineError(undefined, offlineSince);
+}
+
 function extractSearchTerms(text: string): string[] {
   return Array.from(
     new Set(
@@ -166,12 +189,9 @@ function askAbortMessage(externalSignal?: AbortSignal): string {
 async function postJSON<T>(
   path: string,
   body: unknown,
-  options?: { signal?: AbortSignal; retries?: number },
+  options?: { signal?: AbortSignal; retries?: number; write?: boolean },
 ): Promise<T> {
-  // Offline check
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    throw new Error('网络已断开，请检查网络连接后重试');
-  }
+  if (options?.write) assertOnlineForWrite();
 
   const signal = buildTimeoutSignal(options?.signal);
   const maxRetries = Math.min(options?.retries ?? 0, 3);
@@ -207,7 +227,7 @@ async function postJSON<T>(
       });
     } catch {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        throw new Error('网络已断开，请检查网络连接后重试');
+        throw options?.write ? new OfflineError() : new Error('网络已断开，请检查网络连接后重试');
       }
       lastError = new Error('网络连接失败');
       // Network error — retry if allowed
@@ -311,7 +331,7 @@ export async function ingestSource(input: {
   };
 
   // 3. Call API
-  const resp = await postJSON<PersistedIngestResponse>('/api/ingest', req);
+  const resp = await postJSON<PersistedIngestResponse>('/api/ingest', req, { write: true });
 
   // 4. Mirror the server-persisted rows into IndexedDB so the current browser
   // immediately shows the same IDs and content as other devices.
@@ -550,7 +570,9 @@ export async function createWikiFromSelection(input: {
     sourceConceptId: input.sourceConceptId,
     contextTitle: input.contextTitle,
   };
-  const resp = await postJSON<SelectionWikiResponse>('/api/concepts/from-selection', req);
+  const resp = await postJSON<SelectionWikiResponse>('/api/concepts/from-selection', req, {
+    write: true,
+  });
 
   if (resp.concepts.length > 0) {
     const db = getDb();
@@ -580,12 +602,16 @@ export async function archiveAnswerAsConcept(
     conceptId: string;
     concepts: Concept[];
     activity: ActivityLog;
-  }>('/api/concepts/archive-answer', {
-    title,
-    summary,
-    body,
-    citedConceptIds,
-  });
+  }>(
+    '/api/concepts/archive-answer',
+    {
+      title,
+      summary,
+      body,
+      citedConceptIds,
+    },
+    { write: true },
+  );
 
   const db = getDb();
   await db.transaction('rw', [db.concepts, db.activity], async () => {
@@ -609,6 +635,7 @@ export async function updateSourceContent(input: {
   concepts: Concept[];
   activity?: ActivityLog;
 }> {
+  assertOnlineForWrite();
   const res = await fetch('/api/data/sources', {
     method: 'PATCH',
     headers: {
@@ -684,7 +711,7 @@ export interface RepairStatusResponse {
 }
 
 export async function startRepair(findings: RepairFindingPayload[]): Promise<RepairStartResponse> {
-  return postJSON<RepairStartResponse>('/api/repair/run', { findings });
+  return postJSON<RepairStartResponse>('/api/repair/run', { findings }, { write: true });
 }
 
 export async function getRepairStatus(runId: string): Promise<RepairStatusResponse> {
@@ -718,7 +745,7 @@ export async function lintWiki(activityId?: string): Promise<LintResponse> {
       related: c.related,
     })),
   };
-  const resp = await postJSON<LintResponse>('/api/lint', req);
+  const resp = await postJSON<LintResponse>('/api/lint', req, { write: true });
 
   const successDetails =
     resp.findings.length === 0
@@ -755,7 +782,7 @@ export interface LintRunStartResponse {
 
 /** Start a cloud-side async lint run. The server reads its own DB, no client data needed. */
 export async function startLintRun(): Promise<LintRunStartResponse> {
-  return postJSON<LintRunStartResponse>('/api/lint/run', {});
+  return postJSON<LintRunStartResponse>('/api/lint/run', {}, { write: true });
 }
 
 /** Poll the status of an async lint run. Throws on 404 (run not found). */
@@ -810,7 +837,7 @@ export async function categorizeConcepts(
     };
 
     try {
-      const resp = await postJSON<CategorizeResponse>('/api/categorize', req);
+      const resp = await postJSON<CategorizeResponse>('/api/categorize', req, { write: true });
 
       // Write results to Dexie
       await db.transaction('rw', db.concepts, async () => {

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useAppStore, type TaskItem, type TaskStatus, type TaskKind } from '@/lib/store';
+import { isOfflineError } from '@/lib/api-client';
 import { Icon } from './Icons';
 
 const TASK_KIND_LABEL: Record<TaskKind, string> = {
@@ -22,8 +23,12 @@ const TASK_KIND_ICON: Record<TaskKind, React.ReactNode> = {
 
 function statusBadge(status: TaskStatus) {
   switch (status) {
+    case 'queued':
+      return <span className="tc-badge tc-badge-running">待恢复</span>;
     case 'running':
       return <span className="tc-badge tc-badge-running">进行中</span>;
+    case 'paused-offline':
+      return <span className="tc-badge tc-badge-error">离线暂停</span>;
     case 'success':
       return <span className="tc-badge tc-badge-success">完成</span>;
     case 'error':
@@ -46,7 +51,9 @@ export function TaskCenter() {
   const removeTask = useAppStore((s) => s.removeTask);
   const clearFinishedTasks = useAppStore((s) => s.clearFinishedTasks);
 
-  const runningCount = tasks.filter((t) => t.status === 'running').length;
+  const activeCount = tasks.filter((t) =>
+    ['queued', 'running', 'paused-offline'].includes(t.status),
+  ).length;
   const hasTasks = tasks.length > 0;
 
   const handleRetry = async (task: TaskItem) => {
@@ -54,8 +61,17 @@ export function TaskCenter() {
     updateTask(task.id, { status: 'running', error: undefined, result: undefined });
     try {
       await task.retry();
-    } catch {
-      // updateTask will be called by the original caller
+      const latest = useAppStore.getState().tasks.find((item) => item.id === task.id);
+      if (latest?.status === 'running') {
+        updateTask(task.id, { status: 'success', finishedAt: Date.now(), result: '已完成' });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      updateTask(task.id, {
+        status: isOfflineError(err) ? 'paused-offline' : 'error',
+        finishedAt: isOfflineError(err) ? undefined : Date.now(),
+        error: isOfflineError(err) ? '离线暂停，联网后可重试。' : msg.slice(0, 160),
+      });
     }
   };
 
@@ -66,11 +82,11 @@ export function TaskCenter() {
         <button
           className="tc-trigger"
           onClick={toggleTaskCenter}
-          aria-label={`任务中心 · ${runningCount > 0 ? `${runningCount} 个进行中` : '全部完成'}`}
+          aria-label={`任务中心 · ${activeCount > 0 ? `${activeCount} 个未完成` : '全部完成'}`}
         >
-          {runningCount > 0 ? <span className="tc-trigger-indicator" /> : <Icon.Lint />}
+          {activeCount > 0 ? <span className="tc-trigger-indicator" /> : <Icon.Lint />}
           <span className="tc-trigger-text">
-            {runningCount > 0 ? `${runningCount} 个任务` : '任务中心'}
+            {activeCount > 0 ? `${activeCount} 个任务` : '任务中心'}
           </span>
         </button>
       )}
@@ -81,7 +97,7 @@ export function TaskCenter() {
           <div className="tc-header">
             <h4 className="tc-title">任务中心</h4>
             <div className="tc-header-actions">
-              {tasks.some((t) => t.status !== 'running') && (
+              {tasks.some((t) => !['queued', 'running', 'paused-offline'].includes(t.status)) && (
                 <button className="tc-header-btn" onClick={clearFinishedTasks}>
                   清除已完成
                 </button>
@@ -110,16 +126,28 @@ export function TaskCenter() {
                 </div>
                 <div className="tc-item-actions">
                   {task.status === 'running' && <div className="spinner tc-spinner" />}
-                  {task.status === 'error' && task.retry && (
+                  {(task.status === 'queued' ||
+                    task.status === 'paused-offline' ||
+                    task.status === 'error') &&
+                    task.retry && (
+                      <button
+                        className="tc-retry-btn"
+                        onClick={() => void handleRetry(task)}
+                        aria-label="重试"
+                      >
+                        重试
+                      </button>
+                    )}
+                  {!['queued', 'running', 'paused-offline'].includes(task.status) && (
                     <button
-                      className="tc-retry-btn"
-                      onClick={() => void handleRetry(task)}
-                      aria-label="重试"
+                      className="tc-dismiss-btn"
+                      onClick={() => removeTask(task.id)}
+                      aria-label="关闭"
                     >
-                      重试
+                      ×
                     </button>
                   )}
-                  {task.status !== 'running' && (
+                  {task.status === 'paused-offline' && (
                     <button
                       className="tc-dismiss-btn"
                       onClick={() => removeTask(task.id)}

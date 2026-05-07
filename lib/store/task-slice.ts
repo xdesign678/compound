@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { AppState } from './types';
 
-export type TaskStatus = 'running' | 'success' | 'error';
+export type TaskStatus = 'queued' | 'running' | 'paused-offline' | 'success' | 'error';
 export type TaskKind = 'ingest' | 'lint' | 'repair' | 'categorize' | 'query';
 
 export interface TaskItem {
@@ -40,7 +40,10 @@ export const createTaskSlice: StateCreator<AppState, [], [], TaskSlice> = (set) 
       tasks: s.tasks.map((t) => (t.id === id ? { ...t, ...patch } : t)),
     })),
   removeTask: (id) => set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) })),
-  clearFinishedTasks: () => set((s) => ({ tasks: s.tasks.filter((t) => t.status === 'running') })),
+  clearFinishedTasks: () =>
+    set((s) => ({
+      tasks: s.tasks.filter((t) => ['queued', 'running', 'paused-offline'].includes(t.status)),
+    })),
   setTaskCenterOpen: (v) => set({ taskCenterOpen: v }),
   toggleTaskCenter: () => set((s) => ({ taskCenterOpen: !s.taskCenterOpen })),
 });

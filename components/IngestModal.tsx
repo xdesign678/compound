@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore, type TaskItem } from '@/lib/store';
-import { ingestSource } from '@/lib/api-client';
+import { ingestSource, isOfflineError } from '@/lib/api-client';
 import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 import { Icon } from './Icons';
 import { NoteEditor } from './NoteEditor';
@@ -108,9 +108,9 @@ export function IngestModal() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       updateTask(taskId, {
-        status: 'error',
-        finishedAt: Date.now(),
-        error: msg.slice(0, 160),
+        status: isOfflineError(err) ? 'paused-offline' : 'error',
+        finishedAt: isOfflineError(err) ? undefined : Date.now(),
+        error: isOfflineError(err) ? '离线暂停，联网后可重试。' : msg.slice(0, 160),
       });
     }
   }
@@ -176,9 +176,9 @@ export function IngestModal() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       updateTask(taskId, {
-        status: 'error',
-        finishedAt: Date.now(),
-        error: msg.slice(0, 160),
+        status: isOfflineError(err) ? 'paused-offline' : 'error',
+        finishedAt: isOfflineError(err) ? undefined : Date.now(),
+        error: isOfflineError(err) ? '离线暂停，联网后可重试。' : msg.slice(0, 160),
       });
     }
   }

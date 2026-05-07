@@ -52,6 +52,10 @@ function ToastSlot({ toast, onDismiss }: { toast: ToastState; onDismiss: () => v
 export function Toast() {
   const primaryToast = useAppStore((s) => s.toast);
   const toastQueue = useAppStore((s) => s.toastQueue);
+  const isOnline = useAppStore((s) => s.isOnline);
+  const pausedCount = useAppStore(
+    (s) => s.tasks.filter((task) => task.status === 'paused-offline').length,
+  );
   const hideToast = useAppStore((s) => s.hideToast);
 
   const dismissQueueItem = (id: number) => {
@@ -65,6 +69,13 @@ export function Toast() {
 
   return (
     <div className="toast-container">
+      {!isOnline && (
+        <div className="toast visible toast-error" role="status" aria-live="polite">
+          <span className="toast-text">
+            离线中，写入已暂停{pausedCount > 0 ? ` · ${pausedCount} 个任务待恢复` : ''}
+          </span>
+        </div>
+      )}
       {/* Additional stacked toasts */}
       {additionalToasts.map((t) => (
         <ToastSlot key={t.id} toast={t} onDismiss={() => dismissQueueItem(t.id)} />
