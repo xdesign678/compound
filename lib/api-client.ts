@@ -19,6 +19,8 @@ import type {
   CategorizeResponse,
   SelectionWikiRequest,
   SelectionWikiResponse,
+  SelectionWikiRunStartResponse,
+  SelectionWikiRunStatusResponse,
   SourceType,
 } from './types';
 
@@ -556,25 +558,41 @@ export async function askWikiStream(
   };
 }
 
-/**
- * Create a new wiki concept from a free-form text selection. The server
- * runs the LLM with related-concept context and persists the new concept,
- * we mirror the result into Dexie so the page is immediately visible.
- */
-export async function createWikiFromSelection(input: {
+export async function startWikiFromSelection(input: {
   selection: string;
   sourceConceptId?: string;
   contextTitle?: string;
-}): Promise<SelectionWikiResponse> {
+}): Promise<SelectionWikiRunStartResponse> {
   const req: SelectionWikiRequest = {
     selection: input.selection,
     sourceConceptId: input.sourceConceptId,
     contextTitle: input.contextTitle,
   };
-  const resp = await postJSON<SelectionWikiResponse>('/api/concepts/from-selection', req, {
+  return postJSON<SelectionWikiRunStartResponse>('/api/concepts/from-selection', req, {
     write: true,
   });
+}
 
+export async function getWikiFromSelectionRun(
+  runId: string,
+): Promise<SelectionWikiRunStatusResponse> {
+  const res = await fetch(
+    `/api/concepts/from-selection/status?runId=${encodeURIComponent(runId)}`,
+    {
+      headers: {
+        'X-Request-ID': generateClientRequestId(),
+        ...getAdminAuthHeaders(),
+      },
+    },
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 200) || `状态查询失败 (${res.status})`);
+  }
+  return (await res.json()) as SelectionWikiRunStatusResponse;
+}
+
+export async function mirrorWikiFromSelectionResult(resp: SelectionWikiResponse): Promise<void> {
   if (resp.concepts.length > 0) {
     const db = getDb();
     await db.transaction('rw', db.concepts, async () => {
@@ -589,8 +607,33 @@ export async function createWikiFromSelection(input: {
   if (resp.activity) {
     await getDb().activity.put(resp.activity);
   }
+}
 
-  return resp;
+/**
+ * Compatibility helper for callers that still want a promise for the final
+ * concept. The server work is still backgrounded; this only polls from the
+ * client until the run reaches a terminal state.
+ */
+export async function createWikiFromSelection(input: {
+  selection: string;
+  sourceConceptId?: string;
+  contextTitle?: string;
+}): Promise<SelectionWikiResponse> {
+  const started = await startWikiFromSelection(input);
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    const status = await getWikiFromSelectionRun(started.runId);
+    if (status.status === 'done' && status.result) {
+      await mirrorWikiFromSelectionResult(status.result);
+      return status.result;
+    }
+    if (status.status === 'failed') {
+      throw new Error(status.error || '选段建页失败');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+  }
+
+  throw new Error('选段建页仍在后台进行，请稍后查看进度浮窗。');
 }
 
 export async function archiveAnswerAsConcept(

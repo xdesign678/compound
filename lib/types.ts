@@ -165,6 +165,33 @@ export interface SelectionWikiResponse {
   activity: ActivityLog;
 }
 
+export type SelectionWikiRunStatus = 'running' | 'done' | 'failed';
+export type SelectionWikiRunPhase =
+  | 'queued'
+  | 'loading_context'
+  | 'generating'
+  | 'persisting'
+  | 'done';
+
+export interface SelectionWikiRunStartResponse {
+  runId: string;
+  status: Extract<SelectionWikiRunStatus, 'running'>;
+  phase: SelectionWikiRunPhase;
+  selectionPreview: string;
+  startedAt: number;
+}
+
+export interface SelectionWikiRunStatusResponse {
+  runId: string;
+  status: SelectionWikiRunStatus;
+  phase: SelectionWikiRunPhase;
+  selectionPreview: string;
+  startedAt: number;
+  finishedAt: number | null;
+  error: string | null;
+  result: SelectionWikiResponse | null;
+}
+
 export interface QueryRequest {
   question: string;
   concepts: Array<{ id: string; title: string; summary: string; body?: string }>;

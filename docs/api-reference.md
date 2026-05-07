@@ -6,8 +6,8 @@
 
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
-- Routes: **37**
-- Handlers (HTTP methods): **44**
+- Routes: **38**
+- Handlers (HTTP methods): **45**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
@@ -17,6 +17,7 @@ This document is generated automatically from the Next.js Route Handlers under `
 - **concepts**
   - [`/api/concepts/archive-answer`](#api-concepts-archive-answer)
   - [`/api/concepts/from-selection`](#api-concepts-from-selection)
+  - [`/api/concepts/from-selection/status`](#api-concepts-from-selection-status)
 - **data**
   - [`/api/data/concepts/{id}/versions`](#api-data-concepts--id--versions)
   - [`/api/data/concepts`](#api-data-concepts)
@@ -108,23 +109,44 @@ Source: [`app/api/concepts/from-selection/route.ts`](../app/api/concepts/from-se
 | ----------- | ------------------------------------------------------- |
 | Methods     | `POST`                                                  |
 | Runtime     | `nodejs`                                                |
-| maxDuration | 90                                                      |
+| maxDuration | 30                                                      |
 | Guards      | `admin-token`, `rate-limited`, `content-length-guarded` |
 
 #### POST
 
-Create a brand-new Wiki concept page from a free-form text selection. The
-selection (typically grabbed from another concept page in the UI) is fed to
-the LLM together with a candidate list of related Wiki concepts so it can
-synthesise a focused note that links back into the existing graph.
+Start a server-side Wiki creation run from a free-form text selection. The
+API returns quickly with a `runId`; the LLM work and SQLite writes continue
+in the server process so the browser can close or reload without losing the
+creation job.
 
 Body: `SelectionWikiRequest` — `selection` is required (>= 2, <= 4k chars).
-Optional `sourceConceptId` (the page the snippet came from) is added as the
-first related link; `contextTitle` adds extra grounding. The response mirrors
-the persisted concept and any concepts that received bidirectional updates,
-mirroring the shape produced by `/api/ingest`.
+Optional `sourceConceptId` links the new page back to the page the snippet
+came from; `contextTitle` gives the worker extra grounding. Poll
+`/api/concepts/from-selection/status?runId=<id>` for progress and result.
 
 Guards: admin token, LLM rate limit, 256KB body cap.
+
+### `/api/concepts/from-selection/status`
+
+Source: [`app/api/concepts/from-selection/status/route.ts`](../app/api/concepts/from-selection/status/route.ts)
+
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | _unset_       |
+| Guards      | `admin-token` |
+
+#### GET
+
+Poll the status of a server-side selection-to-Wiki run.
+
+Query: `?runId=<id>`
+Returns the current phase, error (if any), and final `SelectionWikiResponse`
+once the run is done. The route also revives still-running jobs if the server
+lost its in-memory worker reference after a restart.
+
+Guards: admin token.
 
 ## data
 

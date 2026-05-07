@@ -9,7 +9,9 @@ import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
-import { createWikiFromSelection } from '@/lib/api-client';
+import { startWikiFromSelection } from '@/lib/api-client';
+import { rememberSelectionWikiRun } from '@/lib/selection-wiki-runs';
+import { computeSelectionPopoverPosition, type RectLike } from '@/lib/selection-popover-position';
 import type { ConceptVersion } from '@/lib/types';
 import { SourceTypeIcon } from '../Icons';
 import { Prose } from '../Prose';
@@ -32,17 +34,80 @@ type SelectionPopoverState = {
 // 中文用户常选 2-4 字的词语，阈值过高会让按钮"经常无法触发"。
 const MIN_SELECTION_CHARS = 2;
 const MAX_SELECTION_CHARS = 4_000;
-const POPOVER_ESTIMATED_WIDTH = 148;
-const POPOVER_ESTIMATED_HEIGHT = 36;
-const POPOVER_EDGE_PADDING = 8;
-const POPOVER_VERTICAL_GAP = 8;
+const POPOVER_ESTIMATED_WIDTH = 180;
+const POPOVER_ESTIMATED_HEIGHT = 44;
+
+function isUsefulRect(rect: DOMRect): boolean {
+  return rect.width > 0 && rect.height > 0;
+}
+
+function isSelectionBackward(selection: Selection): boolean {
+  if (!selection.anchorNode || !selection.focusNode) return false;
+  if (selection.anchorNode === selection.focusNode) {
+    return selection.anchorOffset > selection.focusOffset;
+  }
+  return Boolean(
+    selection.anchorNode.compareDocumentPosition(selection.focusNode) &
+    Node.DOCUMENT_POSITION_PRECEDING,
+  );
+}
+
+function boundaryFromRect(rect: DOMRect, backward: boolean): RectLike {
+  const x = backward ? rect.left : rect.right;
+  return {
+    left: x,
+    right: x,
+    top: rect.top,
+    bottom: rect.bottom,
+    width: 0,
+    height: rect.height,
+  };
+}
+
+function getFocusBoundaryRect(selection: Selection, shell: HTMLElement): RectLike | null {
+  const focusNode = selection.focusNode;
+  if (!focusNode || !shell.contains(focusNode) || focusNode.nodeType !== Node.TEXT_NODE) {
+    return null;
+  }
+  const text = focusNode.textContent ?? '';
+  const ownerDocument = focusNode.ownerDocument;
+  if (!ownerDocument) return null;
+  const offset = Math.min(selection.focusOffset, text.length);
+  const backward = isSelectionBackward(selection);
+  const start = backward ? offset : Math.max(0, offset - 1);
+  const end = backward ? Math.min(text.length, offset + 1) : offset;
+  if (start === end) return null;
+
+  const probe = ownerDocument.createRange();
+  probe.setStart(focusNode, start);
+  probe.setEnd(focusNode, end);
+  const rects = Array.from(probe.getClientRects()).filter(isUsefulRect);
+  const rect = backward ? rects[0] : rects[rects.length - 1];
+  return rect ? boundaryFromRect(rect, backward) : null;
+}
+
+function getSelectionAnchorRect(
+  selection: Selection,
+  range: Range,
+  shell: HTMLElement,
+): RectLike | null {
+  const focusRect = getFocusBoundaryRect(selection, shell);
+  if (focusRect) return focusRect;
+
+  const backward = isSelectionBackward(selection);
+  const rects = Array.from(range.getClientRects()).filter(isUsefulRect);
+  const rect = backward ? rects[0] : rects[rects.length - 1];
+  if (rect) return boundaryFromRect(rect, backward);
+
+  const fallback = range.getBoundingClientRect();
+  return isUsefulRect(fallback) ? boundaryFromRect(fallback, backward) : null;
+}
 
 export function ConceptDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
   const openSource = useAppStore((s) => s.openSource);
   const showToast = useAppStore((s) => s.showToast);
   const showErrorToast = useAppStore((s) => s.showErrorToast);
-  const markFresh = useAppStore((s) => s.markFresh);
   const freshIds = useAppStore((s) => s.freshConceptIds);
   const [, setHydrating] = useState(false);
   const [hydrateError, setHydrateError] = useState<string | null>(null);
@@ -140,39 +205,17 @@ export function ConceptDetail({ id }: { id: string }) {
         dismissSelectionPopover();
         return;
       }
-      // 取选段"末尾插入点"的 rect (collapse 到 end)，这样 popover 会精确贴在
-      // 用户最后一个被选中的字符旁边，而不是 last-line rect 的右边界
-      // (后者在长行/justified 文本下会被推到行尾，导致 popover 漂到视口右侧)。
-      const endRange = range.cloneRange();
-      endRange.collapse(false);
-      let endRect: DOMRect | null = endRange.getBoundingClientRect();
-      if (!endRect || (endRect.width === 0 && endRect.height === 0 && endRect.top === 0)) {
-        // 某些浏览器对折叠 range 返回空 rect，回退到最后一个非空行 rect。
-        const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0 && r.height > 0);
-        endRect = rects[rects.length - 1] ?? range.getBoundingClientRect();
-      }
-      if (!endRect) {
+      const anchorRect = getSelectionAnchorRect(sel, range, shell);
+      if (!anchorRect) {
         dismissSelectionPopover();
         return;
       }
 
-      const viewportW = window.innerWidth;
-      const viewportH = window.innerHeight;
-      // 默认放到选段末尾的正下方，并以末尾点为水平中心。
-      let top = endRect.bottom + POPOVER_VERTICAL_GAP;
-      let left = endRect.left + endRect.width / 2 - POPOVER_ESTIMATED_WIDTH / 2;
-      // 水平越界时夹回视口内。
-      left = Math.min(
-        Math.max(left, POPOVER_EDGE_PADDING),
-        viewportW - POPOVER_ESTIMATED_WIDTH - POPOVER_EDGE_PADDING,
-      );
-      // 底部放不下时，改到选段上方。
-      if (top + POPOVER_ESTIMATED_HEIGHT > viewportH - POPOVER_EDGE_PADDING) {
-        top = Math.max(
-          POPOVER_EDGE_PADDING,
-          endRect.top - POPOVER_ESTIMATED_HEIGHT - POPOVER_VERTICAL_GAP,
-        );
-      }
+      const { top, left } = computeSelectionPopoverPosition({
+        anchorRect,
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        popover: { width: POPOVER_ESTIMATED_WIDTH, height: POPOVER_ESTIMATED_HEIGHT },
+      });
 
       setSelectionPopover({
         visible: true,
@@ -229,23 +272,16 @@ export function ConceptDetail({ id }: { id: string }) {
     const text = selectionPopover.text.trim();
     if (!text) return;
     setCreatingFromSelection(true);
-    // 不再调用全局 toast：让 popover 原地变成迷你"正在建页"浮窗，
-    // 既保留了选段附近的位置感，也避免了全局横幅的喧闹。
     try {
-      const resp = await createWikiFromSelection({
+      const run = await startWikiFromSelection({
         selection: text,
         sourceConceptId: id,
         contextTitle: concept?.title,
       });
+      rememberSelectionWikiRun(run);
       if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
       setSelectionPopover((state) => ({ ...state, visible: false }));
-      if (resp.status === 'duplicate') {
-        showToast('已有等价概念，已为你打开');
-      } else {
-        markFresh([resp.conceptId]);
-        showToast('已为选段创建概念');
-      }
-      openConcept(resp.conceptId);
+      showToast('已开始后台创建 Wiki');
     } catch (err) {
       setSelectionPopover((state) => ({ ...state, visible: false }));
       const message = err instanceof Error ? err.message : '创建失败';
@@ -253,16 +289,7 @@ export function ConceptDetail({ id }: { id: string }) {
     } finally {
       setCreatingFromSelection(false);
     }
-  }, [
-    concept?.title,
-    creatingFromSelection,
-    id,
-    markFresh,
-    openConcept,
-    selectionPopover.text,
-    showToast,
-    showErrorToast,
-  ]);
+  }, [concept?.title, creatingFromSelection, id, selectionPopover.text, showToast, showErrorToast]);
 
   useEffect(() => {
     if (!concept || hasFullBody) return;
@@ -454,7 +481,7 @@ export function ConceptDetail({ id }: { id: string }) {
           {creatingFromSelection ? (
             <div className="selection-popover-loading" role="status" aria-live="polite">
               <span className="selection-popover-spinner" aria-hidden="true" />
-              <span className="selection-popover-loading-text">正在为选段建页…</span>
+              <span className="selection-popover-loading-text">正在启动后台任务...</span>
             </div>
           ) : (
             <button
