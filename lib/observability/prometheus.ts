@@ -5,6 +5,7 @@
  * scrapeable text endpoint, while hosting platforms can route it into
  * Prometheus, Datadog, New Relic, CloudWatch, or another collector.
  */
+import { getCircuitBreakerSnapshots, type CircuitBreakerState } from '../circuit-breaker';
 import type { SyncDashboard, SyncRunRow } from '../sync-observability';
 import { getQueryAnalyzerSnapshot } from './query-analyzer';
 
@@ -38,6 +39,8 @@ export interface PrometheusRenderInput {
 
 const HTTP_DURATION_BUCKETS_SECONDS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 const httpSamples = new Map<string, HttpSample>();
+const llmRetries = new Map<string, { labels: { host: string; reason: string }; count: number }>();
+const llmSsrfBlocks = new Map<string, { labels: { host: string }; count: number }>();
 
 function escapeLabel(value: LabelValue): string {
   return String(value).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"');
@@ -74,6 +77,13 @@ function sampleKey(labels: HttpSample['labels']): string {
   return `${labels.method}\u001f${labels.route}\u001f${labels.status}`;
 }
 
+function labeledKey(labels: Labels): string {
+  return Object.entries(labels)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join('\u001f');
+}
+
 export function observeHttpRequest(observation: HttpObservation): void {
   const labels = {
     method: observation.method.toUpperCase(),
@@ -97,6 +107,20 @@ export function observeHttpRequest(observation: HttpObservation): void {
     if (durationSeconds <= bucket) existing.bucketCounts[index] += 1;
   });
   httpSamples.set(key, existing);
+}
+
+export function recordLlmRetry(labels: { host: string; reason: string }): void {
+  const key = labeledKey(labels);
+  const existing = llmRetries.get(key) ?? { labels, count: 0 };
+  existing.count += 1;
+  llmRetries.set(key, existing);
+}
+
+export function recordLlmSsrfBlock(labels: { host: string }): void {
+  const key = labeledKey(labels);
+  const existing = llmSsrfBlocks.get(key) ?? { labels, count: 0 };
+  existing.count += 1;
+  llmSsrfBlocks.set(key, existing);
 }
 
 class PrometheusTextBuilder {
@@ -170,6 +194,48 @@ function addHttpMetrics(out: PrometheusTextBuilder): void {
       sample.labels,
     );
     out.sample('compound_http_request_duration_seconds_count', sample.count, sample.labels);
+  }
+}
+
+function circuitStateValue(state: CircuitBreakerState): number {
+  if (state === 'open') return 2;
+  if (state === 'half_open') return 1;
+  return 0;
+}
+
+function hostFromCircuitName(name: string): string {
+  return name.startsWith('llm-gateway:') ? name.slice('llm-gateway:'.length) : name;
+}
+
+function addLlmMetrics(out: PrometheusTextBuilder): void {
+  out.metric(
+    'compound_llm_circuit_state',
+    'gauge',
+    'LLM circuit breaker state by host: closed=0, half_open=1, open=2.',
+  );
+  for (const snapshot of getCircuitBreakerSnapshots()) {
+    if (!snapshot.name.startsWith('llm-gateway:')) continue;
+    out.sample('compound_llm_circuit_state', circuitStateValue(snapshot.state), {
+      host: hostFromCircuitName(snapshot.name),
+    });
+  }
+
+  out.metric('compound_llm_retries_total', 'counter', 'LLM retry or fallback attempts by host.');
+  for (const item of Array.from(llmRetries.values()).sort((a, b) =>
+    labeledKey(a.labels).localeCompare(labeledKey(b.labels)),
+  )) {
+    out.sample('compound_llm_retries_total', item.count, item.labels);
+  }
+
+  out.metric(
+    'compound_llm_ssrf_blocks_total',
+    'counter',
+    'LLM gateway requests blocked by SSRF protection.',
+  );
+  for (const item of Array.from(llmSsrfBlocks.values()).sort((a, b) =>
+    labeledKey(a.labels).localeCompare(labeledKey(b.labels)),
+  )) {
+    out.sample('compound_llm_ssrf_blocks_total', item.count, item.labels);
   }
 }
 
@@ -338,6 +404,7 @@ export function renderPrometheusMetrics(input: PrometheusRenderInput = {}): stri
   const out = new PrometheusTextBuilder();
   addProcessMetrics(out);
   addHttpMetrics(out);
+  addLlmMetrics(out);
   addQueryAnalyzerMetrics(out);
   if (input.syncDashboard) addSyncMetrics(out, input.syncDashboard);
   if (input.reviewMetrics) addReviewMetrics(out, input.reviewMetrics);
@@ -348,4 +415,6 @@ export function renderPrometheusMetrics(input: PrometheusRenderInput = {}): stri
 
 export function resetPrometheusMetricsForTests(): void {
   httpSamples.clear();
+  llmRetries.clear();
+  llmSsrfBlocks.clear();
 }

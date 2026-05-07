@@ -161,6 +161,10 @@ export function getCircuitBreaker(options: CircuitBreakerOptions): CircuitBreake
   return breaker;
 }
 
+export function getCircuitBreakerSnapshots(): CircuitBreakerSnapshot[] {
+  return Array.from(breakers.values()).map((breaker) => breaker.snapshot());
+}
+
 export function resetCircuitBreakersForTests(): void {
   breakers.clear();
 }

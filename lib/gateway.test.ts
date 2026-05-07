@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 
 import { CircuitBreakerOpenError, resetCircuitBreakersForTests } from './circuit-breaker';
 import { chat } from './gateway';
+import {
+  renderPrometheusMetrics,
+  resetPrometheusMetricsForTests,
+} from './observability/prometheus';
 
 async function withEnv<T>(
   values: Record<string, string | undefined>,
@@ -150,6 +154,8 @@ test('trims server api url and honors legacy gateway url', { concurrency: false 
 });
 
 test('blocks private or loopback custom api urls', { concurrency: false }, async () => {
+  resetPrometheusMetricsForTests();
+
   await withEnv(
     {
       LLM_API_KEY: undefined,
@@ -168,14 +174,19 @@ test('blocks private or loopback custom api urls', { concurrency: false }, async
       );
     },
   );
+
+  const metrics = renderPrometheusMetrics();
+  assert.match(metrics, /compound_llm_ssrf_blocks_total\{host="127\.0\.0\.1"\} 1/);
 });
 
 test(
-  'opens a circuit after repeated transient gateway failures',
+  'opens a circuit after repeated transient gateway failures and exposes recovery metrics',
   { concurrency: false },
   async () => {
     resetCircuitBreakersForTests();
+    resetPrometheusMetricsForTests();
     let fetchCalls = 0;
+    let shouldRecover = false;
 
     await withEnv(
       {
@@ -183,11 +194,22 @@ test(
         AI_GATEWAY_API_KEY: undefined,
         COMPOUND_SKIP_DNS_GUARD: 'true',
         COMPOUND_LLM_CIRCUIT_FAILURE_THRESHOLD: '2',
-        COMPOUND_LLM_CIRCUIT_RESET_MS: '60000',
+        COMPOUND_LLM_CIRCUIT_RESET_MS: '100',
       },
       async () => {
         const mockFetch: typeof fetch = async () => {
           fetchCalls += 1;
+          if (shouldRecover) {
+            return new Response(
+              JSON.stringify({
+                choices: [{ message: { content: 'recovered' }, finish_reason: 'stop' }],
+              }),
+              {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              },
+            );
+          }
           return new Response('temporary outage', { status: 503 });
         };
 
@@ -203,10 +225,25 @@ test(
             chat({ messages: [{ role: 'user', content: 'hi' }], maxTokens: 10 }),
             CircuitBreakerOpenError,
           );
+
+          let metrics = renderPrometheusMetrics();
+          assert.match(metrics, /compound_llm_circuit_state\{host="openrouter\.ai"\} 2/);
+
+          shouldRecover = true;
+          await new Promise((resolve) => setTimeout(resolve, 120));
+
+          const recovered = await chat({
+            messages: [{ role: 'user', content: 'hi' }],
+            maxTokens: 10,
+          });
+
+          metrics = renderPrometheusMetrics();
+          assert.equal(recovered, 'recovered');
+          assert.match(metrics, /compound_llm_circuit_state\{host="openrouter\.ai"\} 0/);
         });
       },
     );
 
-    assert.equal(fetchCalls, 2);
+    assert.equal(fetchCalls, 3);
   },
 );

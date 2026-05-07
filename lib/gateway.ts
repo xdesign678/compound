@@ -15,6 +15,7 @@ import net from 'node:net';
 import { CircuitBreakerOpenError, getCircuitBreaker } from './circuit-breaker';
 import { recordModelRun } from './model-runs';
 import { logger } from './logging';
+import { recordLlmRetry, recordLlmSsrfBlock } from './observability/prometheus';
 import { addBreadcrumb, reportError } from './observability/sentry';
 import { buildOutboundTraceHeaders } from './request-context';
 
@@ -82,11 +83,13 @@ async function validateApiUrl(url: string): Promise<void> {
   }
 
   if (rawHost === 'localhost' || METADATA_HOSTS.has(rawHost)) {
+    recordLlmSsrfBlock({ host: rawHost });
     throw new Error('Invalid API URL: must be a public HTTPS endpoint');
   }
 
   if (net.isIP(rawHost)) {
     if (isBlockedIP(rawHost)) {
+      recordLlmSsrfBlock({ host: rawHost });
       throw new Error('Invalid API URL: must be a public HTTPS endpoint');
     }
     return;
@@ -117,6 +120,7 @@ async function validateApiUrl(url: string): Promise<void> {
   }
   for (const record of records) {
     if (isBlockedIP(record.address)) {
+      recordLlmSsrfBlock({ host: rawHost });
       throw new Error('Invalid API URL: resolves to a blocked network range');
     }
   }
@@ -354,6 +358,14 @@ function circuitNameForGateway(url: string): string {
   }
 }
 
+function metricHostForGateway(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return 'invalid-url';
+  }
+}
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -493,6 +505,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
   const fallbackChoice = pickFallbackModel(requestedModel);
   const model = fallbackChoice ?? requestedModel;
   if (fallbackChoice) {
+    recordLlmRetry({ host: metricHostForGateway(gatewayUrl), reason: 'consecutive_timeouts' });
     logger.warn('gateway.auto_fallback', {
       requestedModel,
       fallbackModel: model,

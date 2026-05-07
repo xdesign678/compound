@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import {
   normalizeMetricRoute,
   observeHttpRequest,
+  recordLlmRetry,
+  recordLlmSsrfBlock,
   renderPrometheusMetrics,
   resetPrometheusMetricsForTests,
 } from './observability/prometheus';
@@ -41,6 +43,23 @@ test('renderPrometheusMetrics exposes HTTP counters and duration histogram', () 
     body,
     /compound_http_request_duration_seconds_count\{method="POST",route="\/api\/review\/queue\/:id",status="201"\} 1/,
   );
+});
+
+test('renderPrometheusMetrics exposes LLM retry and SSRF counters', () => {
+  resetPrometheusMetricsForTests();
+
+  recordLlmRetry({ host: 'openrouter.ai', reason: 'consecutive_timeouts' });
+  recordLlmRetry({ host: 'openrouter.ai', reason: 'consecutive_timeouts' });
+  recordLlmSsrfBlock({ host: '169.254.169.254' });
+
+  const body = renderPrometheusMetrics();
+  assert.match(body, /# TYPE compound_llm_retries_total counter/);
+  assert.match(
+    body,
+    /compound_llm_retries_total\{host="openrouter\.ai",reason="consecutive_timeouts"\} 2/,
+  );
+  assert.match(body, /# TYPE compound_llm_ssrf_blocks_total counter/);
+  assert.match(body, /compound_llm_ssrf_blocks_total\{host="169\.254\.169\.254"\} 1/);
 });
 
 test('renderPrometheusMetrics includes domain gauges and collector errors', () => {
