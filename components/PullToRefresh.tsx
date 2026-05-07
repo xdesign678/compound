@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { hapticLight, hapticSuccess } from '@/lib/haptic';
+import { canStartPullToRefresh } from '@/lib/pull-to-refresh-boundary';
 import { useAppStore } from '@/lib/store';
 
 const TRIGGER_DISTANCE = 72; // px pull to trigger refresh
@@ -76,18 +77,9 @@ export function PullToRefresh({
       if (!isMobile()) return;
       const el = getContainer();
       if (!el) return;
-      // Don't trigger pull if not the root scroll container
       const target = e.target as HTMLElement;
-      const isRootScroll = target === el || el.contains(target);
-      // Don't trigger inside scrollable sub-containers (modals, textareas)
-      if (!isRootScroll) return;
-      if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') return;
-      const scrollableParent = target.closest(
-        '.library-detail-modal-scroll, .modal, .settings-modal',
-      );
-      if (scrollableParent) return;
+      if (!canStartPullToRefresh({ target, root: el })) return;
       const scrollTop = el.scrollTop ?? 0;
-      if (scrollTop > 2) return; // not at top
       const touch = e.touches[0];
       startYRef.current = touch.clientY;
       startScrollRef.current = scrollTop;

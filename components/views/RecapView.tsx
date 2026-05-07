@@ -9,6 +9,7 @@ import { useAppStore } from '@/lib/store';
 import { ensureConceptsHydrated } from '@/lib/cloud-sync';
 import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
 import { pickReviewConcepts, markReviewed } from '@/lib/review-picks';
+import { resolveRecapGestureAxis, type RecapGestureAxis } from '@/lib/recap-gesture-lock';
 import { DESKTOP_LAYOUT_MIN_WIDTH } from '@/lib/responsive';
 import { Icon } from '../Icons';
 import { Prose } from '../Prose';
@@ -209,7 +210,8 @@ export function RecapView() {
     let startX = 0;
     let startY = 0;
     let isTracking = false;
-    let isHorizontal = false;
+    let lockedAxis: RecapGestureAxis | null = null;
+    let moveFrameCount = 0;
 
     const onTouchStart = (e: TouchEvent) => {
       if (animatingRef.current) return;
@@ -217,7 +219,8 @@ export function RecapView() {
       startX = t.clientX;
       startY = t.clientY;
       isTracking = true;
-      isHorizontal = false;
+      lockedAxis = null;
+      moveFrameCount = 0;
       dragXRef.current = 0;
     };
 
@@ -227,21 +230,20 @@ export function RecapView() {
       const dx = t.clientX - startX;
       const dy = t.clientY - startY;
 
-      if (!isHorizontal) {
+      if (!lockedAxis) {
         const totalDrift = Math.abs(dx) + Math.abs(dy);
         if (totalDrift < 10) return; // not enough to decide yet
+        moveFrameCount += 1;
 
-        // Use angle threshold + lock axis (30° = tan(30°) ≈ 0.577)
-        const angle = Math.abs(dy) / (Math.abs(dx) + Math.abs(dy) + 0.001);
-        if (angle < 0.5) {
-          isHorizontal = true;
-        } else {
+        lockedAxis = resolveRecapGestureAxis({ dx, dy, frameCount: moveFrameCount });
+        if (!lockedAxis) return;
+        if (lockedAxis === 'vertical') {
           isTracking = false;
           return;
         }
       }
 
-      if (isHorizontal) {
+      if (lockedAxis === 'horizontal') {
         e.preventDefault();
         const damped = dx * 0.85;
         dragXRef.current = damped;
@@ -258,9 +260,10 @@ export function RecapView() {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       // Restore pointer events after drag
       if (cardRef.current) cardRef.current.style.pointerEvents = '';
-      const wasHorizontal = isHorizontal;
+      const wasHorizontal = lockedAxis === 'horizontal';
       isTracking = false;
-      isHorizontal = false;
+      lockedAxis = null;
+      moveFrameCount = 0;
 
       if (wasHorizontal) {
         const dx = dragXRef.current;
@@ -275,7 +278,8 @@ export function RecapView() {
     const onTouchCancel = () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       isTracking = false;
-      isHorizontal = false;
+      lockedAxis = null;
+      moveFrameCount = 0;
       if (dragXRef.current !== 0) {
         animateSpring();
       }
@@ -302,8 +306,8 @@ export function RecapView() {
     let startX = 0;
     let startY = 0;
     let isDragging = false;
-    let isHorizontal = false;
-    let directionDecided = false;
+    let lockedAxis: RecapGestureAxis | null = null;
+    let moveFrameCount = 0;
 
     const onPointerDown = (e: PointerEvent) => {
       // Only handle mouse; touch is handled above via touch events
@@ -316,8 +320,8 @@ export function RecapView() {
       startX = e.clientX;
       startY = e.clientY;
       isDragging = true;
-      isHorizontal = false;
-      directionDecided = false;
+      lockedAxis = null;
+      moveFrameCount = 0;
       dragXRef.current = 0;
       cardEl.setPointerCapture(e.pointerId);
       cardEl.style.cursor = 'grabbing';
@@ -328,22 +332,21 @@ export function RecapView() {
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
 
-      if (!directionDecided) {
+      if (!lockedAxis) {
         const totalDrift = Math.abs(dx) + Math.abs(dy);
         if (totalDrift < 10) return;
+        moveFrameCount += 1;
 
-        const angle = Math.abs(dy) / (Math.abs(dx) + Math.abs(dy) + 0.001);
-        directionDecided = true;
-        if (angle < 0.5) {
-          isHorizontal = true;
-        } else {
+        lockedAxis = resolveRecapGestureAxis({ dx, dy, frameCount: moveFrameCount });
+        if (!lockedAxis) return;
+        if (lockedAxis === 'vertical') {
           isDragging = false;
           cardEl.style.cursor = 'grab';
           return;
         }
       }
 
-      if (isHorizontal) {
+      if (lockedAxis === 'horizontal') {
         e.preventDefault();
         const damped = dx * 0.85;
         dragXRef.current = damped;
@@ -358,10 +361,10 @@ export function RecapView() {
       if (!isDragging) return;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       cardEl.style.cursor = 'grab';
-      const wasHorizontal = isHorizontal;
+      const wasHorizontal = lockedAxis === 'horizontal';
       isDragging = false;
-      isHorizontal = false;
-      directionDecided = false;
+      lockedAxis = null;
+      moveFrameCount = 0;
 
       if (wasHorizontal) {
         const dx = dragXRef.current;

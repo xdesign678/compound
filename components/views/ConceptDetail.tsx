@@ -12,6 +12,7 @@ import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
 import { startWikiFromSelection } from '@/lib/api-client';
 import { rememberSelectionWikiRun } from '@/lib/selection-wiki-runs';
 import { computeSelectionPopoverPosition, type RectLike } from '@/lib/selection-popover-position';
+import { getVisibleViewportBottom } from '@/lib/hooks/useSelectionPopover';
 import type { ConceptVersion } from '@/lib/types';
 import { SourceTypeIcon } from '../Icons';
 import { Prose } from '../Prose';
@@ -213,7 +214,10 @@ export function ConceptDetail({ id }: { id: string }) {
 
       const { top, left } = computeSelectionPopoverPosition({
         anchorRect,
-        viewport: { width: window.innerWidth, height: window.innerHeight },
+        viewport: {
+          width: window.visualViewport?.width ?? window.innerWidth,
+          height: getVisibleViewportBottom(window),
+        },
         popover: { width: POPOVER_ESTIMATED_WIDTH, height: POPOVER_ESTIMATED_HEIGHT },
       });
 
@@ -251,12 +255,17 @@ export function ConceptDetail({ id }: { id: string }) {
       if (creatingFromSelection) return;
       dismissSelectionPopover();
     };
+    const handleViewportChange = () => {
+      window.setTimeout(updateFromSelection, 10);
+    };
 
     document.addEventListener('mouseup', handlePointerUp);
     document.addEventListener('touchend', handlePointerUp);
     document.addEventListener('selectionchange', handleSelectionChange);
     window.addEventListener('scroll', handleScroll, true);
     window.addEventListener('resize', handleScroll);
+    window.visualViewport?.addEventListener('resize', handleViewportChange);
+    window.visualViewport?.addEventListener('scroll', handleViewportChange);
 
     return () => {
       document.removeEventListener('mouseup', handlePointerUp);
@@ -264,6 +273,8 @@ export function ConceptDetail({ id }: { id: string }) {
       document.removeEventListener('selectionchange', handleSelectionChange);
       window.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('resize', handleScroll);
+      window.visualViewport?.removeEventListener('resize', handleViewportChange);
+      window.visualViewport?.removeEventListener('scroll', handleViewportChange);
     };
   }, [creatingFromSelection, dismissSelectionPopover]);
 
