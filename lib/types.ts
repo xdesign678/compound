@@ -81,6 +81,10 @@ export interface AskMessage {
   role: 'user' | 'ai';
   text: string;
   citedConcepts?: string[];
+  faithfulness?: {
+    score: number;
+    level: 'low' | 'mid' | 'high';
+  };
   savedAsConceptId?: string;
   suggestedTitle?: string;
   suggestedSummary?: string;
@@ -172,6 +176,10 @@ export interface QueryResponse {
   answer: string;
   citedConceptIds: string[];
   archivable: boolean;
+  faithfulness?: {
+    score: number;
+    level: 'low' | 'mid' | 'high';
+  };
   suggestedTitle?: string;
   suggestedSummary?: string;
   /** Follow-up questions the user might be interested in. */

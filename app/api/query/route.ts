@@ -504,6 +504,32 @@ export const POST = withRequestTracing(async (req: Request) => {
             parsed.retrievalMode = retrieval.retrievalMode;
             stageTelemetry.finish('synthesize');
 
+            if (process.env.COMPOUND_FAITHFULNESS !== 'off') {
+              const citedConcepts = parsed.citedConceptIds
+                .map((id) => repo.getConceptsByIds([id])[0])
+                .filter((c): c is Concept => Boolean(c));
+              const faithfulness = checkFaithfulness({
+                answer: parsed.answer,
+                citedConcepts: citedConcepts.map((c) => ({
+                  id: c.id,
+                  title: c.title,
+                  summary: c.summary,
+                  body: c.body,
+                })),
+              });
+              parsed.faithfulness = {
+                score: faithfulness.score,
+                level: faithfulness.level,
+              };
+              if (faithfulness.level === 'low' && faithfulness.unsupported.length > 0) {
+                logger.warn('query.faithfulness_low', {
+                  score: faithfulness.score,
+                  unsupported: faithfulness.unsupported,
+                  answerPreview: parsed.answer.slice(0, 200),
+                });
+              }
+            }
+
             sendSSE('stage', {
               key: 'synthesize',
               status: 'done',
@@ -519,30 +545,8 @@ export const POST = withRequestTracing(async (req: Request) => {
               rewrittenQuestion: parsed.rewrittenQuestion,
               retrievalMode: parsed.retrievalMode,
               stageDurations,
+              faithfulness: parsed.faithfulness,
             });
-
-            // Faithfulness check (log-only)
-            if (process.env.COMPOUND_FAITHFULNESS !== 'off') {
-              const citedConcepts = parsed.citedConceptIds
-                .map((id) => repo.getConceptsByIds([id])[0])
-                .filter((c): c is Concept => Boolean(c));
-              const faithfulness = checkFaithfulness({
-                answer: parsed.answer,
-                citedConcepts: citedConcepts.map((c) => ({
-                  id: c.id,
-                  title: c.title,
-                  summary: c.summary,
-                  body: c.body,
-                })),
-              });
-              if (faithfulness.score < 0.5 && faithfulness.unsupported.length > 0) {
-                logger.warn('query.faithfulness_low', {
-                  score: faithfulness.score,
-                  unsupported: faithfulness.unsupported,
-                  answerPreview: parsed.answer.slice(0, 200),
-                });
-              }
-            }
 
             clearInterval(keepaliveInterval);
             controller.close();
@@ -611,8 +615,6 @@ export const POST = withRequestTracing(async (req: Request) => {
     const validIds = new Set(concepts.map((c) => c.id));
     parsed.citedConceptIds = parsed.citedConceptIds.filter((id) => validIds.has(id));
 
-    // Faithfulness check: warn (in logs only) when [CX] markers don't have
-    // token-level support in the cited bodies.
     if (process.env.COMPOUND_FAITHFULNESS !== 'off') {
       const citedConcepts = parsed.citedConceptIds
         .map((id) => repo.getConceptsByIds([id])[0])
@@ -626,7 +628,11 @@ export const POST = withRequestTracing(async (req: Request) => {
           body: c.body,
         })),
       });
-      if (faithfulness.score < 0.5 && faithfulness.unsupported.length > 0) {
+      parsed.faithfulness = {
+        score: faithfulness.score,
+        level: faithfulness.level,
+      };
+      if (faithfulness.level === 'low' && faithfulness.unsupported.length > 0) {
         logger.warn('query.faithfulness_low', {
           score: faithfulness.score,
           unsupported: faithfulness.unsupported,

@@ -19,8 +19,18 @@ export interface FaithfulnessInput {
 export interface FaithfulnessResult {
   /** 0–1，1 = 全部引用都有 token-level 支撑 */
   score: number;
+  /** User-facing confidence bucket derived from the score. */
+  level: FaithfulnessLevel;
   /** 不可信的引用 id 列表 */
   unsupported: string[];
+}
+
+export type FaithfulnessLevel = 'low' | 'mid' | 'high';
+
+export function classifyFaithfulnessLevel(score: number): FaithfulnessLevel {
+  if (!Number.isFinite(score) || score < 0.5) return 'low';
+  if (score < 0.8) return 'mid';
+  return 'high';
 }
 
 /**
@@ -57,13 +67,13 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 
 export function checkFaithfulness(input: FaithfulnessInput): FaithfulnessResult {
   if (input.citedConcepts.length === 0) {
-    return { score: 1, unsupported: [] };
+    return { score: 1, level: 'high', unsupported: [] };
   }
   const contexts = extractCitationContexts(input.answer);
   if (contexts.size === 0) {
     // No [CX] markers in the answer at all. Treat as low faithfulness signal
     // but don't fail outright — the prompt may have skipped citations.
-    return { score: 0.5, unsupported: [] };
+    return { score: 0.5, level: 'mid', unsupported: [] };
   }
   const unsupported: string[] = [];
   let supported = 0;
@@ -83,8 +93,10 @@ export function checkFaithfulness(input: FaithfulnessInput): FaithfulnessResult 
     }
   }
   const total = contexts.size;
+  const score = total === 0 ? 1 : supported / total;
   return {
-    score: total === 0 ? 1 : supported / total,
+    score,
+    level: classifyFaithfulnessLevel(score),
     unsupported,
   };
 }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { checkFaithfulness } from './faithfulness';
+import { checkFaithfulness, classifyFaithfulnessLevel } from './faithfulness';
 
 test('checkFaithfulness returns 1 when no citations claimed', () => {
   const r = checkFaithfulness({ answer: '一些没引用的回答', citedConcepts: [] });
@@ -38,4 +38,15 @@ test('checkFaithfulness passes when claim shares tokens with cited body', () => 
   });
   assert.equal(r.unsupported.length, 0);
   assert.ok(r.score >= 0.99);
+});
+
+test('classifyFaithfulnessLevel maps scores into user-facing levels', () => {
+  assert.equal(classifyFaithfulnessLevel(0.3), 'low');
+  assert.equal(classifyFaithfulnessLevel(0.5), 'mid');
+  assert.equal(classifyFaithfulnessLevel(0.8), 'high');
+});
+
+test('classifyFaithfulnessLevel clamps invalid scores to low', () => {
+  assert.equal(classifyFaithfulnessLevel(Number.NaN), 'low');
+  assert.equal(classifyFaithfulnessLevel(-1), 'low');
 });

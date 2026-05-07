@@ -547,6 +547,7 @@ export async function askWikiStream(
     answer: answer || '(无回答)',
     citedConceptIds: (doneData.citedConceptIds as string[]) || [],
     archivable: Boolean(doneData.archivable),
+    faithfulness: doneData.faithfulness as QueryResponse['faithfulness'],
     suggestedTitle: doneData.suggestedTitle as string | undefined,
     suggestedSummary: doneData.suggestedSummary as string | undefined,
     suggestedQuestions: doneData.suggestedQuestions as string[] | undefined,

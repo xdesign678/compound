@@ -438,6 +438,7 @@ export function useAskState() {
           role: 'ai',
           text: resp.answer,
           citedConcepts: resp.citedConceptIds,
+          faithfulness: resp.faithfulness,
           suggestedTitle: resp.archivable ? resp.suggestedTitle : undefined,
           suggestedSummary: resp.archivable ? resp.suggestedSummary : undefined,
           suggestedQuestions: resp.suggestedQuestions?.length ? resp.suggestedQuestions : undefined,

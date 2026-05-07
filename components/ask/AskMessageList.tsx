@@ -99,11 +99,23 @@ export function AskMessageList({
                         {failureDetail && <pre className="ask-failure-detail">{failureDetail}</pre>}
                       </div>
                     ) : (
-                      <Prose
-                        markdown={formatConceptBodyForDisplay(message.text)}
-                        citedConceptIds={message.citedConcepts}
-                        className="prose-answer"
-                      />
+                      <>
+                        <Prose
+                          markdown={formatConceptBodyForDisplay(message.text)}
+                          citedConceptIds={message.citedConcepts}
+                          className="prose-answer"
+                        />
+                        {message.faithfulness?.level === 'low' && (
+                          <div className="msg-sources" role="note">
+                            <div className="ms-label">证据支撑较弱</div>
+                            <div>
+                              本回答基于检索证据的支撑较弱（score=
+                              {message.faithfulness.score.toFixed(1)}
+                              ），建议结合资料原文再判断。
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                     {!failedAnswer && message.citedConcepts && message.citedConcepts.length > 0 && (
                       <div className="msg-sources">
