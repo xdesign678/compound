@@ -104,6 +104,7 @@ npm run typecheck
 npm run test
 npm run docs:api:check   # ensures docs/api-reference.md is up to date
 npm run build
+npm run build:measure    # writes tmp/build-metrics.json for build duration and static size
 ```
 
 ## API reference

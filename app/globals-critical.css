@@ -1,0 +1,150 @@
+:root {
+  --brand-clay: #d97757;
+  --brand-clay-text: #7d3522;
+  --brand-clay-soft: rgba(217, 119, 87, 0.12);
+  --bg-primary: #faf9f5;
+  --bg-secondary: #f9f9f7;
+  --bg-hover: #f5f4f0;
+  --bg-active: #efeee8;
+  --bg-card: #ffffff;
+  --bg-button: #0f0f0e;
+  --bg-button-hover: #2a2a27;
+  --bg-muted: #f0efe8;
+
+  --text-primary: #141413;
+  --text-body: rgba(20, 20, 19, 0.85);
+  --text-secondary: #5e5d59;
+  --text-tertiary: #9a9890;
+  --text-on-button: #faf9f5;
+  --ink-soft: var(--text-tertiary);
+  --ink: var(--text-primary);
+  --border: var(--border-default);
+  --surface-subtle: var(--bg-hover);
+
+  --prose-font-size: 16px;
+  --prose-line-height: 1.7;
+
+  --font-sans: var(--font-inter), Inter, system-ui, -apple-system, sans-serif;
+  --font-reading:
+    var(--font-lora), var(--font-noto-serif-sc), 'Noto Serif SC', Georgia, 'Times New Roman', serif;
+  --font-mono: var(--font-geist-mono), 'JetBrains Mono', 'SF Mono', monospace;
+
+  --border-light: rgba(0, 0, 0, 0.08);
+  --border-default: rgba(0, 0, 0, 0.12);
+  --border-section: rgba(0, 0, 0, 0.06);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.16);
+
+  --motion-duration-fast: 180ms;
+  --motion-duration-base: 240ms;
+  --motion-duration-slow: 320ms;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-md: 17px;
+  --text-lg: 20px;
+  --text-xl: 26px;
+  --text-2xl: 32px;
+
+  --leading-tight: 1.4;
+  --leading-body: 1.7;
+  --leading-relaxed: 1.82;
+
+  --space-2xs: 4px;
+  --space-xs: 6px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-2xl: 24px;
+  --space-3xl: 32px;
+  --space-4xl: 44px;
+
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  --color-success: #2f6a47;
+  --color-error: #a34b2d;
+  --color-warning: #b8860b;
+}
+
+.dark {
+  --bg-primary: #1a1a18;
+  --bg-secondary: #232320;
+  --bg-hover: #2a2a27;
+  --bg-active: rgba(236, 233, 225, 0.08);
+  --bg-card: #232320;
+  --bg-button: #ece9e1;
+  --bg-button-hover: #d4d1c9;
+  --bg-muted: #2a2a27;
+
+  --text-primary: #ece9e1;
+  --text-body: rgba(236, 233, 225, 0.85);
+  --text-secondary: #9b9b95;
+  --text-tertiary: #9a9a94;
+  --brand-clay-text: #f0a183;
+  --text-on-button: #1a1a18;
+
+  --border-light: rgba(236, 233, 225, 0.08);
+  --border-default: rgba(236, 233, 225, 0.12);
+  --border-section: rgba(236, 233, 225, 0.06);
+
+  --color-success: #6ee7b7;
+  --color-error: #fca5a5;
+  --color-warning: #fde68a;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  margin: 0;
+  padding: 0;
+}
+
+button {
+  font: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+}
+
+.app-shell {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overflow: clip;
+}
+
+.header {
+  min-height: 60px;
+  flex-shrink: 0;
+}
+
+.app-main {
+  flex: 1 1 auto;
+  min-height: 0;
+}

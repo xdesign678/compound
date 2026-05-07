@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter, JetBrains_Mono, Lora, Noto_Serif_SC } from 'next/font/google';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import './globals.css';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { ViewportObserver } from '@/components/ViewportObserver';
@@ -8,18 +10,21 @@ const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
   display: 'swap',
+  preload: false,
 });
 
 const geistMono = JetBrains_Mono({
   subsets: ['latin'],
   variable: '--font-geist-mono',
   display: 'swap',
+  preload: false,
 });
 
 const lora = Lora({
   subsets: ['latin'],
   variable: '--font-lora',
   display: 'optional',
+  preload: false,
 });
 
 const notoSerifSC = Noto_Serif_SC({
@@ -27,8 +32,10 @@ const notoSerifSC = Noto_Serif_SC({
   weight: ['400', '600'],
   variable: '--font-noto-serif-sc',
   display: 'swap',
-  preload: false,
+  preload: true,
 });
+
+const criticalCss = readFileSync(path.join(process.cwd(), 'app/globals-critical.css'), 'utf8');
 
 export const metadata: Metadata = {
   title: 'Compound · 让 AI 维护你的知识库',
@@ -77,6 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${inter.variable} ${geistMono.variable} ${lora.variable} ${notoSerifSC.variable}`}
     >
       <head>
+        <style data-compound-critical-css="" dangerouslySetInnerHTML={{ __html: criticalCss }} />
         <script
           dangerouslySetInnerHTML={{
             __html: `
