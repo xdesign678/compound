@@ -3,6 +3,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { renderMarkdown } from '@/lib/format';
 import { useAppStore } from '@/lib/store';
+import {
+  applyMarkdownSelectionEdit,
+  type MarkdownEditCommand,
+} from '@/lib/markdown-editor/selection';
 import DOMPurify from 'dompurify';
 
 const DRAFT_KEY_PREFIX = 'compound_note_draft_';
@@ -99,6 +103,39 @@ export function NoteEditor({ onDone, onCancel, disabled = false, draftId }: Note
     onCancel();
   }
 
+  function applyMarkdownCommand(command: MarkdownEditCommand) {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const result = applyMarkdownSelectionEdit({
+      value: body,
+      selectionStart: textarea.selectionStart,
+      selectionEnd: textarea.selectionEnd,
+      command,
+    });
+    setBody(result.value);
+    window.requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(result.selectionStart, result.selectionEnd);
+    });
+  }
+
+  const handleFormat = (command: MarkdownEditCommand) => (event: React.MouseEvent) => {
+    event.preventDefault();
+    applyMarkdownCommand(command);
+  };
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'b') {
+      event.preventDefault();
+      applyMarkdownCommand('bold');
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'i') {
+      event.preventDefault();
+      applyMarkdownCommand('italic');
+    }
+  }
+
   const fullMarkdown = title.trim() ? `# ${title.trim()}\n\n${body}` : body;
   const rendered = useMemo(
     () => (mode === 'preview' ? DOMPurify.sanitize(renderMarkdown(fullMarkdown || '')) : ''),
@@ -160,12 +197,30 @@ export function NoteEditor({ onDone, onCancel, disabled = false, draftId }: Note
               <span>*斜体*</span>
               <span>`代码`</span>
             </div>
+            <div className="note-editor-toolbar" role="toolbar" aria-label="Markdown 格式">
+              <button type="button" onMouseDown={handleFormat('bold')} aria-label="加粗">
+                <strong>B</strong>
+              </button>
+              <button type="button" onMouseDown={handleFormat('italic')} aria-label="斜体">
+                <em>I</em>
+              </button>
+              <button type="button" onMouseDown={handleFormat('heading')} aria-label="标题">
+                H
+              </button>
+              <button type="button" onMouseDown={handleFormat('list')} aria-label="列表">
+                ☰
+              </button>
+              <button type="button" onMouseDown={handleFormat('quote')} aria-label="引用">
+                ❞
+              </button>
+            </div>
             <textarea
               ref={textareaRef}
               className="note-editor-textarea"
               placeholder="开始记录…"
               value={body}
               onChange={(e) => setBody(e.target.value)}
+              onKeyDown={handleKeyDown}
               spellCheck={false}
             />
           </>

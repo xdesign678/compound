@@ -1,12 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { ensureSourceHydrated } from '@/lib/cloud-sync';
 import { updateSourceContent } from '@/lib/api-client';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime, renderMarkdown } from '@/lib/format';
+import {
+  applyMarkdownSelectionEdit,
+  type MarkdownEditCommand,
+} from '@/lib/markdown-editor/selection';
 
 interface SourceTocItem {
   id: string;
@@ -16,141 +20,6 @@ interface SourceTocItem {
 
 function normalizeText(text: string) {
   return text.replace(/\u00a0/g, ' ');
-}
-
-function serializeInlineChildren(node: ParentNode): string {
-  return Array.from(node.childNodes).map(serializeInlineNode).join('');
-}
-
-function serializeList(list: HTMLElement, depth = 0): string {
-  const ordered = list.tagName === 'OL';
-  return Array.from(list.children)
-    .filter((child): child is HTMLLIElement => child instanceof HTMLLIElement)
-    .map((item, index) => {
-      const marker = ordered ? `${index + 1}.` : '-';
-      const inlineParts: string[] = [];
-      const nestedParts: string[] = [];
-
-      Array.from(item.childNodes).forEach((child) => {
-        if (
-          child.nodeType === Node.ELEMENT_NODE &&
-          ['UL', 'OL'].includes((child as HTMLElement).tagName)
-        ) {
-          nestedParts.push(serializeList(child as HTMLElement, depth + 1).trimEnd());
-          return;
-        }
-        inlineParts.push(serializeInlineNode(child));
-      });
-
-      const body = inlineParts.join('').trim();
-      const line = `${'  '.repeat(depth)}${marker} ${body}`.trimEnd();
-      return nestedParts.length > 0 ? [line, ...nestedParts].join('\n') : line;
-    })
-    .join('\n');
-}
-
-function serializeBlockNode(node: ChildNode): string {
-  if (node.nodeType === Node.TEXT_NODE) {
-    const text = normalizeText(node.textContent || '').trim();
-    return text ? `${text}\n\n` : '';
-  }
-
-  if (node.nodeType !== Node.ELEMENT_NODE) return '';
-
-  const element = node as HTMLElement;
-  const tag = element.tagName;
-
-  if (tag === 'BR') return '\n';
-  if (tag === 'HR') return '---\n\n';
-  if (tag === 'UL' || tag === 'OL') return `${serializeList(element)}\n\n`;
-  if (tag === 'PRE') {
-    const code = (element.textContent || '').replace(/\n+$/, '');
-    return code ? `\`\`\`\n${code}\n\`\`\`\n\n` : '';
-  }
-  if (/^H[1-4]$/.test(tag)) {
-    const level = Number(tag[1]);
-    const text = serializeInlineChildren(element).trim();
-    return text ? `${'#'.repeat(level)} ${text}\n\n` : '';
-  }
-  if (tag === 'BLOCKQUOTE') {
-    const inner = Array.from(element.childNodes)
-      .map(serializeBlockNode)
-      .join('')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-    if (!inner) return '';
-    return `${inner
-      .split('\n')
-      .map((line) => (line ? `> ${line}` : '>'))
-      .join('\n')}\n\n`;
-  }
-  if (tag === 'DIV') {
-    if (element.childElementCount === 0) {
-      const text = serializeInlineChildren(element).trim();
-      return text ? `${text}\n\n` : '';
-    }
-    return Array.from(element.childNodes).map(serializeBlockNode).join('');
-  }
-
-  const text = serializeInlineChildren(element).trim();
-  return text ? `${text}\n\n` : '';
-}
-
-function serializeInlineNode(node: ChildNode): string {
-  if (node.nodeType === Node.TEXT_NODE) {
-    return normalizeText(node.textContent || '');
-  }
-
-  if (node.nodeType !== Node.ELEMENT_NODE) return '';
-
-  const element = node as HTMLElement;
-  const tag = element.tagName;
-
-  if (tag === 'BR') return '\n';
-  if (tag === 'STRONG' || tag === 'B') return `**${serializeInlineChildren(element)}**`;
-  if (tag === 'EM' || tag === 'I') return `*${serializeInlineChildren(element)}*`;
-  if (tag === 'DEL' || tag === 'S' || tag === 'STRIKE')
-    return `~~${serializeInlineChildren(element)}~~`;
-  if (tag === 'CODE') return `\`${normalizeText(element.textContent || '')}\``;
-
-  if (tag === 'A') {
-    const href = element.getAttribute('href') || '';
-    const text = serializeInlineChildren(element).trim() || href;
-    return href ? `[${text}](${href})` : text;
-  }
-
-  if (tag === 'SPAN') {
-    const conceptId = element.dataset.conceptId;
-    if (conceptId) {
-      return `[${normalizeText(element.textContent || '').trim()}](concept:${conceptId})`;
-    }
-    const citationIndex = element.dataset.citationIndex;
-    if (citationIndex) {
-      return `[C${citationIndex}]`;
-    }
-  }
-
-  if (['P', 'DIV', 'LI', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE'].includes(tag)) {
-    return serializeInlineChildren(element);
-  }
-
-  return serializeInlineChildren(element);
-}
-
-function htmlToMarkdown(html: string): string {
-  if (typeof window === 'undefined') return html.trim();
-
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
-  const root = doc.body.firstElementChild;
-  if (!root) return '';
-
-  return Array.from(root.childNodes)
-    .map(serializeBlockNode)
-    .join('')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
 }
 
 function formatSourceHost(url: string): string {
@@ -202,8 +71,8 @@ function collectSourceToc(root: HTMLElement): SourceTocItem[] {
 
 export function SourceDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
-  const editorRef = useRef<HTMLDivElement>(null);
-  const renderedContentRef = useRef<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
   const tocCloseTimerRef = useRef<number | null>(null);
   const [draftContent, setDraftContent] = useState('');
   const [isDirty, setIsDirty] = useState(false);
@@ -211,11 +80,6 @@ export function SourceDetail({ id }: { id: string }) {
   const [tocOpen, setTocOpen] = useState(false);
   const [tocVisible, setTocVisible] = useState(false);
   const [tocItems, setTocItems] = useState<SourceTocItem[]>([]);
-  const [bubble, setBubble] = useState<{
-    visible: boolean;
-    top: number;
-    left: number;
-  }>({ visible: false, top: 0, left: 0 });
 
   const source = useLiveQuery(async () => getDb().sources.get(id), [id]);
   const generated = useLiveQuery(
@@ -245,8 +109,8 @@ export function SourceDetail({ id }: { id: string }) {
   }, [id, source]);
 
   const refreshToc = useCallback(() => {
-    const editor = editorRef.current;
-    setTocItems(editor ? collectSourceToc(editor) : []);
+    const preview = previewRef.current;
+    setTocItems(preview ? collectSourceToc(preview) : []);
   }, []);
 
   const openToc = useCallback(() => {
@@ -278,7 +142,6 @@ export function SourceDetail({ id }: { id: string }) {
     setSaveStatus('idle');
     closeToc();
     setTocItems([]);
-    renderedContentRef.current = null;
   }, [closeToc, id]);
 
   useEffect(() => {
@@ -287,54 +150,65 @@ export function SourceDetail({ id }: { id: string }) {
   }, [hasFullContent, isDirty, source]);
 
   useEffect(() => {
-    if (!editorRef.current || !source || !hasFullContent || isDirty) return;
-    const nextMarkdown = source.rawContent;
-    if (renderedContentRef.current === nextMarkdown) return;
-    editorRef.current.innerHTML = markLeadingTitleEcho(renderMarkdown(nextMarkdown), source.title);
-    renderedContentRef.current = nextMarkdown;
-    refreshToc();
-  }, [hasFullContent, isDirty, refreshToc, source]);
-
-  useEffect(() => {
     if (saveStatus !== 'saved') return;
     const timer = window.setTimeout(() => setSaveStatus('idle'), 2200);
     return () => window.clearTimeout(timer);
   }, [saveStatus]);
 
-  const syncDraftFromEditor = useCallback(() => {
-    const html = editorRef.current?.innerHTML ?? '';
-    const nextMarkdown = htmlToMarkdown(html);
-    setDraftContent(nextMarkdown);
-    setIsDirty(nextMarkdown !== (source?.rawContent ?? ''));
-    renderedContentRef.current = nextMarkdown;
-    setSaveStatus((current) => (current === 'idle' ? current : 'idle'));
-    refreshToc();
-  }, [refreshToc, source?.rawContent]);
-
-  const applyRichCommand = useCallback(
-    (command: string, value?: string) => {
-      if (!editorRef.current) return;
-      editorRef.current.focus();
-      document.execCommand(command, false, value);
-      syncDraftFromEditor();
+  const updateDraftContent = useCallback(
+    (nextMarkdown: string) => {
+      setDraftContent(nextMarkdown);
+      setIsDirty(nextMarkdown !== (source?.rawContent ?? ''));
+      setSaveStatus((current) => (current === 'idle' ? current : 'idle'));
     },
-    [syncDraftFromEditor],
+    [source?.rawContent],
   );
+
+  const handleDraftChange = useCallback(
+    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const nextMarkdown = event.target.value;
+      updateDraftContent(nextMarkdown);
+      window.requestAnimationFrame(refreshToc);
+    },
+    [refreshToc, updateDraftContent],
+  );
+
+  const applyMarkdownCommand = useCallback(
+    (command: MarkdownEditCommand) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const result = applyMarkdownSelectionEdit({
+        value: draftContent,
+        selectionStart: textarea.selectionStart,
+        selectionEnd: textarea.selectionEnd,
+        command,
+      });
+      updateDraftContent(result.value);
+      window.requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(result.selectionStart, result.selectionEnd);
+        refreshToc();
+      });
+    },
+    [draftContent, refreshToc, updateDraftContent],
+  );
+
+  const previewHtml = useMemo(() => {
+    if (!source) return '';
+    return markLeadingTitleEcho(renderMarkdown(draftContent), source.title);
+  }, [draftContent, source]);
+
+  useEffect(() => {
+    refreshToc();
+  }, [previewHtml, refreshToc]);
 
   const handleResetDraft = useCallback(() => {
     const originalContent = source?.rawContent ?? '';
-    if (editorRef.current) {
-      editorRef.current.innerHTML = markLeadingTitleEcho(
-        renderMarkdown(originalContent),
-        source?.title ?? '',
-      );
-    }
-    renderedContentRef.current = originalContent;
-    setDraftContent(originalContent);
+    updateDraftContent(originalContent);
     setIsDirty(false);
     setSaveStatus('idle');
     window.requestAnimationFrame(refreshToc);
-  }, [refreshToc, source?.rawContent, source?.title]);
+  }, [refreshToc, source?.rawContent, updateDraftContent]);
 
   const canEdit = hasFullContent;
   const canSave = canEdit && isDirty && saveStatus !== 'saving';
@@ -348,7 +222,6 @@ export function SourceDetail({ id }: { id: string }) {
         title: source?.title,
         rawContent: draftContent,
       });
-      renderedContentRef.current = draftContent;
       setIsDirty(false);
       setSaveStatus('saved');
     } catch (err) {
@@ -356,6 +229,11 @@ export function SourceDetail({ id }: { id: string }) {
       setSaveStatus('error');
     }
   }, [canEdit, draftContent, id, isDirty, saveStatus, source?.title]);
+
+  const handleTextareaBlur = useCallback(() => {
+    if (!isDirty) return;
+    void handleSave();
+  }, [handleSave, isDirty]);
 
   useEffect(() => {
     if (!canEdit || !isDirty || saveStatus === 'saving') return;
@@ -371,47 +249,21 @@ export function SourceDetail({ id }: { id: string }) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
         void handleSave();
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'b') {
+        event.preventDefault();
+        applyMarkdownCommand('bold');
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'i') {
+        event.preventDefault();
+        applyMarkdownCommand('italic');
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [canEdit, handleSave]);
-
-  // 选区气泡：仅在编辑器内、非空选区时出现
-  useEffect(() => {
-    if (!canEdit) return;
-    const updateBubble = () => {
-      const selection = window.getSelection();
-      const editor = editorRef.current;
-      if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !editor) {
-        setBubble((prev) => (prev.visible ? { ...prev, visible: false } : prev));
-        return;
-      }
-      const range = selection.getRangeAt(0);
-      if (!editor.contains(range.commonAncestorContainer)) {
-        setBubble((prev) => (prev.visible ? { ...prev, visible: false } : prev));
-        return;
-      }
-      const rect = range.getBoundingClientRect();
-      if (!rect || (rect.width === 0 && rect.height === 0)) {
-        setBubble((prev) => (prev.visible ? { ...prev, visible: false } : prev));
-        return;
-      }
-      setBubble({
-        visible: true,
-        top: rect.top - 8,
-        left: rect.left + rect.width / 2,
-      });
-    };
-    document.addEventListener('selectionchange', updateBubble);
-    window.addEventListener('scroll', updateBubble, true);
-    window.addEventListener('resize', updateBubble);
-    return () => {
-      document.removeEventListener('selectionchange', updateBubble);
-      window.removeEventListener('scroll', updateBubble, true);
-      window.removeEventListener('resize', updateBubble);
-    };
-  }, [canEdit]);
+  }, [applyMarkdownCommand, canEdit, handleSave]);
 
   useEffect(() => {
     if (!tocOpen) return;
@@ -435,7 +287,7 @@ export function SourceDetail({ id }: { id: string }) {
   const handleTocJump = useCallback(
     (headingId: string) => {
       const target = Array.from(
-        editorRef.current?.querySelectorAll<HTMLElement>('h1, h2, h3, h4') ?? [],
+        previewRef.current?.querySelectorAll<HTMLElement>('h1, h2, h3, h4') ?? [],
       ).find((heading) => heading.id === headingId);
       closeToc();
       window.setTimeout(() => {
@@ -454,9 +306,9 @@ export function SourceDetail({ id }: { id: string }) {
   const readingMinutes = wordCount > 0 ? Math.max(1, Math.round(wordCount / 400)) : 0;
   const sourceHost = source.url ? formatSourceHost(source.url) : null;
 
-  const handleFormat = (command: string, value?: string) => (event: React.MouseEvent) => {
+  const handleFormat = (command: MarkdownEditCommand) => (event: React.MouseEvent) => {
     event.preventDefault();
-    applyRichCommand(command, value);
+    applyMarkdownCommand(command);
   };
 
   return (
@@ -526,18 +378,66 @@ export function SourceDetail({ id }: { id: string }) {
           <div className="empty-state empty-state-compact">原文加载中...</div>
         ) : (
           <div className="source-editor-shell">
+            <div className="source-editor-toolbar" role="toolbar" aria-label="Markdown 格式">
+              <button
+                type="button"
+                className="source-editor-toolbar-btn"
+                onMouseDown={handleFormat('bold')}
+                aria-label="加粗"
+              >
+                <strong>B</strong>
+              </button>
+              <button
+                type="button"
+                className="source-editor-toolbar-btn"
+                onMouseDown={handleFormat('italic')}
+                aria-label="斜体"
+              >
+                <em>I</em>
+              </button>
+              <span className="source-editor-toolbar-divider" aria-hidden="true" />
+              <button
+                type="button"
+                className="source-editor-toolbar-btn"
+                onMouseDown={handleFormat('heading')}
+                aria-label="标题"
+              >
+                H
+              </button>
+              <button
+                type="button"
+                className="source-editor-toolbar-btn"
+                onMouseDown={handleFormat('list')}
+                aria-label="列表"
+              >
+                ☰
+              </button>
+              <button
+                type="button"
+                className="source-editor-toolbar-btn"
+                onMouseDown={handleFormat('quote')}
+                aria-label="引用"
+              >
+                ❞
+              </button>
+            </div>
+
+            <textarea
+              ref={textareaRef}
+              className="source-editor-textarea"
+              value={draftContent}
+              onChange={handleDraftChange}
+              onBlur={handleTextareaBlur}
+              spellCheck={false}
+              aria-label="资料正文 Markdown 编辑器"
+              placeholder="直接用 Markdown 整理这份资料..."
+            />
+
             <div
-              ref={editorRef}
-              className="prose source-editor-content note-editor-content"
-              contentEditable={canEdit}
-              suppressContentEditableWarning
-              data-placeholder="直接在这里整理这份资料…"
-              onInput={syncDraftFromEditor}
-              onBlur={() => {
-                if (!isDirty) return;
-                void handleSave();
-              }}
-              aria-label="资料正文所见即所得编辑器"
+              ref={previewRef}
+              className="prose source-editor-content source-editor-preview"
+              dangerouslySetInnerHTML={{ __html: previewHtml }}
+              aria-label="资料正文预览"
             />
           </div>
         )}
@@ -587,61 +487,6 @@ export function SourceDetail({ id }: { id: string }) {
               )}
             </div>
           </div>
-        </div>
-      )}
-
-      {bubble.visible && (
-        <div
-          className="source-selection-bubble"
-          role="toolbar"
-          aria-label="文本格式"
-          style={{
-            top: `${bubble.top}px`,
-            left: `${bubble.left}px`,
-          }}
-          onMouseDown={(event) => event.preventDefault()}
-        >
-          <button
-            type="button"
-            className="source-selection-bubble-btn"
-            onMouseDown={handleFormat('bold')}
-            aria-label="加粗"
-          >
-            <strong>B</strong>
-          </button>
-          <button
-            type="button"
-            className="source-selection-bubble-btn"
-            onMouseDown={handleFormat('italic')}
-            aria-label="斜体"
-          >
-            <em>I</em>
-          </button>
-          <span className="source-selection-bubble-divider" aria-hidden="true" />
-          <button
-            type="button"
-            className="source-selection-bubble-btn"
-            onMouseDown={handleFormat('formatBlock', '<h2>')}
-            aria-label="标题"
-          >
-            H
-          </button>
-          <button
-            type="button"
-            className="source-selection-bubble-btn"
-            onMouseDown={handleFormat('insertUnorderedList')}
-            aria-label="列表"
-          >
-            ☰
-          </button>
-          <button
-            type="button"
-            className="source-selection-bubble-btn"
-            onMouseDown={handleFormat('formatBlock', '<blockquote>')}
-            aria-label="引用"
-          >
-            ❞
-          </button>
         </div>
       )}
 
