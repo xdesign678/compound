@@ -11,7 +11,12 @@ import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
 import { startWikiFromSelection } from '@/lib/api-client';
 import { rememberSelectionWikiRun } from '@/lib/selection-wiki-runs';
-import { computeSelectionPopoverPosition, type RectLike } from '@/lib/selection-popover-position';
+import {
+  computeSelectionPopoverPosition,
+  rectsToSelectionHighlights,
+  type RectLike,
+  type SelectionHighlightRect,
+} from '@/lib/selection-popover-position';
 import { getVisibleViewportBottom } from '@/lib/hooks/useSelectionPopover';
 import type { ConceptVersion } from '@/lib/types';
 import { SourceTypeIcon } from '../Icons';
@@ -30,6 +35,7 @@ type SelectionPopoverState = {
   top: number;
   left: number;
   text: string;
+  highlights: SelectionHighlightRect[];
 };
 
 // 中文用户常选 2-4 字的词语，阈值过高会让按钮"经常无法触发"。
@@ -87,11 +93,33 @@ function getFocusBoundaryRect(selection: Selection, shell: HTMLElement): RectLik
   return rect ? boundaryFromRect(rect, backward) : null;
 }
 
+function getRangeEndBoundaryRect(range: Range, shell: HTMLElement): RectLike | null {
+  const node = range.endContainer;
+  if (!node || !shell.contains(node) || node.nodeType !== Node.TEXT_NODE) return null;
+  const text = node.textContent ?? '';
+  const ownerDocument = node.ownerDocument;
+  if (!ownerDocument) return null;
+
+  const offset = Math.min(range.endOffset, text.length);
+  const start = Math.max(0, offset - 1);
+  if (start === offset) return null;
+
+  const probe = ownerDocument.createRange();
+  probe.setStart(node, start);
+  probe.setEnd(node, offset);
+  const rects = Array.from(probe.getClientRects()).filter(isUsefulRect);
+  const rect = rects[rects.length - 1];
+  return rect ? boundaryFromRect(rect, false) : null;
+}
+
 function getSelectionAnchorRect(
   selection: Selection,
   range: Range,
   shell: HTMLElement,
 ): RectLike | null {
+  const rangeEndRect = getRangeEndBoundaryRect(range, shell);
+  if (rangeEndRect) return rangeEndRect;
+
   const focusRect = getFocusBoundaryRect(selection, shell);
   if (focusRect) return focusRect;
 
@@ -125,6 +153,7 @@ export function ConceptDetail({ id }: { id: string }) {
     top: 0,
     left: 0,
     text: '',
+    highlights: [],
   });
   const [creatingFromSelection, setCreatingFromSelection] = useState(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -175,11 +204,13 @@ export function ConceptDetail({ id }: { id: string }) {
       error: null,
       versions: [],
     });
-    setSelectionPopover({ visible: false, top: 0, left: 0, text: '' });
+    setSelectionPopover({ visible: false, top: 0, left: 0, text: '', highlights: [] });
   }, [id]);
 
   const dismissSelectionPopover = useCallback(() => {
-    setSelectionPopover((state) => (state.visible ? { ...state, visible: false } : state));
+    setSelectionPopover((state) =>
+      state.visible ? { ...state, visible: false, highlights: [] } : state,
+    );
   }, []);
 
   useEffect(() => {
@@ -206,6 +237,7 @@ export function ConceptDetail({ id }: { id: string }) {
         dismissSelectionPopover();
         return;
       }
+      const highlightRects = rectsToSelectionHighlights(Array.from(range.getClientRects()));
       const anchorRect = getSelectionAnchorRect(sel, range, shell);
       if (!anchorRect) {
         dismissSelectionPopover();
@@ -226,6 +258,7 @@ export function ConceptDetail({ id }: { id: string }) {
         top,
         left,
         text,
+        highlights: highlightRects,
       });
     };
 
@@ -291,10 +324,10 @@ export function ConceptDetail({ id }: { id: string }) {
       });
       rememberSelectionWikiRun(run);
       if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
-      setSelectionPopover((state) => ({ ...state, visible: false }));
+      setSelectionPopover((state) => ({ ...state, visible: false, highlights: [] }));
       showToast('已开始后台创建 Wiki');
     } catch (err) {
-      setSelectionPopover((state) => ({ ...state, visible: false }));
+      setSelectionPopover((state) => ({ ...state, visible: false, highlights: [] }));
       const message = err instanceof Error ? err.message : '创建失败';
       showErrorToast(message.slice(0, 120), () => handleCreateFromSelection());
     } finally {
@@ -466,6 +499,25 @@ export function ConceptDetail({ id }: { id: string }) {
           </div>
         )}
       </div>
+
+      {selectionPopover.visible &&
+        selectionPopover.highlights.map((rect, index) => (
+          <div
+            key={`${rect.left}-${rect.top}-${index}`}
+            style={{
+              position: 'fixed',
+              zIndex: 55,
+              pointerEvents: 'none',
+              borderRadius: '2px',
+              background: 'color-mix(in srgb, var(--brand-clay) 34%, transparent)',
+              top: `${rect.top}px`,
+              left: `${rect.left}px`,
+              width: `${rect.width}px`,
+              height: `${rect.height}px`,
+            }}
+            aria-hidden="true"
+          />
+        ))}
 
       {(selectionPopover.visible || creatingFromSelection) && (
         <div

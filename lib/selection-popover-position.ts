@@ -7,6 +7,13 @@ export interface RectLike {
   height: number;
 }
 
+export interface SelectionHighlightRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 interface SizeLike {
   width: number;
   height: number;
@@ -46,6 +53,17 @@ export function computeSelectionPopoverPosition({
   const centered = anchorRect.left + anchorWidth / 2 - popover.width / 2;
   const maxLeft = viewport.width - popover.width - edgePadding;
   return { top, left: clamp(Math.round(centered), edgePadding, maxLeft) };
+}
+
+export function rectsToSelectionHighlights(rects: RectLike[]): SelectionHighlightRect[] {
+  return rects
+    .filter((rect) => rect.width > 0 && rect.height > 0)
+    .map((rect) => ({
+      left: Math.round(rect.left),
+      top: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    }));
 }
 
 function clamp(value: number, min: number, max: number): number {

@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { computeSelectionPopoverPosition } from './selection-popover-position';
+import {
+  computeSelectionPopoverPosition,
+  rectsToSelectionHighlights,
+} from './selection-popover-position';
 
 test('selection popover prefers the actual text anchor instead of the justified line edge', () => {
   const position = computeSelectionPopoverPosition({
@@ -38,4 +41,34 @@ test('selection popover flips to the left when the right side would overflow', (
 
   assert.equal(position.left, 1458);
   assert.equal(position.top, 98);
+});
+
+test('selection highlights preserve the visible selected text state', () => {
+  const highlights = rectsToSelectionHighlights([
+    {
+      left: 73.4,
+      right: 321.2,
+      top: 16.2,
+      bottom: 64.8,
+      width: 247.8,
+      height: 48.6,
+    },
+    {
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
+      width: 0,
+      height: 0,
+    },
+  ]);
+
+  assert.deepEqual(highlights, [
+    {
+      left: 73,
+      top: 16,
+      width: 248,
+      height: 49,
+    },
+  ]);
 });
