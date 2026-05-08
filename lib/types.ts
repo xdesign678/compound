@@ -202,6 +202,8 @@ export interface QueryRequest {
 export interface QueryResponse {
   answer: string;
   citedConceptIds: string[];
+  citedConcepts?: Array<{ id: string; title: string }>;
+  retrievedConcepts?: Array<{ id: string; title: string }>;
   archivable: boolean;
   faithfulness?: {
     score: number;
@@ -222,6 +224,9 @@ export interface QueryResponse {
    * configured, retrieval is BM25 + graph only. Surfaced in health probe.
    */
   retrievalMode?: 'remote-emb' | 'fts-only' | 'local-hash';
+  rerankUsed?: 'llm' | 'fallback';
+  rerankReason?: string;
+  stageDurations?: Partial<Record<AskStageKey, number>>;
 }
 
 export interface LintRequest {

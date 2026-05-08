@@ -94,6 +94,8 @@ test('aggregate excludes errored items from averages', () => {
       hitSkipped: false,
       keywordSkipped: false,
       latencyMs: 1000,
+      totalLatencyMs: 1000,
+      citedConceptIds: ['c-1'],
     },
     {
       id: 'b',
@@ -106,6 +108,8 @@ test('aggregate excludes errored items from averages', () => {
       hitSkipped: false,
       keywordSkipped: false,
       latencyMs: 0,
+      totalLatencyMs: 0,
+      citedConceptIds: [],
       error: 'boom',
     },
   ];

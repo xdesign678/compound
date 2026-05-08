@@ -58,6 +58,14 @@ export interface QueryContext {
   evidence: ConceptEvidence[];
 }
 
+export interface QueryContextPromptBudget {
+  conceptBodyChars?: number;
+  evidenceLimit?: number;
+  evidenceQuoteChars?: number;
+  chunkLimit?: number;
+  chunkChars?: number;
+}
+
 export interface OrphanIntegrityCount {
   count: number;
   examples: string[];
@@ -1040,27 +1048,36 @@ export const wikiRepo = {
   },
 };
 
-export function formatQueryContextForPrompt(context: QueryContext): string {
+export function formatQueryContextForPrompt(
+  context: QueryContext,
+  budget: QueryContextPromptBudget = {},
+): string {
+  const conceptBodyChars = budget.conceptBodyChars ?? 1200;
+  const evidenceLimit = budget.evidenceLimit ?? 16;
+  const evidenceQuoteChars = budget.evidenceQuoteChars ?? 360;
+  const chunkLimit = budget.chunkLimit ?? 8;
+  const chunkChars = budget.chunkChars ?? 700;
+
   const concepts = context.concepts
     .map((concept) => {
-      const body = (concept.body || '').slice(0, 1200);
+      const body = (concept.body || '').slice(0, conceptBodyChars);
       return `## [${concept.id}] ${concept.title}\n_${concept.summary}_\n\n${body}`;
     })
     .join('\n\n---\n\n');
 
   const evidence = context.evidence
-    .slice(0, 16)
+    .slice(0, evidenceLimit)
     .map((item, index) => {
-      const quote = item.quote ? `\n摘录：${item.quote.slice(0, 360)}` : '';
+      const quote = item.quote ? `\n摘录：${item.quote.slice(0, evidenceQuoteChars)}` : '';
       return `${index + 1}. concept=${item.conceptId} source=${item.sourceId} kind=${item.kind}\n主张：${item.claim}${quote}`;
     })
     .join('\n\n');
 
   const chunks = context.chunks
-    .slice(0, 8)
+    .slice(0, chunkLimit)
     .map(
       (chunk, index) =>
-        `${index + 1}. source=${chunk.sourceId} chunk=${chunk.id} heading=${chunk.heading}\n${chunk.content.slice(0, 700)}`,
+        `${index + 1}. source=${chunk.sourceId} chunk=${chunk.id} heading=${chunk.heading}\n${chunk.content.slice(0, chunkChars)}`,
     )
     .join('\n\n');
 

@@ -19,6 +19,7 @@
  *   --golden PATH          (default: eval/golden-set.json)
  *   --update-baseline      Save current run as the new baseline
  *   --concurrency N        (default: 1 — be gentle on the LLM)
+ *   --timeout-ms N         Per-item timeout (default: 60000)
  *   --filter CATEGORY      Only run items whose category matches
  *   --verbose              Dump per-item answer to stdout
  *
@@ -35,10 +36,15 @@ import { spawnSync } from 'node:child_process';
 const root = process.cwd();
 const args = parseArgs(process.argv.slice(2));
 
-const baseUrl = (args['base-url'] || process.env.COMPOUND_EVAL_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
+const baseUrl = (
+  args['base-url'] ||
+  process.env.COMPOUND_EVAL_BASE_URL ||
+  'http://localhost:8080'
+).replace(/\/$/, '');
 const adminToken = args.token || process.env.COMPOUND_ADMIN_TOKEN || '';
 const goldenPath = path.resolve(root, args.golden || 'eval/golden-set.json');
 const concurrency = Math.max(1, Number(args.concurrency || 1));
+const timeoutMs = Math.max(1_000, Number(args['timeout-ms'] || 60_000));
 const filter = args.filter || null;
 const verbose = Boolean(args.verbose);
 const updateBaseline = Boolean(args['update-baseline']);
@@ -58,6 +64,7 @@ if (items.length === 0) {
 }
 
 console.log(`[eval] running ${items.length} item(s) against ${baseUrl}`);
+console.log(`[eval] per-item timeout ${timeoutMs}ms`);
 
 // Compile lib/eval/metrics.ts once so the runner can import the pure scoring fns.
 const cacheDir = path.join(root, 'node_modules', '.cache', 'compound-eval');
@@ -69,12 +76,18 @@ const tsc = spawnSync(
   npxBin,
   [
     'tsc',
-    '--outDir', cacheDir,
-    '--rootDir', '.',
-    '--module', 'commonjs',
-    '--moduleResolution', 'node',
-    '--target', 'es2022',
-    '--lib', 'es2022,dom',
+    '--outDir',
+    cacheDir,
+    '--rootDir',
+    '.',
+    '--module',
+    'commonjs',
+    '--moduleResolution',
+    'node',
+    '--target',
+    'es2022',
+    '--lib',
+    'es2022,dom',
     '--esModuleInterop',
     '--skipLibCheck',
     'lib/eval/metrics.ts',
@@ -86,9 +99,7 @@ if (tsc.status !== 0) {
   process.exit(1);
 }
 
-const metricsModule = await import(
-  path.join(cacheDir, 'lib', 'eval', 'metrics.js')
-);
+const metricsModule = await import(path.join(cacheDir, 'lib', 'eval', 'metrics.js'));
 const { scoreItem, aggregate, diffAggregates } = metricsModule;
 
 const scores = [];
@@ -125,9 +136,7 @@ console.log(`\n[eval] wrote ${path.relative(root, latestPath)}`);
 console.log(`[eval] wrote ${path.relative(root, latestMarkdownPath)}`);
 
 let exitCode = 0;
-const baseline = existsSync(baselinePath)
-  ? JSON.parse(readFileSync(baselinePath, 'utf8'))
-  : null;
+const baseline = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : null;
 
 printSummary(agg, items.length, scores);
 
@@ -155,6 +164,10 @@ process.exit(exitCode);
 
 async function runOne(item) {
   const started = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(new DOMException(`eval item exceeded ${timeoutMs}ms`, 'TimeoutError'));
+  }, timeoutMs);
   try {
     const res = await fetch(`${baseUrl}/api/query`, {
       method: 'POST',
@@ -167,56 +180,95 @@ async function runOne(item) {
         concepts: [],
         conversationHistory: item.history || [],
       }),
+      signal: controller.signal,
     });
     const latencyMs = Date.now() - started;
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      return scoreItem(item, {
-        question: item.question,
-        citedConceptIds: [],
-        answer: '',
-        latencyMs,
-        error: `HTTP ${res.status}: ${text.slice(0, 200)}`,
-      }, []);
+      let parsed = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        // keep plain-text error body below
+      }
+      return scoreItem(
+        item,
+        {
+          question: item.question,
+          citedConceptIds: [],
+          answer: '',
+          latencyMs,
+          totalLatencyMs: latencyMs,
+          errorType: parsed?.errorType || `http_${res.status}`,
+          stageDurations: parsed?.stageDurations,
+          error: `HTTP ${res.status}: ${String(parsed?.error || text).slice(0, 200)}`,
+        },
+        [],
+      );
     }
     const data = await res.json();
     const cited = Array.isArray(data.citedConceptIds) ? data.citedConceptIds : [];
-    // We don't have stable titles from /api/query; matching is id-only.
-    // Title-based expectations need the user to fetch concept titles
-    // separately — pass empty titles and rely on id matching.
-    const candidates = cited.map((id) => ({ id, title: '' }));
+    const retrievedConcepts = normalizeConceptList(data.retrievedConcepts);
+    const citedConcepts = normalizeConceptList(data.citedConcepts);
+    const candidates =
+      retrievedConcepts.length > 0
+        ? retrievedConcepts
+        : citedConcepts.length > 0
+          ? citedConcepts
+          : cited.map((id) => ({ id, title: '' }));
     const result = {
       question: item.question,
       citedConceptIds: cited,
-      retrievedConceptIds: cited,
+      retrievedConceptIds: candidates.map((concept) => concept.id),
       answer: typeof data.answer === 'string' ? data.answer : '',
       latencyMs,
+      totalLatencyMs: latencyMs,
       retrievalMode: data.retrievalMode,
       rewrittenQuestion: data.rewrittenQuestion,
+      stageDurations: data.stageDurations,
+      errorType: data.errorType,
+      rerankUsed: data.rerankUsed,
+      rerankReason: data.rerankReason,
     };
     if (verbose) {
       console.log(`\n--- ${item.id} ---\nQ: ${item.question}\nA: ${result.answer.slice(0, 600)}\n`);
     }
-    // Title-based hit needs concept titles; fetch them best-effort. The
-    // server doesn't return them, so we approximate by treating
-    // expectedConceptTitles as keywords against the answer for now.
-    const augmented = { ...item };
-    if (item.expectedConceptTitles && item.expectedConceptTitles.length > 0) {
-      augmented.expectedKeywords = [
-        ...(item.expectedKeywords || []),
-        ...item.expectedConceptTitles,
-      ];
-    }
-    return scoreItem(augmented, result, candidates);
+    return scoreItem(item, result, candidates);
   } catch (error) {
-    return scoreItem(item, {
-      question: item.question,
-      citedConceptIds: [],
-      answer: '',
-      latencyMs: Date.now() - started,
-      error: error instanceof Error ? error.message : String(error),
-    }, []);
+    const latencyMs = Date.now() - started;
+    const errorType = isTimeoutError(error) ? 'timeout' : 'network';
+    return scoreItem(
+      item,
+      {
+        question: item.question,
+        citedConceptIds: [],
+        answer: '',
+        latencyMs,
+        totalLatencyMs: latencyMs,
+        errorType,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      [],
+    );
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+function normalizeConceptList(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => ({
+      id: typeof item?.id === 'string' ? item.id : '',
+      title: typeof item?.title === 'string' ? item.title : '',
+    }))
+    .filter((item) => item.id);
+}
+
+function isTimeoutError(error) {
+  if (!(error instanceof Error)) return false;
+  const text = `${error.name}|${error.message}`.toLowerCase();
+  return text.includes('timeout') || text.includes('aborted');
 }
 
 function printOneLine(score) {
@@ -225,9 +277,18 @@ function printOneLine(score) {
   const kw = score.keywordSkipped ? '  -' : `${(score.keywordRecall * 100).toFixed(0)}%`;
   const tag = score.category ? `[${score.category}]` : '';
   const err = score.error ? ` :: ${score.error.slice(0, 120)}` : '';
+  const stages = formatStageDurations(score.stageDurations);
   console.log(
-    `[${status}] ${score.id.padEnd(20)} ${tag.padEnd(14)} hit@8=${hit} kw=${kw.padStart(4)}  ${score.latencyMs}ms${err}`,
+    `[${status}] ${score.id.padEnd(20)} ${tag.padEnd(14)} hit@8=${hit} kw=${kw.padStart(4)}  ${score.latencyMs}ms ${stages}${err}`,
   );
+}
+
+function formatStageDurations(stageDurations) {
+  if (!stageDurations || typeof stageDurations !== 'object') return '';
+  const parts = ['rewrite', 'retrieve', 'graph', 'rerank', 'synthesize']
+    .filter((key) => Number.isFinite(stageDurations[key]))
+    .map((key) => `${key}=${Math.round(stageDurations[key])}ms`);
+  return parts.length > 0 ? `[${parts.join(' ')}]` : '';
 }
 
 function printSummary(agg, total, scores) {
@@ -291,15 +352,15 @@ function renderMarkdownSummary(latest, scores) {
     `| avg latency | ${Math.round(agg.latency.avg)} ms |`,
     `| p95 latency | ${Math.round(agg.latency.p95)} ms |`,
     '',
-    '| ID | Category | hit@8 | keyword recall | latency | error |',
-    '| --- | --- | ---: | ---: | ---: | --- |',
+    '| ID | Category | hit@8 | keyword recall | latency | retrieval | rerank | stages | cited ids | error type | error |',
+    '| --- | --- | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |',
   ];
 
   for (const score of scores) {
     lines.push(
       `| ${score.id} | ${score.category || ''} | ${score.hitSkipped ? '-' : score.hitAt8 ? '1' : '0'} | ${
         score.keywordSkipped ? '-' : fmt(score.keywordRecall)
-      } | ${score.latencyMs} ms | ${score.error ? score.error.replace(/\|/g, '/') : ''} |`,
+      } | ${score.latencyMs} ms | ${score.retrievalMode || ''} | ${[score.rerankUsed, score.rerankReason].filter(Boolean).join(' / ')} | ${formatStageDurations(score.stageDurations).replace(/\|/g, '/')} | ${(score.citedConceptIds || []).join(', ')} | ${score.errorType || ''} | ${score.error ? score.error.replace(/\|/g, '/') : ''} |`,
     );
   }
 

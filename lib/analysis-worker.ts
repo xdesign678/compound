@@ -1007,7 +1007,7 @@ export function startAnalysisWorker(reason = 'manual'): StartAnalysisWorkerResul
     stage: 'llm',
     message: `分析 worker 启动：${reason}（worker #${activeWorkerCount} · 队列 ${queued}）`,
   });
-  void (async () => {
+  const workerPromise = (async () => {
     try {
       for (let i = 0; i < WORKER_MAX_LOOPS; i += 1) {
         const result = await runAnalysisWorkerOnce();
@@ -1018,6 +1018,10 @@ export function startAnalysisWorker(reason = 'manual'): StartAnalysisWorkerResul
       syncObs.recordEvent({ stage: 'llm', level: 'success', message: '分析 worker 空闲' });
     }
   })();
+  const g = globalThis as unknown as { __activeAnalysisWorkerPromises?: Set<Promise<void>> };
+  g.__activeAnalysisWorkerPromises ??= new Set();
+  g.__activeAnalysisWorkerPromises.add(workerPromise);
+  void workerPromise.finally(() => g.__activeAnalysisWorkerPromises?.delete(workerPromise));
 
   return {
     started: true,

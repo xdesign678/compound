@@ -45,10 +45,20 @@ export interface QueryRunResult {
   answer: string;
   /** Wall-clock latency in ms. */
   latencyMs: number;
+  /** Same wall-clock total, named explicitly for JSON/Markdown reports. */
+  totalLatencyMs?: number;
   /** Whatever the server returned for retrieval mode. */
   retrievalMode?: string;
+  /** Stage timings returned by /api/query. */
+  stageDurations?: Partial<Record<string, number>>;
+  /** Rerank mode surfaced by /api/query. */
+  rerankUsed?: string;
+  /** Rerank decision reason surfaced by /api/query. */
+  rerankReason?: string;
   /** Optional rewritten query the server logged. */
   rewrittenQuestion?: string;
+  /** Machine-friendly error type for grouping failures. */
+  errorType?: string;
   /** Set when the server returned a non-2xx or threw. */
   error?: string;
 }
@@ -74,7 +84,13 @@ export interface ItemScore {
   /** True when no expected keywords were configured. */
   keywordSkipped: boolean;
   latencyMs: number;
+  totalLatencyMs: number;
   retrievalMode?: string;
+  stageDurations?: Partial<Record<string, number>>;
+  citedConceptIds: string[];
+  errorType?: string;
+  rerankUsed?: string;
+  rerankReason?: string;
   error?: string;
 }
 
@@ -157,7 +173,13 @@ export function scoreItem(
     hitSkipped: !hasIdExpectations,
     keywordSkipped: expectedKeywords.length === 0,
     latencyMs: result.latencyMs,
+    totalLatencyMs: result.totalLatencyMs ?? result.latencyMs,
     retrievalMode: result.retrievalMode,
+    stageDurations: result.stageDurations,
+    citedConceptIds: result.citedConceptIds,
+    errorType: result.errorType,
+    rerankUsed: result.rerankUsed,
+    rerankReason: result.rerankReason,
     error: result.error,
   };
 }

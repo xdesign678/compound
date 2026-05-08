@@ -19,6 +19,13 @@ import { rewriteQuery } from '@/lib/retrieval/query-rewrite';
 import { reciprocalRankFusion } from '@/lib/retrieval/rrf';
 import { graphExpand } from '@/lib/retrieval/graph-expand';
 import { llmRerank, type RerankCandidate } from '@/lib/retrieval/llm-rerank';
+import {
+  decideRerank,
+  getRerankCandidateLimit,
+  limitRerankCandidates,
+  type RerankDecisionReason,
+} from '@/lib/retrieval/query-planning';
+import { classifyQueryError, publicQueryErrorMessage } from '@/lib/retrieval/query-errors';
 import { checkFaithfulness } from '@/lib/retrieval/faithfulness';
 import { repo } from '@/lib/server-db';
 import type { Concept, QueryRequest, QueryResponse, LlmConfig } from '@/lib/types';
@@ -32,14 +39,10 @@ const MAX_QUESTION_CHARS = 2_000;
 const MAX_HISTORY_MESSAGES = 6;
 const RECALL_TOP_K = Math.max(10, Number(process.env.COMPOUND_RECALL_TOP_K || 30));
 const FINAL_TOP_K = Math.max(3, Number(process.env.COMPOUND_FINAL_TOP_K || 8));
-
-function publicQueryErrorMessage(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err);
-  return raw
-    .replace(/sk-[A-Za-z0-9_-]{12,}/g, 'sk-...[redacted]')
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{12,}/gi, 'Bearer [redacted]')
-    .slice(0, 300);
-}
+const SYNTHESIS_MAX_TOKENS = Math.max(
+  900,
+  Number(process.env.COMPOUND_QUERY_SYNTHESIS_MAX_TOKENS || 1600),
+);
 
 function conceptFromRequest(c: QueryRequest['concepts'][number]): Concept {
   const now = Date.now();
@@ -147,6 +150,7 @@ interface RetrievalResult {
   rewriteUsed: 'llm' | 'pass-through' | 'fallback';
   retrievalMode: 'remote-emb' | 'local-hash' | 'fts-only';
   rerankUsed: 'llm' | 'fallback';
+  rerankReason: RerankDecisionReason;
   finalContext: QueryContext;
 }
 
@@ -162,6 +166,18 @@ export interface StageEvent {
 
 type StageEmitter = (event: StageEvent) => void;
 type StageDurationSnapshot = Partial<StageDurations>;
+
+interface RetrievedConceptSummary {
+  id: string;
+  title: string;
+}
+
+function summarizeConcepts(concepts: Concept[]): RetrievedConceptSummary[] {
+  return concepts.map((concept) => ({
+    id: concept.id,
+    title: concept.title,
+  }));
+}
 
 const STAGE_KEYS: StageEventKey[] = ['rewrite', 'retrieve', 'graph', 'rerank', 'synthesize'];
 
@@ -296,12 +312,24 @@ async function runRetrievalPipeline(opts: {
   const candidates = buildRerankCandidates({ concepts, graphConceptIds, chunks });
 
   // Step 6: LLM rerank to FINAL_TOP_K
-  const rerank = await llmRerank({
-    query: effectiveQuery,
-    candidates,
-    topK: FINAL_TOP_K,
-    llmConfig: opts.llmConfig,
+  const candidateLimit = getRerankCandidateLimit(FINAL_TOP_K);
+  const limitedCandidates = limitRerankCandidates(candidates, candidateLimit);
+  const rerankDecision = decideRerank({
+    candidateCount: limitedCandidates.length,
+    finalTopK: FINAL_TOP_K,
+    retrievalMode,
   });
+  const rerank = rerankDecision.useLlm
+    ? await llmRerank({
+        query: effectiveQuery,
+        candidates: limitedCandidates,
+        topK: FINAL_TOP_K,
+        llmConfig: opts.llmConfig,
+      })
+    : {
+        ranked: limitedCandidates.slice(0, FINAL_TOP_K),
+        used: 'fallback' as const,
+      };
 
   const conceptsById = new Map(concepts.map((c) => [c.id, c]));
   const chunksById = new Map(chunks.map((c) => [c.id, c]));
@@ -310,7 +338,9 @@ async function runRetrievalPipeline(opts: {
   emit({
     key: 'rerank',
     status: 'done',
-    detail: `融合 ${candidates.length} 候选 · ${rerank.used === 'llm' ? 'LLM 重排' : '启发式排序'} 到 Top-${partitioned.concepts.length + partitioned.chunks.length}`,
+    detail: `融合 ${candidates.length} 候选，裁剪到 ${limitedCandidates.length} · ${
+      rerank.used === 'llm' ? 'LLM 重排' : `启发式排序 (${rerankDecision.reason})`
+    } 到 Top-${partitioned.concepts.length + partitioned.chunks.length}`,
     conceptTitles: partitioned.concepts.slice(0, 8).map((c) => c.title),
   });
   stageTelemetry.finish('rerank');
@@ -327,6 +357,7 @@ async function runRetrievalPipeline(opts: {
     rewriteUsed,
     retrievalMode,
     rerankUsed: rerank.used,
+    rerankReason: rerankDecision.reason,
     finalContext: {
       concepts: partitioned.concepts,
       chunks: partitioned.chunks,
@@ -395,11 +426,20 @@ export const POST = withRequestTracing(async (req: Request) => {
         MAX_CONCEPTS,
       );
       const wikiDump =
-        formatQueryContextForPrompt({
-          concepts,
-          evidence: retrieval.finalContext.evidence,
-          chunks: retrieval.finalContext.chunks,
-        }) || '(Wiki 为空)';
+        formatQueryContextForPrompt(
+          {
+            concepts,
+            evidence: retrieval.finalContext.evidence,
+            chunks: retrieval.finalContext.chunks,
+          },
+          {
+            conceptBodyChars: Number(process.env.COMPOUND_QUERY_PROMPT_CONCEPT_CHARS || 700),
+            evidenceLimit: Number(process.env.COMPOUND_QUERY_PROMPT_EVIDENCE_LIMIT || 10),
+            evidenceQuoteChars: Number(process.env.COMPOUND_QUERY_PROMPT_EVIDENCE_CHARS || 240),
+            chunkLimit: Number(process.env.COMPOUND_QUERY_PROMPT_CHUNK_LIMIT || 5),
+            chunkChars: Number(process.env.COMPOUND_QUERY_PROMPT_CHUNK_CHARS || 450),
+          },
+        ) || '(Wiki 为空)';
 
       const historyBlock = history
         ? history
@@ -464,7 +504,7 @@ export const POST = withRequestTracing(async (req: Request) => {
               ],
               responseFormat: reasoning ? undefined : 'json_object',
               temperature: 0.35,
-              maxTokens: 2200,
+              maxTokens: SYNTHESIS_MAX_TOKENS,
               llmConfig,
               task: 'query',
               promptVersion: QUERY_SYSTEM_PROMPT_VERSION,
@@ -480,6 +520,10 @@ export const POST = withRequestTracing(async (req: Request) => {
                 rewrittenQuestion?: string;
                 retrievalMode?: string;
                 stageDurations?: StageDurationSnapshot;
+                rerankUsed?: string;
+                rerankReason?: string;
+                retrievedConcepts?: RetrievedConceptSummary[];
+                citedConcepts?: RetrievedConceptSummary[];
               }
             >(raw);
             parsed.citedConceptIds = parsed.citedConceptIds || [];
@@ -503,6 +547,14 @@ export const POST = withRequestTracing(async (req: Request) => {
             parsed.rewrittenQuestion =
               retrieval.rewriteUsed === 'pass-through' ? undefined : retrieval.rewrittenQuestion;
             parsed.retrievalMode = retrieval.retrievalMode;
+            parsed.rerankUsed = retrieval.rerankUsed;
+            parsed.rerankReason = retrieval.rerankReason;
+            parsed.retrievedConcepts = summarizeConcepts(concepts);
+            const conceptById = new Map(concepts.map((concept) => [concept.id, concept]));
+            parsed.citedConcepts = parsed.citedConceptIds
+              .map((id) => conceptById.get(id))
+              .filter((concept): concept is Concept => Boolean(concept))
+              .map((concept) => ({ id: concept.id, title: concept.title }));
             stageTelemetry.finish('synthesize');
 
             if (process.env.COMPOUND_FAITHFULNESS !== 'off') {
@@ -545,6 +597,10 @@ export const POST = withRequestTracing(async (req: Request) => {
               suggestedQuestions: parsed.suggestedQuestions,
               rewrittenQuestion: parsed.rewrittenQuestion,
               retrievalMode: parsed.retrievalMode,
+              rerankUsed: parsed.rerankUsed,
+              rerankReason: parsed.rerankReason,
+              retrievedConcepts: parsed.retrievedConcepts,
+              citedConcepts: parsed.citedConcepts,
               stageDurations,
               faithfulness: parsed.faithfulness,
             });
@@ -559,6 +615,8 @@ export const POST = withRequestTracing(async (req: Request) => {
             });
             sendSSE('error', {
               error: publicQueryErrorMessage(err),
+              errorType: classifyQueryError(err),
+              stageDurations: stageTelemetry.snapshot(),
               requestId: getRequestContext()?.requestId,
             });
             controller.close();
@@ -593,7 +651,7 @@ export const POST = withRequestTracing(async (req: Request) => {
       ],
       responseFormat: 'json_object',
       temperature: 0.35,
-      maxTokens: 2200,
+      maxTokens: SYNTHESIS_MAX_TOKENS,
       llmConfig,
       task: 'query',
       promptVersion: QUERY_SYSTEM_PROMPT_VERSION,
@@ -604,6 +662,10 @@ export const POST = withRequestTracing(async (req: Request) => {
         rewrittenQuestion?: string;
         retrievalMode?: string;
         stageDurations?: StageDurationSnapshot;
+        rerankUsed?: string;
+        rerankReason?: string;
+        retrievedConcepts?: RetrievedConceptSummary[];
+        citedConcepts?: RetrievedConceptSummary[];
       }
     >(raw);
     parsed.citedConceptIds = parsed.citedConceptIds || [];
@@ -646,6 +708,14 @@ export const POST = withRequestTracing(async (req: Request) => {
     parsed.rewrittenQuestion =
       retrieval.rewriteUsed === 'pass-through' ? undefined : retrieval.rewrittenQuestion;
     parsed.retrievalMode = retrieval.retrievalMode;
+    parsed.rerankUsed = retrieval.rerankUsed;
+    parsed.rerankReason = retrieval.rerankReason;
+    parsed.retrievedConcepts = summarizeConcepts(concepts);
+    const conceptById = new Map(concepts.map((concept) => [concept.id, concept]));
+    parsed.citedConcepts = parsed.citedConceptIds
+      .map((id) => conceptById.get(id))
+      .filter((concept): concept is Concept => Boolean(concept))
+      .map((concept) => ({ id: concept.id, title: concept.title }));
     stageTelemetry.finish('synthesize');
     parsed.stageDurations = stageDurations;
 
@@ -656,6 +726,8 @@ export const POST = withRequestTracing(async (req: Request) => {
     return NextResponse.json(
       {
         error,
+        errorType: classifyQueryError(err),
+        stageDurations: stageTelemetry.snapshot(),
         requestId: getRequestContext()?.requestId,
       },
       { status: 500 },

@@ -31,6 +31,16 @@ function setupTempDb() {
   };
 }
 
+async function waitForAnalysisWorkers(): Promise<void> {
+  const holder = globalThis as unknown as {
+    __activeAnalysisWorkerPromises?: Set<Promise<void>>;
+  };
+  const promises = Array.from(holder.__activeAnalysisWorkerPromises ?? []);
+  if (promises.length > 0) {
+    await Promise.allSettled(promises);
+  }
+}
+
 test('recoverStaleAnalysisJobs requeues stale running jobs and records lease event', async (t) => {
   const env = setupTempDb();
   t.after(env.cleanup);
@@ -254,6 +264,7 @@ test('startGithubSync sweeps stale analysis leases before returning existing act
     .run(staleAt, 'dead-worker', staleAt, staleAt, jobId);
 
   const result = startGithubSync();
+  await waitForAnalysisWorkers();
   const job = getServerDb()
     .prepare(`SELECT locked_by FROM analysis_jobs WHERE id = ?`)
     .get(jobId) as { locked_by: string | null };
