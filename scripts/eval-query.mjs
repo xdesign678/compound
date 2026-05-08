@@ -220,6 +220,8 @@ async function runOne(item) {
       question: item.question,
       citedConceptIds: cited,
       retrievedConceptIds: candidates.map((concept) => concept.id),
+      retrievedConcepts,
+      citedConcepts,
       answer: typeof data.answer === 'string' ? data.answer : '',
       latencyMs,
       totalLatencyMs: latencyMs,
@@ -352,15 +354,19 @@ function renderMarkdownSummary(latest, scores) {
     `| avg latency | ${Math.round(agg.latency.avg)} ms |`,
     `| p95 latency | ${Math.round(agg.latency.p95)} ms |`,
     '',
-    '| ID | Category | hit@8 | keyword recall | latency | retrieval | rerank | stages | cited ids | error type | error |',
-    '| --- | --- | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |',
+    '| ID | Category | hit@8 | keyword recall | latency | retrieval | rerank | stages | retrieved titles | cited ids | error type | error |',
+    '| --- | --- | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- | --- |',
   ];
 
   for (const score of scores) {
+    const retrievedTitles = (score.retrievedConcepts || [])
+      .slice(0, 8)
+      .map((concept) => concept.title || concept.id)
+      .join('<br>');
     lines.push(
       `| ${score.id} | ${score.category || ''} | ${score.hitSkipped ? '-' : score.hitAt8 ? '1' : '0'} | ${
         score.keywordSkipped ? '-' : fmt(score.keywordRecall)
-      } | ${score.latencyMs} ms | ${score.retrievalMode || ''} | ${[score.rerankUsed, score.rerankReason].filter(Boolean).join(' / ')} | ${formatStageDurations(score.stageDurations).replace(/\|/g, '/')} | ${(score.citedConceptIds || []).join(', ')} | ${score.errorType || ''} | ${score.error ? score.error.replace(/\|/g, '/') : ''} |`,
+      } | ${score.latencyMs} ms | ${score.retrievalMode || ''} | ${[score.rerankUsed, score.rerankReason].filter(Boolean).join(' / ')} | ${formatStageDurations(score.stageDurations).replace(/\|/g, '/')} | ${retrievedTitles.replace(/\|/g, '/')} | ${(score.citedConceptIds || []).join(', ')} | ${score.errorType || ''} | ${score.error ? score.error.replace(/\|/g, '/') : ''} |`,
     );
   }
 

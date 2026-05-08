@@ -41,6 +41,10 @@ export interface QueryRunResult {
    * if we ever surface the full retrieval set).
    */
   retrievedConceptIds?: string[];
+  /** Retrieved concepts with titles, when /api/query exposes them. */
+  retrievedConcepts?: RetrievedConcept[];
+  /** Cited concepts with titles, when /api/query exposes them. */
+  citedConcepts?: RetrievedConcept[];
   /** The Markdown answer body. */
   answer: string;
   /** Wall-clock latency in ms. */
@@ -88,6 +92,8 @@ export interface ItemScore {
   retrievalMode?: string;
   stageDurations?: Partial<Record<string, number>>;
   citedConceptIds: string[];
+  retrievedConcepts?: RetrievedConcept[];
+  citedConcepts?: RetrievedConcept[];
   errorType?: string;
   rerankUsed?: string;
   rerankReason?: string;
@@ -177,6 +183,8 @@ export function scoreItem(
     retrievalMode: result.retrievalMode,
     stageDurations: result.stageDurations,
     citedConceptIds: result.citedConceptIds,
+    retrievedConcepts: result.retrievedConcepts,
+    citedConcepts: result.citedConcepts,
     errorType: result.errorType,
     rerankUsed: result.rerankUsed,
     rerankReason: result.rerankReason,

@@ -136,8 +136,63 @@ References:
 
 ## After Metrics
 
-To be filled from the post-deploy online run after the change reaches
-`https://compund.zeabur.app`.
+Post-deploy target: `https://compund.zeabur.app`.
+
+Deployment probe after changes:
+
+| Metric         |           Value |
+| -------------- | --------------: |
+| total latency  |        19581 ms |
+| retrieval mode |      `fts-only` |
+| rerank used    |      `fallback` |
+| rerank reason  | `fts-fast-path` |
+| rewrite        |            0 ms |
+| retrieve       |          176 ms |
+| graph          |            2 ms |
+| rerank         |            1 ms |
+| synthesize     |        19095 ms |
+
+Five fixed golden queries after changes:
+
+| Metric         |    Before |    After |          Delta |
+| -------------- | --------: | -------: | -------------: |
+| avg latency    |  32050 ms | 24109 ms |       -7941 ms |
+| p95 latency    |  69712 ms | 34000 ms |      -35712 ms |
+| hit@8          |     0.000 |    0.000 |          0.000 |
+| keyword recall |     0.250 |    0.133 |         -0.117 |
+| errored        |         0 |        0 |              0 |
+| rerank p95     | ~24627 ms |     0 ms | removed in FTS |
+
+Per-item after details were saved to `tmp/eval/after-online.json` and
+`tmp/eval/after-online.md`.
+
+## Golden Eval Stability Finding
+
+The post-deploy eval now records retrieved concept titles, so the hit@8 miss is
+no longer opaque. The five LLM Wiki golden questions did not retrieve the
+expected LLM Wiki concepts in production. Example retrieved titles for
+`definition-001` were:
+
+- `三时态认知框架`
+- `设计令牌`
+- `残留注视`
+- `系统状态可见性原则`
+- `共同复杂性管理`
+- `Jakob Nielsen十大可用性原则`
+- `认知负荷管理`
+- `工作记忆容量`
+
+For `definition-002` through `definition-005`, production repeatedly retrieved
+UX/cognitive-science concepts such as `心智模型`, `现实世界匹配原则`, `自由能原理`,
+and `认知负荷理论`.
+
+Root cause: the current production Wiki data does not match the LLM Wiki golden
+set. The eval harness is now stable enough to show this honestly instead of
+turning expected titles into answer keywords. The correct fix is to run this
+golden set only against a Wiki seeded with the LLM Wiki concepts, or add a
+separate production golden set derived from the currently deployed Wiki content.
+Do not mark these misses as hits unless production data contains the expected
+concepts.
 
 ## Remaining Risks
 

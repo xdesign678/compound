@@ -96,6 +96,8 @@ test('aggregate excludes errored items from averages', () => {
       latencyMs: 1000,
       totalLatencyMs: 1000,
       citedConceptIds: ['c-1'],
+      retrievedConcepts: [{ id: 'c-1', title: '认知负荷' }],
+      citedConcepts: [{ id: 'c-1', title: '认知负荷' }],
     },
     {
       id: 'b',
@@ -110,6 +112,8 @@ test('aggregate excludes errored items from averages', () => {
       latencyMs: 0,
       totalLatencyMs: 0,
       citedConceptIds: [],
+      retrievedConcepts: [],
+      citedConcepts: [],
       error: 'boom',
     },
   ];
