@@ -62,6 +62,21 @@ export interface StartGithubSyncOptions {
   force?: boolean;
 }
 
+export interface GithubWebhookDeliveryInput {
+  deliveryId: string;
+  event: string;
+  signatureSha256: string;
+}
+
+type StartGithubSyncResult = {
+  jobId: string;
+  existing?: boolean;
+  runId?: string;
+  recoveredJobs?: number;
+  recoveredAnalysis?: number;
+  workerStarted?: boolean;
+};
+
 function readLog(row: SyncJobRow | null): LogEntry[] {
   if (!row?.log) return [];
   try {
@@ -185,22 +200,89 @@ export function startGithubSync(options: StartGithubSyncOptions = {}): {
   // job, this fixes the "9 running but worker died" symptom on the dashboard.
   const analysisRecovery = recoverStaleAnalysisJobs();
 
+  const result = createGithubSyncJobTransaction({
+    recoveredJobs: recovered,
+    recoveredAnalysis: analysisRecovery.jobs + analysisRecovery.items,
+  });
+  if (result.existing) return result;
+  launchGithubSyncLoop(result.jobId, options);
+  return result;
+}
+
+export function startGithubSyncFromWebhook(
+  delivery: GithubWebhookDeliveryInput,
+): StartGithubSyncResult {
+  syncObs.ensureSchema();
+  if (!delivery.deliveryId.trim()) throw new Error('Missing X-GitHub-Delivery header');
+  const recovered = repo.recoverStaleSyncJobs(STALE_JOB_MAX_AGE_MS);
+  if (recovered > 0) logger.info('github_sync.stale_jobs_recovered', { recovered });
+  const analysisRecovery = recoverStaleAnalysisJobs();
+  const db = getServerDb();
+  const result = db.transaction(() => {
+    const inserted = db
+      .prepare(
+        `INSERT OR IGNORE INTO webhook_deliveries
+          (delivery_id, event, signature_sha256, received_at, status)
+         VALUES (?, ?, ?, ?, 'received')`,
+      )
+      .run(delivery.deliveryId, delivery.event, delivery.signatureSha256, Date.now());
+
+    if (inserted.changes === 0) {
+      const existingDelivery = db
+        .prepare(`SELECT job_id FROM webhook_deliveries WHERE delivery_id = ?`)
+        .get(delivery.deliveryId) as { job_id: string | null } | undefined;
+      return {
+        jobId: existingDelivery?.job_id ?? '',
+        existing: true,
+        recoveredJobs: recovered,
+        recoveredAnalysis: analysisRecovery.jobs + analysisRecovery.items,
+        workerStarted: false,
+      } satisfies StartGithubSyncResult;
+    }
+
+    const sync = createGithubSyncJob({
+      recoveredJobs: recovered,
+      recoveredAnalysis: analysisRecovery.jobs + analysisRecovery.items,
+    });
+    db.prepare(
+      `UPDATE webhook_deliveries
+          SET status = 'processed',
+              job_id = ?,
+              error = NULL
+        WHERE delivery_id = ?`,
+    ).run(sync.jobId, delivery.deliveryId);
+    return sync;
+  })();
+
+  if (!result.existing) launchGithubSyncLoop(result.jobId, { triggerType: 'webhook' });
+  return result;
+}
+
+function createGithubSyncJobTransaction(input: {
+  recoveredJobs: number;
+  recoveredAnalysis: number;
+}): StartGithubSyncResult {
+  return getServerDb().transaction(() => createGithubSyncJob(input))();
+}
+
+function createGithubSyncJob(input: {
+  recoveredJobs: number;
+  recoveredAnalysis: number;
+}): StartGithubSyncResult {
   const active = repo.getActiveSyncJob();
   if (active) {
-    // Start a worker to drain whatever is left in the queue, but don't spawn a
-    // second sync job — the UI already has a banner telling the user about it.
     const workerInfo = startAnalysisWorker('existing-job-drain');
     return {
       jobId: active.id,
       existing: true,
-      recoveredJobs: recovered,
-      recoveredAnalysis: analysisRecovery.jobs + analysisRecovery.items,
+      recoveredJobs: input.recoveredJobs,
+      recoveredAnalysis: input.recoveredAnalysis,
       workerStarted: workerInfo.started,
     };
   }
 
   const jobId = `job-${nanoid(10)}`;
-  const now = Date.now();
+  const ts = Date.now();
   repo.insertSyncJob({
     id: jobId,
     kind: 'github',
@@ -211,24 +293,29 @@ export function startGithubSync(options: StartGithubSyncOptions = {}): {
     current: null,
     log: '[]',
     error: null,
-    started_at: now,
+    started_at: ts,
     finished_at: null,
   });
+  return {
+    jobId,
+    existing: false,
+    recoveredJobs: input.recoveredJobs,
+    recoveredAnalysis: input.recoveredAnalysis,
+    workerStarted: false,
+  };
+}
 
-  const promise = runGithubSyncLoop(jobId, options).catch((err) => {
-    const message = err instanceof Error ? err.message : String(err);
-    repo.updateSyncJob(jobId, { status: 'failed', error: message, finished_at: Date.now() });
-  });
+function launchGithubSyncLoop(jobId: string, options: StartGithubSyncOptions): void {
+  const promise = Promise.resolve()
+    .then(() => runGithubSyncLoop(jobId, options))
+    .catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      repo.updateSyncJob(jobId, { status: 'failed', error: message, finished_at: Date.now() });
+    });
   const g = globalThis as unknown as { __activeSyncPromises?: Set<Promise<void>> };
   g.__activeSyncPromises ??= new Set();
   g.__activeSyncPromises.add(promise);
   void promise.finally(() => g.__activeSyncPromises?.delete(promise));
-  return {
-    jobId,
-    recoveredJobs: recovered,
-    recoveredAnalysis: analysisRecovery.jobs + analysisRecovery.items,
-    workerStarted: false,
-  };
 }
 
 async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions): Promise<void> {

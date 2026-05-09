@@ -63,6 +63,7 @@ interface AnalysisJobRow {
   duration_ms?: number | null;
   error_category?: string | null;
   heartbeat_at?: number | null;
+  dead_letter_at?: number | null;
 }
 
 interface GithubIngestPayload {
@@ -162,12 +163,16 @@ export function ensureAnalysisWorkerSchema(): void {
   addColumnIfMissing('analysis_jobs', 'duration_ms', 'INTEGER');
   addColumnIfMissing('analysis_jobs', 'error_category', 'TEXT');
   addColumnIfMissing('analysis_jobs', 'heartbeat_at', 'INTEGER');
+  addColumnIfMissing('analysis_jobs', 'dead_letter_at', 'INTEGER');
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_analysis_jobs_queue
       ON analysis_jobs(status, not_before_at, priority, updated_at);
     CREATE INDEX IF NOT EXISTS idx_analysis_jobs_run_item
       ON analysis_jobs(run_id, item_id, status);
+    CREATE INDEX IF NOT EXISTS idx_analysis_jobs_dlq
+      ON analysis_jobs(dead_letter_at DESC)
+      WHERE dead_letter_at IS NOT NULL;
     CREATE TABLE IF NOT EXISTS source_analysis (
       source_id TEXT PRIMARY KEY,
       source_sha TEXT,
@@ -253,6 +258,7 @@ export function queueAdvancedAnalysisJob(input: {
        ON CONFLICT(source_id, source_sha, stage, stage_version, model, prompt_version) DO UPDATE SET
          status = CASE WHEN analysis_jobs.status = 'running' THEN analysis_jobs.status ELSE 'queued' END,
          error = NULL,
+         dead_letter_at = NULL,
          run_id = excluded.run_id,
          item_id = excluded.item_id,
          source_path = excluded.source_path,
@@ -705,6 +711,7 @@ function failJob(job: AnalysisJobRow, err: unknown): void {
        SET status = ?, attempts = ?, error = ?, error_category = ?, not_before_at = ?, updated_at = ?,
            finished_at = CASE WHEN ? THEN ? ELSE finished_at END,
            duration_ms = CASE WHEN ? THEN ? ELSE duration_ms END,
+           dead_letter_at = CASE WHEN ? THEN ? ELSE NULL END,
            locked_at = NULL, locked_by = NULL
        WHERE id = ?`,
     )
@@ -719,6 +726,8 @@ function failJob(job: AnalysisJobRow, err: unknown): void {
       ts,
       terminal ? 1 : 0,
       durationMs,
+      terminal ? 1 : 0,
+      ts,
       job.id,
     );
 
@@ -762,11 +771,12 @@ function failJobPermanently(job: AnalysisJobRow, message: string): void {
            finished_at = ?,
            updated_at = ?,
            duration_ms = ?,
+           dead_letter_at = ?,
            locked_at = NULL,
            locked_by = NULL
        WHERE id = ?`,
     )
-    .run(attempts, message.slice(0, 500), ts, ts, durationMs, job.id);
+    .run(attempts, message.slice(0, 500), ts, ts, durationMs, ts, job.id);
 
   syncObs.recordEvent({
     runId: job.run_id,
@@ -1480,6 +1490,7 @@ export function retryAnalysisJobs(
     .prepare(
       `UPDATE analysis_jobs
        SET status = 'queued', attempts = 0, error = NULL, not_before_at = ?, finished_at = NULL, updated_at = ?
+          , dead_letter_at = NULL
        WHERE ${clauses.join(' AND ')}`,
     )
     .run(now(), now(), ...params);

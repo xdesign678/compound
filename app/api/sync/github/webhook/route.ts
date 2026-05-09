@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { startGithubSync } from '@/lib/github-sync-runner';
+import { startGithubSyncFromWebhook } from '@/lib/github-sync-runner';
 import { safeEqual } from '@/lib/server-auth';
 
 export const runtime = 'nodejs';
@@ -35,7 +35,12 @@ export async function POST(req: Request) {
   if (event === 'ping') return NextResponse.json({ ok: true, event });
 
   try {
-    const { jobId, existing } = startGithubSync({ triggerType: 'webhook' });
+    const deliveryId = req.headers.get('x-github-delivery') || '';
+    const { jobId, existing } = startGithubSyncFromWebhook({
+      deliveryId,
+      event,
+      signatureSha256: req.headers.get('x-hub-signature-256') || '',
+    });
     return NextResponse.json({ jobId, existing: !!existing });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -99,6 +99,29 @@ export interface ThroughputBucket {
   failed: number;
 }
 
+export interface DlqJob {
+  id: string;
+  source_id: string;
+  source_sha: string | null;
+  source_path: string | null;
+  stage: string;
+  status: string;
+  attempts: number;
+  max_attempts: number | null;
+  error: string | null;
+  error_category: string | null;
+  dead_letter_at: number;
+  updated_at: number;
+  run_id: string | null;
+  item_id: string | null;
+}
+
+export interface DlqSummary {
+  count: number;
+  byStage: Record<string, number>;
+  recent: DlqJob[];
+}
+
 export type NarrativeNextAction = 'sync' | 'wait' | 'retry' | 'review' | 'cancel';
 export type NarrativeTone = 'idle' | 'running' | 'error' | 'stalled' | 'done' | 'review';
 
@@ -199,6 +222,7 @@ export interface Dashboard {
   health: RunHealth;
   throughput: ThroughputBucket[];
   itemSummary: Record<SyncItemStatus, number>;
+  dlq?: DlqSummary;
   story?: DashboardStory;
 }
 

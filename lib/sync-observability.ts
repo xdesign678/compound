@@ -107,6 +107,40 @@ export interface SyncDashboard {
   health: RunHealth;
   throughput: ThroughputBucket[];
   itemSummary: Record<SyncItemStatus, number>;
+  dlq: DlqSummary;
+}
+
+export interface DlqSummary {
+  count: number;
+  byStage: Record<string, number>;
+  recent: DlqJobRow[];
+}
+
+export interface DlqJobRow {
+  id: string;
+  source_id: string;
+  source_sha: string | null;
+  source_path: string | null;
+  stage: string;
+  status: string;
+  attempts: number;
+  max_attempts: number | null;
+  error: string | null;
+  error_category: string | null;
+  dead_letter_at: number;
+  updated_at: number;
+  run_id: string | null;
+  item_id: string | null;
+}
+
+export interface WebhookDeliveryRow {
+  delivery_id: string;
+  event: string;
+  signature_sha256: string;
+  received_at: number;
+  status: 'received' | 'processed' | 'replayed' | 'rejected';
+  job_id: string | null;
+  error: string | null;
 }
 
 export interface PipelineStageRow {
@@ -226,6 +260,20 @@ function tableExists(tableName: string): boolean {
     .prepare(`SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?`)
     .get(tableName) as { name?: string } | undefined;
   return Boolean(row?.name);
+}
+
+function tableColumns(tableName: string): Set<string> {
+  if (!tableExists(tableName)) return new Set();
+  const rows = getServerDb().prepare(`PRAGMA table_info(${tableName})`).all() as Array<{
+    name: string;
+  }>;
+  return new Set(rows.map((row) => row.name));
+}
+
+function addColumnIfMissing(tableName: string, column: string, sql: string): void {
+  if (!tableColumns(tableName).has(column)) {
+    getServerDb().exec(`ALTER TABLE ${tableName} ADD COLUMN ${column} ${sql};`);
+  }
 }
 
 function safeCount(sql: string): number {
@@ -438,6 +486,18 @@ export function ensureSyncObservabilitySchema(): void {
     CREATE INDEX IF NOT EXISTS idx_analysis_jobs_status_stage ON analysis_jobs(status, stage, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_analysis_jobs_source ON analysis_jobs(source_id, source_sha);
 
+    CREATE TABLE IF NOT EXISTS webhook_deliveries (
+      delivery_id TEXT PRIMARY KEY,
+      event TEXT NOT NULL,
+      signature_sha256 TEXT NOT NULL,
+      received_at INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'received',
+      job_id TEXT,
+      error TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_received
+      ON webhook_deliveries(received_at DESC);
+
     CREATE TABLE IF NOT EXISTS sync_events (
       id TEXT PRIMARY KEY,
       run_id TEXT,
@@ -451,6 +511,15 @@ export function ensureSyncObservabilitySchema(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_sync_events_run_at ON sync_events(run_id, at DESC);
     CREATE INDEX IF NOT EXISTS idx_sync_events_level_at ON sync_events(level, at DESC);
+  `);
+  addColumnIfMissing('analysis_jobs', 'run_id', 'TEXT');
+  addColumnIfMissing('analysis_jobs', 'item_id', 'TEXT');
+  addColumnIfMissing('analysis_jobs', 'max_attempts', 'INTEGER NOT NULL DEFAULT 3');
+  addColumnIfMissing('analysis_jobs', 'dead_letter_at', 'INTEGER');
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_analysis_jobs_dlq
+      ON analysis_jobs(dead_letter_at DESC)
+      WHERE dead_letter_at IS NOT NULL;
   `);
   schemaReady = true;
   schemaDb = db;
@@ -850,6 +919,35 @@ export const syncObs = {
           ORDER BY stage, category`,
       )
       .all() as Array<{ stage: string; category: string; count: number }>;
+    const dlqRows = db
+      .prepare(
+        `SELECT id, source_id, source_sha, source_path, stage, status, attempts, max_attempts,
+                error, error_category, dead_letter_at, updated_at, run_id, item_id
+           FROM analysis_jobs
+          WHERE dead_letter_at IS NOT NULL
+          ORDER BY dead_letter_at DESC
+          LIMIT 50`,
+      )
+      .all() as DlqJobRow[];
+    const dlqByStageRows = db
+      .prepare(
+        `SELECT stage, COUNT(*) AS count
+           FROM analysis_jobs
+          WHERE dead_letter_at IS NOT NULL
+          GROUP BY stage
+          ORDER BY stage`,
+      )
+      .all() as Array<{ stage: string; count: number }>;
+    const dlq: DlqSummary = {
+      count:
+        dlqRows.length > 0
+          ? safeCount(
+              `SELECT COUNT(*) AS count FROM analysis_jobs WHERE dead_letter_at IS NOT NULL`,
+            )
+          : 0,
+      byStage: Object.fromEntries(dlqByStageRows.map((row) => [row.stage, Number(row.count || 0)])),
+      recent: dlqRows,
+    };
     const errorStats = db
       .prepare(
         `SELECT COALESCE(error, '未知错误') AS error, COUNT(*) AS count, MAX(updated_at) AS lastAt
@@ -1101,6 +1199,7 @@ export const syncObs = {
       health,
       throughput,
       itemSummary,
+      dlq,
     };
   },
 };

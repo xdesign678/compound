@@ -149,6 +149,11 @@ test('renderPrometheusMetrics includes domain gauges and collector errors', () =
         skipped: 0,
         cancelled: 0,
       },
+      dlq: {
+        count: 0,
+        byStage: {},
+        recent: [],
+      },
     },
     reviewMetrics: {
       reviewOpen: 4,

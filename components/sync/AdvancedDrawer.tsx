@@ -57,6 +57,7 @@ export default function AdvancedDrawer({
   const run = dashboard?.activeRun ?? dashboard?.latestRuns?.[0] ?? null;
   const failedFiles = dashboard?.itemSummary?.failed ?? 0;
   const throughput = dashboard?.throughput ?? [];
+  const dlq = dashboard?.dlq;
 
   return (
     <div
@@ -136,6 +137,37 @@ export default function AdvancedDrawer({
                 <Sparkline data={throughput} />
               </div>
             ) : null}
+          </section>
+
+          <section className="sync-v2-drawer-section" aria-label="死信队列">
+            <h3>死信 · {dlq?.count ?? 0}</h3>
+            {dlq && Object.keys(dlq.byStage).length > 0 ? (
+              <div className="sync-v2-drawer-actions">
+                {Object.entries(dlq.byStage).map(([stage, count]) => (
+                  <span key={stage} className="sync-v2-badge tone-bad">
+                    {stage} · {count}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {dlq?.recent?.length ? (
+              <ul className="sync-v2-event-log">
+                {dlq.recent.map((job) => (
+                  <li key={job.id} className="sync-v2-event tone-bad">
+                    <div className="sync-v2-event-head">
+                      <span className="sync-v2-badge tone-bad">{job.stage}</span>
+                      <span className="sync-v2-event-when">{fmtDate(job.dead_letter_at)}</span>
+                    </div>
+                    {job.source_path ? (
+                      <code className="sync-v2-event-path">{job.source_path}</code>
+                    ) : null}
+                    <p>{job.error || '分析任务进入死信队列'}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="sync-v2-empty">暂无死信任务。</p>
+            )}
           </section>
 
           <section className="sync-v2-drawer-section" aria-label="完整文件表">

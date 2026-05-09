@@ -55,9 +55,15 @@ function getHolder(): Holder {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.pragma('synchronous = NORMAL');
-  db.pragma('busy_timeout = 3000');
+  db.pragma('busy_timeout = 5000');
+  db.pragma('wal_autocheckpoint = 1000');
 
   runMigrations(db);
+  try {
+    db.pragma('wal_checkpoint(PASSIVE)');
+  } catch {
+    // Checkpointing is opportunistic; boot should continue if SQLite skips it.
+  }
   // ANALYZE refreshes the query planner's statistics so large SELECTs pick
   // the correct index after schema-introducing migrations. Cheap on small
   // DBs (<100ms), and idempotent — safe to run unconditionally at startup.

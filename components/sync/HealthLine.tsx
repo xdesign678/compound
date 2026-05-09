@@ -5,6 +5,7 @@ import { type SyncHealth } from './types';
 interface Props {
   health: SyncHealth | null;
   reviewOpen: number;
+  deadLetters: number;
   onOpenReview: () => void;
 }
 
@@ -20,7 +21,7 @@ const SCORE_LABEL: Record<string, string> = {
  * confusing % bars whose denominators were sometimes identical to their
  * numerators.
  */
-export default function HealthLine({ health, reviewOpen, onOpenReview }: Props) {
+export default function HealthLine({ health, reviewOpen, deadLetters, onOpenReview }: Props) {
   if (!health) return null;
   return (
     <section className={`sync-v2-health tone-${health.score}`} aria-label="知识库健康">
@@ -44,6 +45,10 @@ export default function HealthLine({ health, reviewOpen, onOpenReview }: Props) 
             <span className="sync-v2-health-chip-value">{detail.value}</span>
           </li>
         ))}
+        <li className={`sync-v2-health-chip tone-${deadLetters > 0 ? 'bad' : 'neutral'}`}>
+          <span className="sync-v2-health-chip-label">死信</span>
+          <span className="sync-v2-health-chip-value">{deadLetters}</span>
+        </li>
       </ul>
     </section>
   );

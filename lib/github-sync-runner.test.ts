@@ -274,3 +274,45 @@ test('startGithubSync sweeps stale analysis leases before returning existing act
   assert.equal(result.recoveredAnalysis, 2);
   assert.notEqual(job.locked_by, 'dead-worker');
 });
+
+test('startGithubSyncFromWebhook records delivery and deduplicates retries', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { getServerDb } = await import('./server-db');
+  const { startGithubSyncFromWebhook } = await import('./github-sync-runner');
+
+  const first = startGithubSyncFromWebhook({
+    deliveryId: 'delivery-1',
+    event: 'push',
+    signatureSha256: 'sha256=test',
+  });
+  const second = startGithubSyncFromWebhook({
+    deliveryId: 'delivery-1',
+    event: 'push',
+    signatureSha256: 'sha256=test',
+  });
+
+  const syncJobs = getServerDb().prepare(`SELECT COUNT(*) AS count FROM sync_jobs`).get() as {
+    count: number;
+  };
+  const delivery = getServerDb()
+    .prepare(
+      `SELECT delivery_id, status, job_id, error FROM webhook_deliveries WHERE delivery_id = ?`,
+    )
+    .get('delivery-1') as {
+    delivery_id: string;
+    status: string;
+    job_id: string | null;
+    error: string | null;
+  };
+
+  assert.equal(first.existing, false);
+  assert.equal(second.existing, true);
+  assert.equal(second.jobId, first.jobId);
+  assert.equal(syncJobs.count, 1);
+  assert.equal(delivery.delivery_id, 'delivery-1');
+  assert.equal(delivery.status, 'processed');
+  assert.equal(delivery.job_id, first.jobId);
+  assert.equal(delivery.error, null);
+});

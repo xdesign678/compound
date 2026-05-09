@@ -65,20 +65,30 @@ test('github ingest jobs with missing payload fail once and do not requeue', asy
 
   const result = await runAnalysisWorkerOnce();
   const job = getServerDb()
-    .prepare(`SELECT status, attempts, error FROM analysis_jobs WHERE id = ?`)
-    .get(jobId) as { status: string; attempts: number; error: string };
+    .prepare(`SELECT status, attempts, error, dead_letter_at FROM analysis_jobs WHERE id = ?`)
+    .get(jobId) as {
+    status: string;
+    attempts: number;
+    error: string;
+    dead_letter_at: number | null;
+  };
   const item = getServerDb()
     .prepare(`SELECT status, stage, error FROM sync_run_items WHERE id = ?`)
     .get('sri-invalid-payload') as { status: string; stage: string; error: string };
+  const dashboard = syncObs.getDashboard();
   const retried = retryAnalysisJobs({ itemId: 'sri-invalid-payload' });
 
   assert.equal(result.claimed, 1);
   assert.equal(job.status, 'failed');
   assert.equal(job.attempts, 3);
+  assert.ok(job.dead_letter_at);
   assert.match(job.error, /缺少文件内容/);
   assert.equal(item.status, 'failed');
   assert.equal(item.stage, 'llm');
   assert.match(item.error, /缺少文件内容/);
+  assert.equal(dashboard.dlq.count, 1);
+  assert.equal(dashboard.dlq.byStage.github_ingest, 1);
+  assert.equal(dashboard.dlq.recent[0]?.id, jobId);
   assert.equal(retried, 0);
 });
 

@@ -100,6 +100,7 @@ function DashboardInner() {
   const health = story?.health ?? null;
   const stalled = dashboard?.health?.stalled ?? false;
   const stalledFor = dashboard?.health?.stalledFor ?? 0;
+  const deadLetters = dashboard?.dlq?.count ?? 0;
 
   const handlePrimary = useCallback(() => {
     const action = story?.narrative?.nextAction ?? 'sync';
@@ -267,7 +268,12 @@ function DashboardInner() {
         onOpenAdvanced={() => setDrawerOpen(true)}
       />
 
-      <HealthLine health={health} reviewOpen={reviewOpen} onOpenReview={handleOpenReview} />
+      <HealthLine
+        health={health}
+        reviewOpen={reviewOpen}
+        deadLetters={deadLetters}
+        onOpenReview={handleOpenReview}
+      />
 
       <AdvancedDrawer
         open={drawerOpen}
