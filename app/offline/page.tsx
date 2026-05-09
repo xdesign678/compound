@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { BookOpen, Database, FileText, RefreshCcw, WifiOff } from 'lucide-react';
 import { getDb } from '@/lib/db';
+import './offline.css';
 
 interface OfflineCounts {
   sources: number;
@@ -32,112 +34,47 @@ export default function OfflinePage() {
     };
   }, []);
 
+  const handleRetry = () => {
+    window.location.reload();
+  };
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        fontFamily: 'system-ui, sans-serif',
-        color: 'var(--offline-text, #141413)',
-        background: 'var(--offline-bg, #faf9f5)',
-        padding: '32px',
-        textAlign: 'center',
-      }}
-    >
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-            @media (prefers-color-scheme: dark) {
-              :root {
-                --offline-bg: #1a1a1a;
-                --offline-text: #e8e6e1;
-                --offline-muted: #a3a19c;
-                --offline-btn-bg: #e8e6e1;
-                --offline-btn-text: #1a1a1a;
-              }
-            }
-            @media (prefers-color-scheme: light) {
-              :root {
-                --offline-bg: #faf9f5;
-                --offline-text: #141413;
-                --offline-muted: #5e5d59;
-                --offline-btn-bg: #0f0f0e;
-                --offline-btn-text: #faf9f5;
-              }
-            }
-          `,
-        }}
-      />
-      <h1 style={{ fontSize: '24px', fontWeight: 600, marginBottom: '12px' }}>离线模式</h1>
-      <p
-        style={{
-          fontSize: '16px',
-          color: 'var(--offline-muted, #5e5d59)',
-          maxWidth: '400px',
-          lineHeight: 1.6,
-        }}
-      >
-        当前无法连接网络。你可以继续浏览已缓存的知识库内容。写入操作（摄入、修复、归类）将在恢复连接后可用。
-      </p>
-      <section
-        aria-label="本地缓存概览"
-        style={{
-          marginTop: '24px',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-          gap: '12px',
-          width: 'min(100%, 360px)',
-        }}
-      >
-        <div
-          style={{
-            border: '1px solid rgba(120, 112, 99, 0.22)',
-            borderRadius: '8px',
-            padding: '14px',
-          }}
-        >
-          <span style={{ color: 'var(--offline-muted, #5e5d59)', fontSize: '13px' }}>
-            已缓存资料
-          </span>
-          <strong style={{ display: 'block', marginTop: '4px', fontSize: '28px' }}>
-            {counts ? counts.sources : '...'}
-          </strong>
+    <main className="offline-page">
+      <section className="offline-state" aria-labelledby="offline-title">
+        <div className="offline-status-mark" aria-hidden="true">
+          <WifiOff size={28} strokeWidth={1.8} />
         </div>
-        <div
-          style={{
-            border: '1px solid rgba(120, 112, 99, 0.22)',
-            borderRadius: '8px',
-            padding: '14px',
-          }}
-        >
-          <span style={{ color: 'var(--offline-muted, #5e5d59)', fontSize: '13px' }}>可读概念</span>
-          <strong style={{ display: 'block', marginTop: '4px', fontSize: '28px' }}>
-            {counts ? counts.concepts : '...'}
-          </strong>
+
+        <p className="offline-kicker">本地可读</p>
+        <h1 id="offline-title">离线模式</h1>
+        <p className="offline-copy">
+          当前无法连接网络。你仍然可以查看已缓存的知识库内容；摄入、修复和归类会在恢复连接后继续可用。
+        </p>
+
+        <section className="offline-counts" aria-label="本地缓存概览">
+          <div className="offline-count">
+            <Database size={18} aria-hidden="true" />
+            <span>已缓存资料</span>
+            <strong>{counts ? counts.sources : '...'}</strong>
+          </div>
+          <div className="offline-count">
+            <FileText size={18} aria-hidden="true" />
+            <span>可读概念</span>
+            <strong>{counts ? counts.concepts : '...'}</strong>
+          </div>
+        </section>
+
+        <div className="offline-actions">
+          <button className="offline-primary-action" type="button" onClick={handleRetry}>
+            <RefreshCcw size={16} aria-hidden="true" />
+            重试连接
+          </button>
+          <Link className="offline-secondary-action" href="/" aria-label="返回知识库首页">
+            <BookOpen size={16} aria-hidden="true" />
+            返回知识库
+          </Link>
         </div>
       </section>
-      <Link
-        href="/"
-        aria-label="返回知识库首页"
-        style={{
-          marginTop: '24px',
-          padding: '10px 24px',
-          fontSize: '15px',
-          fontWeight: 500,
-          color: 'var(--offline-btn-text, #faf9f5)',
-          background: 'var(--offline-btn-bg, #0f0f0e)',
-          border: 'none',
-          borderRadius: '8px',
-          cursor: 'pointer',
-          textDecoration: 'none',
-          display: 'inline-block',
-        }}
-      >
-        返回知识库
-      </Link>
-    </div>
+    </main>
   );
 }
