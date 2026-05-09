@@ -43,15 +43,27 @@ export default function AdvancedDrawer({
   onDeleteDeadLetter,
 }: Props) {
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
   const [opsTab, setOpsTab] = useState<'dlq' | 'webhooks'>('dlq');
   useEffect(() => {
     if (!open) return;
+    openerRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     closeRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = originalOverflow;
+      openerRef.current?.focus();
+    };
   }, [open, onClose]);
 
   if (!open) return null;
@@ -64,18 +76,26 @@ export default function AdvancedDrawer({
   const throughput = dashboard?.throughput ?? [];
   const dlq = dashboard?.dlq;
   const deliveries = dashboard?.webhookDeliveries ?? [];
+  const dlqCount = dlq?.count ?? 0;
+  const dlqStageCount = dlq ? Object.keys(dlq.byStage).length : 0;
 
   return (
-    <div
-      className="sync-v2-drawer-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="高级抽屉"
-      onClick={onClose}
-    >
-      <aside className="sync-v2-drawer" onClick={(e) => e.stopPropagation()}>
+    <div className="sync-v2-drawer-backdrop" onClick={onClose}>
+      <aside
+        className="sync-v2-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sync-v2-drawer-title"
+        aria-describedby="sync-v2-drawer-desc"
+        onClick={(e) => e.stopPropagation()}
+      >
         <header className="sync-v2-drawer-head">
-          <h2>高级抽屉</h2>
+          <div>
+            <h2 id="sync-v2-drawer-title">高级抽屉</h2>
+            <p id="sync-v2-drawer-desc">
+              底层操作、死信队列、webhook 投递历史、完整文件表和事件流。
+            </p>
+          </div>
           <button
             ref={closeRef}
             type="button"
@@ -145,22 +165,39 @@ export default function AdvancedDrawer({
             ) : null}
           </section>
 
-          <section className="sync-v2-drawer-section" aria-label="死信与投递历史">
-            <div className="sync-v2-drawer-tabs" role="tablist" aria-label="高级队列视图">
+          <section className="sync-v2-drawer-section" aria-labelledby="sync-v2-queue-title">
+            <div className="sync-v2-drawer-section-head">
+              <h3 id="sync-v2-queue-title">死信与投递历史</h3>
+              <span className="sync-v2-drawer-summary" aria-live="polite">
+                死信 {dlqCount} · 投递 {deliveries.length}
+              </span>
+            </div>
+            <div
+              className="sync-v2-drawer-tabs"
+              role="tablist"
+              aria-label="高级队列视图"
+              aria-orientation="horizontal"
+            >
               <button
+                id="sync-v2-tab-dlq"
                 type="button"
                 role="tab"
                 aria-selected={opsTab === 'dlq'}
+                aria-controls="sync-v2-panel-dlq"
                 className={opsTab === 'dlq' ? 'active' : ''}
+                tabIndex={opsTab === 'dlq' ? 0 : -1}
                 onClick={() => setOpsTab('dlq')}
               >
-                死信 · {dlq?.count ?? 0}
+                死信 · {dlqCount}
               </button>
               <button
+                id="sync-v2-tab-webhooks"
                 type="button"
                 role="tab"
                 aria-selected={opsTab === 'webhooks'}
+                aria-controls="sync-v2-panel-webhooks"
                 className={opsTab === 'webhooks' ? 'active' : ''}
+                tabIndex={opsTab === 'webhooks' ? 0 : -1}
                 onClick={() => setOpsTab('webhooks')}
               >
                 投递历史 · {deliveries.length}
@@ -168,7 +205,17 @@ export default function AdvancedDrawer({
             </div>
 
             {opsTab === 'dlq' ? (
-              <>
+              <div
+                id="sync-v2-panel-dlq"
+                role="tabpanel"
+                aria-labelledby="sync-v2-tab-dlq"
+                className="sync-v2-drawer-panel"
+              >
+                <p className="sync-v2-drawer-summary">
+                  {dlqCount > 0
+                    ? `${dlqCount} 个死信任务，分布在 ${dlqStageCount} 个阶段。`
+                    : '当前没有死信任务。'}
+                </p>
                 {dlq && Object.keys(dlq.byStage).length > 0 ? (
                   <div className="sync-v2-drawer-actions">
                     {Object.entries(dlq.byStage).map(([stage, count]) => (
@@ -179,7 +226,7 @@ export default function AdvancedDrawer({
                   </div>
                 ) : null}
                 {dlq?.recent?.length ? (
-                  <ul className="sync-v2-event-log">
+                  <ul className="sync-v2-event-log" aria-label="死信任务列表">
                     {dlq.recent.map((job) => (
                       <li key={job.id} className="sync-v2-event tone-bad">
                         <div className="sync-v2-event-head">
@@ -196,6 +243,7 @@ export default function AdvancedDrawer({
                             className="sync-v2-btn sync-v2-btn-tiny"
                             disabled={busy}
                             onClick={() => onRetryDeadLetter(job.id)}
+                            aria-label={`重新入队 ${job.source_path ?? job.id}`}
                           >
                             重新入队
                           </button>
@@ -204,6 +252,7 @@ export default function AdvancedDrawer({
                             className="sync-v2-btn sync-v2-btn-tiny sync-v2-btn-danger"
                             disabled={busy}
                             onClick={() => onDeleteDeadLetter(job.id)}
+                            aria-label={`删除死信 ${job.source_path ?? job.id}`}
                           >
                             删除
                           </button>
@@ -214,29 +263,46 @@ export default function AdvancedDrawer({
                 ) : (
                   <p className="sync-v2-empty">暂无死信任务。</p>
                 )}
-              </>
+              </div>
             ) : deliveries.length > 0 ? (
-              <ul className="sync-v2-event-log">
-                {deliveries.map((delivery) => (
-                  <li
-                    key={delivery.delivery_id}
-                    className={`sync-v2-event tone-${badgeTone(delivery.status)}`}
-                  >
-                    <div className="sync-v2-event-head">
-                      <span className={`sync-v2-badge tone-${badgeTone(delivery.status)}`}>
-                        {delivery.status}
-                      </span>
-                      <span className="sync-v2-badge tone-neutral">{delivery.event}</span>
-                      <span className="sync-v2-event-when">{fmtDate(delivery.received_at)}</span>
-                    </div>
-                    <code className="sync-v2-event-path">{delivery.delivery_id}</code>
-                    {delivery.job_id ? <p>jobId: {delivery.job_id}</p> : null}
-                    {delivery.error ? <p>{delivery.error}</p> : null}
-                  </li>
-                ))}
-              </ul>
+              <div
+                id="sync-v2-panel-webhooks"
+                role="tabpanel"
+                aria-labelledby="sync-v2-tab-webhooks"
+                className="sync-v2-drawer-panel"
+              >
+                <p className="sync-v2-drawer-summary">
+                  最近 {deliveries.length} 条 webhook 投递记录。
+                </p>
+                <ul className="sync-v2-event-log" aria-label="webhook 投递历史">
+                  {deliveries.map((delivery) => (
+                    <li
+                      key={delivery.delivery_id}
+                      className={`sync-v2-event tone-${badgeTone(delivery.status)}`}
+                    >
+                      <div className="sync-v2-event-head">
+                        <span className={`sync-v2-badge tone-${badgeTone(delivery.status)}`}>
+                          {delivery.status}
+                        </span>
+                        <span className="sync-v2-badge tone-neutral">{delivery.event}</span>
+                        <span className="sync-v2-event-when">{fmtDate(delivery.received_at)}</span>
+                      </div>
+                      <code className="sync-v2-event-path">{delivery.delivery_id}</code>
+                      {delivery.job_id ? <p>jobId: {delivery.job_id}</p> : null}
+                      {delivery.error ? <p>{delivery.error}</p> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : (
-              <p className="sync-v2-empty">暂无 webhook 投递记录。</p>
+              <div
+                id="sync-v2-panel-webhooks"
+                role="tabpanel"
+                aria-labelledby="sync-v2-tab-webhooks"
+                className="sync-v2-drawer-panel"
+              >
+                <p className="sync-v2-empty">暂无 webhook 投递记录。</p>
+              </div>
             )}
           </section>
 
@@ -256,7 +322,7 @@ export default function AdvancedDrawer({
             {events.length === 0 ? (
               <p className="sync-v2-empty">暂无事件。</p>
             ) : (
-              <ul className="sync-v2-event-log">
+              <ul className="sync-v2-event-log" aria-label="同步事件流">
                 {events.map((event) => (
                   <EventRow key={event.id} event={event} />
                 ))}

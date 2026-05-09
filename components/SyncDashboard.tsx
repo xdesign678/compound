@@ -226,6 +226,8 @@ function DashboardInner() {
 
       {!dashboard && !loadError ? (
         <div
+          role="status"
+          aria-live="polite"
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -235,6 +237,7 @@ function DashboardInner() {
           }}
         >
           <div
+            aria-hidden="true"
             style={{
               width: 32,
               height: 32,

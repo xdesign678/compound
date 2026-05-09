@@ -122,7 +122,13 @@ export const SURFACES = {
     },
   },
   globalShell: { url: '/', setup: async () => {} },
-  sync: { url: '/sync', setup: async () => {} },
+  sync: {
+    url: '/sync',
+    setup: async (page) => {
+      await page.getByRole('button', { name: '打开高级抽屉' }).click();
+      await page.waitForSelector('.sync-v2-drawer', { timeout: 30_000 });
+    },
+  },
   review: { url: '/review', setup: async () => {} },
   offline: { url: '/offline', setup: async () => {} },
 };
