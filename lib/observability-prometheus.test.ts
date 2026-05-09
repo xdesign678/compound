@@ -125,6 +125,8 @@ test('renderPrometheusMetrics includes domain gauges and collector errors', () =
       },
       itemStats: [{ stage: 'ingest', status: 'succeeded', count: 3 }],
       analysisStats: [{ stage: 'embedding', status: 'queued', count: 2 }],
+      analysisDurationStats: [{ stage: 'embedding', avgMs: 1200, maxMs: 2500, count: 2 }],
+      analysisErrorCategories: [{ stage: 'summarize', category: 'transient', count: 1 }],
       errorStats: [],
       pipeline: [],
       errorGroups: [],
@@ -162,6 +164,8 @@ test('renderPrometheusMetrics includes domain gauges and collector errors', () =
   assert.match(body, /compound_sync_run_files\{state="total"\} 10/);
   assert.match(body, /compound_sync_items\{stage="ingest",status="succeeded"\} 3/);
   assert.match(body, /compound_analysis_jobs\{stage="embedding",status="queued"\} 2/);
+  assert.match(body, /compound_analysis_job_duration_ms\{stage="embedding",stat="avg"\} 1200/);
+  assert.match(body, /compound_analysis_job_errors\{stage="summarize",category="transient"\} 1/);
   assert.match(body, /compound_knowledge_records\{kind="sources"\} 8/);
   assert.match(body, /compound_review_items\{status="open"\} 4/);
   assert.match(

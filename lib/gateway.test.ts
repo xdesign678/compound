@@ -153,6 +153,48 @@ test('trims server api url and honors legacy gateway url', { concurrency: false 
   );
 });
 
+test(
+  'chat propagates caller abort signal to the underlying fetch',
+  { concurrency: false },
+  async () => {
+    await withEnv(
+      {
+        LLM_API_KEY: 'server-key',
+        LLM_API_URL: 'https://example.com/v1/chat/completions',
+        AI_GATEWAY_API_KEY: undefined,
+        COMPOUND_SKIP_DNS_GUARD: 'true',
+      },
+      async () => {
+        const controller = new AbortController();
+        let sawAbort = false;
+        const mockFetch: typeof fetch = async (_input, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            if (init?.signal?.aborted) {
+              sawAbort = true;
+              reject(init.signal.reason ?? new DOMException('aborted', 'AbortError'));
+              return;
+            }
+            init?.signal?.addEventListener('abort', () => {
+              sawAbort = true;
+              reject(init.signal?.reason ?? new DOMException('aborted', 'AbortError'));
+            });
+          });
+
+        await withMockFetch(mockFetch, async () => {
+          const promise = chat({
+            messages: [{ role: 'user', content: 'hi' }],
+            maxTokens: 10,
+            signal: controller.signal,
+          });
+          controller.abort(new DOMException('user cancelled', 'AbortError'));
+          await assert.rejects(promise, /user cancelled|AbortError|aborted/);
+          assert.equal(sawAbort, true);
+        });
+      },
+    );
+  },
+);
+
 test('blocks private or loopback custom api urls', { concurrency: false }, async () => {
   resetPrometheusMetricsForTests();
 

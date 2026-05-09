@@ -452,8 +452,25 @@ export function deriveDiagnostics(input: {
   failedItems: SyncRunItemRow[];
   errorGroups: ErrorGroupRow[];
   itemSummary: Record<SyncItemStatus, number>;
+  coverage?: Record<string, number | string | boolean>;
 }): SyncDiagnostic[] {
   const out: SyncDiagnostic[] = [];
+  const budgetWaits =
+    typeof input.coverage?.analysisBudgetWaitsLast10m === 'number'
+      ? input.coverage.analysisBudgetWaitsLast10m
+      : 0;
+  if (budgetWaits > 0) {
+    out.push({
+      id: 'analysis-budget-wait',
+      severity: 'info',
+      title: '后台 LLM 预算正在限流',
+      detail:
+        `最近 10 分钟有 ${budgetWaits} 次分析任务因后台 LLM 并发预算排队。` +
+        '这是预期的保护机制；如果队列长期不动，再调整 COMPOUND_BACKGROUND_LLM_* 预算。',
+      affectedCount: budgetWaits,
+      actions: [{ id: 'open-env', label: '查看 env 变量' }],
+    });
+  }
 
   const timeoutPattern = detectUniformTimeoutPattern(input.failedItems, input.errorGroups);
   if (timeoutPattern.uniform) {
@@ -545,6 +562,7 @@ export function deriveStory(
     failedItems: dashboard.failedItems ?? [],
     errorGroups: dashboard.errorGroups,
     itemSummary: dashboard.itemSummary,
+    coverage: dashboard.coverage,
   });
   return { narrative, phases, health, lastRun, diagnostics };
 }

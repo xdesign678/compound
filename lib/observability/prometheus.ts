@@ -429,6 +429,34 @@ function addSyncMetrics(out: PrometheusTextBuilder, dashboard: SyncDashboard): v
     });
   }
 
+  out.metric(
+    'compound_analysis_job_duration_ms',
+    'gauge',
+    'Analysis job duration statistics by stage.',
+  );
+  for (const item of dashboard.analysisDurationStats ?? []) {
+    out.sample('compound_analysis_job_duration_ms', Number(item.avgMs || 0), {
+      stage: item.stage,
+      stat: 'avg',
+    });
+    out.sample('compound_analysis_job_duration_ms', Number(item.maxMs || 0), {
+      stage: item.stage,
+      stat: 'max',
+    });
+  }
+
+  out.metric(
+    'compound_analysis_job_errors',
+    'gauge',
+    'Failed analysis job counts by stage and error category.',
+  );
+  for (const item of dashboard.analysisErrorCategories ?? []) {
+    out.sample('compound_analysis_job_errors', Number(item.count), {
+      stage: item.stage,
+      category: item.category,
+    });
+  }
+
   out.metric('compound_sync_errors', 'gauge', 'Failed sync item counts grouped by error.');
   for (const item of dashboard.errorStats) {
     out.sample('compound_sync_errors', Number(item.count), {

@@ -53,3 +53,51 @@ test('splitMarkdownIntoChunks 保留嵌套标题层级', () => {
   assert.deepEqual(nestedChunk?.headingPath, ['总览', '第二层', '第三层']);
   assert.match(nestedChunk?.content ?? '', /路径：总览 \/ 第二层 \/ 第三层/);
 });
+
+test('splitMarkdownIntoChunks covers Obsidian-flavored markdown fixtures with stable metadata', () => {
+  const markdown = `---
+title: Obsidian Fixture
+tags: [compound, llm-wiki]
+aliases:
+  - Fixture Alias
+---
+
+# Vault Root
+
+这里有 [[Linked Concept|别名链接]]、#project/compound 标签和 ![[assets/diagram.png]] 嵌入。
+
+> [!note] Callout title
+> callout 正文会保留为普通 Markdown 内容。
+
+## Area
+
+### Deep Heading
+
+深层标题内容，引用 [[Another Note]] 和本地资源 [asset](assets/local.pdf)。`;
+
+  const chunks = splitMarkdownIntoChunks(markdown, {
+    maxTokens: 240,
+    overlapTokens: 0,
+    minChunkChars: 1,
+  });
+
+  assert.ok(chunks.length >= 2);
+  assert.equal(chunks[0]?.heading, '未命名片段');
+  assert.deepEqual(chunks[0]?.headingPath, ['未命名片段']);
+  assert.match(chunks[0]?.content ?? '', /title: Obsidian Fixture/);
+  assert.match(chunks[0]?.content ?? '', /tags: \[compound, llm-wiki\]/);
+
+  const root = chunks.find((chunk) => chunk.heading === 'Vault Root');
+  assert.ok(root);
+  assert.deepEqual(root?.headingPath, ['Vault Root']);
+  assert.match(root?.content ?? '', /\[\[Linked Concept\|别名链接\]\]/);
+  assert.match(root?.content ?? '', /!\[\[assets\/diagram\.png\]\]/);
+  assert.match(root?.content ?? '', /> \[!note\] Callout title/);
+
+  const deep = chunks.find((chunk) => chunk.heading === 'Deep Heading');
+  assert.ok(deep);
+  assert.deepEqual(deep?.headingPath, ['Vault Root', 'Area', 'Deep Heading']);
+  assert.match(deep?.content ?? '', /路径：Vault Root \/ Area \/ Deep Heading/);
+  assert.match(deep?.content ?? '', /\[asset\]\(assets\/local\.pdf\)/);
+  assert.match(deep?.contentHash ?? '', /^[a-f0-9]{64}$/);
+});

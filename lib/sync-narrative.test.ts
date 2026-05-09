@@ -406,3 +406,16 @@ test('deriveDiagnostics returns empty for healthy run', () => {
   });
   assert.deepEqual(diags, []);
 });
+
+test('deriveDiagnostics surfaces background LLM budget queueing', () => {
+  const diags = deriveDiagnostics({
+    failedItems: [],
+    errorGroups: [],
+    itemSummary: { queued: 2, running: 1, succeeded: 0, failed: 0, skipped: 0, cancelled: 0 },
+    coverage: { analysisBudgetWaitsLast10m: 3 },
+  });
+
+  assert.equal(diags[0]?.id, 'analysis-budget-wait');
+  assert.equal(diags[0]?.severity, 'info');
+  assert.match(diags[0]?.detail ?? '', /后台 LLM 并发预算排队/);
+});

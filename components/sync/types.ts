@@ -191,6 +191,8 @@ export interface Dashboard {
   events: SyncEvent[];
   coverage: Record<string, number | string | boolean>;
   analysisStats: Array<{ stage: string; status: string; count: number }>;
+  analysisDurationStats?: Array<{ stage: string; avgMs: number; maxMs: number; count: number }>;
+  analysisErrorCategories?: Array<{ stage: string; category: string; count: number }>;
   errorStats: Array<{ error: string; count: number; lastAt: number }>;
   pipeline: PipelineStage[];
   errorGroups: ErrorGroup[];

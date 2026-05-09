@@ -75,7 +75,9 @@ interface GithubIngestPayload {
   sha: string;
   externalKey: string;
   title: string;
-  rawContent: string;
+  rawContent?: string;
+  rawContentRef?: string;
+  rawContentHash?: string;
   replaceSourceId?: string | null;
 }
 
@@ -98,6 +100,7 @@ const LEASE_MS = Math.max(60_000, Number(process.env.COMPOUND_ANALYSIS_LEASE_MS 
 /** Max concurrent worker loops. We use DB lease + in-memory counter combined. */
 const MAX_PARALLEL_WORKERS = Math.max(1, Number(process.env.COMPOUND_ANALYSIS_MAX_WORKERS || 2));
 const HEARTBEAT_MS = Math.max(5_000, Number(process.env.COMPOUND_ANALYSIS_HEARTBEAT_MS || 15_000));
+const MARKDOWN_PARSER_VERSION = process.env.COMPOUND_MARKDOWN_PARSER_VERSION || 'wiki-chunk-v1';
 const BACKGROUND_LLM_BUDGETS: Record<string, number> = {
   github_ingest: Math.max(1, Number(process.env.COMPOUND_BACKGROUND_LLM_GITHUB_INGEST || 1)),
   summarize: Math.max(1, Number(process.env.COMPOUND_BACKGROUND_LLM_SUMMARIZE || 1)),
@@ -192,6 +195,13 @@ export function ensureAnalysisWorkerSchema(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_source_analysis_stage_cache_source
       ON source_analysis_stage_cache(source_id, stage, updated_at DESC);
+    CREATE TABLE IF NOT EXISTS analysis_payload_blobs (
+      ref TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      last_used_at INTEGER NOT NULL
+    );
   `);
   schemaReady = true;
   schemaDb = db;
@@ -272,6 +282,31 @@ export function queueAdvancedAnalysisJob(input: {
 }
 
 export function queueGithubIngestJob(payload: GithubIngestPayload): string {
+  ensureAnalysisWorkerSchema();
+  const rawContent = payload.rawContent ?? '';
+  const rawContentHash = payload.rawContentHash ?? stableHash(normalizeContentForHash(rawContent));
+  const rawContentRef =
+    payload.rawContentRef ??
+    `github:${payload.repoSlug}:${payload.branch}:${payload.path}@${payload.sha}:${rawContentHash.slice(0, 16)}`;
+  const compactPayload: GithubIngestPayload = {
+    ...payload,
+    rawContent: undefined,
+    rawContentRef,
+    rawContentHash,
+  };
+  if (typeof payload.rawContent === 'string') {
+    const ts = now();
+    getServerDb()
+      .prepare(
+        `INSERT INTO analysis_payload_blobs (ref, content, content_hash, created_at, last_used_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(ref) DO UPDATE SET
+           content = excluded.content,
+           content_hash = excluded.content_hash,
+           last_used_at = excluded.last_used_at`,
+      )
+      .run(rawContentRef, rawContent, rawContentHash, ts, ts);
+  }
   return queueAdvancedAnalysisJob({
     runId: payload.runId,
     itemId: payload.itemId,
@@ -280,7 +315,7 @@ export function queueGithubIngestJob(payload: GithubIngestPayload): string {
     sourcePath: payload.path,
     stage: 'github_ingest',
     stageVersion: DEFAULT_STAGE_VERSION,
-    payload: payload as unknown as Record<string, unknown>,
+    payload: compactPayload as unknown as Record<string, unknown>,
     priority: 100,
     maxAttempts: 3,
   });
@@ -359,7 +394,15 @@ function claimJobs(limit: number): AnalysisJobRow[] {
     const ts = now();
     const res = stmt.run(ts, WORKER_ID, ts, ts, ts, row.id);
     if (res.changes > 0)
-      claimed.push({ ...row, status: 'running', locked_at: ts, locked_by: WORKER_ID });
+      claimed.push({
+        ...row,
+        status: 'running',
+        locked_at: ts,
+        locked_by: WORKER_ID,
+        started_at: row.started_at ?? ts,
+        heartbeat_at: ts,
+        updated_at: ts,
+      });
   }
   return claimed;
 }
@@ -451,14 +494,17 @@ async function withBackgroundLlmBudget<T>(
 function computeStageInputHash(job: AnalysisJobRow): string | null {
   if (job.stage === 'github_ingest') {
     const payload = parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload);
-    if (typeof payload.rawContent !== 'string') return null;
+    const rawContent = getGithubIngestRawContent(payload);
+    if (typeof rawContent !== 'string') return null;
+    const contentHash = payload.rawContentHash ?? stableHash(normalizeContentForHash(rawContent));
     return stableHash(
       [
         payload.repoSlug,
         payload.branch,
         payload.path,
         payload.sha,
-        normalizeContentForHash(payload.rawContent),
+        contentHash,
+        MARKDOWN_PARSER_VERSION,
         job.stage_version,
         job.prompt_version ?? '',
         job.model ?? '',
@@ -469,9 +515,11 @@ function computeStageInputHash(job: AnalysisJobRow): string | null {
   if (!source) return null;
   return stableHash(
     [
+      source.externalKey ?? '',
       job.source_path ?? '',
       job.source_sha ?? '',
-      normalizeContentForHash(source.rawContent),
+      stableHash(normalizeContentForHash(source.rawContent)),
+      MARKDOWN_PARSER_VERSION,
       job.stage,
       job.stage_version,
       job.prompt_version ?? '',
@@ -503,6 +551,49 @@ function getCachedStageStatus(job: AnalysisJobRow, inputHash: string | null): st
       inputHash,
     ) as { status?: string } | undefined;
   return row?.status ?? null;
+}
+
+function getGithubIngestRawContent(payload: GithubIngestPayload): string | null {
+  if (typeof payload.rawContent === 'string') return payload.rawContent;
+  if (!payload.rawContentRef) return null;
+  const row = getServerDb()
+    .prepare(`SELECT content FROM analysis_payload_blobs WHERE ref = ?`)
+    .get(payload.rawContentRef) as { content?: string } | undefined;
+  if (typeof row?.content !== 'string') return null;
+  getServerDb()
+    .prepare(`UPDATE analysis_payload_blobs SET last_used_at = ? WHERE ref = ?`)
+    .run(now(), payload.rawContentRef);
+  return row.content;
+}
+
+async function resolveGithubIngestRawContent(payload: GithubIngestPayload): Promise<string | null> {
+  const cached = getGithubIngestRawContent(payload);
+  if (cached != null) return cached;
+  if (!payload.path || !payload.sha) return null;
+
+  try {
+    const { fetchMarkdownContent, getGithubConfig } = await import('./github-sync');
+    const cfg = getGithubConfig();
+    const remote = await fetchMarkdownContent(payload.path, cfg, payload.sha);
+    const rawContentHash = stableHash(normalizeContentForHash(remote.content));
+    const rawContentRef =
+      payload.rawContentRef ??
+      `github:${payload.repoSlug}:${payload.branch}:${payload.path}@${payload.sha}:${rawContentHash.slice(0, 16)}`;
+    const ts = now();
+    getServerDb()
+      .prepare(
+        `INSERT INTO analysis_payload_blobs (ref, content, content_hash, created_at, last_used_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(ref) DO UPDATE SET
+           content = excluded.content,
+           content_hash = excluded.content_hash,
+           last_used_at = excluded.last_used_at`,
+      )
+      .run(rawContentRef, remote.content, rawContentHash, ts, ts);
+    return remote.content;
+  } catch {
+    return null;
+  }
 }
 
 function recordStageCache(
@@ -820,7 +911,8 @@ function queuePostIngestJobs(input: {
 
 async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
   const payload = parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload);
-  if (typeof payload.rawContent !== 'string' || !payload.path || !payload.externalKey) {
+  const rawContent = await resolveGithubIngestRawContent(payload);
+  if (typeof rawContent !== 'string' || !payload.path || !payload.externalKey) {
     const message = 'GitHub 分析任务缺少文件内容，请重新同步该文件。';
     failJobPermanently(job, message);
     if (job.item_id) {
@@ -835,7 +927,7 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
     maybeFinishRun(job.run_id || null);
     return;
   }
-  if (payload.rawContent.trim().length === 0) {
+  if (rawContent.trim().length === 0) {
     finishJob(job, 'skipped', 'empty markdown file');
     if (payload.itemId) {
       syncObs.updateRunItem(payload.itemId, {
@@ -880,7 +972,7 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
   const result = await ingestSourceToServerDb({
     title: payload.title,
     type: 'file',
-    rawContent: payload.rawContent,
+    rawContent,
     externalKey: payload.externalKey,
     replaceSourceId: payload.replaceSourceId ?? undefined,
     signal: currentRunSignal(payload.runId),

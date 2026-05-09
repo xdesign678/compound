@@ -28,6 +28,11 @@ export interface ContextualizeChunkInput {
 const MAX_DOC_CHARS = 32_000;
 const MAX_CHUNK_CHARS = 4_000;
 const MAX_PREFIX_TOKENS = 200;
+const CONTEXTUALIZE_LLM_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.COMPOUND_BACKGROUND_LLM_CONTEXTUALIZE || 1),
+);
+let activeContextualizeCalls = 0;
 
 function buildPrompt(input: ContextualizeChunkInput): string {
   let doc = input.fullDocument;
@@ -44,7 +49,19 @@ export async function contextualizeChunk(input: ContextualizeChunkInput): Promis
   if (process.env.COMPOUND_CONTEXTUAL_RETRIEVAL === 'off') return '';
   if (!input.chunk?.trim()) return '';
 
+  let acquiredBudget = false;
   try {
+    while (activeContextualizeCalls >= CONTEXTUALIZE_LLM_CONCURRENCY) {
+      if (input.signal?.aborted) {
+        throw new DOMException(
+          'contextual chunk call aborted while waiting for budget',
+          'AbortError',
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    activeContextualizeCalls += 1;
+    acquiredBudget = true;
     const { chat } = await import('./gateway');
     const raw = await chat({
       messages: [
@@ -71,5 +88,9 @@ export async function contextualizeChunk(input: ContextualizeChunkInput): Promis
       error: error instanceof Error ? error.message : String(error),
     });
     return '';
+  } finally {
+    if (acquiredBudget) {
+      activeContextualizeCalls = Math.max(0, activeContextualizeCalls - 1);
+    }
   }
 }

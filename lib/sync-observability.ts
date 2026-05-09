@@ -99,6 +99,8 @@ export interface SyncDashboard {
   coverage: Record<string, number | string | boolean>;
   itemStats: Array<{ stage: string; status: string; count: number }>;
   analysisStats: Array<{ stage: string; status: string; count: number }>;
+  analysisDurationStats: Array<{ stage: string; avgMs: number; maxMs: number; count: number }>;
+  analysisErrorCategories: Array<{ stage: string; category: string; count: number }>;
   errorStats: Array<{ error: string; count: number; lastAt: number }>;
   pipeline: PipelineStageRow[];
   errorGroups: ErrorGroupRow[];
@@ -814,6 +816,7 @@ export const syncObs = {
     const events = db
       .prepare(`SELECT * FROM sync_events ORDER BY at DESC LIMIT 80`)
       .all() as SyncEventRow[];
+    const ts = now();
     const itemStats = db
       .prepare(
         `SELECT stage, status, COUNT(*) AS count FROM sync_run_items GROUP BY stage, status ORDER BY stage, status`,
@@ -824,6 +827,29 @@ export const syncObs = {
         `SELECT stage, status, COUNT(*) AS count FROM analysis_jobs GROUP BY stage, status ORDER BY stage, status`,
       )
       .all() as Array<{ stage: string; status: string; count: number }>;
+    const analysisDurationStats = db
+      .prepare(
+        `SELECT stage,
+                AVG(duration_ms) AS avgMs,
+                MAX(duration_ms) AS maxMs,
+                COUNT(*) AS count
+           FROM analysis_jobs
+          WHERE duration_ms IS NOT NULL
+          GROUP BY stage
+          ORDER BY stage`,
+      )
+      .all() as Array<{ stage: string; avgMs: number; maxMs: number; count: number }>;
+    const analysisErrorCategories = db
+      .prepare(
+        `SELECT stage,
+                COALESCE(error_category, 'unknown') AS category,
+                COUNT(*) AS count
+           FROM analysis_jobs
+          WHERE status = 'failed'
+          GROUP BY stage, COALESCE(error_category, 'unknown')
+          ORDER BY stage, category`,
+      )
+      .all() as Array<{ stage: string; category: string; count: number }>;
     const errorStats = db
       .prepare(
         `SELECT COALESCE(error, '未知错误') AS error, COUNT(*) AS count, MAX(updated_at) AS lastAt
@@ -862,6 +888,11 @@ export const syncObs = {
       ),
       analysisFailed: safeCount(
         `SELECT COUNT(*) AS count FROM analysis_jobs WHERE status = 'failed'`,
+      ),
+      analysisBudgetWaitsLast10m: safeCount(
+        `SELECT COUNT(*) AS count FROM sync_events
+          WHERE at >= ${ts - 10 * 60_000}
+            AND json_extract(meta, '$.event') = 'analysis.llm_budget_wait'`,
       ),
       ftsReady: Boolean((wikiMetrics as Record<string, unknown>).ftsReady),
     };
@@ -977,7 +1008,6 @@ export const syncObs = {
 
     // ---- Run health ------------------------------------------------------
     const baseRun = activeRun ?? latestRuns[0] ?? null;
-    const ts = now();
     const heartbeatAgeMs = baseRun?.heartbeat_at != null ? ts - baseRun.heartbeat_at : null;
     const lastEventAt = events[0]?.at ?? null;
     const stalled =
@@ -1063,6 +1093,8 @@ export const syncObs = {
       coverage,
       itemStats,
       analysisStats,
+      analysisDurationStats,
+      analysisErrorCategories,
       errorStats,
       pipeline,
       errorGroups,

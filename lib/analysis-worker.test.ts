@@ -204,3 +204,86 @@ test('same stage and sha can be queued again and skips by fingerprint cache', as
   assert.equal(job.error, 'stage fingerprint unchanged');
   assert.equal(secondItem.status, 'succeeded');
 });
+
+test('github ingest payload stores markdown content by blob reference, not inline payload_json', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { getServerDb } = await import('./server-db');
+  const { syncObs } = await import('./sync-observability');
+  const { queueGithubIngestJob } = await import('./analysis-worker');
+
+  syncObs.startRun({
+    id: 'sr-blob',
+    kind: 'github',
+    triggerType: 'manual',
+    repo: 'demo/vault',
+    branch: 'main',
+  });
+  syncObs.upsertRunItem({
+    id: 'sri-blob',
+    runId: 'sr-blob',
+    path: 'notes/blob.md',
+    changeType: 'create',
+    status: 'queued',
+    stage: 'ingest',
+  });
+  const rawContent = '# Blob\n\nThis markdown should not live inside analysis_jobs.payload_json.';
+  const jobId = queueGithubIngestJob({
+    runId: 'sr-blob',
+    itemId: 'sri-blob',
+    repoSlug: 'demo/vault',
+    branch: 'main',
+    path: 'notes/blob.md',
+    sha: 'sha-blob',
+    externalKey: 'github:demo/vault:notes/blob.md@sha-blob',
+    title: 'Blob',
+    rawContent,
+  });
+  const job = getServerDb()
+    .prepare(`SELECT payload_json FROM analysis_jobs WHERE id = ?`)
+    .get(jobId) as { payload_json: string };
+  const payload = JSON.parse(job.payload_json) as {
+    rawContent?: string;
+    rawContentRef?: string;
+    rawContentHash?: string;
+  };
+  const blob = getServerDb()
+    .prepare(`SELECT content, content_hash FROM analysis_payload_blobs WHERE ref = ?`)
+    .get(payload.rawContentRef) as { content: string; content_hash: string };
+
+  assert.equal(payload.rawContent, undefined);
+  assert.ok(payload.rawContentRef);
+  assert.match(payload.rawContentHash ?? '', /^[a-f0-9]{64}$/);
+  assert.equal(blob.content, rawContent);
+  assert.equal(blob.content_hash, payload.rawContentHash);
+});
+
+test('claiming a job records a durable heartbeat timestamp', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { getServerDb, repo } = await import('./server-db');
+  const { queueAdvancedAnalysisJob, runAnalysisWorkerOnce } = await import('./analysis-worker');
+
+  repo.insertSource({
+    id: 's-heartbeat',
+    title: 'Heartbeat',
+    type: 'file',
+    rawContent: '# Heartbeat',
+    ingestedAt: Date.now(),
+  });
+  const jobId = queueAdvancedAnalysisJob({
+    sourceId: 's-heartbeat',
+    stage: 'qa_index',
+  });
+
+  await runAnalysisWorkerOnce();
+  const job = getServerDb()
+    .prepare(`SELECT status, heartbeat_at, duration_ms FROM analysis_jobs WHERE id = ?`)
+    .get(jobId) as { status: string; heartbeat_at: number | null; duration_ms: number | null };
+
+  assert.equal(job.status, 'succeeded');
+  assert.ok(job.heartbeat_at);
+  assert.ok(job.duration_ms != null);
+});
