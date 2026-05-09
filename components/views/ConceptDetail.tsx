@@ -392,7 +392,13 @@ export function ConceptDetail({ id }: { id: string }) {
     void getDb().concepts.update(id, { contentStatus: 'full' });
   }, [concept, id]);
 
-  if (!concept) return <div className="empty-state">未找到概念</div>;
+  if (!concept) {
+    return (
+      <div className="empty-state" role="status">
+        未找到概念
+      </div>
+    );
+  }
 
   const isFresh = freshIds[concept.id];
   const currentVersion = versionDialog.versions.find((item) => item.version === concept.version);
@@ -481,7 +487,7 @@ export function ConceptDetail({ id }: { id: string }) {
           </button>
         </div>
       ) : (
-        <div className="concept-body-skeleton">
+        <div className="concept-body-skeleton" role="status" aria-label="正在加载概念正文">
           <div className="concept-skeleton-line concept-skeleton-line-lg" />
           <div className="concept-skeleton-line concept-skeleton-line-md" />
           <div className="concept-skeleton-line concept-skeleton-line-sm" />
@@ -494,7 +500,13 @@ export function ConceptDetail({ id }: { id: string }) {
         <div className="detail-section">
           <h3>基于资料</h3>
           {sources.map((s) => (
-            <button key={s!.id} className="source-ref" onClick={() => openSource(s!.id)}>
+            <button
+              key={s!.id}
+              className="source-ref"
+              onClick={() => openSource(s!.id)}
+              type="button"
+              aria-label={`${s!.title}，${s!.author ?? '未知来源'}，${formatRelativeTime(s!.ingestedAt)}`}
+            >
               <div className="src-icon">
                 <SourceTypeIcon type={s!.type} />
               </div>
@@ -514,7 +526,12 @@ export function ConceptDetail({ id }: { id: string }) {
           <h3>相关概念</h3>
           <div className="related-grid">
             {related.map((r) => (
-              <button key={r!.id} className="related-chip" onClick={() => openConcept(r!.id)}>
+              <button
+                key={r!.id}
+                className="related-chip"
+                onClick={() => openConcept(r!.id)}
+                type="button"
+              >
                 {r!.title}
               </button>
             ))}

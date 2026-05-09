@@ -40,7 +40,10 @@ export const SURFACES = {
   },
   sources: { url: '/', setup: (page) => page.getByRole('tab', { name: '资料' }).click() },
   ask: { url: '/', setup: (page) => page.getByRole('tab', { name: '问答' }).click() },
-  conceptDetail: { url: '/', setup: (page) => page.locator('.concept-card').first().click() },
+  conceptDetail: {
+    url: '/',
+    setup: (page) => page.locator('.concept-card:not(.recap-entry-card)').first().click(),
+  },
   sourceDetail: {
     url: '/',
     setup: async (page) => {
