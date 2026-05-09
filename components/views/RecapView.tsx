@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useId } from 'react';
 import dynamic from 'next/dynamic';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
@@ -27,6 +27,8 @@ const PEEK_TRANSITION_MS = 320;
 
 export function RecapView() {
   const router = useRouter();
+  const titleId = useId();
+  const cardTitleId = useId();
   const openConcept = useAppStore((s) => s.openConcept);
   const setTab = useAppStore((s) => s.setTab);
   const detail = useAppStore((s) => s.detail);
@@ -150,6 +152,10 @@ export function RecapView() {
     el.style.transition = 'none';
   }, []);
 
+  const restoreCardPointerEvents = useCallback(() => {
+    if (cardRef.current) cardRef.current.style.pointerEvents = '';
+  }, []);
+
   const animateExit = useCallback((dir: 'left' | 'right', delta = 1) => {
     const el = cardRef.current;
     if (!el) return;
@@ -259,7 +265,7 @@ export function RecapView() {
     const onTouchEnd = () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       // Restore pointer events after drag
-      if (cardRef.current) cardRef.current.style.pointerEvents = '';
+      restoreCardPointerEvents();
       const wasHorizontal = lockedAxis === 'horizontal';
       isTracking = false;
       lockedAxis = null;
@@ -280,6 +286,7 @@ export function RecapView() {
       isTracking = false;
       lockedAxis = null;
       moveFrameCount = 0;
+      restoreCardPointerEvents();
       if (dragXRef.current !== 0) {
         animateSpring();
       }
@@ -296,7 +303,7 @@ export function RecapView() {
       cardEl.removeEventListener('touchend', onTouchEnd);
       cardEl.removeEventListener('touchcancel', onTouchCancel);
     };
-  }, [applyCardTransform, animateSpring, advance]);
+  }, [applyCardTransform, animateSpring, advance, restoreCardPointerEvents]);
 
   // ---- pointer (mouse) events for desktop drag ----
   useEffect(() => {
@@ -342,6 +349,7 @@ export function RecapView() {
         if (lockedAxis === 'vertical') {
           isDragging = false;
           cardEl.style.cursor = 'grab';
+          if (cardEl.hasPointerCapture(e.pointerId)) cardEl.releasePointerCapture(e.pointerId);
           return;
         }
       }
@@ -357,10 +365,11 @@ export function RecapView() {
       }
     };
 
-    const onPointerUp = (_e: PointerEvent) => {
+    const onPointerUp = (e: PointerEvent) => {
       if (!isDragging) return;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       cardEl.style.cursor = 'grab';
+      if (cardEl.hasPointerCapture(e.pointerId)) cardEl.releasePointerCapture(e.pointerId);
       const wasHorizontal = lockedAxis === 'horizontal';
       isDragging = false;
       lockedAxis = null;
@@ -449,7 +458,7 @@ export function RecapView() {
 
   if (!mounted || !allConcepts) {
     return (
-      <div className="recap-root">
+      <div className="recap-root" role="status" aria-live="polite" aria-busy="true">
         <div className="recap-state-screen">
           <p className="recap-state-body">加载中…</p>
         </div>
@@ -459,20 +468,27 @@ export function RecapView() {
 
   if (cards.length === 0) {
     return (
-      <div className="recap-root">
+      <div className="recap-root" aria-labelledby={titleId}>
         <header className="recap-header">
-          <button className="recap-back-btn" onClick={() => router.back()} aria-label="返回">
+          <button
+            type="button"
+            className="recap-back-btn"
+            onClick={() => router.back()}
+            aria-label="返回"
+          >
             <Icon.Back />
           </button>
-          <span className="recap-header-title">今日复盘</span>
+          <span id={titleId} className="recap-header-title" role="heading" aria-level={1}>
+            今日复盘
+          </span>
         </header>
-        <div className="recap-state-screen">
-          <div className="recap-state-icon">
+        <div className="recap-state-screen" role="status" aria-live="polite">
+          <div className="recap-state-icon" aria-hidden="true">
             <Icon.Sparkle />
           </div>
           <h3 className="recap-state-heading">暂无待复盘内容</h3>
           <p className="recap-state-body">先添加一些资料，让 AI 编译成概念后就可以在这里复盘了。</p>
-          <button className="modal-btn" onClick={() => router.push('/')}>
+          <button type="button" className="modal-btn" onClick={() => router.push('/')}>
             回到主页
           </button>
         </div>
@@ -482,20 +498,27 @@ export function RecapView() {
 
   if (currentIndex >= cards.length) {
     return (
-      <div className="recap-root">
+      <div className="recap-root" aria-labelledby={titleId}>
         <header className="recap-header">
-          <button className="recap-back-btn" onClick={() => router.push('/')} aria-label="返回">
+          <button
+            type="button"
+            className="recap-back-btn"
+            onClick={() => router.push('/')}
+            aria-label="返回"
+          >
             <Icon.Back />
           </button>
-          <span className="recap-header-title">今日复盘</span>
+          <span id={titleId} className="recap-header-title" role="heading" aria-level={1}>
+            今日复盘
+          </span>
         </header>
-        <div className="recap-state-screen">
-          <div className="recap-state-icon">
+        <div className="recap-state-screen" role="status" aria-live="polite">
+          <div className="recap-state-icon" aria-hidden="true">
             <Icon.Lint />
           </div>
           <h3 className="recap-state-heading">本次复盘完成</h3>
           <p className="recap-state-body">共复盘了 {cards.length} 个概念，明天再来刷新一批。</p>
-          <button className="modal-btn" onClick={() => router.push('/')}>
+          <button type="button" className="modal-btn" onClick={() => router.push('/')}>
             回到主页
           </button>
         </div>
@@ -509,13 +532,23 @@ export function RecapView() {
   const currentCardMarkdown = (currentCard.body || '').trim() || (currentCard.summary || '').trim();
 
   return (
-    <div className="recap-root" ref={containerRef} tabIndex={-1}>
+    <div className="recap-root" ref={containerRef} tabIndex={-1} aria-labelledby={titleId}>
       <header className="recap-header">
-        <button className="recap-back-btn" onClick={() => router.push('/')} aria-label="返回">
+        <button
+          type="button"
+          className="recap-back-btn"
+          onClick={() => router.push('/')}
+          aria-label="返回"
+        >
           <Icon.Back />
         </button>
-        <span className="recap-header-title">今日复盘</span>
-        <span className="recap-header-progress">
+        <span id={titleId} className="recap-header-title" role="heading" aria-level={1}>
+          今日复盘
+        </span>
+        <span
+          className="recap-header-progress"
+          aria-label={`第 ${currentIndex + 1} 张，共 ${cards.length} 张`}
+        >
           {currentIndex + 1} / {cards.length}
         </span>
       </header>
@@ -525,7 +558,14 @@ export function RecapView() {
           {nextNextCard && <div className="recap-card recap-card-ghost-2" aria-hidden="true" />}
           {nextCard && <div className="recap-card recap-card-ghost-1" aria-hidden="true" />}
 
-          <div ref={cardRef} className="recap-card recap-card-top" key={currentCard.id}>
+          <div
+            ref={cardRef}
+            className="recap-card recap-card-top"
+            key={currentCard.id}
+            role="article"
+            aria-labelledby={cardTitleId}
+            tabIndex={0}
+          >
             <div className="recap-card-scroll">
               {/* fixed header zone */}
               {currentCard.categories && currentCard.categories.length > 0 && (
@@ -538,10 +578,12 @@ export function RecapView() {
                 </div>
               )}
 
-              <h2 className="recap-card-title">{currentCard.title}</h2>
+              <h2 id={cardTitleId} className="recap-card-title">
+                {currentCard.title}
+              </h2>
 
               {/* full body — reuses ConceptDetail prose verbatim, scrollable inside card */}
-              <div className="recap-card-body-shell">
+              <div className="recap-card-body-shell" role="region" aria-label="复盘正文">
                 {currentCardMarkdown ? (
                   <Prose
                     markdown={formatConceptBodyForDisplay(currentCardMarkdown)}
@@ -555,13 +597,20 @@ export function RecapView() {
               <div className="recap-card-footer">
                 <button
                   className="recap-card-read-more"
+                  type="button"
                   onClick={() => handleReadMore(currentCard.id)}
+                  aria-label={`深入阅读：${currentCard.title}`}
                 >
                   深入阅读
                   <Icon.Send />
                 </button>
-                <span className="recap-card-meta">
-                  <Icon.Link />
+                <span
+                  className="recap-card-meta"
+                  aria-label={`${currentCard.related.length} 个链接`}
+                >
+                  <span aria-hidden="true">
+                    <Icon.Link />
+                  </span>
                   {currentCard.related.length} 链接
                 </span>
               </div>
@@ -583,7 +632,12 @@ export function RecapView() {
             aria-label="概念详情"
             onClick={(e) => e.stopPropagation()}
           >
-            <button className="library-detail-modal-close" onClick={closePeek} aria-label="关闭">
+            <button
+              type="button"
+              className="library-detail-modal-close"
+              onClick={closePeek}
+              aria-label="关闭"
+            >
               ✕
             </button>
             <div className="library-detail-modal-scroll">
