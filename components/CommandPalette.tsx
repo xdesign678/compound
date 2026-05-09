@@ -246,6 +246,9 @@ export function CommandPalette() {
       .map(({ item }) => item);
   }, [deferredQuery, recentItems, concepts, sources]);
 
+  const activeItemId =
+    !showHelp && items[selectedIndex] ? `cmd-item-${items[selectedIndex].id}` : undefined;
+
   useEffect(() => {
     setSelectedIndex(0);
   }, [deferredQuery, items.length]);
@@ -290,6 +293,16 @@ export function CommandPalette() {
       setSelectedIndex((i) => Math.max(i - 1, 0));
       return;
     }
+    if (e.key === 'Home') {
+      e.preventDefault();
+      setSelectedIndex(0);
+      return;
+    }
+    if (e.key === 'End') {
+      e.preventDefault();
+      setSelectedIndex(Math.max(0, items.length - 1));
+      return;
+    }
     if (e.key === 'Enter') {
       e.preventDefault();
       handleSelect(selectedIndex);
@@ -309,11 +322,19 @@ export function CommandPalette() {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="cmd-input-row">
-          <Icon.Search />
+          <span className="cmd-input-icon" aria-hidden="true">
+            <Icon.Search />
+          </span>
           <input
             ref={inputRef}
             className="cmd-input"
             placeholder="搜索概念、资料或输入命令…"
+            aria-label="搜索命令、概念或资料"
+            aria-autocomplete="list"
+            aria-controls={showHelp ? undefined : 'cmd-results'}
+            aria-activedescendant={activeItemId}
+            aria-expanded={!showHelp}
+            role="combobox"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -322,25 +343,39 @@ export function CommandPalette() {
         </div>
 
         {showHelp ? (
-          <div className="cmd-help" ref={listRef}>
+          <div className="cmd-help" ref={listRef} role="list" aria-label="快捷键帮助">
             {HELP_ITEMS.map((h) => (
-              <div key={h.keys} className="cmd-help-row">
+              <div key={h.keys} className="cmd-help-row" role="listitem">
                 <kbd className="cmd-help-key">{h.keys}</kbd>
                 <span className="cmd-help-desc">{h.desc}</span>
               </div>
             ))}
           </div>
         ) : (
-          <div className="cmd-list" ref={listRef}>
-            {items.length === 0 && <div className="cmd-empty">没有匹配结果</div>}
+          <div
+            className="cmd-list"
+            ref={listRef}
+            id="cmd-results"
+            role="listbox"
+            aria-label="命令结果"
+          >
+            {items.length === 0 && (
+              <div className="cmd-empty" role="status">
+                没有匹配结果
+              </div>
+            )}
             {items.map((item, i) => (
               <button
                 key={item.id}
+                id={`cmd-item-${item.id}`}
                 className={`cmd-item${i === selectedIndex ? ' selected' : ''}`}
                 onClick={() => handleSelect(i)}
                 onMouseEnter={() => setSelectedIndex(i)}
+                role="option"
+                aria-selected={i === selectedIndex}
+                type="button"
               >
-                <span className="cmd-item-icon">
+                <span className="cmd-item-icon" aria-hidden="true">
                   {item.type === 'concept' && <Icon.Wiki />}
                   {item.type === 'source' && <Icon.Sources />}
                   {item.type === 'action' && item.icon}
@@ -355,7 +390,12 @@ export function CommandPalette() {
         )}
 
         <div className="cmd-footer">
-          <button className="cmd-footer-btn" onClick={() => setShowHelp((v) => !v)}>
+          <button
+            className="cmd-footer-btn"
+            type="button"
+            aria-expanded={showHelp}
+            onClick={() => setShowHelp((v) => !v)}
+          >
             {showHelp ? '返回搜索' : '快捷键 ?'}
           </button>
         </div>

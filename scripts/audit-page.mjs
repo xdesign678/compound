@@ -112,7 +112,15 @@ export const SURFACES = {
       await page.waitForSelector('.onboarding-card', { timeout: 30_000 });
     },
   },
-  commandPalette: { url: '/', setup: (page) => page.keyboard.press('Control+K') },
+  commandPalette: {
+    url: '/',
+    setup: async (page) => {
+      await page.waitForSelector('.search-input, .concept-card, .empty-state', { timeout: 30_000 });
+      await page.waitForLoadState('networkidle').catch(() => undefined);
+      await page.keyboard.press('Control+K');
+      await page.waitForSelector('.cmd-dialog', { timeout: 30_000 });
+    },
+  },
   globalShell: { url: '/', setup: async () => {} },
   sync: { url: '/sync', setup: async () => {} },
   review: { url: '/review', setup: async () => {} },

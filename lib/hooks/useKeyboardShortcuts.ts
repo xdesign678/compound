@@ -16,6 +16,13 @@ export function useKeyboardShortcuts() {
       const isInput =
         tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
 
+      // Cmd/Ctrl+K should work even when focus is inside search or another text field.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        store.openCommandPalette();
+        return;
+      }
+
       // Don't intercept when typing in inputs (except Escape)
       if (isInput && e.key !== 'Escape') return;
 
@@ -32,13 +39,6 @@ export function useKeyboardShortcuts() {
           e.preventDefault();
           store.closeCommandPalette();
         }
-        return;
-      }
-
-      // Cmd/Ctrl+K: open command palette
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        store.openCommandPalette();
         return;
       }
 
