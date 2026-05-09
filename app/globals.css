@@ -4003,6 +4003,10 @@ button {
 .ingest-option:active {
   background: var(--bg-hover);
 }
+.ingest-option-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .ingest-option:focus-visible {
   outline: none;
   border-color: var(--border-default);

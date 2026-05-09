@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type DragEvent } from 'react';
 import { useAppStore, type TaskItem } from '@/lib/store';
 import { ingestSource, isOfflineError } from '@/lib/api-client';
 import { canQueueOfflineWrite, getOfflineWritePayloadBytes } from '@/lib/cloud-sync';
@@ -34,6 +34,8 @@ export function IngestModal() {
   const [confirmClose, setConfirmClose] = useState(false);
   const [visible, setVisible] = useState(false);
 
+  const hasDraft = Boolean(title.trim() || author.trim() || url.trim() || content.trim());
+
   useEffect(() => {
     if (isOpen) {
       requestAnimationFrame(() => {
@@ -54,8 +56,7 @@ export function IngestModal() {
   useFocusTrap(modalRef, isOpen);
 
   useEffect(() => {
-    const el = modalRef.current;
-    if (!el || !isOpen) return;
+    if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -63,10 +64,10 @@ export function IngestModal() {
         handleClose();
       }
     };
-    el.addEventListener('keydown', handleKeyDown);
-    return () => el.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, step]);
+  }, [isOpen, step, hasDraft, submitting]);
 
   function reset() {
     setStep('choose');
@@ -133,7 +134,7 @@ export function IngestModal() {
   function handleClose() {
     if (submitting) return;
     // If on link step with any content filled, require confirmation
-    if (step === 'link' && (title.trim() || author.trim() || url.trim() || content.trim())) {
+    if (step === 'link' && hasDraft) {
       setConfirmClose(true);
       return;
     }
@@ -211,6 +212,14 @@ export function IngestModal() {
     }
   }
 
+  function handleContentDrop(e: DragEvent<HTMLTextAreaElement>) {
+    const droppedText = e.dataTransfer.getData('text/plain').trim();
+    if (!droppedText) return;
+    e.preventDefault();
+    setError(null);
+    setContent((current) => (current.trim() ? `${current.trim()}\n\n${droppedText}` : droppedText));
+  }
+
   if (noteEditorOpen) {
     return (
       <NoteEditor
@@ -231,16 +240,21 @@ export function IngestModal() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="ingest-modal-title"
+        aria-describedby={
+          step === 'choose' ? 'ingest-modal-desc' : confirmClose ? undefined : 'ingest-link-desc'
+        }
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-handle" />
         {step === 'choose' && (
           <>
             <h3 id="ingest-modal-title">添加新资料</h3>
-            <p className="modal-desc">原文只读 · AI 会把它编译进你的 Wiki,不会改动原文。</p>
+            <p className="modal-desc" id="ingest-modal-desc">
+              原文只读 · AI 会把它编译进你的 Wiki，不会改动原文。
+            </p>
             <div className="ingest-options">
-              <button className="ingest-option" onClick={() => setStep('link')}>
-                <div className="opt-icon">
+              <button className="ingest-option" type="button" onClick={() => setStep('link')}>
+                <div className="opt-icon" aria-hidden="true">
                   <Icon.Link />
                 </div>
                 <div>
@@ -248,8 +262,12 @@ export function IngestModal() {
                   <div className="opt-sub">带上文章/帖子的正文</div>
                 </div>
               </button>
-              <button className="ingest-option" onClick={() => setNoteEditorOpen(true)}>
-                <div className="opt-icon">
+              <button
+                className="ingest-option"
+                type="button"
+                onClick={() => setNoteEditorOpen(true)}
+              >
+                <div className="opt-icon" aria-hidden="true">
                   <Icon.Text />
                 </div>
                 <div>
@@ -258,11 +276,12 @@ export function IngestModal() {
                 </div>
               </button>
               <button
-                className="ingest-option"
+                className="ingest-option ingest-option-disabled"
+                type="button"
                 disabled
-                style={{ opacity: 0.5, cursor: 'not-allowed' }}
+                aria-disabled="true"
               >
-                <div className="opt-icon">
+                <div className="opt-icon" aria-hidden="true">
                   <Icon.File />
                 </div>
                 <div>
@@ -271,7 +290,7 @@ export function IngestModal() {
                 </div>
               </button>
             </div>
-            <button className="modal-btn" onClick={handleClose}>
+            <button className="modal-btn" type="button" onClick={handleClose}>
               取消
             </button>
           </>
@@ -279,27 +298,28 @@ export function IngestModal() {
 
         {step === 'link' && (
           <>
-            <h3>添加链接资料</h3>
+            <h3 id="ingest-modal-title">添加链接资料</h3>
             {confirmClose ? (
-              <div className="ingest-confirm-close">
+              <div className="ingest-confirm-close" role="alert" aria-live="assertive">
                 <p className="modal-desc">已填写的内容将丢失，确认关闭？</p>
-                <button className="modal-btn primary" onClick={handleConfirmClose}>
+                <button className="modal-btn primary" type="button" onClick={handleConfirmClose}>
                   确认
                 </button>
-                <button className="modal-btn" onClick={() => setConfirmClose(false)}>
+                <button className="modal-btn" type="button" onClick={() => setConfirmClose(false)}>
                   继续编辑
                 </button>
               </div>
             ) : (
               <>
-                <p className="modal-desc">
-                  当前版本需要你把目标页面的正文一起贴进来(浏览器无法跨域抓取)。AI 会基于正文编译。
+                <p className="modal-desc" id="ingest-link-desc">
+                  当前版本需要你把目标页面的正文一起贴进来（浏览器无法跨域抓取）。AI
+                  会基于正文编译，长任务会同步出现在任务中心。
                 </p>
                 {(submitting || error) && (
                   <ImportProgress
                     title="资料导入"
                     stage={submitting ? '正在送入 AI 编译' : '导入失败'}
-                    detail={title || '等待提交'}
+                    detail={submitting ? `${title || '等待提交'} · 可在任务中心继续查看` : title}
                     progress={submitting ? 35 : 0}
                     running={submitting}
                     error={error}
@@ -312,8 +332,10 @@ export function IngestModal() {
                   <input
                     id="link-title"
                     className="form-input"
+                    type="text"
                     placeholder="例如: LLM Wiki by Karpathy"
                     value={title}
+                    autoComplete="off"
                     onChange={(e) => setTitle(e.target.value)}
                   />
                 </div>
@@ -322,7 +344,9 @@ export function IngestModal() {
                   <input
                     id="link-author"
                     className="form-input"
+                    type="text"
                     value={author}
+                    autoComplete="off"
                     onChange={(e) => setAuthor(e.target.value)}
                   />
                 </div>
@@ -331,8 +355,12 @@ export function IngestModal() {
                   <input
                     id="link-url"
                     className="form-input"
+                    type="url"
+                    inputMode="url"
                     placeholder="https://…"
                     value={url}
+                    autoComplete="url"
+                    spellCheck={false}
                     onChange={(e) => setUrl(e.target.value)}
                   />
                 </div>
@@ -344,12 +372,20 @@ export function IngestModal() {
                     rows={8}
                     placeholder="把页面正文粘贴到这里…"
                     value={content}
+                    aria-describedby="ingest-link-desc"
+                    onDrop={handleContentDrop}
+                    onPaste={() => setError(null)}
                     onChange={(e) => setContent(e.target.value)}
                   />
                 </div>
-                {error && <div className="ingest-error-banner">{error}</div>}
+                {error && (
+                  <div className="ingest-error-banner" role="alert" aria-live="assertive">
+                    {error}
+                  </div>
+                )}
                 <button
                   className="modal-btn primary"
+                  type="button"
                   disabled={!title.trim() || !content.trim() || submitting || !isOnline}
                   onClick={() => handleSubmit('link')}
                 >
@@ -357,6 +393,7 @@ export function IngestModal() {
                 </button>
                 <button
                   className="modal-btn"
+                  type="button"
                   disabled={submitting}
                   onClick={() => setStep('choose')}
                 >
