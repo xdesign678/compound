@@ -11,6 +11,14 @@
 - 复现时优先核对真实状态：用户实际选中的文本、目标元素矩形、浮窗/按钮矩形、滚动容器位置、是否发生 React 重渲染或 DOM 替换。
 - 修复顺序先保证原生交互不被前端打断，再保证状态不被重渲染清掉，最后再调视觉位置和样式。
 
+## 线上 API 测试约定
+
+- 后续需要调用已部署站点 API 做线上测试时，默认先从本机 `.env.local` 加载测试凭据：
+  `set -a && source .env.local && set +a`。
+- 调用 `https://compund.zeabur.app` 的管理接口时，使用
+  `Authorization: Bearer $COMPOUND_ADMIN_TOKEN`，不要在命令输出、文档、代码、提交信息或测试快照中记录真实 token。
+- `.env.local` 已被 `.gitignore` 忽略，只用于本机测试；不要把它改成可追踪文件，也不要把其中的真实值复制到 `docs/` 或 README。
+
 ## Naming conventions
 
 Naming rules are enforced via `@typescript-eslint/naming-convention` in `.eslintrc.json`.
