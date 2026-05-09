@@ -42,6 +42,7 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
     return (
       <button
         key={item.id}
+        type="button"
         id={`tab-${item.id}`}
         role="tab"
         aria-selected={isActive}
@@ -52,7 +53,7 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
         onMouseEnter={() => preloadView(item.id)}
         onFocus={() => preloadView(item.id)}
       >
-        {item.icon}
+        <span aria-hidden="true">{item.icon}</span>
         <span>{t(item.labelKey)}</span>
       </button>
     );
@@ -61,7 +62,9 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
   if (isSidebar) {
     return (
       <nav className="tabbar tabbar-sidebar" aria-label={t('tab.navLabel')}>
-        <div role="tablist">{TABS.map(renderTab)}</div>
+        <div role="tablist" aria-orientation="vertical">
+          {TABS.map(renderTab)}
+        </div>
       </nav>
     );
   }
@@ -70,13 +73,13 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
 
   return (
     <nav className="tabbar" aria-label={t('tab.navLabel')}>
-      <div role="tablist" className="tabbar-tabs">
+      <div role="tablist" aria-orientation="horizontal" className="tabbar-tabs">
         {renderTab(first)}
         {renderTab(second)}
         {rest.map(renderTab)}
       </div>
       <button type="button" className="tab-add" aria-label={t('tab.addSource')} onClick={openModal}>
-        <span className="tab-add-btn">
+        <span className="tab-add-btn" aria-hidden="true">
           <Icon.Plus />
         </span>
       </button>

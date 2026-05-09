@@ -73,6 +73,7 @@ function OverflowMenu({
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
         onClose();
         return;
       }
@@ -100,8 +101,15 @@ function OverflowMenu({
   if (!open) return null;
 
   return (
-    <div className="overflow-menu" ref={menuRef} role="menu" aria-label={t('header.more')}>
+    <div
+      className="overflow-menu"
+      ref={menuRef}
+      role="menu"
+      aria-label={t('header.more')}
+      id="header-overflow-menu"
+    >
       <button
+        type="button"
         className="overflow-menu-item"
         role="menuitem"
         tabIndex={-1}
@@ -110,7 +118,9 @@ function OverflowMenu({
           onGithubSync();
         }}
       >
-        <Icon.Github />
+        <span aria-hidden="true">
+          <Icon.Github />
+        </span>
         <span>{t('header.githubSync')}</span>
       </button>
       <Link
@@ -120,10 +130,13 @@ function OverflowMenu({
         href="/sync"
         onClick={onClose}
       >
-        <Icon.Activity />
+        <span aria-hidden="true">
+          <Icon.Activity />
+        </span>
         <span>{t('header.syncConsole')}</span>
       </Link>
       <button
+        type="button"
         className="overflow-menu-item"
         role="menuitem"
         tabIndex={-1}
@@ -132,10 +145,13 @@ function OverflowMenu({
           onObsidianImport();
         }}
       >
-        <Icon.Ingest />
+        <span aria-hidden="true">
+          <Icon.Ingest />
+        </span>
         <span>{t('header.obsidianImport')}</span>
       </button>
       <button
+        type="button"
         className="overflow-menu-item"
         role="menuitem"
         tabIndex={-1}
@@ -144,7 +160,9 @@ function OverflowMenu({
           onSettings();
         }}
       >
-        <Icon.Settings />
+        <span aria-hidden="true">
+          <Icon.Settings />
+        </span>
         <span>{t('header.settings')}</span>
       </button>
     </div>
@@ -179,8 +197,10 @@ export function Header(props: HeaderProps) {
   if (detail) {
     return (
       <header className="header detail-header">
-        <button className="back-btn" onClick={back}>
-          <Icon.Back />
+        <button type="button" className="back-btn" onClick={back}>
+          <span aria-hidden="true">
+            <Icon.Back />
+          </span>
           <span>{t('header.back')}</span>
         </button>
         {detail.type === 'source' && (
@@ -192,7 +212,9 @@ export function Header(props: HeaderProps) {
               aria-label={t('header.toc')}
               title={t('header.toc')}
             >
-              <ListTree />
+              <span aria-hidden="true">
+                <ListTree />
+              </span>
             </button>
           </div>
         )}
@@ -216,7 +238,9 @@ export function Header(props: HeaderProps) {
             onClick={handleExpandSearch}
             aria-label={t('header.search.expand')}
           >
-            <Icon.Search />
+            <span aria-hidden="true">
+              <Icon.Search />
+            </span>
           </button>
         )}
         {/* Mobile: command palette trigger (visible when search icon is not shown) */}
@@ -227,17 +251,22 @@ export function Header(props: HeaderProps) {
             onClick={openCommandPalette}
             aria-label={t('header.search')}
           >
-            <Icon.Search />
+            <span aria-hidden="true">
+              <Icon.Search />
+            </span>
           </button>
         )}
         {/* Desktop: show individual icons */}
         <button
+          type="button"
           className="icon-btn header-desktop-action"
           onClick={openGithubSync}
           aria-label={t('header.githubSync')}
           title={t('header.githubSync')}
         >
-          <Icon.Github />
+          <span aria-hidden="true">
+            <Icon.Github />
+          </span>
         </button>
         <Link
           className="icon-btn header-desktop-action"
@@ -245,32 +274,45 @@ export function Header(props: HeaderProps) {
           aria-label={t('header.syncConsole')}
           title={t('header.syncConsole')}
         >
-          <Icon.Activity />
+          <span aria-hidden="true">
+            <Icon.Activity />
+          </span>
         </Link>
         <button
+          type="button"
           className="icon-btn header-desktop-action"
           onClick={openObsidianImport}
           aria-label={t('header.obsidianImport')}
           title={t('header.obsidianImport')}
         >
-          <Icon.Ingest />
+          <span aria-hidden="true">
+            <Icon.Ingest />
+          </span>
         </button>
         <button
+          type="button"
           className="icon-btn header-desktop-action"
           onClick={openSettings}
           aria-label={t('header.settings')}
         >
-          <Icon.Settings />
+          <span aria-hidden="true">
+            <Icon.Settings />
+          </span>
         </button>
         {/* Mobile: single overflow menu */}
         <div className="header-mobile-overflow">
           <button
+            type="button"
             className={`icon-btn${overflowOpen ? ' is-active' : ''}`}
             onClick={() => setOverflowOpen((v) => !v)}
             aria-label={t('header.more')}
             aria-expanded={overflowOpen}
+            aria-haspopup="menu"
+            aria-controls={overflowOpen ? 'header-overflow-menu' : undefined}
           >
-            <Icon.Overflow />
+            <span aria-hidden="true">
+              <Icon.Overflow />
+            </span>
           </button>
           <OverflowMenu
             open={overflowOpen}

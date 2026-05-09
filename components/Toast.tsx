@@ -25,11 +25,11 @@ function ToastSlot({ toast, onDismiss }: { toast: ToastState; onDismiss: () => v
   return (
     <div
       className={`toast ${toast.visible ? 'visible' : ''} ${toast.isError ? 'toast-error' : ''}`}
-      role="status"
+      role={toast.isError ? 'alert' : 'status'}
       aria-live={toast.isError ? 'assertive' : 'polite'}
       aria-atomic="true"
     >
-      {toast.loading && <div className="spinner" />}
+      {toast.loading && <div className="spinner" aria-hidden="true" />}
       <span className="toast-text">{displayText}</span>
       {toast.isError && toast.retry && (
         <button
@@ -42,8 +42,13 @@ function ToastSlot({ toast, onDismiss }: { toast: ToastState; onDismiss: () => v
         </button>
       )}
       {toast.isError && (
-        <button className="toast-close" onClick={onDismiss} aria-label={t('toast.close')}>
-          ×
+        <button
+          className="toast-close"
+          onClick={onDismiss}
+          aria-label={t('toast.close')}
+          type="button"
+        >
+          <span aria-hidden="true">×</span>
         </button>
       )}
     </div>
@@ -72,7 +77,12 @@ export function Toast() {
   return (
     <div className="toast-container">
       {!isOnline && (
-        <div className="toast visible toast-error" role="status" aria-live="polite">
+        <div
+          className="toast visible toast-error"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           <span className="toast-text">
             {pausedCount > 0
               ? t('toast.offlineWithTasks', { count: pausedCount })

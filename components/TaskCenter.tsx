@@ -80,11 +80,19 @@ export function TaskCenter() {
       {/* Floating trigger button */}
       {hasTasks && !open && (
         <button
+          type="button"
           className="tc-trigger"
           onClick={toggleTaskCenter}
           aria-label={`任务中心 · ${activeCount > 0 ? `${activeCount} 个未完成` : '全部完成'}`}
+          aria-haspopup="dialog"
         >
-          {activeCount > 0 ? <span className="tc-trigger-indicator" /> : <Icon.Lint />}
+          {activeCount > 0 ? (
+            <span className="tc-trigger-indicator" aria-hidden="true" />
+          ) : (
+            <span aria-hidden="true">
+              <Icon.Lint />
+            </span>
+          )}
           <span className="tc-trigger-text">
             {activeCount > 0 ? `${activeCount} 个任务` : '任务中心'}
           </span>
@@ -93,25 +101,39 @@ export function TaskCenter() {
 
       {/* Panel */}
       {open && (
-        <div className="tc-panel">
+        <section
+          className="tc-panel"
+          role="region"
+          aria-labelledby="task-center-title"
+          aria-live="polite"
+        >
           <div className="tc-header">
-            <h4 className="tc-title">任务中心</h4>
+            <h4 className="tc-title" id="task-center-title">
+              任务中心
+            </h4>
             <div className="tc-header-actions">
               {tasks.some((t) => !['queued', 'running', 'paused-offline'].includes(t.status)) && (
-                <button className="tc-header-btn" onClick={clearFinishedTasks}>
+                <button type="button" className="tc-header-btn" onClick={clearFinishedTasks}>
                   清除已完成
                 </button>
               )}
-              <button className="tc-header-btn tc-close-btn" onClick={toggleTaskCenter}>
-                ✕
+              <button
+                type="button"
+                className="tc-header-btn tc-close-btn"
+                onClick={toggleTaskCenter}
+                aria-label="关闭任务中心"
+              >
+                <span aria-hidden="true">✕</span>
               </button>
             </div>
           </div>
-          <div className="tc-list">
+          <div className="tc-list" role="list">
             {tasks.length === 0 && <div className="tc-empty">暂无任务</div>}
             {tasks.map((task) => (
-              <div key={task.id} className={`tc-item tc-item-${task.status}`}>
-                <span className="tc-item-icon">{TASK_KIND_ICON[task.kind]}</span>
+              <div key={task.id} className={`tc-item tc-item-${task.status}`} role="listitem">
+                <span className="tc-item-icon" aria-hidden="true">
+                  {TASK_KIND_ICON[task.kind]}
+                </span>
                 <div className="tc-item-body">
                   <div className="tc-item-row">
                     <span className="tc-item-label">{task.label}</span>
@@ -125,12 +147,15 @@ export function TaskCenter() {
                   {task.error && <div className="tc-item-error">{task.error}</div>}
                 </div>
                 <div className="tc-item-actions">
-                  {task.status === 'running' && <div className="spinner tc-spinner" />}
+                  {task.status === 'running' && (
+                    <div className="spinner tc-spinner" aria-hidden="true" />
+                  )}
                   {(task.status === 'queued' ||
                     task.status === 'paused-offline' ||
                     task.status === 'error') &&
                     task.retry && (
                       <button
+                        type="button"
                         className="tc-retry-btn"
                         onClick={() => void handleRetry(task)}
                         aria-label="重试"
@@ -140,27 +165,29 @@ export function TaskCenter() {
                     )}
                   {!['queued', 'running', 'paused-offline'].includes(task.status) && (
                     <button
+                      type="button"
                       className="tc-dismiss-btn"
                       onClick={() => removeTask(task.id)}
                       aria-label="关闭"
                     >
-                      ×
+                      <span aria-hidden="true">×</span>
                     </button>
                   )}
                   {task.status === 'paused-offline' && (
                     <button
+                      type="button"
                       className="tc-dismiss-btn"
                       onClick={() => removeTask(task.id)}
                       aria-label="关闭"
                     >
-                      ×
+                      <span aria-hidden="true">×</span>
                     </button>
                   )}
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
     </>
   );
