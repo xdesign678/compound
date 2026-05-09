@@ -79,6 +79,9 @@ const ConceptCard = memo(function ConceptCard({
       className={`concept-card${isActive ? ' active' : ''}`}
       onClick={() => onOpen(concept.id)}
       data-concept-id={concept.id}
+      type="button"
+      aria-current={isActive ? 'page' : undefined}
+      aria-label={`${concept.title}，${concept.related.length} 个链接，${formatRelativeTime(concept.updatedAt)}更新`}
     >
       <div className="title">{concept.title}</div>
       <div className="summary">{concept.summary}</div>
@@ -379,8 +382,18 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
     }
   }, [categorizing, showToast, showErrorToast, hideToast]);
 
+  const clearFilters = useCallback(() => {
+    setQuery('');
+    setSelectedPrimary(null);
+    setSelectedSecondary(null);
+  }, [setQuery, setSelectedPrimary, setSelectedSecondary]);
+
   if (!concepts) {
-    return <div className="empty-state">加载中...</div>;
+    return (
+      <div className="empty-state" role="status" aria-live="polite">
+        加载中...
+      </div>
+    );
   }
 
   const filterLabel = selectedPrimary
@@ -439,6 +452,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
             className="modal-btn primary library-categorize-btn"
             onClick={handleCategorize}
             disabled={categorizing}
+            type="button"
           >
             {categorizing ? '归类中...' : '自动归类'}
           </button>
@@ -483,6 +497,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
               <button
                 className={`library-primary-card${selectedPrimary === null ? ' active' : ''}`}
                 aria-pressed={selectedPrimary === null}
+                type="button"
                 onClick={() => {
                   setSelectedPrimary(null);
                   setSelectedSecondary(null);
@@ -503,6 +518,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                     key={cat.primary}
                     className={`library-primary-card${selectedPrimary === cat.primary ? ' active' : ''}`}
                     aria-pressed={selectedPrimary === cat.primary}
+                    type="button"
                     onClick={() => {
                       if (selectedPrimary === cat.primary) {
                         setSelectedPrimary(null);
@@ -541,6 +557,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
               <button
                 className={`library-secondary-chip${selectedSecondary === null ? ' active' : ''}`}
                 aria-pressed={selectedSecondary === null}
+                type="button"
                 onClick={() => setSelectedSecondary(null)}
               >
                 <span className="library-secondary-chip-inner">
@@ -559,6 +576,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                   key={sec.name}
                   className={`library-secondary-chip${selectedSecondary === sec.name ? ' active' : ''}`}
                   aria-pressed={selectedSecondary === sec.name}
+                  type="button"
                   onClick={() => {
                     setSelectedSecondary(selectedSecondary === sec.name ? null : sec.name);
                   }}
@@ -578,6 +596,8 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
               {hasMoreSecondaries && (
                 <button
                   className="library-secondary-chip library-secondary-more"
+                  type="button"
+                  aria-expanded={showAllSecondaries}
                   onClick={() => setShowAllSecondaries((v) => !v)}
                 >
                   <span className="library-secondary-chip-inner">
@@ -613,15 +633,8 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
             <button className="filter-indicator-clear" onClick={() => setQuery('')} type="button">
               清除搜索词
             </button>
-            <button
-              className="filter-indicator-clear"
-              onClick={() => {
-                setSelectedPrimary(null);
-                setSelectedSecondary(null);
-              }}
-              type="button"
-            >
-              取消分类
+            <button className="filter-indicator-clear" onClick={clearFilters} type="button">
+              清空筛选
             </button>
           </div>
         </div>
@@ -631,7 +644,12 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
         concepts.length === 0 ? (
           <OnboardingCard />
         ) : (
-          <div className="empty-state">没有匹配的概念</div>
+          <div className="empty-state" role="status">
+            <p>没有匹配的概念</p>
+            <button className="modal-btn" type="button" onClick={clearFilters}>
+              清空筛选
+            </button>
+          </div>
         )
       ) : (
         <>
