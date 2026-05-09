@@ -64,6 +64,7 @@ export function AskMessageList({
                 <button
                   className="ask-reset-btn ask-recovery-action"
                   onClick={() => void onRestart()}
+                  type="button"
                 >
                   重新开始
                 </button>
@@ -128,7 +129,7 @@ export function AskMessageList({
                         message.citedConcepts &&
                         message.citedConcepts.length > 0 &&
                         (message.savedAsConceptId ? (
-                          <button className="save-as-page" disabled>
+                          <button className="save-as-page" disabled type="button">
                             <Icon.Save />
                             已归档为 Wiki 页面
                           </button>
@@ -137,6 +138,7 @@ export function AskMessageList({
                             className="save-as-page"
                             disabled={archiving === message.id}
                             onClick={() => void onArchive(message, userQuestion)}
+                            type="button"
                           >
                             <Icon.Save />
                             {archiving === message.id ? '归档中...' : '归档为新页面'}
@@ -166,6 +168,7 @@ export function AskMessageList({
                               key={q}
                               className="msg-follow-up-q"
                               onClick={() => void onSendSuggestion(q)}
+                              type="button"
                             >
                               {q}
                             </button>
@@ -213,7 +216,12 @@ function CitedList({ ids, onClick }: { ids: string[]; onClick: (id: string) => v
   return (
     <>
       {concepts.map((concept) => (
-        <button key={concept!.id} className="ms-item" onClick={() => onClick(concept!.id)}>
+        <button
+          key={concept!.id}
+          className="ms-item"
+          onClick={() => onClick(concept!.id)}
+          type="button"
+        >
           {concept!.title}
         </button>
       ))}

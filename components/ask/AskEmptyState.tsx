@@ -19,12 +19,12 @@ export function AskEmptyState({
       </div>
       <h3>从你的 Wiki 问起</h3>
       <p>
-        答案从已综合的概念页中提取,带引用。好的回答可以归档为新页面。
+        答案从已综合的概念页中提取，带引用。好的回答可以归档为新页面。
         {conceptCount === 0 && (
           <>
             <br />
             <br />
-            <strong>Wiki 当前为空</strong>,请先添加一些资料。
+            <strong>Wiki 当前为空</strong>，请先添加一些资料。
           </>
         )}
       </p>
@@ -35,6 +35,7 @@ export function AskEmptyState({
               key={suggestion}
               className="suggested-q"
               onClick={() => void onSend(suggestion)}
+              type="button"
             >
               {suggestion}
             </button>

@@ -83,6 +83,7 @@ export function AskComposer({
                   key={`${item.kind}-${item.id}`}
                   className={`ask-mention-chip ${item.kind === 'source' ? 'is-source' : ''}`}
                   onClick={() => onRemoveMention(item)}
+                  type="button"
                   title="移除引用"
                 >
                   <span className="ask-mention-chip-kind">
@@ -210,6 +211,7 @@ export function AskComposer({
                 className="ask-send-btn"
                 onClick={() => void onSend()}
                 disabled={!input.trim() || loading}
+                type="button"
                 aria-label="发送问题"
                 title="发送问题"
               >
@@ -245,19 +247,23 @@ function ReferencePicker({
   return (
     <>
       <div className="ask-flyout-backdrop" onClick={onClose} aria-hidden="true" />
-      <div className="ask-flyout ask-reference-flyout">
+      <div className="ask-flyout ask-reference-flyout" role="dialog" aria-label="添加引用">
         <div className="ask-flyout-header">
           <div className="ask-flyout-title">添加引用</div>
           <div className="ask-segmented">
             <button
               className={`ask-segmented-btn${referenceMode === 'concept' ? ' active' : ''}`}
               onClick={() => setReferenceMode('concept')}
+              type="button"
+              aria-pressed={referenceMode === 'concept'}
             >
               引用概念
             </button>
             <button
               className={`ask-segmented-btn${referenceMode === 'source' ? ' active' : ''}`}
               onClick={() => setReferenceMode('source')}
+              type="button"
+              aria-pressed={referenceMode === 'source'}
             >
               引用文件
             </button>
@@ -299,7 +305,7 @@ function ModelSelector({
   return (
     <>
       <div className="ask-flyout-backdrop" onClick={onClose} aria-hidden="true" />
-      <div className="ask-flyout ask-model-flyout">
+      <div className="ask-flyout ask-model-flyout" role="dialog" aria-label="切换模型">
         <div className="ask-flyout-title">切换模型</div>
         <div className="ask-model-list">
           {modelOptions.map((item) => {
@@ -309,6 +315,8 @@ function ModelSelector({
                 key={item.value}
                 className={`ask-model-option${active ? ' active' : ''}`}
                 onClick={() => onSelectModel(item.value)}
+                type="button"
+                aria-pressed={active}
               >
                 <span className="ask-model-option-copy">
                   <span className="ask-model-option-label">{item.label}</span>
@@ -334,7 +342,11 @@ function MentionResults({
   onSelect: (item: MentionItem) => void;
 }) {
   if (items.length === 0) {
-    return <div className="ask-flyout-empty">{emptyLabel}</div>;
+    return (
+      <div className="ask-flyout-empty" role="status">
+        {emptyLabel}
+      </div>
+    );
   }
 
   const conceptItems = items.filter((item) => item.kind === 'concept');
@@ -371,7 +383,7 @@ function MentionRow({
   onSelect: (item: MentionItem) => void;
 }) {
   return (
-    <button className="ask-reference-item" onClick={() => onSelect(item)}>
+    <button className="ask-reference-item" onClick={() => onSelect(item)} type="button">
       <span className="ask-reference-item-icon">
         {item.kind === 'concept' ? <Icon.Wiki /> : <SourceTypeIcon type={item.type ?? 'file'} />}
       </span>
