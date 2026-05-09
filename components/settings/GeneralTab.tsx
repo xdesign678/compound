@@ -20,16 +20,19 @@ export function GeneralTab() {
   }, []);
 
   return (
-    <div className="settings-tab-content">
+    <div className="settings-tab-content settings-general-tab">
       <div className="settings-tool-row settings-tool-row-flat">
         <div>
           <div className="settings-tool-title">{t('settings.language.title')}</div>
           <div className="settings-card-desc">{t('settings.language.desc')}</div>
         </div>
-        <div className="settings-segmented">
+        <div className="settings-segmented" role="radiogroup" aria-label="界面语言">
           {(['zh-CN', 'en'] as Locale[]).map((item) => (
             <button
               key={item}
+              type="button"
+              role="radio"
+              aria-checked={locale === item}
               className={locale === item ? 'active' : ''}
               onClick={() => setLocale(item)}
             >
@@ -44,10 +47,17 @@ export function GeneralTab() {
           <div className="settings-tool-title">颜色模式</div>
           <div className="settings-card-desc">浅色、深色或跟随系统</div>
         </div>
-        <div className="settings-segmented settings-segmented-three">
+        <div
+          className="settings-segmented settings-segmented-three"
+          role="radiogroup"
+          aria-label="颜色模式"
+        >
           {(['light', 'dark', 'system'] as ColorMode[]).map((mode) => (
             <button
               key={mode}
+              type="button"
+              role="radio"
+              aria-checked={colorMode === mode}
               className={colorMode === mode ? 'active' : ''}
               onClick={() => setColorMode(mode)}
             >
@@ -78,14 +88,20 @@ export function GeneralTab() {
           <div className="settings-tool-title">首页样式</div>
           <div className="settings-card-desc">动态流或分类知识库</div>
         </div>
-        <div className="settings-segmented">
+        <div className="settings-segmented" role="radiogroup" aria-label="首页样式">
           <button
+            type="button"
+            role="radio"
+            aria-checked={homeStyle === 'feed'}
             className={homeStyle === 'feed' ? 'active' : ''}
             onClick={() => setHomeStyle('feed')}
           >
             动态流
           </button>
           <button
+            type="button"
+            role="radio"
+            aria-checked={homeStyle === 'library'}
             className={homeStyle === 'library' ? 'active' : ''}
             onClick={() => setHomeStyle('library')}
           >
@@ -101,8 +117,11 @@ export function GeneralTab() {
             {breaksEnabled ? '宽松模式：单个换行即分段' : '严格模式：需空行才能分段'}
           </div>
         </div>
-        <div className="settings-segmented">
+        <div className="settings-segmented" role="radiogroup" aria-label="Markdown 换行模式">
           <button
+            type="button"
+            role="radio"
+            aria-checked={!breaksEnabled}
             className={!breaksEnabled ? 'active' : ''}
             onClick={() => {
               setMarkdownBreaks(false);
@@ -112,6 +131,9 @@ export function GeneralTab() {
             严格
           </button>
           <button
+            type="button"
+            role="radio"
+            aria-checked={breaksEnabled}
             className={breaksEnabled ? 'active' : ''}
             onClick={() => {
               setMarkdownBreaks(true);

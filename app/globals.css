@@ -4520,6 +4520,13 @@ button {
 .settings-tab-content {
   padding: 4px 0 0;
 }
+.settings-general-tab .settings-tool-title {
+  line-height: 1.35;
+}
+.settings-general-tab .settings-card-desc {
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
 .settings-tab-divider {
   height: 1px;
   background: var(--border-section);

@@ -9,10 +9,17 @@ export function FontSizeSelector() {
   const setFontSize = useAppStore((s) => s.setFontSize);
 
   return (
-    <div className="settings-segmented settings-segmented-five">
+    <div
+      className="settings-segmented settings-segmented-five"
+      role="radiogroup"
+      aria-label="正文字号"
+    >
       {FONT_SIZES.map((size) => (
         <button
           key={size}
+          type="button"
+          role="radio"
+          aria-checked={fontSize === size}
           className={fontSize === size ? 'active' : ''}
           onClick={() => setFontSize(size)}
           aria-label={`字号: ${FONT_SIZE_MAP[size].label}`}

@@ -9,10 +9,17 @@ export function LineHeightSelector() {
   const setLineHeight = useAppStore((s) => s.setLineHeight);
 
   return (
-    <div className="settings-segmented settings-segmented-five">
+    <div
+      className="settings-segmented settings-segmented-five"
+      role="radiogroup"
+      aria-label="正文行间距"
+    >
       {LINE_HEIGHTS.map((lh) => (
         <button
           key={lh}
+          type="button"
+          role="radio"
+          aria-checked={lineHeight === lh}
           className={lineHeight === lh ? 'active' : ''}
           onClick={() => setLineHeight(lh)}
           aria-label={`行间距: ${LINE_HEIGHT_MAP[lh].label}`}
