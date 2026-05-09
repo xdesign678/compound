@@ -114,7 +114,7 @@ export function SourcesView() {
 
   if (!sources)
     return (
-      <div className="skeleton-sources" aria-label="正在加载..." aria-busy="true">
+      <div className="skeleton-sources" role="status" aria-label="正在加载资料" aria-busy="true">
         <div className="skeleton skeleton-header" />
         <div className="skeleton skeleton-card" />
         <div className="skeleton skeleton-card" style={{ opacity: 0.7 }} />
@@ -158,7 +158,11 @@ export function SourcesView() {
             </div>
             <h3>没有找到资料</h3>
             <p>换个关键词试试，或清空搜索回到全部资料。</p>
-            <button className="modal-btn empty-state-action" onClick={() => setQuery('')}>
+            <button
+              className="modal-btn empty-state-action"
+              onClick={() => setQuery('')}
+              type="button"
+            >
               清空搜索
             </button>
           </div>
@@ -169,6 +173,11 @@ export function SourcesView() {
                 key={source.id}
                 className={`source-card${detail?.type === 'source' && detail.id === source.id ? ' active' : ''}`}
                 onClick={() => openSource(source.id)}
+                type="button"
+                aria-current={
+                  detail?.type === 'source' && detail.id === source.id ? 'page' : undefined
+                }
+                aria-label={`${source.title}，${SOURCE_TYPE_LABELS[source.type]}，${conceptCountBySource?.get(source.id) ?? 0} 个概念`}
               >
                 <div className="s-title">{source.title}</div>
                 {source.author && <div className="s-author">{source.author}</div>}
@@ -192,6 +201,7 @@ export function SourcesView() {
             {filteredSources.length < totalMatches && (
               <button
                 className="modal-btn"
+                type="button"
                 onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
               >
                 加载更多
