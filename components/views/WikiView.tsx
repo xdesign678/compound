@@ -33,6 +33,9 @@ const WikiCard = memo(function WikiCard({
     <button
       className={`concept-card${isFresh ? ' fresh' : ''}${isActive ? ' active' : ''}`}
       onClick={() => onOpen(concept.id)}
+      type="button"
+      aria-current={isActive ? 'page' : undefined}
+      aria-label={`${concept.title}，${concept.related.length} 个链接，来自 ${concept.sources.length} 份资料`}
     >
       <div className="title">{concept.title}</div>
       <div className="summary">{concept.summary}</div>
@@ -150,7 +153,11 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   );
 
   if (!concepts) {
-    return <div className="empty-state">加载中...</div>;
+    return (
+      <div className="empty-state" role="status" aria-live="polite">
+        加载中...
+      </div>
+    );
   }
 
   const hasAnyConcepts = (totalConceptCount ?? 0) > 0;
@@ -208,11 +215,11 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
             </div>
             <h3>Wiki 还是空的</h3>
             <p>
-              点击右下角 <strong>+</strong> 添加第一份资料,AI 会把它编译成你的第一批概念页。
+              点击右下角 <strong>+</strong> 添加第一份资料，AI 会把它编译成你的第一批概念页。
             </p>
           </div>
         ) : (
-          <div className="empty-state">
+          <div className="empty-state" role="status">
             <p>没有匹配的概念</p>
             <button className="modal-btn" onClick={() => setQuery('')} type="button">
               清空搜索
@@ -223,7 +230,7 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
         <>
           {fresh.length > 0 && (
             <>
-              <div className="section-heading">
+              <div className="section-heading" role="heading" aria-level={2}>
                 刚更新 <span className="section-heading-count">({fresh.length})</span>
               </div>
               <div className="concept-list">
@@ -241,7 +248,9 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
           )}
           {others.length > 0 && (
             <>
-              <div className="section-heading">全部概念</div>
+              <div className="section-heading" role="heading" aria-level={2}>
+                全部概念
+              </div>
               <div className="concept-list">
                 {others.map((c) => (
                   <WikiCard
