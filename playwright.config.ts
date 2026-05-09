@@ -10,6 +10,9 @@ export default defineConfig({
   timeout: 30_000,
   expect: {
     timeout: 8_000,
+    toHaveScreenshot: {
+      maxDiffPixelRatio: 0.01,
+    },
   },
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,

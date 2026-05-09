@@ -717,7 +717,7 @@ button {
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--brand-clay);
+  color: var(--brand-clay-text);
   margin-bottom: 8px;
 }
 .view-lead-copy {
@@ -1547,7 +1547,7 @@ button {
   font-family: var(--font-sans);
   font-size: 12px;
   letter-spacing: 0.02em;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   margin-bottom: 14px;
 }
 .source-hero-kicker-dot {
@@ -1613,7 +1613,7 @@ button {
   font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-weight: 600;
 }
 .source-hero-related-chips {
@@ -2122,14 +2122,14 @@ button {
   gap: 8px;
   font-family: var(--font-sans);
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   flex-wrap: wrap;
 }
 .source-card .s-meta .s-type-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 .source-card .s-meta .s-type-badge svg {
   width: 11px;
@@ -3481,17 +3481,17 @@ button {
 }
 .stat-label {
   font-size: var(--text-2xs);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   margin-top: 2px;
 }
 .stat-card.score-good .stat-value {
-  color: #4a9;
+  color: var(--color-success);
 }
 .stat-card.score-warn .stat-value {
-  color: #c90;
+  color: var(--color-warning);
 }
 .stat-card.score-bad .stat-value {
-  color: #c44;
+  color: var(--color-error);
 }
 
 /* Health section */
@@ -3988,7 +3988,7 @@ button {
 .ingest-option .opt-sub {
   font-family: var(--font-sans);
   font-size: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .modal-btn {
@@ -4020,8 +4020,8 @@ button {
   cursor: default;
 }
 .modal-btn.danger {
-  color: var(--brand-clay);
-  border: 1px solid var(--brand-clay);
+  color: var(--brand-clay-text);
+  border: 1px solid var(--brand-clay-text);
 }
 .modal-btn.danger:hover {
   background: rgba(200, 80, 60, 0.08);
@@ -4408,7 +4408,7 @@ button {
 }
 .settings-inline-note {
   margin-top: 6px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-family: var(--font-sans);
   font-size: 12px;
   line-height: 1.5;
@@ -5320,7 +5320,7 @@ button {
     font-size: 11px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--brand-clay);
+    color: var(--brand-clay-text);
     margin-bottom: 12px;
   }
 
@@ -6376,7 +6376,7 @@ button,
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--brand-clay);
+  color: var(--brand-clay-text);
 }
 
 .gh-sync-subtitle {
@@ -6426,7 +6426,7 @@ button,
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .gh-sync-panel h3 {
@@ -7678,7 +7678,7 @@ button,
 
 .ops-kicker {
   margin-bottom: 6px;
-  color: var(--brand-clay);
+  color: var(--brand-clay-text);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -8711,7 +8711,7 @@ button,
 .ops-page .ops-kicker {
   font-size: 10px;
   letter-spacing: 0.12em;
-  color: var(--brand-clay);
+  color: var(--brand-clay-text);
 }
 
 /* Vertical divider rendered as a thin neutral dot for the action toolbar */
@@ -10387,7 +10387,7 @@ button,
   font-size: 11px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--text-tertiary, #b0aea5);
+  color: var(--text-secondary);
   font-weight: 500;
   font-family: var(--font-sans);
 }

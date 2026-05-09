@@ -57,6 +57,9 @@ screenshot-*.png
 screenshots/
 tests/e2e/.results/
 playwright-report/
+tests/e2e/visual/diff/
+tests/e2e/visual/__diff_output__/
+tmp/ux-audit/
 
 # Build performance metrics produced by scripts/measure-build.mjs
 tmp/build-metrics.json

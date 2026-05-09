@@ -19,13 +19,24 @@ export const SURFACES = {
   wiki: {
     url: '/',
     setup: async (page) => {
-      await page.waitForSelector('.concept-card, .empty-state, .loading-skeleton', {
+      await page.evaluate(() => localStorage.setItem('compound_home_style', 'feed'));
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForSelector('.concept-card, .empty-state', {
         timeout: 30_000,
       });
       await page.waitForLoadState('networkidle').catch(() => undefined);
     },
   },
-  library: { url: '/', setup: (page) => page.getByRole('tab', { name: '知识库' }).click() },
+  library: {
+    url: '/',
+    setup: async (page) => {
+      await page.evaluate(() => localStorage.setItem('compound_home_style', 'library'));
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForSelector('.library-grid, .empty-state', {
+        timeout: 30_000,
+      });
+    },
+  },
   sources: { url: '/', setup: (page) => page.getByRole('tab', { name: '资料' }).click() },
   ask: { url: '/', setup: (page) => page.getByRole('tab', { name: '问答' }).click() },
   conceptDetail: { url: '/', setup: (page) => page.locator('.concept-card').first().click() },
@@ -33,7 +44,7 @@ export const SURFACES = {
     url: '/',
     setup: async (page) => {
       await page.getByRole('tab', { name: '资料' }).click();
-      await page.locator('.source-row').first().click();
+      await page.locator('.source-card').first().click();
     },
   },
   activity: { url: '/', setup: (page) => page.getByRole('tab', { name: '活动' }).click() },
@@ -41,36 +52,37 @@ export const SURFACES = {
   health: {
     url: '/',
     setup: async (page) => {
-      await page.getByLabel('打开设置').or(page.getByLabel('设置')).first().click();
-      await page.getByRole('tab', { name: '健康' }).click();
+      await page.getByRole('tab', { name: '活动' }).click();
+      await page.getByRole('button', { name: '健康' }).click();
+      await page.waitForSelector('.health-view, .loading-skeleton', { timeout: 30_000 });
     },
   },
   settingsGeneral: {
     url: '/',
-    setup: (page) => page.getByLabel('打开设置').or(page.getByLabel('设置')).first().click(),
+    setup: (page) => openHeaderAction(page, ['设置', '打开设置']),
   },
   settingsData: {
     url: '/',
     setup: async (page) => {
-      await page.getByLabel('打开设置').or(page.getByLabel('设置')).first().click();
+      await openHeaderAction(page, ['设置', '打开设置']);
       await page.getByRole('tab', { name: '数据' }).click();
     },
   },
   settingsModel: {
     url: '/',
     setup: async (page) => {
-      await page.getByLabel('打开设置').or(page.getByLabel('设置')).first().click();
+      await openHeaderAction(page, ['设置', '打开设置']);
       await page.getByRole('tab', { name: '模型' }).click();
     },
   },
-  ingestModal: { url: '/', setup: (page) => page.getByLabel('添加资料').click() },
+  ingestModal: { url: '/', setup: (page) => openAddSource(page) },
   githubSync: {
     url: '/',
-    setup: (page) => page.getByLabel('从 GitHub 同步').click(),
+    setup: (page) => openHeaderAction(page, '从 GitHub 同步'),
   },
   obsidianImport: {
     url: '/',
-    setup: (page) => page.getByLabel('从 Obsidian 批量导入').click(),
+    setup: (page) => openHeaderAction(page, '从 Obsidian 批量导入'),
   },
   onboarding: {
     url: '/',
@@ -96,6 +108,81 @@ const VIEWPORTS = {
   mobile: { width: 375, height: 667, isMobile: true },
   desktop: { width: 1280, height: 800, isMobile: false },
 };
+
+async function openHeaderAction(page, labels) {
+  const candidates = Array.isArray(labels) ? labels : [labels];
+  if (await clickVisibleAria(page, candidates)) {
+    return;
+  }
+
+  if (!(await clickVisibleAria(page, ['更多操作']))) {
+    throw new Error(`Could not find header overflow for action: ${candidates.join(', ')}`);
+  }
+  for (const label of candidates) {
+    const item = page.getByRole('menuitem', { name: label });
+    if (await item.isVisible().catch(() => false)) {
+      await item.click();
+      return;
+    }
+  }
+  throw new Error(`Could not find header action: ${candidates.join(', ')}`);
+}
+
+async function clickVisibleAria(page, labels) {
+  await page
+    .waitForFunction(
+      (candidates) => {
+        const elements = Array.from(document.querySelectorAll('button[aria-label], a[aria-label]'));
+        return elements.some((element) => {
+          if (!candidates.includes(element.getAttribute('aria-label') ?? '')) return false;
+          const rect = element.getBoundingClientRect();
+          const style = window.getComputedStyle(element);
+          return (
+            rect.width > 0 &&
+            rect.height > 0 &&
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            style.opacity !== '0'
+          );
+        });
+      },
+      labels,
+      { timeout: 5_000 },
+    )
+    .catch(() => undefined);
+
+  return page.evaluate((candidates) => {
+    const elements = Array.from(document.querySelectorAll('button[aria-label], a[aria-label]'));
+    const target = elements.find((element) => {
+      if (!candidates.includes(element.getAttribute('aria-label') ?? '')) return false;
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        style.opacity !== '0'
+      );
+    });
+    if (!target) return false;
+    target.click();
+    return true;
+  }, labels);
+}
+
+async function openAddSource(page) {
+  const addButton = page
+    .locator('button[aria-label="添加资料"]:visible, button[aria-label="添加新资料"]:visible')
+    .first();
+  if (await addButton.isVisible().catch(() => false)) {
+    await addButton.click();
+    return;
+  }
+
+  await page.keyboard.press('n');
+  await page.getByRole('dialog', { name: '添加新资料' }).waitFor({ timeout: 30_000 });
+}
 
 function printDryRun() {
   process.stdout.write(
@@ -145,16 +232,20 @@ async function waitForServer(baseUrl, timeoutMs = 120_000) {
 async function ensureDevServer(baseUrl) {
   if (await waitForServer(baseUrl, 2000)) return null;
 
-  const child = spawn('npm', ['run', 'dev'], {
-    cwd: ROOT_DIR,
-    env: {
-      ...process.env,
-      COMPOUND_ADMIN_TOKEN: process.env.COMPOUND_ADMIN_TOKEN || 'e2e-token',
-      ['LLM_' + 'API_' + 'KEY']: '',
-      ['AI_GATEWAY_' + 'API_' + 'KEY']: '',
+  const child = spawn(
+    process.execPath,
+    ['./node_modules/next/dist/bin/next', 'dev', '-p', '8080', '-H', '0.0.0.0'],
+    {
+      cwd: ROOT_DIR,
+      env: {
+        ...process.env,
+        COMPOUND_ADMIN_TOKEN: process.env.COMPOUND_ADMIN_TOKEN || 'e2e-token',
+        ['LLM_' + 'API_' + 'KEY']: '',
+        ['AI_GATEWAY_' + 'API_' + 'KEY']: '',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  );
   child.stdout.on('data', (chunk) => process.stdout.write(chunk));
   child.stderr.on('data', (chunk) => process.stderr.write(chunk));
 
@@ -278,7 +369,11 @@ async function preparePage(browser, baseUrl, surface, viewport) {
   const page = await context.newPage();
   await page.goto(surface.url, { waitUntil: 'networkidle' });
   await surface.setup(page);
+  await page
+    .waitForSelector('.loading-skeleton', { state: 'detached', timeout: 30_000 })
+    .catch(() => undefined);
   await page.evaluate(async () => {
+    await document.fonts.ready;
     await Promise.all(
       document.getAnimations().map((animation) => animation.finished.catch(() => undefined)),
     );
@@ -345,7 +440,9 @@ async function compareScreenshots(currentPath, baselinePath, diffPath) {
         height: current.info.height,
         channels: current.info.channels,
       },
-    }).png().toFile(diffPath);
+    })
+      .png()
+      .toFile(diffPath);
   } else {
     await rm(diffPath, { force: true });
   }
@@ -400,7 +497,9 @@ function assertThresholds({ lighthouseSummary, axeSummary, visualSummary }) {
     failures.push(`BestPractices ${lighthouseSummary.bestPractices} < ${MIN_BEST_PRACTICES}`);
   }
   if (axeSummary.critical > 0 || axeSummary.serious > 0) {
-    failures.push(`axe blocking violations critical=${axeSummary.critical} serious=${axeSummary.serious}`);
+    failures.push(
+      `axe blocking violations critical=${axeSummary.critical} serious=${axeSummary.serious}`,
+    );
   }
   for (const [name, result] of Object.entries(visualSummary)) {
     if (result.ratio > VISUAL_DIFF_TOLERANCE) {
@@ -429,11 +528,16 @@ async function runAudit(pageId, updateBaseline) {
     const { context, page } = await preparePage(browser, baseUrl, surface, VIEWPORTS.desktop);
     const pwaSummary = await runPwaChecks(page, baseUrl);
     const bestPracticeSummary = await runBestPracticeChecks(baseUrl);
-    let lighthouseSummary = summarizeLighthouse(mobileLighthouse, desktopLighthouse, pwaSummary.score);
+    let lighthouseSummary = summarizeLighthouse(
+      mobileLighthouse,
+      desktopLighthouse,
+      pwaSummary.score,
+    );
     const axeSummary = await runAxe(page);
     await context.close();
 
-    const lighthouseRuntimeError = mobileLighthouse.raw.runtimeError || desktopLighthouse.raw.runtimeError;
+    const lighthouseRuntimeError =
+      mobileLighthouse.raw.runtimeError || desktopLighthouse.raw.runtimeError;
     if (lighthouseRuntimeError) {
       lighthouseSummary = {
         ...lighthouseSummary,
@@ -481,8 +585,14 @@ async function runAudit(pageId, updateBaseline) {
       join(AUDIT_DIR, `${pageId}-lighthouse.json`),
       `${JSON.stringify({ mobile: mobileLighthouse.raw, desktop: desktopLighthouse.raw }, null, 2)}\n`,
     );
-    await writeFile(join(AUDIT_DIR, `${pageId}-axe.json`), `${JSON.stringify(axeSummary.result, null, 2)}\n`);
-    await writeFile(join(AUDIT_DIR, `${pageId}-summary.json`), `${JSON.stringify(report, null, 2)}\n`);
+    await writeFile(
+      join(AUDIT_DIR, `${pageId}-axe.json`),
+      `${JSON.stringify(axeSummary.result, null, 2)}\n`,
+    );
+    await writeFile(
+      join(AUDIT_DIR, `${pageId}-summary.json`),
+      `${JSON.stringify(report, null, 2)}\n`,
+    );
 
     process.stdout.write(
       [
