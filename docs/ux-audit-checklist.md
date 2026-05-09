@@ -143,3 +143,12 @@ Backlog (this surface, defer):
 ```
 
 输出到 commit body 的"Top 5 fixes"段，便于 review 历史轨迹。
+
+---
+
+## 产物卫生
+
+- `tmp/ux-audit/` 只保存本地 Lighthouse、axe、summary 和当前截图输出，严禁进入 commit。
+- `tests/e2e/visual/diff/` 与 `tests/e2e/visual/__diff_output__/` 只保存本地视觉差异调试图，严禁进入 commit。
+- `docs/plans/` 是本地 ralph loop 运行状态目录，进度索引和 progress log 只在本机更新。
+- commit 前必须运行 `git status --short`，确认只出现本张任务允许追踪的文件。
