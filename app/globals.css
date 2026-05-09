@@ -4584,11 +4584,32 @@ button {
 .settings-confirm-block {
   padding: 4px 0;
 }
+.settings-confirm-block .modal-btn + .modal-btn {
+  margin-top: 6px;
+}
 .settings-confirm-danger {
   padding: 14px;
   border: 1px solid rgba(201, 100, 66, 0.34);
   border-radius: 8px;
   background: rgba(201, 100, 66, 0.06);
+}
+.settings-confirm-danger .modal-desc {
+  color: var(--brand-clay);
+}
+.settings-confirm-danger .modal-desc strong,
+.settings-confirm-block .modal-desc strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+.modal-btn.danger-confirm {
+  background: var(--brand-clay);
+  color: var(--text-on-button);
+}
+.modal-btn.danger-confirm:hover {
+  background: var(--brand-clay-text);
 }
 .settings-data-actions {
   display: flex;
