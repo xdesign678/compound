@@ -1535,7 +1535,12 @@ export function abortRun(runId: string, reason = 'cancelled by user'): boolean {
 }
 
 export function retryAnalysisJobs(
-  input: { runId?: string | null; itemId?: string | null; failedOnly?: boolean } = {},
+  input: {
+    runId?: string | null;
+    itemId?: string | null;
+    jobId?: string | null;
+    failedOnly?: boolean;
+  } = {},
 ): number {
   ensureAnalysisWorkerSchema();
   const clauses = [
@@ -1543,6 +1548,10 @@ export function retryAnalysisJobs(
     `NOT (stage = 'github_ingest' AND COALESCE(payload_json, '') = '')`,
   ];
   const params: unknown[] = [];
+  if (input.jobId) {
+    clauses.push(`id = ?`);
+    params.push(input.jobId);
+  }
   if (input.runId) {
     clauses.push(`run_id = ?`);
     params.push(input.runId);
@@ -1561,6 +1570,19 @@ export function retryAnalysisJobs(
     .run(now(), now(), ...params);
   startAnalysisWorker('retry');
   return res.changes;
+}
+
+export function deleteAnalysisJob(input: { jobId: string }): number {
+  ensureAnalysisWorkerSchema();
+  const res = getServerDb()
+    .prepare(
+      `DELETE FROM analysis_jobs
+        WHERE id = ?
+          AND status IN ('failed', 'cancelled', 'skipped', 'succeeded')
+          AND (dead_letter_at IS NOT NULL OR status IN ('failed', 'cancelled'))`,
+    )
+    .run(input.jobId);
+  return Number(res.changes || 0);
 }
 
 export function cancelAnalysisJobs(

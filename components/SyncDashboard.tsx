@@ -135,6 +135,30 @@ function DashboardInner() {
     void runAction('retry-all', '重试失败', () => postJson('/api/sync/retry', { runId: run?.id }));
   }, [runAction, run?.id]);
 
+  const handleRetryDeadLetter = useCallback(
+    (jobId: string) => {
+      void runAction(
+        `dlq-retry-${jobId}`,
+        '重试死信',
+        () => postJson('/api/sync/dlq', { action: 'retry', jobId }),
+        '已重新加入分析队列',
+      );
+    },
+    [runAction],
+  );
+
+  const handleDeleteDeadLetter = useCallback(
+    (jobId: string) => {
+      void runAction(
+        `dlq-delete-${jobId}`,
+        '删除死信',
+        () => postJson('/api/sync/dlq', { action: 'delete', jobId }),
+        '已删除死信任务',
+      );
+    },
+    [runAction],
+  );
+
   const handleRunWorker = useCallback(() => {
     void runAction('worker', '跑分析', () => postJson('/api/sync/worker'));
   }, [runAction]);
@@ -286,6 +310,8 @@ function DashboardInner() {
         onRunWorker={handleRunWorker}
         onCancel={handleCancel}
         onRetryAll={handleRetryAll}
+        onRetryDeadLetter={handleRetryDeadLetter}
+        onDeleteDeadLetter={handleDeleteDeadLetter}
       />
     </main>
   );

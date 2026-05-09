@@ -11535,6 +11535,31 @@ button,
   gap: 8px;
 }
 
+.sync-v2-drawer-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  border: 1px solid var(--border-light, rgba(20, 20, 19, 0.08));
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-card, #fefdfb);
+}
+
+.sync-v2-drawer-tabs button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 12px;
+  min-height: 34px;
+  cursor: pointer;
+}
+
+.sync-v2-drawer-tabs button.active {
+  background: var(--text-primary);
+  color: var(--bg-card, #fefdfb);
+}
+
 .sync-v2-drawer-throughput {
   display: flex;
   align-items: center;
@@ -11597,6 +11622,12 @@ button,
   font-size: 11px;
   color: var(--text-secondary);
   word-break: break-all;
+}
+
+.sync-v2-event-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .sync-v2-event p {

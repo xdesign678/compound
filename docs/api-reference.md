@@ -6,8 +6,8 @@
 
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
-- Routes: **38**
-- Handlers (HTTP methods): **45**
+- Routes: **39**
+- Handlers (HTTP methods): **46**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
@@ -49,6 +49,7 @@ This document is generated automatically from the Next.js Route Handlers under `
   - [`/api/sync/cancel`](#api-sync-cancel)
   - [`/api/sync/cron/rescan`](#api-sync-cron-rescan)
   - [`/api/sync/dashboard`](#api-sync-dashboard)
+  - [`/api/sync/dlq`](#api-sync-dlq)
   - [`/api/sync/github/content`](#api-sync-github-content)
   - [`/api/sync/github/list`](#api-sync-github-list)
   - [`/api/sync/github/run`](#api-sync-github-run)
@@ -577,6 +578,24 @@ worker on-demand, then returns the live sync observability snapshot
 merged with embedding coverage and review-queue metrics, plus the
 `story` block (narrative / phases / health / lastRun) used by the
 V3 console for a single-glance summary.
+
+Guards: admin token.
+
+### `/api/sync/dlq`
+
+Source: [`app/api/sync/dlq/route.ts`](../app/api/sync/dlq/route.ts)
+
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `POST`        |
+| Runtime     | `nodejs`      |
+| maxDuration | 10            |
+| Guards      | `admin-token` |
+
+#### POST
+
+Retry or delete one analysis dead-letter job from the `/sync` advanced
+drawer.
 
 Guards: admin token.
 

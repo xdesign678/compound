@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { STATUS_TEXT, badgeTone, fmtDate, type Dashboard, type SyncEvent } from './types';
 import FileTable from './FileTable';
@@ -18,6 +18,8 @@ interface Props {
   onRunWorker: () => void;
   onCancel: () => void;
   onRetryAll: () => void;
+  onRetryDeadLetter: (jobId: string) => void;
+  onDeleteDeadLetter: (jobId: string) => void;
 }
 
 /**
@@ -37,8 +39,11 @@ export default function AdvancedDrawer({
   onRunWorker,
   onCancel,
   onRetryAll,
+  onRetryDeadLetter,
+  onDeleteDeadLetter,
 }: Props) {
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const [opsTab, setOpsTab] = useState<'dlq' | 'webhooks'>('dlq');
   useEffect(() => {
     if (!open) return;
     closeRef.current?.focus();
@@ -58,6 +63,7 @@ export default function AdvancedDrawer({
   const failedFiles = dashboard?.itemSummary?.failed ?? 0;
   const throughput = dashboard?.throughput ?? [];
   const dlq = dashboard?.dlq;
+  const deliveries = dashboard?.webhookDeliveries ?? [];
 
   return (
     <div
@@ -139,34 +145,98 @@ export default function AdvancedDrawer({
             ) : null}
           </section>
 
-          <section className="sync-v2-drawer-section" aria-label="死信队列">
-            <h3>死信 · {dlq?.count ?? 0}</h3>
-            {dlq && Object.keys(dlq.byStage).length > 0 ? (
-              <div className="sync-v2-drawer-actions">
-                {Object.entries(dlq.byStage).map(([stage, count]) => (
-                  <span key={stage} className="sync-v2-badge tone-bad">
-                    {stage} · {count}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            {dlq?.recent?.length ? (
+          <section className="sync-v2-drawer-section" aria-label="死信与投递历史">
+            <div className="sync-v2-drawer-tabs" role="tablist" aria-label="高级队列视图">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={opsTab === 'dlq'}
+                className={opsTab === 'dlq' ? 'active' : ''}
+                onClick={() => setOpsTab('dlq')}
+              >
+                死信 · {dlq?.count ?? 0}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={opsTab === 'webhooks'}
+                className={opsTab === 'webhooks' ? 'active' : ''}
+                onClick={() => setOpsTab('webhooks')}
+              >
+                投递历史 · {deliveries.length}
+              </button>
+            </div>
+
+            {opsTab === 'dlq' ? (
+              <>
+                {dlq && Object.keys(dlq.byStage).length > 0 ? (
+                  <div className="sync-v2-drawer-actions">
+                    {Object.entries(dlq.byStage).map(([stage, count]) => (
+                      <span key={stage} className="sync-v2-badge tone-bad">
+                        {stage} · {count}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                {dlq?.recent?.length ? (
+                  <ul className="sync-v2-event-log">
+                    {dlq.recent.map((job) => (
+                      <li key={job.id} className="sync-v2-event tone-bad">
+                        <div className="sync-v2-event-head">
+                          <span className="sync-v2-badge tone-bad">{job.stage}</span>
+                          <span className="sync-v2-event-when">{fmtDate(job.dead_letter_at)}</span>
+                        </div>
+                        {job.source_path ? (
+                          <code className="sync-v2-event-path">{job.source_path}</code>
+                        ) : null}
+                        <p>{job.error || '分析任务进入死信队列'}</p>
+                        <div className="sync-v2-event-actions">
+                          <button
+                            type="button"
+                            className="sync-v2-btn sync-v2-btn-tiny"
+                            disabled={busy}
+                            onClick={() => onRetryDeadLetter(job.id)}
+                          >
+                            重新入队
+                          </button>
+                          <button
+                            type="button"
+                            className="sync-v2-btn sync-v2-btn-tiny sync-v2-btn-danger"
+                            disabled={busy}
+                            onClick={() => onDeleteDeadLetter(job.id)}
+                          >
+                            删除
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="sync-v2-empty">暂无死信任务。</p>
+                )}
+              </>
+            ) : deliveries.length > 0 ? (
               <ul className="sync-v2-event-log">
-                {dlq.recent.map((job) => (
-                  <li key={job.id} className="sync-v2-event tone-bad">
+                {deliveries.map((delivery) => (
+                  <li
+                    key={delivery.delivery_id}
+                    className={`sync-v2-event tone-${badgeTone(delivery.status)}`}
+                  >
                     <div className="sync-v2-event-head">
-                      <span className="sync-v2-badge tone-bad">{job.stage}</span>
-                      <span className="sync-v2-event-when">{fmtDate(job.dead_letter_at)}</span>
+                      <span className={`sync-v2-badge tone-${badgeTone(delivery.status)}`}>
+                        {delivery.status}
+                      </span>
+                      <span className="sync-v2-badge tone-neutral">{delivery.event}</span>
+                      <span className="sync-v2-event-when">{fmtDate(delivery.received_at)}</span>
                     </div>
-                    {job.source_path ? (
-                      <code className="sync-v2-event-path">{job.source_path}</code>
-                    ) : null}
-                    <p>{job.error || '分析任务进入死信队列'}</p>
+                    <code className="sync-v2-event-path">{delivery.delivery_id}</code>
+                    {delivery.job_id ? <p>jobId: {delivery.job_id}</p> : null}
+                    {delivery.error ? <p>{delivery.error}</p> : null}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="sync-v2-empty">暂无死信任务。</p>
+              <p className="sync-v2-empty">暂无 webhook 投递记录。</p>
             )}
           </section>
 

@@ -115,6 +115,7 @@ export interface SyncDashboard {
     count: number;
   }>;
   webhookDeliveryStats: Array<{ status: string; count: number }>;
+  webhookDeliveries: WebhookDeliveryRow[];
   errorStats: Array<{ error: string; count: number; lastAt: number }>;
   pipeline: PipelineStageRow[];
   errorGroups: ErrorGroupRow[];
@@ -999,6 +1000,14 @@ export const syncObs = {
           ORDER BY status`,
       )
       .all() as Array<{ status: string; count: number }>;
+    const webhookDeliveries = db
+      .prepare(
+        `SELECT delivery_id, event, signature_sha256, received_at, status, job_id, error
+           FROM webhook_deliveries
+          ORDER BY received_at DESC
+          LIMIT 50`,
+      )
+      .all() as WebhookDeliveryRow[];
     const analysisErrorCategories = db
       .prepare(
         `SELECT stage,
@@ -1288,6 +1297,7 @@ export const syncObs = {
       analysisErrorCategories,
       githubRunDurationStats,
       webhookDeliveryStats,
+      webhookDeliveries,
       errorStats,
       pipeline,
       errorGroups,

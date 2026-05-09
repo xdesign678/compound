@@ -122,6 +122,16 @@ export interface DlqSummary {
   recent: DlqJob[];
 }
 
+export interface WebhookDelivery {
+  delivery_id: string;
+  event: string;
+  signature_sha256: string;
+  received_at: number;
+  status: string;
+  job_id: string | null;
+  error: string | null;
+}
+
 export type NarrativeNextAction = 'sync' | 'wait' | 'retry' | 'review' | 'cancel';
 export type NarrativeTone = 'idle' | 'running' | 'error' | 'stalled' | 'done' | 'review';
 
@@ -223,6 +233,7 @@ export interface Dashboard {
   throughput: ThroughputBucket[];
   itemSummary: Record<SyncItemStatus, number>;
   dlq?: DlqSummary;
+  webhookDeliveries?: WebhookDelivery[];
   story?: DashboardStory;
 }
 

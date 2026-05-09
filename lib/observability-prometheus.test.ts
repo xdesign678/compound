@@ -134,6 +134,7 @@ test('renderPrometheusMetrics includes domain gauges and collector errors', () =
       analysisErrorCategories: [{ stage: 'summarize', category: 'transient', count: 1 }],
       githubRunDurationStats: [{ status: 'done', avgSeconds: 1, maxSeconds: 1, count: 1 }],
       webhookDeliveryStats: [{ status: 'processed', count: 3 }],
+      webhookDeliveries: [],
       errorStats: [],
       pipeline: [],
       errorGroups: [],
