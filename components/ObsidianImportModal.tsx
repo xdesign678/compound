@@ -14,6 +14,7 @@ import {
   type FileStatus,
 } from '@/lib/obsidian-import';
 import { ImportProgress, rememberRecentImport } from './ImportProgress';
+import { Icon } from './Icons';
 
 type Stage = 'idle' | 'selected' | 'running' | 'done';
 
@@ -26,15 +27,6 @@ const STATUS_LABEL: Record<FileStatus, string> = {
   success: '完成',
   failed: '失败',
   skipped: '未勾选',
-};
-
-const STATUS_COLOR: Record<FileStatus, string> = {
-  pending: 'var(--ink-soft)',
-  duplicate: '#9ca3af',
-  running: '#c96442',
-  success: '#10b981',
-  failed: '#ef4444',
-  skipped: '#9ca3af',
 };
 
 function formatSize(bytes: number): string {
@@ -276,6 +268,7 @@ export function ObsidianImportModal() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="obsidian-import-title"
+        aria-describedby="obsidian-import-desc"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
@@ -284,12 +277,12 @@ export function ObsidianImportModal() {
         {/* 头部 */}
         <div className="obsidian-import-head">
           <h3 id="obsidian-import-title">从 Obsidian 批量导入</h3>
-          <p className="modal-desc">
+          <p className="modal-desc" id="obsidian-import-desc">
             选择你的 Obsidian 库文件夹（或多个 .md 文件），AI 会逐个编译进 Wiki。
             {manifestSize > 0 && (
               <>
                 {' '}
-                <span style={{ color: 'var(--ink-soft)' }}>
+                <span className="obsidian-import-note">
                   已有 {manifestSize} 条导入记录，重复选择会自动跳过。
                 </span>
               </>
@@ -301,15 +294,29 @@ export function ObsidianImportModal() {
         {stage === 'idle' && (
           <>
             <div className="ingest-options">
-              <button className="ingest-option" onClick={handlePickFolder} disabled={loadingFiles}>
-                <div className="opt-icon">📂</div>
+              <button
+                className="ingest-option"
+                type="button"
+                onClick={handlePickFolder}
+                disabled={loadingFiles}
+              >
+                <div className="opt-icon" aria-hidden="true">
+                  <Icon.File />
+                </div>
                 <div>
                   <div className="opt-title">选择整个文件夹</div>
                   <div className="opt-sub">推荐 · 会扫描所有 .md 文件（自动跳过 .obsidian）</div>
                 </div>
               </button>
-              <button className="ingest-option" onClick={handlePickFiles} disabled={loadingFiles}>
-                <div className="opt-icon">📄</div>
+              <button
+                className="ingest-option"
+                type="button"
+                onClick={handlePickFiles}
+                disabled={loadingFiles}
+              >
+                <div className="opt-icon" aria-hidden="true">
+                  <Icon.File />
+                </div>
                 <div>
                   <div className="opt-title">选择多个文件</div>
                   <div className="opt-sub">按住 Cmd/Ctrl 多选 .md 文件</div>
@@ -318,62 +325,50 @@ export function ObsidianImportModal() {
             </div>
 
             {loadingFiles && (
-              <p className="modal-desc" style={{ textAlign: 'center' }}>
+              <p className="modal-desc obsidian-import-loading" role="status" aria-live="polite">
                 正在读取文件内容…
               </p>
             )}
 
             {inlineError && (
-              <p className="modal-desc" style={{ color: 'var(--brand-clay)', marginTop: 8 }}>
+              <p className="modal-desc obsidian-import-inline-error" role="alert">
                 {inlineError}
               </p>
             )}
 
             {confirmingClearManifest ? (
-              <div style={{ marginTop: 12 }}>
-                <p className="modal-desc" style={{ marginBottom: 8 }}>
+              <div className="obsidian-import-confirm" role="alert" aria-live="assertive">
+                <p className="modal-desc">
                   确定清除 {manifestSize}{' '}
                   条导入记录吗？已导入的资料本身不会被删除，但下次再选同样的文件会被当作新文件重复导入。
                 </p>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div className="obsidian-import-confirm-actions">
                   <button
                     className="modal-btn primary"
+                    type="button"
                     onClick={confirmClearManifest}
-                    style={{ background: 'var(--brand-clay)', flex: 1 }}
                   >
                     确认清除
                   </button>
                   <button
                     className="modal-btn"
+                    type="button"
                     onClick={() => setConfirmingClearManifest(false)}
-                    style={{ flex: 1 }}
                   >
                     取消
                   </button>
                 </div>
               </div>
             ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 8,
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginTop: 12,
-                }}
-              >
+              <div className="obsidian-import-idle-actions">
                 {manifestSize > 0 ? (
-                  <button
-                    className="modal-btn"
-                    onClick={handleClearManifest}
-                    style={{ flex: 1, fontSize: 13, color: 'var(--ink-soft)' }}
-                  >
+                  <button className="modal-btn" type="button" onClick={handleClearManifest}>
                     清除 {manifestSize} 条导入记录
                   </button>
                 ) : (
-                  <span />
+                  <span aria-hidden="true" />
                 )}
-                <button className="modal-btn" onClick={handleClose} style={{ flex: 1 }}>
+                <button className="modal-btn" type="button" onClick={handleClose}>
                   关闭
                 </button>
               </div>
@@ -412,27 +407,27 @@ export function ObsidianImportModal() {
               onClose={handleClose}
             />
             {/* 统计条 */}
-            <div className="obsidian-import-stats">
+            <div className="obsidian-import-stats" role="status" aria-live="polite">
               <span>
                 共 <b>{counts.total}</b>
               </span>
-              <span style={{ color: STATUS_COLOR.pending }}>
+              <span className="obsidian-status-pending">
                 待导入 <b>{counts.pending}</b>
               </span>
               {counts.duplicate > 0 && (
-                <span style={{ color: STATUS_COLOR.duplicate }}>
+                <span className="obsidian-status-muted">
                   跳过 <b>{counts.duplicate}</b>
                 </span>
               )}
-              <span style={{ color: STATUS_COLOR.success }}>
+              <span className="obsidian-status-success">
                 成功 <b>{counts.success}</b>
               </span>
               {counts.failed > 0 && (
-                <span style={{ color: STATUS_COLOR.failed }}>
+                <span className="obsidian-status-failed">
                   失败 <b>{counts.failed}</b>
                 </span>
               )}
-              <span style={{ marginLeft: 'auto', color: 'var(--ink-soft)' }}>
+              <span className="obsidian-import-selected-count">
                 已勾选 <b>{counts.selected}</b>
               </span>
             </div>
@@ -440,30 +435,29 @@ export function ObsidianImportModal() {
             {/* 操作按钮：选择类 */}
             {stage === 'selected' && counts.pending > 0 && (
               <div className="obsidian-import-toolbar">
-                <button className="obsidian-pill" onClick={selectOnlyTrial}>
+                <button className="obsidian-pill" type="button" onClick={selectOnlyTrial}>
                   试跑前 {Math.min(TRIAL_COUNT, counts.pending)} 篇
                 </button>
-                <button className="obsidian-pill" onClick={selectAllPending}>
+                <button className="obsidian-pill" type="button" onClick={selectAllPending}>
                   全选待导入
                 </button>
-                <button className="obsidian-pill" onClick={deselectAll}>
+                <button className="obsidian-pill" type="button" onClick={deselectAll}>
                   全不选
                 </button>
               </div>
             )}
 
             {/* 文件列表 */}
-            <div className="obsidian-import-list">
+            <div className="obsidian-import-list" role="list" aria-label="待导入文件">
               {files.map((f) => (
                 <label
                   key={f.id}
                   className={`obsidian-import-row status-${f.status}`}
-                  style={{
-                    cursor: f.status === 'pending' && stage !== 'running' ? 'pointer' : 'default',
-                  }}
+                  role="listitem"
                 >
                   <input
                     type="checkbox"
+                    aria-label={`选择 ${f.title}`}
                     checked={f.selected && f.status === 'pending'}
                     disabled={f.status !== 'pending' || stage === 'running'}
                     onChange={() => toggleSelect(f.id)}
@@ -479,7 +473,7 @@ export function ObsidianImportModal() {
                       {f.error && (
                         <>
                           <span>·</span>
-                          <span style={{ color: STATUS_COLOR.failed }} title={f.error}>
+                          <span className="obsidian-status-failed" title={f.error}>
                             {f.error.slice(0, 60)}
                           </span>
                         </>
@@ -487,14 +481,14 @@ export function ObsidianImportModal() {
                       {f.status === 'success' && (f.newConcepts || f.updatedConcepts) && (
                         <>
                           <span>·</span>
-                          <span style={{ color: STATUS_COLOR.success }}>
+                          <span className="obsidian-status-success">
                             +{f.newConcepts || 0} 新 / {f.updatedConcepts || 0} 更新
                           </span>
                         </>
                       )}
                     </div>
                   </div>
-                  <div className="obsidian-import-status" style={{ color: STATUS_COLOR[f.status] }}>
+                  <div className={`obsidian-import-status obsidian-status-${f.status}`}>
                     {STATUS_LABEL[f.status]}
                   </div>
                 </label>
@@ -505,20 +499,17 @@ export function ObsidianImportModal() {
             <div className="obsidian-import-actions">
               {confirmingClose ? (
                 <>
-                  <p
-                    className="modal-desc"
-                    style={{ width: '100%', marginBottom: 8, color: 'var(--brand-clay)' }}
-                  >
+                  <p className="modal-desc obsidian-import-close-warning" role="alert">
                     导入正在进行，确定关闭吗？未完成的文件会停止处理（下次可以断点续传）。
                   </p>
-                  <button
-                    className="modal-btn primary"
-                    onClick={confirmClose}
-                    style={{ background: 'var(--brand-clay)' }}
-                  >
+                  <button className="modal-btn primary" type="button" onClick={confirmClose}>
                     确认关闭
                   </button>
-                  <button className="modal-btn" onClick={() => setConfirmingClose(false)}>
+                  <button
+                    className="modal-btn"
+                    type="button"
+                    onClick={() => setConfirmingClose(false)}
+                  >
                     继续导入
                   </button>
                 </>
@@ -526,11 +517,12 @@ export function ObsidianImportModal() {
                 <>
                   {stage === 'selected' && (
                     <>
-                      <button className="modal-btn" onClick={reset}>
+                      <button className="modal-btn" type="button" onClick={reset}>
                         返回
                       </button>
                       <button
                         className="modal-btn primary"
+                        type="button"
                         onClick={startImport}
                         disabled={counts.selected === 0}
                       >
@@ -541,10 +533,10 @@ export function ObsidianImportModal() {
 
                   {stage === 'running' && (
                     <>
-                      <button className="modal-btn" onClick={stopImport}>
+                      <button className="modal-btn" type="button" onClick={stopImport}>
                         请求停止
                       </button>
-                      <button className="modal-btn" onClick={handleClose}>
+                      <button className="modal-btn" type="button" onClick={handleClose}>
                         关闭
                       </button>
                     </>
@@ -552,11 +544,11 @@ export function ObsidianImportModal() {
 
                   {stage === 'done' && (
                     <>
-                      <button className="modal-btn" onClick={handleClose}>
+                      <button className="modal-btn" type="button" onClick={handleClose}>
                         完成
                       </button>
                       {counts.pending > 0 && (
-                        <button className="modal-btn primary" onClick={startImport}>
+                        <button className="modal-btn primary" type="button" onClick={startImport}>
                           继续导入剩余 {counts.pending} 篇
                         </button>
                       )}
@@ -574,7 +566,7 @@ export function ObsidianImportModal() {
           type="file"
           accept=".md,text/markdown"
           multiple
-          style={{ display: 'none' }}
+          hidden
           onChange={(e) => {
             handleFilesSelected(e.target.files);
             e.target.value = '';
@@ -587,7 +579,7 @@ export function ObsidianImportModal() {
           webkitdirectory=""
           directory=""
           multiple
-          style={{ display: 'none' }}
+          hidden
           onChange={(e) => {
             handleFilesSelected(e.target.files);
             e.target.value = '';

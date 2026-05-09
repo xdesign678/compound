@@ -6298,6 +6298,41 @@ button,
 .obsidian-import-head {
   flex-shrink: 0;
 }
+.obsidian-import-note {
+  color: var(--text-secondary);
+}
+.obsidian-import-loading {
+  text-align: center;
+}
+.obsidian-import-inline-error,
+.obsidian-import-close-warning {
+  color: var(--brand-clay);
+}
+.obsidian-import-inline-error {
+  margin-top: 8px;
+}
+.obsidian-import-confirm {
+  margin-top: 12px;
+}
+.obsidian-import-confirm .modal-desc,
+.obsidian-import-close-warning {
+  width: 100%;
+  margin-bottom: 8px;
+}
+.obsidian-import-confirm-actions,
+.obsidian-import-idle-actions {
+  display: flex;
+  gap: 8px;
+}
+.obsidian-import-idle-actions {
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+.obsidian-import-confirm-actions .modal-btn,
+.obsidian-import-idle-actions .modal-btn {
+  flex: 1;
+}
 
 .obsidian-import-stats {
   display: flex;
@@ -6316,6 +6351,23 @@ button,
   color: var(--ink, #1a1a18);
   font-weight: 600;
   margin-left: 2px;
+}
+.obsidian-import-selected-count {
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+.obsidian-status-pending,
+.obsidian-status-duplicate,
+.obsidian-status-skipped,
+.obsidian-status-muted {
+  color: var(--text-secondary);
+}
+.obsidian-status-running,
+.obsidian-status-failed {
+  color: var(--brand-clay);
+}
+.obsidian-status-success {
+  color: var(--brand-clay-text);
 }
 
 .obsidian-import-toolbar {
@@ -6360,6 +6412,16 @@ button,
   border-bottom: 1px solid var(--border, #e5e1d8);
   font-size: 13px;
 }
+.obsidian-import-row.status-pending {
+  cursor: pointer;
+}
+.obsidian-import-row.status-running,
+.obsidian-import-row.status-success,
+.obsidian-import-row.status-failed,
+.obsidian-import-row.status-duplicate,
+.obsidian-import-row.status-skipped {
+  cursor: default;
+}
 
 .obsidian-import-row:last-child {
   border-bottom: none;
@@ -6375,18 +6437,18 @@ button,
 }
 
 .obsidian-import-row.status-success {
-  background: rgba(16, 185, 129, 0.04);
+  background: var(--brand-clay-soft);
 }
 
 .obsidian-import-row.status-failed {
-  background: rgba(239, 68, 68, 0.05);
+  background: rgba(217, 119, 87, 0.08);
 }
 
 .obsidian-import-row input[type='checkbox'] {
   width: 16px;
   height: 16px;
   cursor: pointer;
-  accent-color: #c96442;
+  accent-color: var(--brand-clay);
   flex-shrink: 0;
 }
 
