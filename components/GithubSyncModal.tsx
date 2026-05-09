@@ -39,6 +39,13 @@ interface JobStatus {
 }
 
 const POLL_INTERVAL_MS = 1500;
+const SECRET_REDACTION_PATTERNS = [
+  /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g,
+  /\bsk-[A-Za-z0-9_-]{16,}\b/g,
+  /\bBearer\s+[A-Za-z0-9._-]{16,}\b/gi,
+  /\b(token|api[_-]?key|authorization)(\s*[:=]\s*)(["']?)[^\s"',;]+/gi,
+] as const;
 
 class PollHttpError extends Error {
   status: number;
@@ -47,6 +54,19 @@ class PollHttpError extends Error {
     super(message);
     this.status = status;
   }
+}
+
+function redactSensitiveText(text: string): string {
+  return SECRET_REDACTION_PATTERNS.reduce(
+    (current, pattern) =>
+      current.replace(pattern, (_match, key, separator, quote) => {
+        if (typeof key === 'string' && typeof separator === 'string') {
+          return `${key}${separator}${quote ?? ''}[已隐藏]`;
+        }
+        return '[已隐藏凭据]';
+      }),
+    text,
+  );
 }
 
 export function GithubSyncModal() {
@@ -146,7 +166,7 @@ export function GithubSyncModal() {
       }
 
       setPollIssue(null);
-      setError(msg);
+      setError(redactSensitiveText(msg));
       setPhase('failed');
     }
   }, []);
@@ -174,7 +194,7 @@ export function GithubSyncModal() {
       void pollOnce(data.jobId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
+      setError(redactSensitiveText(msg));
       setPhase('failed');
     }
   }, [pollOnce]);
@@ -188,7 +208,8 @@ export function GithubSyncModal() {
       setPhase('failed');
       setError('同步已取消');
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(redactSensitiveText(msg));
       setPhase('failed');
     }
   }, []);
@@ -211,6 +232,7 @@ export function GithubSyncModal() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="gh-sync-title"
+        aria-describedby="gh-sync-desc"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
@@ -218,7 +240,7 @@ export function GithubSyncModal() {
         <header className="gh-sync-header">
           <div className="gh-sync-header-row">
             <div className="gh-sync-title">
-              <span className="gh-sync-title-icon">
+              <span className="gh-sync-title-icon" aria-hidden="true">
                 <Icon.Github />
               </span>
               <div>
@@ -228,6 +250,7 @@ export function GithubSyncModal() {
             </div>
             <button
               className="icon-btn gh-sync-close"
+              type="button"
               onClick={close}
               disabled={!canClose}
               aria-label="关闭"
@@ -236,7 +259,9 @@ export function GithubSyncModal() {
               ×
             </button>
           </div>
-          <p className="gh-sync-subtitle">{statusCopy.description}</p>
+          <p className="gh-sync-subtitle" id="gh-sync-desc">
+            {statusCopy.description}
+          </p>
         </header>
 
         {(phase === 'idle' || (phase === 'failed' && !job)) && (
@@ -266,14 +291,15 @@ export function GithubSyncModal() {
                 </div>
                 <div className="gh-sync-badge">共 {job.total} 个文件</div>
               </div>
-              <div className="gh-sync-stage-list" aria-label="同步阶段">
+              <div className="gh-sync-stage-list" role="list" aria-label="同步阶段">
                 {stageItems.map((item, index) => (
                   <div
                     key={item.id}
+                    role="listitem"
                     className={`gh-sync-stage-item ${item.status}`}
                     aria-current={item.status === 'current' ? 'step' : undefined}
                   >
-                    <div className="gh-sync-stage-dot" />
+                    <div className="gh-sync-stage-dot" aria-hidden="true" />
                     <span className="gh-sync-stage-label">{item.label}</span>
                     {index < stageItems.length - 1 && <span className="gh-sync-stage-line" />}
                   </div>
@@ -318,13 +344,20 @@ export function GithubSyncModal() {
                   </span>
                 </div>
               </div>
-              <div className="gh-sync-progress-bar" aria-label="同步进度">
+              <div
+                className="gh-sync-progress-bar"
+                role="progressbar"
+                aria-label="同步进度"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressPct}
+              >
                 <div className="gh-sync-progress-fill" style={{ width: `${progressPct}%` }} />
               </div>
             </section>
 
             {error && job.status === 'failed' && (
-              <div className="gh-sync-error gh-sync-panel">
+              <div className="gh-sync-error gh-sync-panel" role="alert" aria-live="assertive">
                 <div className="gh-sync-panel-head">
                   <div>
                     <p className="gh-sync-panel-kicker">失败原因</p>
@@ -391,7 +424,7 @@ export function GithubSyncModal() {
                   <span className="gh-sync-progress-text">
                     关闭窗口不会中断，服务端会继续同步。
                   </span>
-                  <button className="btn-primary" onClick={close}>
+                  <button className="btn-primary" type="button" onClick={close}>
                     后台继续
                   </button>
                 </>
@@ -401,7 +434,7 @@ export function GithubSyncModal() {
                   <span className="gh-sync-progress-text">
                     {pulling ? '正在拉取最新数据到本地…' : '最新数据已经同步到当前设备。'}
                   </span>
-                  <button className="btn-primary" onClick={close}>
+                  <button className="btn-primary" type="button" onClick={close}>
                     关闭
                   </button>
                 </>
@@ -409,7 +442,7 @@ export function GithubSyncModal() {
               {phase === 'failed' && (
                 <>
                   <span className="gh-sync-progress-text">请检查失败原因后重试。</span>
-                  <button className="btn-ghost" onClick={() => setPhase('idle')}>
+                  <button className="btn-ghost" type="button" onClick={() => setPhase('idle')}>
                     重试
                   </button>
                 </>
@@ -439,12 +472,12 @@ function IdleView({ onStart, error }: { onStart: () => void; error: string | nul
       </section>
       <div className="gh-sync-footer gh-sync-footer-start">
         <span className="gh-sync-progress-text">准备好后就可以开始本次同步。</span>
-        <button className="btn-primary" onClick={onStart}>
+        <button className="btn-primary" type="button" onClick={onStart}>
           <Icon.Refresh /> <span>启动同步</span>
         </button>
       </div>
       {error && (
-        <div className="gh-sync-error gh-sync-panel">
+        <div className="gh-sync-error gh-sync-panel" role="alert" aria-live="assertive">
           <div className="gh-sync-panel-head">
             <div>
               <p className="gh-sync-panel-kicker">启动失败</p>
@@ -477,14 +510,15 @@ function StartingView({
             <h3>服务端正在建立同步任务</h3>
           </div>
         </div>
-        <div className="gh-sync-stage-list" aria-label="同步阶段">
+        <div className="gh-sync-stage-list" role="list" aria-label="同步阶段">
           {stageItems.map((item, index) => (
             <div
               key={item.id}
+              role="listitem"
               className={`gh-sync-stage-item ${item.status}`}
               aria-current={item.status === 'current' ? 'step' : undefined}
             >
-              <div className="gh-sync-stage-dot" />
+              <div className="gh-sync-stage-dot" aria-hidden="true" />
               <span className="gh-sync-stage-label">{item.label}</span>
               {index < stageItems.length - 1 && <span className="gh-sync-stage-line" />}
             </div>
@@ -508,21 +542,26 @@ function StartingView({
 
 function ErrorDetail({ error }: { error: string }) {
   const [expanded, setExpanded] = useState(false);
+  const safeError = redactSensitiveText(error);
   // Attempt to extract a user-friendly summary from the error string
   // Take first line or up to 120 chars as the main message
-  const lines = error.split('\n');
-  const mainMessage = lines[0]?.slice(0, 200) ?? error;
-  const hasDetails = error.length > mainMessage.length || lines.length > 1;
+  const lines = safeError.split('\n');
+  const mainMessage = lines[0]?.slice(0, 200) ?? safeError;
+  const hasDetails = safeError.length > mainMessage.length || lines.length > 1;
 
   return (
     <div className="gh-sync-error-detail">
       <p className="gh-sync-error-main">{mainMessage}</p>
       {hasDetails && (
         <div className="gh-sync-error-collapse">
-          <button className="gh-sync-error-toggle" onClick={() => setExpanded((v) => !v)}>
+          <button
+            className="gh-sync-error-toggle"
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+          >
             {expanded ? '收起详情' : '查看详情'}
           </button>
-          {expanded && <pre className="gh-sync-error-pre">{error}</pre>}
+          {expanded && <pre className="gh-sync-error-pre">{safeError}</pre>}
         </div>
       )}
     </div>
