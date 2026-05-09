@@ -404,24 +404,26 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
 
   return (
     <>
-      <div className={`search-bar-slot${scrolled ? ' is-collapsed' : ''}`}>
-        <div className={`search-bar ${scrolled ? 'scrolled' : ''}`}>
-          <div className="search-label">检索概念、摘要与引用</div>
-          <div className="search-wrap">
-            <Icon.Search />
-            <input
-              ref={searchInputRef}
-              className="search-input"
-              name="library-search"
-              autoComplete="off"
-              placeholder="搜索概念、资料、引用…"
-              aria-label="搜索概念"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
+      {concepts.length > 0 && (
+        <div className={`search-bar-slot${scrolled ? ' is-collapsed' : ''}`}>
+          <div className={`search-bar ${scrolled ? 'scrolled' : ''}`}>
+            <div className="search-label">检索概念、摘要与引用</div>
+            <div className="search-wrap">
+              <Icon.Search />
+              <input
+                ref={searchInputRef}
+                className="search-input"
+                name="library-search"
+                autoComplete="off"
+                placeholder="搜索概念、资料、引用…"
+                aria-label="搜索概念"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {unreviewedCount > 0 && (
         <div className="recap-entry-list recap-entry-list-library">
@@ -459,229 +461,239 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
         </div>
       )}
 
-      <div className="library-filter-stack">
-        <section
-          className="library-filter-section library-filter-section-primary"
-          aria-label="一级分类"
-        >
-          <div className="library-filter-heading">
-            <div className="library-filter-heading-main">
-              <span className="library-filter-eyebrow">一级分类</span>
-            </div>
-            <div
-              className="library-primary-controls"
-              aria-hidden={!primaryRailState.canScrollLeft && !primaryRailState.canScrollRight}
+      {concepts.length === 0 ? (
+        <OnboardingCard />
+      ) : (
+        <>
+          <div className="library-filter-stack">
+            <section
+              className="library-filter-section library-filter-section-primary"
+              aria-label="一级分类"
             >
-              <button
-                className="library-primary-scroll-btn"
-                type="button"
-                onClick={() => scrollPrimaryRail(-1)}
-                disabled={!primaryRailState.canScrollLeft}
-                aria-label="向左滚动分类"
-              >
-                <ChevronLeft size={16} strokeWidth={2} />
-              </button>
-              <button
-                className="library-primary-scroll-btn"
-                type="button"
-                onClick={() => scrollPrimaryRail(1)}
-                disabled={!primaryRailState.canScrollRight}
-                aria-label="向右滚动分类"
-              >
-                <ChevronRight size={16} strokeWidth={2} />
-              </button>
-            </div>
-          </div>
-          <div className="library-primary-rail" ref={primaryRailRef}>
-            <div className="library-primary-board">
-              <button
-                className={`library-primary-card${selectedPrimary === null ? ' active' : ''}`}
-                aria-pressed={selectedPrimary === null}
-                type="button"
-                onClick={() => {
-                  setSelectedPrimary(null);
-                  setSelectedSecondary(null);
-                }}
-              >
-                <span className="library-primary-card-icon" aria-hidden="true">
-                  <Grid2x2 size={28} strokeWidth={1.85} />
-                </span>
-                <span className="library-primary-card-title">全部</span>
-                <span className="library-primary-card-count">
-                  {totalConceptCount ?? concepts?.length ?? 0}
-                </span>
-              </button>
-              {categoryTree.map((cat) => {
-                const PrimaryIcon = getPrimaryCategoryIcon(cat.primary);
-                return (
+              <div className="library-filter-heading">
+                <div className="library-filter-heading-main">
+                  <span className="library-filter-eyebrow">一级分类</span>
+                </div>
+                <div
+                  className="library-primary-controls"
+                  aria-hidden={!primaryRailState.canScrollLeft && !primaryRailState.canScrollRight}
+                >
                   <button
-                    key={cat.primary}
-                    className={`library-primary-card${selectedPrimary === cat.primary ? ' active' : ''}`}
-                    aria-pressed={selectedPrimary === cat.primary}
+                    className="library-primary-scroll-btn"
+                    type="button"
+                    onClick={() => scrollPrimaryRail(-1)}
+                    disabled={!primaryRailState.canScrollLeft}
+                    aria-label="向左滚动分类"
+                  >
+                    <ChevronLeft size={16} strokeWidth={2} />
+                  </button>
+                  <button
+                    className="library-primary-scroll-btn"
+                    type="button"
+                    onClick={() => scrollPrimaryRail(1)}
+                    disabled={!primaryRailState.canScrollRight}
+                    aria-label="向右滚动分类"
+                  >
+                    <ChevronRight size={16} strokeWidth={2} />
+                  </button>
+                </div>
+              </div>
+              <div className="library-primary-rail" ref={primaryRailRef}>
+                <div className="library-primary-board">
+                  <button
+                    className={`library-primary-card${selectedPrimary === null ? ' active' : ''}`}
+                    aria-pressed={selectedPrimary === null}
                     type="button"
                     onClick={() => {
-                      if (selectedPrimary === cat.primary) {
-                        setSelectedPrimary(null);
-                        setSelectedSecondary(null);
-                      } else {
-                        setSelectedPrimary(cat.primary);
-                        setSelectedSecondary(null);
-                      }
+                      setSelectedPrimary(null);
+                      setSelectedSecondary(null);
                     }}
                   >
                     <span className="library-primary-card-icon" aria-hidden="true">
-                      <PrimaryIcon size={28} strokeWidth={1.85} />
+                      <Grid2x2 size={28} strokeWidth={1.85} />
                     </span>
-                    <span className="library-primary-card-title">{cat.primary}</span>
-                    <span className="library-primary-card-count">{cat.count}</span>
+                    <span className="library-primary-card-title">全部</span>
+                    <span className="library-primary-card-count">
+                      {totalConceptCount ?? concepts?.length ?? 0}
+                    </span>
                   </button>
-                );
-              })}
-            </div>
-          </div>
-        </section>
+                  {categoryTree.map((cat) => {
+                    const PrimaryIcon = getPrimaryCategoryIcon(cat.primary);
+                    return (
+                      <button
+                        key={cat.primary}
+                        className={`library-primary-card${selectedPrimary === cat.primary ? ' active' : ''}`}
+                        aria-pressed={selectedPrimary === cat.primary}
+                        type="button"
+                        onClick={() => {
+                          if (selectedPrimary === cat.primary) {
+                            setSelectedPrimary(null);
+                            setSelectedSecondary(null);
+                          } else {
+                            setSelectedPrimary(cat.primary);
+                            setSelectedSecondary(null);
+                          }
+                        }}
+                      >
+                        <span className="library-primary-card-icon" aria-hidden="true">
+                          <PrimaryIcon size={28} strokeWidth={1.85} />
+                        </span>
+                        <span className="library-primary-card-title">{cat.primary}</span>
+                        <span className="library-primary-card-count">{cat.count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
 
-        {selectedPrimary && currentSecondaries.length > 0 && currentPrimaryNode && (
-          <section
-            className="library-filter-section library-filter-section-secondary"
-            aria-label="二级标签"
-          >
-            <div className="library-filter-heading library-filter-heading-secondary">
-              <div className="library-filter-heading-main">
-                <span className="library-filter-eyebrow">
-                  二级标签（{selectedPrimary} · {currentPrimaryNode.count}）
-                </span>
+            {selectedPrimary && currentSecondaries.length > 0 && currentPrimaryNode && (
+              <section
+                className="library-filter-section library-filter-section-secondary"
+                aria-label="二级标签"
+              >
+                <div className="library-filter-heading library-filter-heading-secondary">
+                  <div className="library-filter-heading-main">
+                    <span className="library-filter-eyebrow">
+                      二级标签（{selectedPrimary} · {currentPrimaryNode.count}）
+                    </span>
+                  </div>
+                </div>
+                <div className="library-filter-row library-filter-row-secondary">
+                  <button
+                    className={`library-secondary-chip${selectedSecondary === null ? ' active' : ''}`}
+                    aria-pressed={selectedSecondary === null}
+                    type="button"
+                    onClick={() => setSelectedSecondary(null)}
+                  >
+                    <span className="library-secondary-chip-inner">
+                      <span className="library-secondary-chip-label">全部方向</span>
+                      <span className="library-secondary-chip-count">
+                        {currentPrimaryNode.count}
+                      </span>
+                    </span>
+                    <ChevronRight
+                      size={14}
+                      strokeWidth={2}
+                      className="library-secondary-chip-arrow"
+                      aria-hidden="true"
+                    />
+                  </button>
+                  {visibleSecondaries.map((sec) => (
+                    <button
+                      key={sec.name}
+                      className={`library-secondary-chip${selectedSecondary === sec.name ? ' active' : ''}`}
+                      aria-pressed={selectedSecondary === sec.name}
+                      type="button"
+                      onClick={() => {
+                        setSelectedSecondary(selectedSecondary === sec.name ? null : sec.name);
+                      }}
+                    >
+                      <span className="library-secondary-chip-inner">
+                        <span className="library-secondary-chip-label">{sec.name}</span>
+                        <span className="library-secondary-chip-count">{sec.count}</span>
+                      </span>
+                      <ChevronRight
+                        size={14}
+                        strokeWidth={2}
+                        className="library-secondary-chip-arrow"
+                        aria-hidden="true"
+                      />
+                    </button>
+                  ))}
+                  {hasMoreSecondaries && (
+                    <button
+                      className="library-secondary-chip library-secondary-more"
+                      type="button"
+                      aria-expanded={showAllSecondaries}
+                      onClick={() => setShowAllSecondaries((v) => !v)}
+                    >
+                      <span className="library-secondary-chip-inner">
+                        <span className="library-secondary-chip-label">
+                          {showAllSecondaries ? '收起标签' : '更多标签'}
+                        </span>
+                      </span>
+                      <ChevronRight
+                        size={14}
+                        strokeWidth={2}
+                        className={`library-secondary-chip-arrow${showAllSecondaries ? ' is-open' : ''}`}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
+          </div>
+
+          <div className="library-filter-status">{filterLabel}</div>
+
+          {selectedPrimary && deferredQuery.trim() && (
+            <div className="filter-indicator">
+              <span className="filter-indicator-text">
+                在{' '}
+                <strong>
+                  {selectedSecondary
+                    ? `${selectedPrimary} › ${selectedSecondary}`
+                    : selectedPrimary}
+                </strong>{' '}
+                中搜索 &ldquo;{deferredQuery.trim()}&rdquo;
+              </span>
+              <div className="filter-indicator-actions">
+                <button
+                  className="filter-indicator-clear"
+                  onClick={() => setQuery('')}
+                  type="button"
+                >
+                  清除搜索词
+                </button>
+                <button className="filter-indicator-clear" onClick={clearFilters} type="button">
+                  清空筛选
+                </button>
               </div>
             </div>
-            <div className="library-filter-row library-filter-row-secondary">
-              <button
-                className={`library-secondary-chip${selectedSecondary === null ? ' active' : ''}`}
-                aria-pressed={selectedSecondary === null}
-                type="button"
-                onClick={() => setSelectedSecondary(null)}
-              >
-                <span className="library-secondary-chip-inner">
-                  <span className="library-secondary-chip-label">全部方向</span>
-                  <span className="library-secondary-chip-count">{currentPrimaryNode.count}</span>
-                </span>
-                <ChevronRight
-                  size={14}
-                  strokeWidth={2}
-                  className="library-secondary-chip-arrow"
-                  aria-hidden="true"
-                />
-              </button>
-              {visibleSecondaries.map((sec) => (
-                <button
-                  key={sec.name}
-                  className={`library-secondary-chip${selectedSecondary === sec.name ? ' active' : ''}`}
-                  aria-pressed={selectedSecondary === sec.name}
-                  type="button"
-                  onClick={() => {
-                    setSelectedSecondary(selectedSecondary === sec.name ? null : sec.name);
-                  }}
-                >
-                  <span className="library-secondary-chip-inner">
-                    <span className="library-secondary-chip-label">{sec.name}</span>
-                    <span className="library-secondary-chip-count">{sec.count}</span>
-                  </span>
-                  <ChevronRight
-                    size={14}
-                    strokeWidth={2}
-                    className="library-secondary-chip-arrow"
-                    aria-hidden="true"
-                  />
-                </button>
-              ))}
-              {hasMoreSecondaries && (
-                <button
-                  className="library-secondary-chip library-secondary-more"
-                  type="button"
-                  aria-expanded={showAllSecondaries}
-                  onClick={() => setShowAllSecondaries((v) => !v)}
-                >
-                  <span className="library-secondary-chip-inner">
-                    <span className="library-secondary-chip-label">
-                      {showAllSecondaries ? '收起标签' : '更多标签'}
-                    </span>
-                  </span>
-                  <ChevronRight
-                    size={14}
-                    strokeWidth={2}
-                    className={`library-secondary-chip-arrow${showAllSecondaries ? ' is-open' : ''}`}
-                    aria-hidden="true"
-                  />
-                </button>
-              )}
-            </div>
-          </section>
-        )}
-      </div>
+          )}
 
-      <div className="library-filter-status">{filterLabel}</div>
-
-      {selectedPrimary && deferredQuery.trim() && (
-        <div className="filter-indicator">
-          <span className="filter-indicator-text">
-            在{' '}
-            <strong>
-              {selectedSecondary ? `${selectedPrimary} › ${selectedSecondary}` : selectedPrimary}
-            </strong>{' '}
-            中搜索 &ldquo;{deferredQuery.trim()}&rdquo;
-          </span>
-          <div className="filter-indicator-actions">
-            <button className="filter-indicator-clear" onClick={() => setQuery('')} type="button">
-              清除搜索词
-            </button>
-            <button className="filter-indicator-clear" onClick={clearFilters} type="button">
-              清空筛选
-            </button>
-          </div>
-        </div>
-      )}
-
-      {filtered.length === 0 ? (
-        concepts.length === 0 ? (
-          <OnboardingCard />
-        ) : (
-          <div className="empty-state" role="status">
-            <p>没有匹配的概念</p>
-            <button className="modal-btn" type="button" onClick={clearFilters}>
-              清空筛选
-            </button>
-          </div>
-        )
-      ) : (
-        <>
-          <div className="library-grid">
-            {visibleConcepts.map((c) => (
-              <ConceptCard
-                key={c.id}
-                concept={c}
-                isActive={detail?.type === 'concept' && detail.id === c.id}
-                onOpen={openConcept}
-              />
-            ))}
-          </div>
-          {visibleConcepts.length < filtered.length ? (
-            <div className="list-load-more">
-              <span className="list-load-more-hint">
-                已显示 {visibleConcepts.length} / {filtered.length} 个概念
-              </span>
-              <button
-                type="button"
-                className="modal-btn"
-                onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
-              >
-                加载更多
+          {filtered.length === 0 ? (
+            <div className="empty-state" role="status">
+              <p>没有匹配的概念</p>
+              <button className="modal-btn" type="button" onClick={clearFilters}>
+                清空筛选
               </button>
             </div>
           ) : (
-            <div className="list-end-hint">
-              <span>
-                已显示 {visibleConcepts.length} / {filtered.length} 个概念
-              </span>
-            </div>
+            <>
+              <div className="library-grid">
+                {visibleConcepts.map((c) => (
+                  <ConceptCard
+                    key={c.id}
+                    concept={c}
+                    isActive={detail?.type === 'concept' && detail.id === c.id}
+                    onOpen={openConcept}
+                  />
+                ))}
+              </div>
+              {visibleConcepts.length < filtered.length ? (
+                <div className="list-load-more">
+                  <span className="list-load-more-hint">
+                    已显示 {visibleConcepts.length} / {filtered.length} 个概念
+                  </span>
+                  <button
+                    type="button"
+                    className="modal-btn"
+                    onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+                  >
+                    加载更多
+                  </button>
+                </div>
+              ) : (
+                <div className="list-end-hint">
+                  <span>
+                    已显示 {visibleConcepts.length} / {filtered.length} 个概念
+                  </span>
+                </div>
+              )}
+            </>
           )}
         </>
       )}

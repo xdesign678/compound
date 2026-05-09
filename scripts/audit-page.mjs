@@ -98,8 +98,18 @@ export const SURFACES = {
   onboarding: {
     url: '/',
     setup: async (page) => {
-      await page.evaluate(() => localStorage.removeItem('compound_seeded'));
-      await page.reload();
+      await page.evaluate(async () => {
+        localStorage.setItem('compound_seeded', '1');
+        localStorage.removeItem('compound:onboarding-dismissed');
+        await new Promise((resolve, reject) => {
+          const request = indexedDB.deleteDatabase('compound-db');
+          request.onsuccess = () => resolve(undefined);
+          request.onerror = () => reject(request.error);
+          request.onblocked = () => resolve(undefined);
+        });
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForSelector('.onboarding-card', { timeout: 30_000 });
     },
   },
   commandPalette: { url: '/', setup: (page) => page.keyboard.press('Control+K') },
