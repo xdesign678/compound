@@ -237,7 +237,7 @@ button {
   line-height: 1.2;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--brand-clay);
+  color: var(--brand-clay-text);
   margin-bottom: 4px;
 }
 .header-title {
@@ -449,7 +449,7 @@ button {
   gap: 3px;
   padding: 9px 4px 8px;
   border-radius: 8px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   transition:
     color 0.18s ease,
     transform 0.12s ease,
@@ -457,7 +457,7 @@ button {
   position: relative;
 }
 .tab-item.active {
-  color: var(--brand-clay);
+  color: var(--brand-clay-text);
   background: rgba(217, 119, 87, 0.08);
 }
 .tab-item:active {

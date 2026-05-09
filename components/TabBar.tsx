@@ -33,12 +33,14 @@ interface TabBarProps {
 export function TabBar({ variant = 'bottom' }: TabBarProps) {
   useLocale();
   const tab = useAppStore((s) => s.tab);
+  const detail = useAppStore((s) => s.detail);
   const setTab = useAppStore((s) => s.setTab);
   const openModal = useAppStore((s) => s.openModal);
   const isSidebar = variant === 'sidebar';
 
   const renderTab = (item: (typeof TABS)[number]) => {
     const isActive = tab === item.id;
+    const hasRenderedPanel = isActive && (isSidebar || !detail || tab === 'ask');
     return (
       <button
         key={item.id}
@@ -46,7 +48,7 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
         id={`tab-${item.id}`}
         role="tab"
         aria-selected={isActive}
-        aria-controls={`tabpanel-${item.id}`}
+        aria-controls={hasRenderedPanel ? `tabpanel-${item.id}` : undefined}
         aria-current={isActive ? 'page' : undefined}
         className={`tab-item${isActive ? ' active' : ''}${isSidebar ? ' sidebar' : ''}`}
         onClick={() => setTab(item.id)}
