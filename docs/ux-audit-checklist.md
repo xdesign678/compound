@@ -73,22 +73,52 @@
 
 ---
 
-## Lighthouse / axe rule ↔ checklist 映射（partial）
+## Surface 适用特例
 
-| Lighthouse / axe rule               | 对应 |
-| ----------------------------------- | ---- |
-| `installable-manifest`              | A1   |
-| `service-worker`                    | A2   |
-| `apple-touch-icon`                  | A4   |
-| `largest-contentful-paint`          | B1   |
-| `total-blocking-time`               | B2   |
-| `cumulative-layout-shift`           | B3   |
-| `unused-css-rules` / `font-display` | B5   |
-| axe `color-contrast`                | C4   |
-| axe `focus-order-semantics`         | C2   |
-| axe `aria-required-attr`            | C5   |
-| Lighthouse `tap-targets`            | E1   |
-| Lighthouse `viewport`               | E2   |
+| Surface                    | 特例                                                                 |
+| -------------------------- | -------------------------------------------------------------------- |
+| `wiki` / `library`         | 允许桌面右侧详情空态，但必须有标题、说明和下一步动作线索。           |
+| `sources` / `sourceDetail` | 资料元信息可低强调，但正文、时间、类型、来源 badge 仍需满足 C4。     |
+| `ask` / `commandPalette`   | 搜索框和组合框必须用键盘闭环验证，不能只依赖鼠标点击截图。           |
+| `ingestModal`              | 文件选择器的浏览器原生按钮不纳入视觉一致性，但外层触发和错误态纳入。 |
+| `githubSync`               | 未配置凭据时可展示配置缺失态，但 CTA、阶段列表和错误建议必须完整。   |
+| `obsidianImport`           | 本地文件权限由浏览器控制，空态和文件队列仍按 G1/G2 检查。            |
+| `settings*`                | 危险操作可用红/橘强调，但必须同时有文字、边框或图标区分。            |
+| `activity` / `health`      | 统计颜色只能补充状态，状态含义必须可从文字或图标读出。               |
+| `sync` / `review`          | 运营页可信息密度更高，但分组、焦点和移动端折叠仍按 C2/E1/F1 检查。   |
+| `recap`                    | 手势卡片必须保留可点击后备路径，不能只依赖滑动完成主操作。           |
+| `offline`                  | 离线页不得调用在线接口才能显示核心文案、返回入口或恢复建议。         |
+
+---
+
+## Lighthouse / axe rule ↔ checklist 映射
+
+| Lighthouse / axe rule                         | 对应  |
+| --------------------------------------------- | ----- |
+| `installable-manifest`                        | A1    |
+| `splash-screen`                               | A4    |
+| `service-worker`                              | A2/A3 |
+| `apple-touch-icon`                            | A4    |
+| `themed-omnibox`                              | A1    |
+| `largest-contentful-paint`                    | B1    |
+| `total-blocking-time`                         | B2    |
+| `cumulative-layout-shift`                     | B3    |
+| `unused-css-rules` / `font-display`           | B5    |
+| `tap-targets`                                 | E1    |
+| `viewport`                                    | E2    |
+| `color-contrast`                              | C4    |
+| `aria-required-attr` / `aria-valid-attr`      | C5    |
+| `aria-allowed-attr` / `aria-roles`            | C5    |
+| `button-name` / `link-name`                   | C5    |
+| `image-alt` / `svg-img-alt`                   | C5/G1 |
+| `label` / `select-name` / `input-button-name` | C5    |
+| `focus-order-semantics` / `tabindex`          | C2    |
+| `landmark-one-main` / `region`                | C2/F1 |
+| `heading-order`                               | D4/G1 |
+| `duplicate-id` / `duplicate-id-aria`          | C5    |
+| `nested-interactive`                          | C2/C5 |
+| `scrollable-region-focusable`                 | C2/F1 |
+| `html-has-lang` / `valid-lang`                | A1/C5 |
 
 ---
 
