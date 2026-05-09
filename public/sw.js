@@ -1,7 +1,8 @@
 // Compound PWA Service Worker
-// IMPORTANT: Bump version numbers below when deploying new builds
-const CACHE_NAME = 'compound-v10';
-const RUNTIME_CACHE = 'compound-runtime-v10';
+const SCRIPT_URL = new URL(self.location.href);
+const BUILD_ID = SCRIPT_URL.searchParams.get('buildId') || 'dev';
+const CACHE_NAME = `compound-${BUILD_ID}`;
+const RUNTIME_CACHE = `compound-runtime-${BUILD_ID}`;
 const IS_LOCAL_DEV = ['localhost', '127.0.0.1', '0.0.0.0'].includes(location.hostname);
 
 // App shell files to precache
@@ -19,13 +20,18 @@ async function trimCache(cacheName, maxEntries) {
 // Install: precache app shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    (IS_LOCAL_DEV
+    IS_LOCAL_DEV
       ? Promise.resolve()
       : caches.open(CACHE_NAME).then((cache) => {
           return cache.addAll(PRECACHE_URLS);
-        })
-    ).then(() => self.skipWaiting()),
+        }),
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    event.waitUntil(self.skipWaiting());
+  }
 });
 
 // Activate: clean old caches

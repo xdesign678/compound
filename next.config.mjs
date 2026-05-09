@@ -4,6 +4,7 @@ import { withSentryConfig } from '@sentry/nextjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.env.NODE_ENV !== 'production';
+const buildId = process.env.COMPOUND_BUILD_ID || (isDev ? 'dev' : String(Date.now()));
 
 // Comma-separated list in env takes precedence. Fall back to safe defaults for
 // local dev + the canonical zeabur deployment so first-run still works.
@@ -37,7 +38,7 @@ const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
   env: {
-    NEXT_PUBLIC_BUILD_ID: isDev ? 'dev' : String(Date.now()),
+    NEXT_PUBLIC_BUILD_ID: buildId,
   },
   outputFileTracingRoot: __dirname,
   // Production source maps are required for Sentry to symbolicate stack
