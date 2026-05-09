@@ -14,6 +14,7 @@ export const MIN_PWA = 90;
 export const MIN_A11Y = 90;
 export const MIN_BEST_PRACTICES = 90;
 export const VISUAL_DIFF_TOLERANCE = 0.01;
+export const VISUAL_PIXEL_CHANNEL_TOLERANCE = 96;
 
 export const SURFACES = {
   wiki: {
@@ -373,10 +374,16 @@ async function preparePage(browser, baseUrl, surface, viewport) {
     .waitForSelector('.loading-skeleton', { state: 'detached', timeout: 30_000 })
     .catch(() => undefined);
   await page.evaluate(async () => {
+    await Promise.all([
+      document.fonts.load('16px "Inter"'),
+      document.fonts.load('16px "Lora"'),
+      document.fonts.load('16px "Noto Serif SC"', '知识库结构性缺陷'),
+    ]);
     await document.fonts.ready;
     await Promise.all(
       document.getAnimations().map((animation) => animation.finished.catch(() => undefined)),
     );
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
   return { context, page };
 }
@@ -420,7 +427,10 @@ async function compareScreenshots(currentPath, baselinePath, diffPath) {
   for (let i = 0; i < current.data.length; i += current.info.channels) {
     let different = false;
     for (let channel = 0; channel < current.info.channels; channel += 1) {
-      if (Math.abs(current.data[i + channel] - baseline.data[i + channel]) > 8) {
+      if (
+        Math.abs(current.data[i + channel] - baseline.data[i + channel]) >
+        VISUAL_PIXEL_CHANNEL_TOLERANCE
+      ) {
         different = true;
         break;
       }

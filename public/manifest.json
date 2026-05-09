@@ -10,6 +10,10 @@
   "orientation": "portrait",
   "lang": "zh-CN",
   "scope": "/",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "launch_handler": {
+    "client_mode": "auto"
+  },
   "categories": ["productivity", "education"],
   "icons": [
     {
@@ -63,6 +67,7 @@
   ],
   "shortcuts": [
     {
+      "id": "new-note",
       "name": "新建笔记",
       "short_name": "新建",
       "description": "快速新建一条笔记",
@@ -70,6 +75,21 @@
       "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96" }]
     }
   ],
-  "screenshots": [],
+  "screenshots": [
+    {
+      "src": "/pwa-screenshots/wiki-mobile.png",
+      "sizes": "375x667",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Compound mobile Wiki"
+    },
+    {
+      "src": "/pwa-screenshots/wiki-desktop.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Compound desktop Wiki"
+    }
+  ],
   "prefer_related_applications": false
 }
