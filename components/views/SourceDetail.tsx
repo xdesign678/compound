@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { ensureSourceHydrated } from '@/lib/cloud-sync';
@@ -71,6 +71,10 @@ function collectSourceToc(root: HTMLElement): SourceTocItem[] {
 
 export function SourceDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
+  const sourceTitleId = useId();
+  const editorId = useId();
+  const saveStatusId = useId();
+  const tocTitleId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const tocCloseTimerRef = useRef<number | null>(null);
@@ -297,7 +301,13 @@ export function SourceDetail({ id }: { id: string }) {
     [closeToc],
   );
 
-  if (!source) return <div className="empty-state">未找到资料</div>;
+  if (!source) {
+    return (
+      <div className="empty-state" role="status" aria-live="polite">
+        未找到资料
+      </div>
+    );
+  }
 
   const generatedCount = generated?.length ?? 0;
   const generatedItems = generated ?? [];
@@ -328,10 +338,14 @@ export function SourceDetail({ id }: { id: string }) {
               <span>已生成 {generatedCount} 个概念</span>
             </>
           )}
-          {!hasFullContent && <span className="detail-status">加载中</span>}
+          {!hasFullContent && (
+            <span className="detail-status" role="status" aria-live="polite">
+              加载中
+            </span>
+          )}
         </div>
 
-        <h1>{source.title}</h1>
+        <h1 id={sourceTitleId}>{source.title}</h1>
 
         <div className="source-hero-meta">
           {source.author && <span>{source.author}</span>}
@@ -343,6 +357,7 @@ export function SourceDetail({ id }: { id: string }) {
               target="_blank"
               rel="noopener noreferrer"
               className="source-hero-meta-link"
+              aria-label={`打开原始资料：${sourceHost}`}
             >
               {sourceHost}
               <span aria-hidden="true" className="source-hero-meta-link-arrow">
@@ -362,6 +377,7 @@ export function SourceDetail({ id }: { id: string }) {
                   className="related-chip source-aside-chip"
                   onClick={() => openConcept(concept.id)}
                   type="button"
+                  aria-label={`打开关联概念：${concept.title}`}
                 >
                   {concept.title}
                 </button>
@@ -373,12 +389,24 @@ export function SourceDetail({ id }: { id: string }) {
         <hr className="source-hero-divider" aria-hidden="true" />
       </header>
 
-      <section className="source-layout-main">
+      <section className="source-layout-main" aria-labelledby={sourceTitleId}>
         {!hasFullContent ? (
-          <div className="empty-state empty-state-compact">原文加载中...</div>
+          <div
+            className="empty-state empty-state-compact"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            原文加载中...
+          </div>
         ) : (
           <div className="source-editor-shell">
-            <div className="source-editor-toolbar" role="toolbar" aria-label="Markdown 格式">
+            <div
+              className="source-editor-toolbar"
+              role="toolbar"
+              aria-label="Markdown 格式"
+              aria-controls={editorId}
+            >
               <button
                 type="button"
                 className="source-editor-toolbar-btn"
@@ -423,6 +451,7 @@ export function SourceDetail({ id }: { id: string }) {
             </div>
 
             <textarea
+              id={editorId}
               ref={textareaRef}
               className="source-editor-textarea"
               value={draftContent}
@@ -430,6 +459,7 @@ export function SourceDetail({ id }: { id: string }) {
               onBlur={handleTextareaBlur}
               spellCheck={false}
               aria-label="资料正文 Markdown 编辑器"
+              aria-multiline="true"
               placeholder="直接用 Markdown 整理这份资料..."
             />
 
@@ -437,6 +467,7 @@ export function SourceDetail({ id }: { id: string }) {
               ref={previewRef}
               className="prose source-editor-content source-editor-preview"
               dangerouslySetInnerHTML={{ __html: previewHtml }}
+              role="region"
               aria-label="资料正文预览"
             />
           </div>
@@ -448,7 +479,7 @@ export function SourceDetail({ id }: { id: string }) {
           className={`modal-overlay source-toc-overlay${tocVisible ? ' visible' : ''}`}
           role="dialog"
           aria-modal="true"
-          aria-labelledby="source-toc-title"
+          aria-labelledby={tocTitleId}
           onClick={closeToc}
         >
           <div className="modal source-toc-dialog" onClick={(event) => event.stopPropagation()}>
@@ -456,7 +487,7 @@ export function SourceDetail({ id }: { id: string }) {
             <div className="settings-hero source-toc-head">
               <div>
                 <div className="settings-kicker source-toc-kicker">文章目录</div>
-                <h2 id="source-toc-title">跳转到标题</h2>
+                <h2 id={tocTitleId}>跳转到标题</h2>
               </div>
               <button
                 type="button"
@@ -477,13 +508,16 @@ export function SourceDetail({ id }: { id: string }) {
                     className="source-toc-item"
                     style={{ paddingLeft: `${12 + Math.max(0, item.level - 1) * 14}px` }}
                     onClick={() => handleTocJump(item.id)}
+                    aria-label={`跳转到标题：${item.title}`}
                   >
                     <span className="source-toc-item-marker" aria-hidden="true" />
                     <span>{item.title}</span>
                   </button>
                 ))
               ) : (
-                <div className="source-toc-empty">暂未识别到标题</div>
+                <div className="source-toc-empty" role="status" aria-live="polite">
+                  暂未识别到标题
+                </div>
               )}
             </div>
           </div>
@@ -491,13 +525,20 @@ export function SourceDetail({ id }: { id: string }) {
       )}
 
       {(isDirty || saveStatus !== 'idle') && (
-        <div className="source-save-indicator" role="status" aria-live="polite">
+        <div
+          id={saveStatusId}
+          className="source-save-indicator"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           {isDirty && saveStatus === 'idle' && (
             <>
               <button
                 className="source-save-indicator-action"
                 onClick={handleResetDraft}
                 type="button"
+                aria-label="还原资料正文草稿"
               >
                 还原
               </button>
@@ -506,6 +547,7 @@ export function SourceDetail({ id }: { id: string }) {
                 onClick={handleSave}
                 disabled={!canSave}
                 type="button"
+                aria-label="保存资料正文草稿"
               >
                 保存
               </button>
@@ -527,7 +569,12 @@ export function SourceDetail({ id }: { id: string }) {
             <span className="source-save-indicator-text error">
               <span className="source-save-indicator-dot" aria-hidden="true" />
               保存失败
-              <button className="source-save-indicator-action" onClick={handleSave} type="button">
+              <button
+                className="source-save-indicator-action"
+                onClick={handleSave}
+                type="button"
+                aria-label="重试保存资料正文草稿"
+              >
                 重试
               </button>
             </span>
