@@ -8663,6 +8663,11 @@ button,
   padding: 22px 24px;
 }
 
+.review-card:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
 .review-card::before {
   content: '';
   position: absolute;
@@ -8819,6 +8824,25 @@ button,
   gap: 8px;
 }
 
+.review-undo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--ops-radius-card);
+  background: var(--ops-surface);
+  color: var(--text-body);
+  font-family: var(--font-reading);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.review-undo .ops-btn {
+  flex-shrink: 0;
+}
+
 .review-raw {
   margin-top: 4px;
   border-top: 1px solid var(--border-section);
@@ -8895,6 +8919,11 @@ button,
 
   .review-card .review-actions .ops-btn {
     flex: 1 1 30%;
+  }
+
+  .review-undo {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .review-conf {

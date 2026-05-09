@@ -203,6 +203,28 @@ export function resolveReviewItem(
   );
 }
 
+export function reopenReviewItem(id: string, resolution?: unknown): ReviewItem | null {
+  ensureReviewQueueSchema();
+  const existing = getServerDb().prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as
+    | ReviewItem
+    | undefined;
+  if (!existing) return null;
+
+  const ts = now();
+  getServerDb()
+    .prepare(
+      `UPDATE review_items
+       SET status = 'open', resolution_json = ?, resolved_at = NULL, updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(resolution === undefined ? null : JSON.stringify(resolution), ts, id);
+  return (
+    (getServerDb().prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as
+      | ReviewItem
+      | undefined) ?? null
+  );
+}
+
 export function getReviewMetrics(): Record<string, number> {
   ensureReviewQueueSchema();
   const scalar = (sql: string) =>

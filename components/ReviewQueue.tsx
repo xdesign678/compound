@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
 import { withRequestId } from '@/lib/trace-client';
@@ -28,6 +28,11 @@ type Friendly = {
   why: string;
   facts: { label: string; value: string }[];
   decision: string;
+};
+
+type LastDecision = {
+  item: ReviewItem;
+  status: 'approved' | 'rejected' | 'resolved';
 };
 
 function fmtDate(value: number) {
@@ -205,6 +210,8 @@ export default function ReviewQueue() {
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState('');
   const [initialLoading, setInitialLoading] = useState(true);
+  const [lastDecision, setLastDecision] = useState<LastDecision | null>(null);
+  const cardRefs = useRef<Record<string, HTMLElement | null>>({});
   const isOnline = useAppStore((s) => s.isOnline);
 
   const load = useCallback(
@@ -233,12 +240,25 @@ export default function ReviewQueue() {
 
   const resolve = useCallback(
     async (id: string, next: 'approved' | 'rejected' | 'resolved') => {
+      const item = items.find((candidate) => candidate.id === id);
       setBusyId(id);
       try {
         if (!isOnline) {
           throw new Error('当前离线，审核决定已暂停，请联网后重试。');
         }
         await postJson(`/api/review/queue/${id}`, { status: next });
+        if (item) {
+          setLastDecision({ item, status: next });
+          if (status === 'open') {
+            setItems((current) => current.filter((candidate) => candidate.id !== id));
+            setMetrics((current) => ({
+              ...current,
+              reviewOpen: Math.max(0, (current.reviewOpen || 0) - 1),
+              reviewResolved: (current.reviewResolved || 0) + 1,
+            }));
+            return;
+          }
+        }
         await load();
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -246,7 +266,60 @@ export default function ReviewQueue() {
         setBusyId('');
       }
     },
-    [isOnline, load],
+    [isOnline, items, load, status],
+  );
+
+  const undoLastDecision = useCallback(async () => {
+    if (!lastDecision) return;
+    const { item } = lastDecision;
+    setBusyId(item.id);
+    try {
+      await postJson(`/api/review/queue/${item.id}`, {
+        status: 'open',
+        resolution: { undo: true, previousStatus: lastDecision.status },
+      });
+      setLastDecision(null);
+      if (status === 'open') {
+        setItems((current) => [item, ...current.filter((candidate) => candidate.id !== item.id)]);
+        setMetrics((current) => ({
+          ...current,
+          reviewOpen: (current.reviewOpen || 0) + 1,
+          reviewResolved: Math.max(0, (current.reviewResolved || 0) - 1),
+        }));
+      } else {
+        await load();
+      }
+      window.setTimeout(() => cardRefs.current[item.id]?.focus(), 0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyId('');
+    }
+  }, [lastDecision, load, status]);
+
+  const handleCardKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLElement>, item: ReviewItem) => {
+      const target = event.target as HTMLElement;
+      if (
+        target.closest('button, a, input, textarea, select, summary, details') ||
+        item.status !== 'open' ||
+        busyId
+      ) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === 'a') {
+        event.preventDefault();
+        void resolve(item.id, 'approved');
+      } else if (key === 'r') {
+        event.preventDefault();
+        void resolve(item.id, 'rejected');
+      } else if (key === 's') {
+        event.preventDefault();
+        void resolve(item.id, 'resolved');
+      }
+    },
+    [busyId, resolve],
   );
 
   useEffect(() => {
@@ -265,7 +338,9 @@ export default function ReviewQueue() {
         </div>
         <div className="ops-actions">
           <button
+            type="button"
             className={`ops-btn ${status === 'open' ? 'primary' : ''}`}
+            aria-pressed={status === 'open'}
             onClick={() => {
               setStatus('open');
               void load('open');
@@ -274,7 +349,9 @@ export default function ReviewQueue() {
             待处理 {metrics.reviewOpen || 0}
           </button>
           <button
+            type="button"
             className={`ops-btn ${status === 'all' ? 'primary' : ''}`}
+            aria-pressed={status === 'all'}
             onClick={() => {
               setStatus('all');
               void load('all');
@@ -291,11 +368,42 @@ export default function ReviewQueue() {
         </div>
       </header>
 
-      {error ? <div className="ops-alert">{error}</div> : null}
-      {!isOnline ? <div className="ops-alert">离线中，审核决定会先暂停。</div> : null}
+      {error ? (
+        <div className="ops-alert" role="alert">
+          {error}
+        </div>
+      ) : null}
+      {!isOnline ? (
+        <div className="ops-alert" role="status">
+          离线中，审核决定会先暂停。
+        </div>
+      ) : null}
+      {lastDecision ? (
+        <div className="review-undo" role="status" aria-live="polite">
+          <span>
+            已处理「{lastDecision.item.title || lastDecision.item.id}」。
+            {lastDecision.status === 'approved'
+              ? '撤销会重新打开审核项；已应用的写入不会自动回滚。'
+              : '可撤销并重新放回待处理。'}
+          </span>
+          <button
+            type="button"
+            className="ops-btn subtle"
+            disabled={busyId === lastDecision.item.id}
+            onClick={() => void undoLastDecision()}
+          >
+            撤销
+          </button>
+        </div>
+      ) : null}
 
       {initialLoading ? (
-        <section className="review-list">
+        <section
+          className="review-list"
+          role="status"
+          aria-live="polite"
+          aria-label="审核队列加载中"
+        >
           {Array.from({ length: 3 }).map((_, i) => (
             <article
               key={i}
@@ -360,14 +468,26 @@ export default function ReviewQueue() {
           />
         </section>
       ) : (
-        <section className="review-list">
+        <section className="review-list" aria-label="审核决策卡片">
           {items.map((item) => {
             const friendly = describeReviewItem(item);
             const payload = prettyPayload(item.payload_json);
             const busy = busyId === item.id;
             const st = statusLabel(item.status);
+            const headlineId = `review-headline-${item.id}`;
+            const descId = `review-desc-${item.id}`;
             return (
-              <article className={`review-card severity-${friendly.severity}`} key={item.id}>
+              <article
+                className={`review-card severity-${friendly.severity}`}
+                key={item.id}
+                ref={(node) => {
+                  cardRefs.current[item.id] = node;
+                }}
+                tabIndex={0}
+                aria-labelledby={headlineId}
+                aria-describedby={descId}
+                onKeyDown={(event) => handleCardKeyDown(event, item)}
+              >
                 <div className="review-card-head">
                   <span className="review-kind-tag">{friendly.kindLabel}</span>
                   <span className={`ops-badge tone-${st.tone}`}>{st.text}</span>
@@ -376,8 +496,12 @@ export default function ReviewQueue() {
                   ) : null}
                 </div>
 
-                <h2 className="review-headline">{friendly.headline}</h2>
-                <p className="review-why">{friendly.why}</p>
+                <h2 className="review-headline" id={headlineId}>
+                  {friendly.headline}
+                </h2>
+                <p className="review-why" id={descId}>
+                  {friendly.why}
+                </p>
 
                 <dl className="review-facts">
                   {friendly.facts.map((f) => (
@@ -396,25 +520,31 @@ export default function ReviewQueue() {
                     </div>
                     <div className="review-actions">
                       <button
+                        type="button"
                         className={`ops-btn good${busy ? ' is-busy' : ''}`}
                         disabled={busy || !isOnline}
                         onClick={() => void resolve(item.id, 'approved')}
+                        aria-label={`批准 ${friendly.headline}`}
                       >
                         {busy && <span className="ops-btn-spinner" aria-hidden="true" />}
                         批准
                       </button>
                       <button
+                        type="button"
                         className={`ops-btn danger${busy ? ' is-busy' : ''}`}
                         disabled={busy || !isOnline}
                         onClick={() => void resolve(item.id, 'rejected')}
+                        aria-label={`拒绝 ${friendly.headline}`}
                       >
                         {busy && <span className="ops-btn-spinner" aria-hidden="true" />}
                         拒绝
                       </button>
                       <button
+                        type="button"
                         className={`ops-btn subtle${busy ? ' is-busy' : ''}`}
                         disabled={busy || !isOnline}
                         onClick={() => void resolve(item.id, 'resolved')}
+                        aria-label={`稍后处理 ${friendly.headline}`}
                       >
                         {busy && <span className="ops-btn-spinner" aria-hidden="true" />}
                         稍后再说
