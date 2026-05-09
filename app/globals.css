@@ -4458,6 +4458,50 @@ button {
   font-size: 12px;
   line-height: 1.5;
 }
+.settings-field-hint {
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.settings-field-row-help {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+.settings-status {
+  margin-top: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.settings-status-success {
+  border-color: rgba(217, 119, 87, 0.24);
+  background: var(--brand-clay-soft);
+  color: var(--brand-clay-text);
+}
+.settings-status-warning {
+  border-color: rgba(217, 119, 87, 0.28);
+  background: rgba(217, 119, 87, 0.08);
+  color: var(--brand-clay-text);
+}
+.settings-status-danger {
+  border-color: rgba(217, 119, 87, 0.34);
+  background: rgba(217, 119, 87, 0.08);
+  color: var(--brand-clay);
+}
+.settings-status-info {
+  border-color: rgba(104, 112, 126, 0.24);
+  background: rgba(104, 112, 126, 0.08);
+  color: var(--text-secondary);
+}
 .settings-inline-toggle + .settings-field {
   margin-top: 8px;
 }
