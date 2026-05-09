@@ -17,6 +17,7 @@
     "test": "node scripts/run-node-tests.mjs",
     "test:e2e": "playwright test",
     "test:a11y": "playwright test tests/e2e/a11y.spec.ts",
+    "audit:ux": "node scripts/audit-page.mjs",
     "test:coverage": "node scripts/run-node-tests.mjs --coverage",
     "eval": "node scripts/eval-query.mjs",
     "knip": "knip",
