@@ -47,6 +47,11 @@
   --motion-ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --z-modal: 60;
+  --z-task-center: 70;
+  --z-toast: 80;
+  --z-command-palette: 200;
+  --z-tooltip: 260;
 
   /* Type Scale */
   --text-2xs: 11px;
@@ -318,7 +323,7 @@ button {
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
   padding: 6px 0;
-  z-index: 200;
+  z-index: var(--z-tooltip);
   animation: overflow-menu-in 150ms ease-out;
 }
 @keyframes overflow-menu-in {
@@ -1109,7 +1114,7 @@ button {
    so the reader can spin a brand-new concept page from that snippet. */
 .selection-popover {
   position: fixed;
-  z-index: 60;
+  z-index: var(--z-tooltip);
   pointer-events: auto;
   animation: selection-popover-in 140ms var(--motion-ease-emphasized) both;
   /* 防止点击 popover 时浏览器把外部选区清除掉（保住"选择态不丢失"）。*/
@@ -1778,7 +1783,7 @@ button {
 
 .source-toc-overlay {
   position: fixed;
-  z-index: 80;
+  z-index: var(--z-modal);
   align-items: flex-end;
 }
 .source-toc-dialog {
@@ -1861,7 +1866,7 @@ button {
 /* Selection bubble: Medium-style floating format toolbar */
 .source-selection-bubble {
   position: fixed;
-  z-index: 50;
+  z-index: var(--z-tooltip);
   transform: translate(-50%, calc(-100% - 8px));
   display: inline-flex;
   align-items: center;
@@ -2916,7 +2921,7 @@ button {
   left: 50%;
   transform: translateX(-50%);
   bottom: calc(var(--ask-input-height, 96px) + var(--space-md));
-  z-index: 60;
+  z-index: var(--z-modal);
   box-sizing: border-box;
   width: min(420px, calc(100vw - (var(--space-2xl) * 2)));
   background: var(--bg-card);
@@ -3795,8 +3800,8 @@ button {
   inset: 0;
   /* Lift above the soft keyboard so bottom sheet + its buttons stay visible */
   bottom: var(--ask-kb-offset, 0px);
-  background: rgba(0, 0, 0, 0.35);
-  z-index: 50;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: var(--z-modal);
   display: flex;
   align-items: flex-end;
   opacity: 0;
@@ -4093,7 +4098,7 @@ button {
   top: 70px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 60;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column-reverse;
   align-items: center;
@@ -4836,7 +4841,7 @@ button {
 .note-editor-overlay {
   position: absolute;
   inset: 0;
-  z-index: 60;
+  z-index: var(--z-modal);
   background: var(--bg-primary);
   display: flex;
   flex-direction: column;
@@ -6014,8 +6019,8 @@ button,
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.35);
-    z-index: 55;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: var(--z-modal);
     animation: askBackdropIn 180ms var(--motion-ease-standard);
   }
 
@@ -6036,7 +6041,7 @@ button,
     border-bottom: none;
     box-shadow: 0 -10px 32px rgba(20, 20, 19, 0.18);
     overflow-y: auto;
-    z-index: 60;
+    z-index: var(--z-modal);
     animation: askSheetIn 220ms var(--motion-ease-emphasized);
   }
 
@@ -6103,8 +6108,8 @@ button,
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.35);
-    z-index: 55;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: var(--z-modal);
     animation: askBackdropIn 180ms var(--motion-ease-standard);
   }
 
@@ -6124,7 +6129,7 @@ button,
     border-bottom: none;
     box-shadow: 0 -10px 32px rgba(20, 20, 19, 0.18);
     overflow-y: auto;
-    z-index: 60;
+    z-index: var(--z-modal);
     animation: askSheetIn 220ms var(--motion-ease-emphasized);
   }
 
@@ -7595,8 +7600,8 @@ button,
 .library-detail-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
-  background: rgba(0, 0, 0, 0.45);
+  z-index: var(--z-command-palette);
+  background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
@@ -7676,8 +7681,8 @@ button,
 }
 
 .ask-detail-overlay {
-  z-index: 260;
-  background: rgba(18, 17, 15, 0.32);
+  z-index: var(--z-tooltip);
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .ask-detail-modal {
@@ -9753,7 +9758,7 @@ button,
   position: fixed;
   top: 16px;
   right: 16px;
-  z-index: 80;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -11511,10 +11516,10 @@ button,
 .sync-v2-drawer-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(20, 20, 19, 0.32);
+  background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  z-index: 70;
+  z-index: var(--z-task-center);
   display: flex;
   justify-content: flex-end;
   animation: sync-v2-fade-in 200ms ease;
@@ -12182,7 +12187,7 @@ button,
 .cmd-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: var(--z-command-palette);
   background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: flex-start;
@@ -12377,7 +12382,7 @@ button,
   top: 0;
   left: 0;
   right: 0;
-  z-index: 150;
+  z-index: var(--z-task-center);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -12503,7 +12508,7 @@ button,
   position: fixed;
   right: 12px;
   bottom: calc(124px + var(--safe-bottom));
-  z-index: 65;
+  z-index: var(--z-task-center);
   width: min(340px, calc(100vw - 24px));
   padding: 12px;
   border: 1px solid var(--border-default);
@@ -12584,7 +12589,7 @@ button,
   position: fixed;
   bottom: calc(80px + var(--safe-bottom));
   right: 16px;
-  z-index: 60;
+  z-index: var(--z-task-center);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -12640,7 +12645,7 @@ button,
   position: fixed;
   bottom: calc(80px + var(--safe-bottom));
   right: 12px;
-  z-index: 60;
+  z-index: var(--z-task-center);
   width: min(360px, calc(100vw - 24px));
   max-height: min(400px, 60vh);
   background: var(--bg-primary);
