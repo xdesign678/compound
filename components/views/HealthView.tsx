@@ -152,6 +152,10 @@ export function HealthView() {
     () => allFindings.filter((f) => isFixable(f.type)).length,
     [allFindings],
   );
+  const repairProgress =
+    repairRun && repairRun.total > 0
+      ? Math.round(((repairRun.done + repairRun.failed) / repairRun.total) * 100)
+      : 0;
 
   const pollRepairRun = useCallback(async (runId: string): Promise<RepairStatusResponse | null> => {
     try {
@@ -516,51 +520,64 @@ export function HealthView() {
   };
 
   if (conceptCount === undefined || sourceCount === undefined) {
-    return <div className="empty-state">加载中...</div>;
+    return (
+      <div className="health-loading" role="status" aria-live="polite">
+        <span className="lint-spinner" aria-hidden="true" />
+        <span>正在读取健康检查数据...</span>
+      </div>
+    );
   }
 
   return (
-    <div className="health-view">
-      <div className="health-stats">
-        <div className="stat-card">
+    <div className="health-view" aria-label="知识库健康检查">
+      <div className="health-stats" role="list" aria-label="知识库健康指标">
+        <div className="stat-card" role="listitem" aria-label={`概念 ${conceptCount}`}>
           <div className="stat-value">{conceptCount}</div>
           <div className="stat-label">概念</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" role="listitem" aria-label={`资料 ${sourceCount}`}>
           <div className="stat-value">{sourceCount}</div>
           <div className="stat-label">资料</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" role="listitem" aria-label={`待处理问题 ${allFindings.length}`}>
           <div className="stat-value">{allFindings.length}</div>
           <div className="stat-label">问题</div>
         </div>
-        <div className={`stat-card score-${scoreColor}`}>
+        <div
+          className={`stat-card score-${scoreColor}`}
+          role="listitem"
+          aria-label={`健康分 ${healthScore}`}
+        >
           <div className="stat-value">{healthScore}</div>
           <div className="stat-label">健康分</div>
         </div>
       </div>
 
-      <div className="health-section">
+      <section className="health-section" aria-labelledby="health-findings-title">
         <div className="health-section-header">
-          <h3>待处理事项</h3>
-          <span className="finding-count">{allFindings.length}</span>
+          <h3 id="health-findings-title">待处理事项</h3>
+          <span className="finding-count" aria-label={`共 ${allFindings.length} 项`}>
+            {allFindings.length}
+          </span>
         </div>
 
         {repairRun && repairRun.status === 'running' ? (
-          <div className="repair-banner">
+          <div className="repair-banner" role="status" aria-live="polite">
             <div className="repair-banner-head">
-              <span className="lint-spinner" />
+              <span className="lint-spinner" aria-hidden="true" />
               <span>
                 一键修复中 {repairRun.done + repairRun.failed} / {repairRun.total}
               </span>
             </div>
-            <div className="repair-progress">
-              <div
-                className="repair-progress-bar"
-                style={{
-                  width: `${repairRun.total === 0 ? 0 : Math.round(((repairRun.done + repairRun.failed) / repairRun.total) * 100)}%`,
-                }}
-              />
+            <div
+              className="repair-progress"
+              role="progressbar"
+              aria-label="一键修复进度"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={repairProgress}
+            >
+              <div className="repair-progress-bar" style={{ width: `${repairProgress}%` }} />
             </div>
             <div className="repair-banner-sub">
               合并 {repairRun.summary.merged} · 建链 {repairRun.summary.linked} · 孤岛补{' '}
@@ -569,11 +586,17 @@ export function HealthView() {
             </div>
           </div>
         ) : null}
-        {repairError ? <div className="ops-alert">{repairError}</div> : null}
+        {repairError ? (
+          <div className="ops-alert" role="alert">
+            {repairError}
+          </div>
+        ) : null}
 
         {allFindings.length === 0 ? (
           <div className="health-empty">
-            <Icon.Lint />
+            <span aria-hidden="true">
+              <Icon.Lint />
+            </span>
             <span>
               {lastLintAt || localScanAt
                 ? '最近一次深度检查没有发现需要处理的问题'
@@ -581,7 +604,7 @@ export function HealthView() {
             </span>
           </div>
         ) : (
-          <div className="finding-list">
+          <div className="finding-list" role="list" aria-label="待处理事项列表">
             {allFindings.map((finding, index) => {
               const act = findingAction(finding);
               const fixable = isFixable(finding.type);
@@ -590,8 +613,11 @@ export function HealthView() {
                 <div
                   key={`${finding.type}-${index}`}
                   className={`finding-item type-${finding.type}`}
+                  role="listitem"
                 >
-                  <div className="finding-icon">{findingIcon(finding.type)}</div>
+                  <div className="finding-icon" aria-hidden="true">
+                    {findingIcon(finding.type)}
+                  </div>
                   <div className="finding-body">
                     <div className="finding-top-row">
                       <span className="finding-badge">{findingLabel(finding.type)}</span>
@@ -601,11 +627,16 @@ export function HealthView() {
                             className="finding-action-btn primary"
                             disabled={fixing || repairStarting}
                             onClick={() => void triggerRepair([finding])}
+                            aria-label={`修复${findingLabel(finding.type)}问题`}
                           >
                             修复
                           </button>
                         ) : null}
-                        <button className="finding-action-btn" onClick={act.action}>
+                        <button
+                          className="finding-action-btn"
+                          onClick={act.action}
+                          aria-label={`${act.label}: ${finding.message}`}
+                        >
                           {act.label}
                         </button>
                       </div>
@@ -628,17 +659,18 @@ export function HealthView() {
             })}
           </div>
         )}
-      </div>
+      </section>
 
       <div className="health-action">
         <button
           className="lint-btn"
           onClick={runLint}
           disabled={lintRunning || Boolean(repairRun && repairRun.status === 'running')}
+          aria-describedby={lastLintAt || localScanAt ? 'health-last-run' : undefined}
         >
           {lintRunning ? (
             <>
-              <span className="lint-spinner" /> 检查中...
+              <span className="lint-spinner" aria-hidden="true" /> 检查中...
             </>
           ) : (
             <>
@@ -654,11 +686,12 @@ export function HealthView() {
             repairStarting ||
             Boolean(repairRun && repairRun.status === 'running')
           }
+          aria-label={`一键修复 ${fixableCount} 个可自动修复问题`}
         >
           一键修复{fixableCount > 0 ? ` (${fixableCount})` : ''}
         </button>
         {(lastLintAt || localScanAt) && (
-          <div className="lint-time">
+          <div className="lint-time" id="health-last-run">
             上次检查: {formatRelativeTime(Math.max(lastLintAt ?? 0, localScanAt ?? 0))}
           </div>
         )}

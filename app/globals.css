@@ -3484,6 +3484,20 @@ button {
 .health-view {
   padding: 4px 20px 100px;
 }
+.health-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 168px;
+  padding: 24px 20px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.health-loading .lint-spinner {
+  color: var(--brand-clay);
+  border-color: var(--brand-clay-soft);
+  border-top-color: var(--brand-clay);
+}
 .health-stats {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -3564,7 +3578,7 @@ button {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  color: #4a9;
+  color: var(--color-success);
 }
 
 /* Finding list */
@@ -3595,28 +3609,28 @@ button {
   height: 14px;
 }
 .finding-item.type-orphan .finding-icon {
-  background: rgba(100, 149, 237, 0.12);
-  color: #6495ed;
+  background: var(--brand-clay-soft);
+  color: var(--brand-clay);
 }
 .finding-item.type-stale .finding-icon {
-  background: rgba(201, 144, 0, 0.12);
-  color: #c90;
+  background: rgba(184, 134, 11, 0.14);
+  color: var(--color-warning);
 }
 .finding-item.type-thin .finding-icon {
   background: rgba(150, 150, 140, 0.12);
   color: var(--text-secondary);
 }
 .finding-item.type-contradiction .finding-icon {
-  background: rgba(204, 68, 68, 0.12);
-  color: #c44;
+  background: rgba(163, 75, 45, 0.14);
+  color: var(--color-error);
 }
 .finding-item.type-missing-link .finding-icon {
   background: var(--brand-clay-soft);
   color: var(--brand-clay);
 }
 .finding-item.type-duplicate .finding-icon {
-  background: rgba(138, 112, 200, 0.12);
-  color: #8a70c8;
+  background: rgba(47, 106, 71, 0.12);
+  color: var(--color-success);
 }
 .finding-body {
   flex: 1;
@@ -3641,7 +3655,7 @@ button {
   font-weight: 500;
   color: var(--brand-clay);
   padding: 6px 10px;
-  min-height: 36px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   border-radius: 6px;
@@ -3668,7 +3682,8 @@ button {
 }
 .concept-chip {
   font-size: var(--text-2xs);
-  padding: 2px 8px;
+  padding: 4px 8px;
+  min-height: 32px;
   border-radius: 6px;
   background: var(--bg-secondary);
   color: var(--brand-clay);
