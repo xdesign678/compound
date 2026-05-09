@@ -15,6 +15,8 @@ import {
   recordEmbeddingCacheHit,
   recordEmbeddingCacheMiss,
 } from './observability/prometheus';
+import { pauseLlmBudget } from './llm-budgets';
+import { parseRateLimitBackoffMs } from './llm-rate-headers';
 
 type Vector = number[];
 
@@ -90,6 +92,14 @@ class EmbeddingResponseError extends Error {
     this.name = 'EmbeddingResponseError';
     this.status = status;
   }
+}
+
+function applyEmbeddingRateLimitHeaders(headers: Headers): void {
+  const backoffMs = parseRateLimitBackoffMs(headers, {
+    remainingThreshold: 2,
+    defaultBackoffMs: 30_000,
+  });
+  if (backoffMs != null) pauseLlmBudget('embedding', backoffMs);
 }
 
 function isTransientEmbeddingFailure(error: unknown): boolean {
@@ -198,9 +208,11 @@ async function remoteEmbeddings(texts: string[], signal?: AbortSignal): Promise<
       });
 
       if (!response.ok) {
+        applyEmbeddingRateLimitHeaders(response.headers);
         const err = await response.text().catch(() => '');
         throw new EmbeddingResponseError(response.status, err.slice(0, 200));
       }
+      applyEmbeddingRateLimitHeaders(response.headers);
       return response;
     });
   } catch (error) {

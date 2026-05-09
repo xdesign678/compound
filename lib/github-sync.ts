@@ -12,6 +12,7 @@
 import { buildExternalKey } from './github-sync-shared';
 import { logger } from './logging';
 import { buildOutboundTraceHeaders } from './request-context';
+import { parseRateLimitBackoffMs } from './llm-rate-headers';
 
 export { buildExternalKey, parseExternalKey, externalKeyPath } from './github-sync-shared';
 
@@ -56,6 +57,22 @@ const GITHUB_FETCH_TIMEOUT_MS = readPositiveInt(
   process.env.COMPOUND_GITHUB_FETCH_TIMEOUT_MS,
   30_000,
 );
+let githubRateLimitBackoffUntil = 0;
+
+async function waitForGithubRateLimitBackoff(): Promise<void> {
+  const delay = githubRateLimitBackoffUntil - Date.now();
+  if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+}
+
+function applyGithubRateLimitHeaders(headers: Headers): void {
+  const backoffMs = parseRateLimitBackoffMs(headers, {
+    remainingThreshold: readPositiveInt(process.env.COMPOUND_GITHUB_RATE_REMAINING_THRESHOLD, 5),
+    defaultBackoffMs: 0,
+  });
+  if (backoffMs == null) return;
+  githubRateLimitBackoffUntil = Math.max(githubRateLimitBackoffUntil, Date.now() + backoffMs);
+  logger.warn('github_sync.rate_limit_backoff', { backoffMs });
+}
 
 function encodeContentPath(path: string): string {
   return path.split('/').map(encodeURIComponent).join('/');
@@ -94,6 +111,7 @@ async function githubFetch(
   cfg: GithubConfig,
   accept = 'application/vnd.github+json',
 ): Promise<Response> {
+  await waitForGithubRateLimitBackoff();
   const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${cfg.token}`,
@@ -104,6 +122,7 @@ async function githubFetch(
     },
     signal: AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
   });
+  applyGithubRateLimitHeaders(res.headers);
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     const remaining = res.headers.get('x-ratelimit-remaining');

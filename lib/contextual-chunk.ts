@@ -14,6 +14,7 @@
 
 import { CONTEXTUALIZE_CHUNK_PROMPT, CONTEXTUALIZE_CHUNK_PROMPT_VERSION } from './prompts';
 import { logger } from './logging';
+import { runWithLlmBudget } from './llm-budgets';
 import type { LlmConfig } from './types';
 
 export interface ContextualizeChunkInput {
@@ -28,12 +29,6 @@ export interface ContextualizeChunkInput {
 const MAX_DOC_CHARS = 32_000;
 const MAX_CHUNK_CHARS = 4_000;
 const MAX_PREFIX_TOKENS = 200;
-const CONTEXTUALIZE_LLM_CONCURRENCY = Math.max(
-  1,
-  Number(process.env.COMPOUND_BACKGROUND_LLM_CONTEXTUALIZE || 1),
-);
-let activeContextualizeCalls = 0;
-
 function buildPrompt(input: ContextualizeChunkInput): string {
   let doc = input.fullDocument;
   if (doc.length > MAX_DOC_CHARS) {
@@ -49,33 +44,27 @@ export async function contextualizeChunk(input: ContextualizeChunkInput): Promis
   if (process.env.COMPOUND_CONTEXTUAL_RETRIEVAL === 'off') return '';
   if (!input.chunk?.trim()) return '';
 
-  let acquiredBudget = false;
   try {
-    while (activeContextualizeCalls >= CONTEXTUALIZE_LLM_CONCURRENCY) {
-      if (input.signal?.aborted) {
-        throw new DOMException(
-          'contextual chunk call aborted while waiting for budget',
-          'AbortError',
-        );
-      }
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    activeContextualizeCalls += 1;
-    acquiredBudget = true;
-    const { chat } = await import('./gateway');
-    const raw = await chat({
-      messages: [
-        { role: 'system', content: CONTEXTUALIZE_CHUNK_PROMPT },
-        { role: 'user', content: buildPrompt(input) },
-      ],
-      temperature: 0.1,
-      maxTokens: MAX_PREFIX_TOKENS,
-      llmConfig: input.llmConfig,
-      model: input.contextualizeModel || process.env.COMPOUND_CONTEXTUALIZE_MODEL,
-      signal: input.signal,
-      task: 'contextualize-chunk',
-      promptVersion: CONTEXTUALIZE_CHUNK_PROMPT_VERSION,
-    });
+    const raw = await runWithLlmBudget(
+      'contextualize',
+      async () => {
+        const { chat } = await import('./gateway');
+        return chat({
+          messages: [
+            { role: 'system', content: CONTEXTUALIZE_CHUNK_PROMPT },
+            { role: 'user', content: buildPrompt(input) },
+          ],
+          temperature: 0.1,
+          maxTokens: MAX_PREFIX_TOKENS,
+          llmConfig: input.llmConfig,
+          model: input.contextualizeModel || process.env.COMPOUND_CONTEXTUALIZE_MODEL,
+          signal: input.signal,
+          task: 'contextualize-chunk',
+          promptVersion: CONTEXTUALIZE_CHUNK_PROMPT_VERSION,
+        });
+      },
+      { signal: input.signal },
+    );
     const cleaned = raw
       .trim()
       .replace(/^```[\w-]*\n?|\n?```$/g, '')
@@ -88,9 +77,5 @@ export async function contextualizeChunk(input: ContextualizeChunkInput): Promis
       error: error instanceof Error ? error.message : String(error),
     });
     return '';
-  } finally {
-    if (acquiredBudget) {
-      activeContextualizeCalls = Math.max(0, activeContextualizeCalls - 1);
-    }
   }
 }

@@ -22,6 +22,7 @@ import {
 } from './prompts';
 import { now, parseJson } from './utils';
 import { wikiRepo, type ConceptRelationKind } from './wiki-db';
+import { getLlmBudgetStats, runWithLlmBudget, type LlmBudgetName } from './llm-budgets';
 
 export type AdvancedAnalysisStage =
   | 'github_ingest'
@@ -102,12 +103,6 @@ const LEASE_MS = Math.max(60_000, Number(process.env.COMPOUND_ANALYSIS_LEASE_MS 
 const MAX_PARALLEL_WORKERS = Math.max(1, Number(process.env.COMPOUND_ANALYSIS_MAX_WORKERS || 2));
 const HEARTBEAT_MS = Math.max(5_000, Number(process.env.COMPOUND_ANALYSIS_HEARTBEAT_MS || 15_000));
 const MARKDOWN_PARSER_VERSION = process.env.COMPOUND_MARKDOWN_PARSER_VERSION || 'wiki-chunk-v1';
-const BACKGROUND_LLM_BUDGETS: Record<string, number> = {
-  github_ingest: Math.max(1, Number(process.env.COMPOUND_BACKGROUND_LLM_GITHUB_INGEST || 1)),
-  summarize: Math.max(1, Number(process.env.COMPOUND_BACKGROUND_LLM_SUMMARIZE || 1)),
-  relations: Math.max(1, Number(process.env.COMPOUND_BACKGROUND_LLM_RELATIONS || 1)),
-  contextualize: Math.max(1, Number(process.env.COMPOUND_BACKGROUND_LLM_CONTEXTUALIZE || 1)),
-};
 const RELATION_CONFIDENCE_AUTO_APPLY = Math.max(
   0,
   Math.min(1, Number(process.env.COMPOUND_RELATION_AUTO_APPLY_CONFIDENCE || 0.72)),
@@ -131,7 +126,6 @@ let schemaReady = false;
 let schemaDb: ReturnType<typeof getServerDb> | null = null;
 let activeWorkerCount = 0;
 const cancelControllers = new Map<string, AbortController>();
-const activeLlmSlots = new Map<string, number>();
 
 function tableColumns(table: string): Set<string> {
   const rows = getServerDb().prepare(`PRAGMA table_info(${table})`).all() as Array<{
@@ -470,31 +464,29 @@ async function withJobHeartbeat<T>(job: AnalysisJobRow, fn: () => Promise<T>): P
 }
 
 async function withBackgroundLlmBudget<T>(
-  bucket: keyof typeof BACKGROUND_LLM_BUDGETS,
+  bucket: LlmBudgetName,
   job: AnalysisJobRow,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const limit = BACKGROUND_LLM_BUDGETS[bucket];
-  while ((activeLlmSlots.get(bucket) ?? 0) >= limit) {
+  const stats = getLlmBudgetStats(bucket);
+  if (stats.active >= stats.concurrency || stats.pending > 0 || stats.pausedUntil) {
     syncObs.recordEvent({
       runId: job.run_id,
       itemId: job.item_id,
       stage: job.stage,
       path: job.source_path,
-      message: `等待后台 LLM 预算：${bucket} ${activeLlmSlots.get(bucket) ?? 0}/${limit}`,
-      meta: { event: 'analysis.llm_budget_wait', bucket, limit },
+      message: `等待后台 LLM 队列：${bucket} active=${stats.active}/${stats.concurrency} pending=${stats.pending}`,
+      meta: {
+        event: 'analysis.llm_budget_wait',
+        bucket,
+        active: stats.active,
+        pending: stats.pending,
+        concurrency: stats.concurrency,
+        pausedUntil: stats.pausedUntil,
+      },
     });
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
-    if (isRunCancelled(job.run_id)) {
-      throw new DOMException('run cancelled while waiting for LLM budget', 'AbortError');
-    }
   }
-  activeLlmSlots.set(bucket, (activeLlmSlots.get(bucket) ?? 0) + 1);
-  try {
-    return await fn();
-  } finally {
-    activeLlmSlots.set(bucket, Math.max(0, (activeLlmSlots.get(bucket) ?? 1) - 1));
-  }
+  return runWithLlmBudget(bucket, fn, { signal: currentRunSignal(job.run_id) });
 }
 
 function computeStageInputHash(job: AnalysisJobRow): string | null {
@@ -1318,7 +1310,9 @@ async function processJob(job: AnalysisJobRow): Promise<void> {
         withBackgroundLlmBudget('github_ingest', job, () => processGithubIngest(job)),
       );
     } else if (job.stage === 'embedding') {
-      await withJobHeartbeat(job, () => processEmbedding(job));
+      await withJobHeartbeat(job, () =>
+        withBackgroundLlmBudget('embedding', job, () => processEmbedding(job)),
+      );
     } else if (job.stage === 'summarize') {
       await withJobHeartbeat(job, () =>
         withBackgroundLlmBudget('summarize', job, () => processSummarize(job)),

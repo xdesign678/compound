@@ -18,8 +18,35 @@ import { logger } from './logging';
 import { recordLlmRetry, recordLlmSsrfBlock } from './observability/prometheus';
 import { addBreadcrumb, reportError } from './observability/sentry';
 import { buildOutboundTraceHeaders } from './request-context';
+import { parseRateLimitBackoffMs } from './llm-rate-headers';
+import { pauseLlmBudget, type LlmBudgetName } from './llm-budgets';
 
 const METADATA_HOSTS = new Set(['metadata.google.internal', 'metadata', 'metadata.goog']);
+
+function budgetForTask(task: string): LlmBudgetName | null {
+  if (task === 'ingest') return 'github_ingest';
+  if (task === 'contextualize-chunk') return 'contextualize';
+  if (task === 'source_summarize') return 'summarize';
+  if (task === 'relation_extract') return 'relations';
+  return null;
+}
+
+function applyGatewayRateLimitHeaders(task: string, headers: Headers): void {
+  const bucket = budgetForTask(task);
+  if (!bucket) return;
+  const backoffMs = parseRateLimitBackoffMs(headers, {
+    remainingThreshold: 2,
+    defaultBackoffMs: 30_000,
+  });
+  if (backoffMs == null) return;
+  pauseLlmBudget(bucket, backoffMs);
+  addBreadcrumb({
+    category: 'llm-budget',
+    level: 'warning',
+    message: 'Paused LLM budget from provider rate-limit headers',
+    data: { bucket, task, backoffMs },
+  });
+}
 
 /**
  * IPv4 private / loopback / reserved ranges that must never be reached from the
@@ -622,6 +649,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
         });
 
         if (!response.ok) {
+          applyGatewayRateLimitHeaders(task, response.headers);
           const errText = await response.text().catch(() => '');
           recordModelRun({
             model,
@@ -633,6 +661,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
           throw new GatewayResponseError(response.status, errText.slice(0, 200));
         }
 
+        applyGatewayRateLimitHeaders(task, response.headers);
         if (wantStream && response.body) {
           const drained = await drainSSEStream(response.body, armIdle);
           streamedContent = drained.content;
