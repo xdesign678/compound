@@ -64,7 +64,7 @@ export const SURFACES = {
     url: '/',
     setup: async (page) => {
       await page.getByRole('tab', { name: '活动' }).click();
-      await page.getByRole('button', { name: '健康' }).click();
+      await page.getByRole('tab', { name: '健康' }).click();
       await page.waitForSelector('.health-view, .loading-skeleton', { timeout: 30_000 });
     },
   },
