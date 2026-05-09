@@ -342,12 +342,7 @@ export function deriveLastRun(
 }
 
 export type DiagnosticSeverity = 'info' | 'warning' | 'critical';
-export type DiagnosticActionId =
-  | 'open-env'
-  | 'switch-fast-model'
-  | 'skip-failed'
-  | 'retry-all'
-  | 'open-runbook';
+export type DiagnosticActionId = 'open-env' | 'switch-fast-model' | 'retry-all' | 'open-runbook';
 
 export interface DiagnosticAction {
   id: DiagnosticActionId;
@@ -489,10 +484,6 @@ export function deriveDiagnostics(input: {
           id: 'open-runbook',
           label: '阅读 runbook',
           href: '/runbooks/llm-timeout-uniform.md',
-        },
-        {
-          id: 'skip-failed',
-          label: '跳过这批文件',
         },
       ],
     });

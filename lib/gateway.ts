@@ -394,6 +394,8 @@ export interface ChatOptions {
    * `false` to opt out (e.g. for tests that want a deterministic full body).
    */
   stream?: boolean;
+  /** Optional caller cancellation signal. Used by background jobs when a sync run is cancelled. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -571,9 +573,18 @@ export async function chat(opts: ChatOptions): Promise<string> {
   let res: Response;
   try {
     res = await breaker.execute(async () => {
-      // Build an AbortController with both wall-clock cap and per-chunk idle
-      // reset for streaming mode.
+      // Build an AbortController with wall-clock cap, optional caller abort,
+      // and per-chunk idle reset for streaming mode.
       const controller = new AbortController();
+      const abortFromCaller = () => {
+        const reason =
+          opts.signal?.reason instanceof Error
+            ? opts.signal.reason
+            : new DOMException('LLM call aborted by caller', 'AbortError');
+        controller.abort(reason);
+      };
+      if (opts.signal?.aborted) abortFromCaller();
+      else opts.signal?.addEventListener('abort', abortFromCaller, { once: true });
       const wallTimer = setTimeout(() => {
         controller.abort(
           new DOMException(
@@ -630,6 +641,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
         }
         return response;
       } finally {
+        opts.signal?.removeEventListener('abort', abortFromCaller);
         clearTimeout(wallTimer);
         if (idleTimer) clearTimeout(idleTimer);
       }

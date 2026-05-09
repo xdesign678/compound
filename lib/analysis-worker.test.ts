@@ -81,3 +81,126 @@ test('github ingest jobs with missing payload fail once and do not requeue', asy
   assert.match(item.error, /缺少文件内容/);
   assert.equal(retried, 0);
 });
+
+test('post-ingest jobs keep the file running until every enhancement stage is terminal', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { getServerDb, repo } = await import('./server-db');
+  const { syncObs } = await import('./sync-observability');
+  const { queueAdvancedAnalysisJob, runAnalysisWorkerOnce } = await import('./analysis-worker');
+
+  repo.insertSource({
+    id: 's-enhance',
+    title: 'Enhance',
+    type: 'file',
+    rawContent: '# Enhance\n\nBody',
+    ingestedAt: Date.now(),
+    externalKey: 'github:demo/vault:notes/enhance.md@sha-enhance',
+  });
+  syncObs.startRun({
+    id: 'sr-enhance',
+    kind: 'github',
+    triggerType: 'manual',
+    repo: 'demo/vault',
+    branch: 'main',
+  });
+  syncObs.upsertRunItem({
+    id: 'sri-enhance',
+    runId: 'sr-enhance',
+    path: 'notes/enhance.md',
+    changeType: 'update',
+    status: 'running',
+    stage: 'enhance',
+    sourceId: 's-enhance',
+  });
+  queueAdvancedAnalysisJob({
+    runId: 'sr-enhance',
+    itemId: 'sri-enhance',
+    sourceId: 's-enhance',
+    sourceSha: 'sha-enhance',
+    sourcePath: 'notes/enhance.md',
+    stage: 'chunk',
+  });
+  queueAdvancedAnalysisJob({
+    runId: 'sr-enhance',
+    itemId: 'sri-enhance',
+    sourceId: 's-enhance',
+    sourceSha: 'sha-enhance',
+    sourcePath: 'notes/enhance.md',
+    stage: 'qa_index',
+  });
+
+  await runAnalysisWorkerOnce();
+  const midItem = getServerDb()
+    .prepare(`SELECT status, stage, finished_at FROM sync_run_items WHERE id = ?`)
+    .get('sri-enhance') as { status: string; stage: string; finished_at: number | null };
+
+  await runAnalysisWorkerOnce();
+  const doneItem = getServerDb()
+    .prepare(`SELECT status, stage, finished_at FROM sync_run_items WHERE id = ?`)
+    .get('sri-enhance') as { status: string; stage: string; finished_at: number | null };
+
+  assert.equal(midItem.status, 'running');
+  assert.equal(midItem.stage, 'enhance');
+  assert.equal(midItem.finished_at, null);
+  assert.equal(doneItem.status, 'succeeded');
+  assert.equal(doneItem.stage, 'complete');
+  assert.ok(doneItem.finished_at);
+});
+
+test('same stage and sha can be queued again and skips by fingerprint cache', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { getServerDb, repo } = await import('./server-db');
+  const { syncObs } = await import('./sync-observability');
+  const { queueAdvancedAnalysisJob, runAnalysisWorkerOnce } = await import('./analysis-worker');
+
+  repo.insertSource({
+    id: 's-cache',
+    title: 'Cache',
+    type: 'file',
+    rawContent: '# Cache\n\nStable content',
+    ingestedAt: Date.now(),
+    externalKey: 'github:demo/vault:notes/cache.md@sha-cache',
+  });
+  for (const runId of ['sr-cache-1', 'sr-cache-2']) {
+    syncObs.startRun({
+      id: runId,
+      kind: 'github',
+      triggerType: 'manual',
+      repo: 'demo/vault',
+      branch: 'main',
+    });
+    syncObs.upsertRunItem({
+      id: `${runId}-item`,
+      runId,
+      path: 'notes/cache.md',
+      changeType: 'update',
+      status: 'running',
+      stage: 'enhance',
+      sourceId: 's-cache',
+    });
+    queueAdvancedAnalysisJob({
+      runId,
+      itemId: `${runId}-item`,
+      sourceId: 's-cache',
+      sourceSha: 'sha-cache',
+      sourcePath: 'notes/cache.md',
+      stage: 'qa_index',
+    });
+    await runAnalysisWorkerOnce();
+  }
+
+  const job = getServerDb()
+    .prepare(`SELECT status, error FROM analysis_jobs WHERE source_id = ? AND stage = ?`)
+    .get('s-cache', 'qa_index') as { status: string; error: string | null };
+  const secondItem = getServerDb()
+    .prepare(`SELECT status FROM sync_run_items WHERE id = ?`)
+    .get('sr-cache-2-item') as { status: string };
+
+  assert.equal(job.status, 'skipped');
+  assert.equal(job.error, 'stage fingerprint unchanged');
+  assert.equal(secondItem.status, 'succeeded');
+});

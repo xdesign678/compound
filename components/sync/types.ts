@@ -157,12 +157,7 @@ export interface LastRunSnapshot {
 }
 
 export type DiagnosticSeverity = 'info' | 'warning' | 'critical';
-export type DiagnosticActionId =
-  | 'open-env'
-  | 'switch-fast-model'
-  | 'skip-failed'
-  | 'retry-all'
-  | 'open-runbook';
+export type DiagnosticActionId = 'open-env' | 'switch-fast-model' | 'retry-all' | 'open-runbook';
 
 export interface DiagnosticAction {
   id: DiagnosticActionId;
@@ -222,6 +217,7 @@ export const STAGE_TEXT: Record<string, string> = {
   ingest: '入库',
   github_ingest: '入库',
   llm: '分析',
+  enhance: '增强分析',
   chunk: '分块',
   fts: '全文',
   embedding: '向量',

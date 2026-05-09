@@ -27,6 +27,7 @@ export interface ServerIngestInput {
   externalKey?: string;
   replaceSourceId?: string;
   llmConfig?: LlmConfig;
+  signal?: AbortSignal;
 }
 
 export interface ServerIngestResult {
@@ -91,6 +92,7 @@ export async function ingestSourceToServerDb(
     })),
     existingCategories,
     llmConfig: input.llmConfig,
+    signal: input.signal,
   });
 
   // 4. Compose new concepts
@@ -226,6 +228,7 @@ export async function ingestSourceToServerDb(
       await runContextualizationForSource({
         source,
         llmConfig: input.llmConfig,
+        signal: input.signal,
       });
     } catch (error) {
       logger.warn('ingest.contextualization_failed', {
@@ -255,6 +258,7 @@ const CONTEXTUALIZATION_CONCURRENCY = Math.max(
 async function runContextualizationForSource(opts: {
   source: Source;
   llmConfig?: LlmConfig;
+  signal?: AbortSignal;
 }): Promise<void> {
   const chunks = getServerDb()
     .prepare(
@@ -277,6 +281,7 @@ async function runContextualizationForSource(opts: {
         documentTitle: opts.source.title,
         chunk: chunk.content,
         llmConfig: opts.llmConfig,
+        signal: opts.signal,
       });
       if (prefix) {
         updates.push({ chunkId: chunk.id, prefix });

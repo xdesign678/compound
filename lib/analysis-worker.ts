@@ -7,6 +7,7 @@
  * queued -> running -> succeeded | failed | cancelled.
  */
 import { nanoid } from 'nanoid';
+import crypto from 'node:crypto';
 import { getServerDb, repo } from './server-db';
 import { ingestSourceToServerDb } from './server-ingest';
 import { syncObs, ensureSyncObservabilitySchema } from './sync-observability';
@@ -57,6 +58,11 @@ interface AnalysisJobRow {
   locked_at?: number | null;
   locked_by?: string | null;
   max_attempts?: number | null;
+  input_hash?: string | null;
+  output_hash?: string | null;
+  duration_ms?: number | null;
+  error_category?: string | null;
+  heartbeat_at?: number | null;
 }
 
 interface GithubIngestPayload {
@@ -91,6 +97,13 @@ const WORKER_MAX_LOOPS = Math.max(
 const LEASE_MS = Math.max(60_000, Number(process.env.COMPOUND_ANALYSIS_LEASE_MS || 5 * 60_000));
 /** Max concurrent worker loops. We use DB lease + in-memory counter combined. */
 const MAX_PARALLEL_WORKERS = Math.max(1, Number(process.env.COMPOUND_ANALYSIS_MAX_WORKERS || 2));
+const HEARTBEAT_MS = Math.max(5_000, Number(process.env.COMPOUND_ANALYSIS_HEARTBEAT_MS || 15_000));
+const BACKGROUND_LLM_BUDGETS: Record<string, number> = {
+  github_ingest: Math.max(1, Number(process.env.COMPOUND_BACKGROUND_LLM_GITHUB_INGEST || 1)),
+  summarize: Math.max(1, Number(process.env.COMPOUND_BACKGROUND_LLM_SUMMARIZE || 1)),
+  relations: Math.max(1, Number(process.env.COMPOUND_BACKGROUND_LLM_RELATIONS || 1)),
+  contextualize: Math.max(1, Number(process.env.COMPOUND_BACKGROUND_LLM_CONTEXTUALIZE || 1)),
+};
 const RELATION_CONFIDENCE_AUTO_APPLY = Math.max(
   0,
   Math.min(1, Number(process.env.COMPOUND_RELATION_AUTO_APPLY_CONFIDENCE || 0.72)),
@@ -111,8 +124,10 @@ const RELATION_KINDS = new Set<ConceptRelationKind>([
 ]);
 
 let schemaReady = false;
+let schemaDb: ReturnType<typeof getServerDb> | null = null;
 let activeWorkerCount = 0;
 const cancelControllers = new Map<string, AbortController>();
+const activeLlmSlots = new Map<string, number>();
 
 function tableColumns(table: string): Set<string> {
   const rows = getServerDb().prepare(`PRAGMA table_info(${table})`).all() as Array<{
@@ -127,9 +142,9 @@ function addColumnIfMissing(table: string, column: string, sql: string): void {
 }
 
 export function ensureAnalysisWorkerSchema(): void {
-  if (schemaReady) return;
   ensureSyncObservabilitySchema();
   const db = getServerDb();
+  if (schemaReady && schemaDb === db) return;
 
   addColumnIfMissing('analysis_jobs', 'run_id', 'TEXT');
   addColumnIfMissing('analysis_jobs', 'item_id', 'TEXT');
@@ -139,6 +154,11 @@ export function ensureAnalysisWorkerSchema(): void {
   addColumnIfMissing('analysis_jobs', 'locked_at', 'INTEGER');
   addColumnIfMissing('analysis_jobs', 'locked_by', 'TEXT');
   addColumnIfMissing('analysis_jobs', 'max_attempts', 'INTEGER NOT NULL DEFAULT 3');
+  addColumnIfMissing('analysis_jobs', 'input_hash', 'TEXT');
+  addColumnIfMissing('analysis_jobs', 'output_hash', 'TEXT');
+  addColumnIfMissing('analysis_jobs', 'duration_ms', 'INTEGER');
+  addColumnIfMissing('analysis_jobs', 'error_category', 'TEXT');
+  addColumnIfMissing('analysis_jobs', 'heartbeat_at', 'INTEGER');
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_analysis_jobs_queue
@@ -158,8 +178,23 @@ export function ensureAnalysisWorkerSchema(): void {
       updated_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_source_analysis_updated ON source_analysis(updated_at DESC);
+    CREATE TABLE IF NOT EXISTS source_analysis_stage_cache (
+      source_id TEXT NOT NULL,
+      stage TEXT NOT NULL,
+      stage_version TEXT NOT NULL,
+      model TEXT NOT NULL DEFAULT '',
+      prompt_version TEXT NOT NULL DEFAULT '',
+      input_hash TEXT NOT NULL,
+      output_hash TEXT,
+      status TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY(source_id, stage, stage_version, model, prompt_version, input_hash)
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_analysis_stage_cache_source
+      ON source_analysis_stage_cache(source_id, stage, updated_at DESC);
   `);
   schemaReady = true;
+  schemaDb = db;
 }
 
 function makeJobId(parts: Array<string | null | undefined>): string {
@@ -184,16 +219,17 @@ export function queueAdvancedAnalysisJob(input: {
   maxAttempts?: number;
 }): string {
   ensureAnalysisWorkerSchema();
+  const stageVersion = input.stageVersion || DEFAULT_STAGE_VERSION;
+  const model = input.model ?? '';
+  const promptVersion = input.promptVersion ?? '';
+  const sourceSha = input.sourceSha ?? '';
   const id = makeJobId([
-    input.runId,
-    input.itemId,
     input.sourceId,
-    input.sourceSha,
-    input.sourcePath,
+    sourceSha,
     input.stage,
-    input.stageVersion || DEFAULT_STAGE_VERSION,
-    input.model,
-    input.promptVersion,
+    stageVersion,
+    model,
+    promptVersion,
   ]);
   const ts = now();
   getServerDb()
@@ -204,9 +240,12 @@ export function queueAdvancedAnalysisJob(input: {
        VALUES
         (@id, @source_id, @source_sha, @source_path, @stage, @stage_version, @model, @prompt_version,
          'queued', 0, NULL, @updated_at, @run_id, @item_id, @payload_json, @priority, @not_before_at, @max_attempts)
-       ON CONFLICT(id) DO UPDATE SET
-         status = CASE WHEN analysis_jobs.status IN ('succeeded', 'running') THEN analysis_jobs.status ELSE 'queued' END,
+       ON CONFLICT(source_id, source_sha, stage, stage_version, model, prompt_version) DO UPDATE SET
+         status = CASE WHEN analysis_jobs.status = 'running' THEN analysis_jobs.status ELSE 'queued' END,
          error = NULL,
+         run_id = excluded.run_id,
+         item_id = excluded.item_id,
+         source_path = excluded.source_path,
          payload_json = excluded.payload_json,
          priority = excluded.priority,
          not_before_at = excluded.not_before_at,
@@ -215,12 +254,12 @@ export function queueAdvancedAnalysisJob(input: {
     .run({
       id,
       source_id: input.sourceId,
-      source_sha: input.sourceSha ?? null,
+      source_sha: sourceSha,
       source_path: input.sourcePath ?? null,
       stage: input.stage,
-      stage_version: input.stageVersion || DEFAULT_STAGE_VERSION,
-      model: input.model ?? null,
-      prompt_version: input.promptVersion ?? null,
+      stage_version: stageVersion,
+      model,
+      prompt_version: promptVersion,
       updated_at: ts,
       run_id: input.runId ?? null,
       item_id: input.itemId ?? null,
@@ -313,16 +352,229 @@ function claimJobs(limit: number): AnalysisJobRow[] {
   const claimed: AnalysisJobRow[] = [];
   const stmt = db.prepare(
     `UPDATE analysis_jobs
-     SET status = 'running', locked_at = ?, locked_by = ?, started_at = COALESCE(started_at, ?), updated_at = ?
+     SET status = 'running', locked_at = ?, locked_by = ?, started_at = COALESCE(started_at, ?), updated_at = ?, heartbeat_at = ?
      WHERE id = ? AND status = 'queued'`,
   );
   for (const row of rows) {
     const ts = now();
-    const res = stmt.run(ts, WORKER_ID, ts, ts, row.id);
+    const res = stmt.run(ts, WORKER_ID, ts, ts, ts, row.id);
     if (res.changes > 0)
       claimed.push({ ...row, status: 'running', locked_at: ts, locked_by: WORKER_ID });
   }
   return claimed;
+}
+
+function stableHash(value: string): string {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function normalizeContentForHash(content: string): string {
+  return content.replace(/\r\n/g, '\n').trim();
+}
+
+function classifyJobError(err: unknown): string {
+  const text = err instanceof Error ? `${err.name} ${err.message}` : String(err);
+  const lower = text.toLowerCase();
+  if (/abort|cancel/.test(lower)) return 'cancelled';
+  if (/timeout|timed out|econnreset|network|fetch failed/.test(lower)) return 'transient';
+  if (/\b(429|408|5\d\d)\b|rate limit/.test(lower)) return 'transient';
+  if (/not set|invalid api url|missing|缺少|schema/.test(lower)) return 'permanent';
+  return 'unknown';
+}
+
+function currentRunSignal(runId: string | null | undefined): AbortSignal | undefined {
+  if (!runId) return undefined;
+  let ctrl = cancelControllers.get(runId);
+  if (!ctrl) {
+    ctrl = new AbortController();
+    cancelControllers.set(runId, ctrl);
+  }
+  return ctrl.signal;
+}
+
+function refreshJobHeartbeat(job: AnalysisJobRow): void {
+  const ts = now();
+  getServerDb()
+    .prepare(
+      `UPDATE analysis_jobs
+          SET heartbeat_at = ?, locked_at = ?, updated_at = ?
+        WHERE id = ? AND status = 'running'`,
+    )
+    .run(ts, ts, ts, job.id);
+  if (job.item_id) {
+    syncObs.updateRunItem(job.item_id, {
+      status: 'running',
+      stage: job.stage === 'github_ingest' ? 'llm' : 'enhance',
+    });
+  }
+  if (job.run_id) syncObs.updateRun(job.run_id, { stage: 'llm', current: job.source_path });
+}
+
+async function withJobHeartbeat<T>(job: AnalysisJobRow, fn: () => Promise<T>): Promise<T> {
+  refreshJobHeartbeat(job);
+  const timer = setInterval(() => refreshJobHeartbeat(job), HEARTBEAT_MS);
+  try {
+    return await fn();
+  } finally {
+    clearInterval(timer);
+  }
+}
+
+async function withBackgroundLlmBudget<T>(
+  bucket: keyof typeof BACKGROUND_LLM_BUDGETS,
+  job: AnalysisJobRow,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const limit = BACKGROUND_LLM_BUDGETS[bucket];
+  while ((activeLlmSlots.get(bucket) ?? 0) >= limit) {
+    syncObs.recordEvent({
+      runId: job.run_id,
+      itemId: job.item_id,
+      stage: job.stage,
+      path: job.source_path,
+      message: `等待后台 LLM 预算：${bucket} ${activeLlmSlots.get(bucket) ?? 0}/${limit}`,
+      meta: { event: 'analysis.llm_budget_wait', bucket, limit },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    if (isRunCancelled(job.run_id)) {
+      throw new DOMException('run cancelled while waiting for LLM budget', 'AbortError');
+    }
+  }
+  activeLlmSlots.set(bucket, (activeLlmSlots.get(bucket) ?? 0) + 1);
+  try {
+    return await fn();
+  } finally {
+    activeLlmSlots.set(bucket, Math.max(0, (activeLlmSlots.get(bucket) ?? 1) - 1));
+  }
+}
+
+function computeStageInputHash(job: AnalysisJobRow): string | null {
+  if (job.stage === 'github_ingest') {
+    const payload = parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload);
+    if (typeof payload.rawContent !== 'string') return null;
+    return stableHash(
+      [
+        payload.repoSlug,
+        payload.branch,
+        payload.path,
+        payload.sha,
+        normalizeContentForHash(payload.rawContent),
+        job.stage_version,
+        job.prompt_version ?? '',
+        job.model ?? '',
+      ].join('\x1f'),
+    );
+  }
+  const source = repo.getSource(job.source_id);
+  if (!source) return null;
+  return stableHash(
+    [
+      job.source_path ?? '',
+      job.source_sha ?? '',
+      normalizeContentForHash(source.rawContent),
+      job.stage,
+      job.stage_version,
+      job.prompt_version ?? '',
+      job.model ?? '',
+    ].join('\x1f'),
+  );
+}
+
+function getCachedStageStatus(job: AnalysisJobRow, inputHash: string | null): string | null {
+  if (!inputHash || job.stage === 'github_ingest') return null;
+  const row = getServerDb()
+    .prepare(
+      `SELECT status FROM source_analysis_stage_cache
+        WHERE source_id = ?
+          AND stage = ?
+          AND stage_version = ?
+          AND model = ?
+          AND prompt_version = ?
+          AND input_hash = ?
+        ORDER BY updated_at DESC
+        LIMIT 1`,
+    )
+    .get(
+      job.source_id,
+      job.stage,
+      job.stage_version,
+      job.model ?? '',
+      job.prompt_version ?? '',
+      inputHash,
+    ) as { status?: string } | undefined;
+  return row?.status ?? null;
+}
+
+function recordStageCache(
+  job: AnalysisJobRow,
+  status: Extract<JobStatus, 'succeeded' | 'skipped' | 'cancelled'>,
+  error?: string,
+): void {
+  const inputHash = computeStageInputHash(job);
+  if (!inputHash || status === 'cancelled') return;
+  const ts = now();
+  const outputHash = stableHash(`${status}\x1f${error ?? ''}\x1f${ts}`);
+  getServerDb()
+    .prepare(
+      `INSERT OR REPLACE INTO source_analysis_stage_cache
+        (source_id, stage, stage_version, model, prompt_version, input_hash, output_hash, status, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      job.source_id,
+      job.stage,
+      job.stage_version,
+      job.model ?? '',
+      job.prompt_version ?? '',
+      inputHash,
+      outputHash,
+      status,
+      ts,
+    );
+  getServerDb()
+    .prepare(`UPDATE analysis_jobs SET input_hash = ?, output_hash = ? WHERE id = ?`)
+    .run(inputHash, outputHash, job.id);
+}
+
+function maybeFinalizeItemAfterStage(job: AnalysisJobRow): void {
+  if (!job.item_id || job.stage === 'github_ingest') return;
+  const db = getServerDb();
+  const pending = db
+    .prepare(
+      `SELECT COUNT(*) AS count FROM analysis_jobs
+        WHERE item_id = ?
+          AND stage != 'github_ingest'
+          AND status IN ('queued', 'running')`,
+    )
+    .get(job.item_id) as { count: number };
+  if (Number(pending.count || 0) > 0) return;
+
+  const failed = db
+    .prepare(
+      `SELECT COUNT(*) AS count FROM analysis_jobs
+        WHERE item_id = ?
+          AND stage != 'github_ingest'
+          AND status = 'failed'`,
+    )
+    .get(job.item_id) as { count: number };
+  const terminal = db
+    .prepare(
+      `SELECT COUNT(*) AS count FROM analysis_jobs
+        WHERE item_id = ?
+          AND stage != 'github_ingest'
+          AND status IN ('succeeded', 'skipped', 'failed', 'cancelled')`,
+    )
+    .get(job.item_id) as { count: number };
+  if (Number(terminal.count || 0) === 0) return;
+
+  const failedCount = Number(failed.count || 0);
+  syncObs.updateRunItem(job.item_id, {
+    status: failedCount > 0 ? 'failed' : 'succeeded',
+    stage: 'complete',
+    error: failedCount > 0 ? `${failedCount} 个增强分析阶段失败` : null,
+    finished_at: now(),
+  });
+  maybeFinishRun(job.run_id || null);
 }
 
 function finishJob(
@@ -331,30 +583,37 @@ function finishJob(
   error?: string,
 ): void {
   const ts = now();
+  const durationMs = job.started_at ? Math.max(0, ts - job.started_at) : null;
   getServerDb()
     .prepare(
       `UPDATE analysis_jobs
-       SET status = ?, error = ?, finished_at = ?, updated_at = ?, locked_at = NULL, locked_by = NULL
+       SET status = ?, error = ?, finished_at = ?, updated_at = ?, duration_ms = COALESCE(duration_ms, ?),
+           locked_at = NULL, locked_by = NULL
        WHERE id = ?`,
     )
-    .run(status, error ?? null, ts, ts, job.id);
+    .run(status, error ?? null, ts, ts, durationMs, job.id);
+  recordStageCache(job, status, error);
+  maybeFinalizeItemAfterStage(job);
 }
 
 function failJob(job: AnalysisJobRow, err: unknown): void {
   const message = err instanceof Error ? err.message : String(err);
+  const category = classifyJobError(err);
   const attempts = (job.attempts || 0) + 1;
   const maxAttempts = job.max_attempts || 3;
-  const terminal = attempts >= maxAttempts;
+  const terminal = category === 'permanent' || attempts >= maxAttempts;
   const delay = terminal
     ? null
     : Math.min(15 * 60_000, 1000 * 2 ** attempts + Math.floor(Math.random() * 500));
   const ts = now();
+  const durationMs = job.started_at ? Math.max(0, ts - job.started_at) : null;
 
   getServerDb()
     .prepare(
       `UPDATE analysis_jobs
-       SET status = ?, attempts = ?, error = ?, not_before_at = ?, updated_at = ?,
+       SET status = ?, attempts = ?, error = ?, error_category = ?, not_before_at = ?, updated_at = ?,
            finished_at = CASE WHEN ? THEN ? ELSE finished_at END,
+           duration_ms = CASE WHEN ? THEN ? ELSE duration_ms END,
            locked_at = NULL, locked_by = NULL
        WHERE id = ?`,
     )
@@ -362,10 +621,13 @@ function failJob(job: AnalysisJobRow, err: unknown): void {
       terminal ? 'failed' : 'queued',
       attempts,
       message.slice(0, 500),
+      category,
       delay ? ts + delay : null,
       ts,
       terminal ? 1 : 0,
       ts,
+      terminal ? 1 : 0,
+      durationMs,
       job.id,
     );
 
@@ -389,26 +651,31 @@ function failJob(job: AnalysisJobRow, err: unknown): void {
     });
     incrementLegacy(job, 'failed');
     maybeFinishRun(job.run_id || null);
+  } else if (terminal) {
+    maybeFinalizeItemAfterStage(job);
   }
 }
 
 function failJobPermanently(job: AnalysisJobRow, message: string): void {
   const ts = now();
   const attempts = job.max_attempts || 1;
+  const durationMs = job.started_at ? Math.max(0, ts - job.started_at) : null;
   getServerDb()
     .prepare(
       `UPDATE analysis_jobs
        SET status = 'failed',
            attempts = ?,
            error = ?,
+           error_category = 'permanent',
            not_before_at = NULL,
            finished_at = ?,
            updated_at = ?,
+           duration_ms = ?,
            locked_at = NULL,
            locked_by = NULL
        WHERE id = ?`,
     )
-    .run(attempts, message.slice(0, 500), ts, ts, job.id);
+    .run(attempts, message.slice(0, 500), ts, ts, durationMs, job.id);
 
   syncObs.recordEvent({
     runId: job.run_id,
@@ -418,6 +685,7 @@ function failJobPermanently(job: AnalysisJobRow, message: string): void {
     path: job.source_path,
     message: message.slice(0, 180),
   });
+  maybeFinalizeItemAfterStage(job);
 }
 
 function incrementLegacy(job: AnalysisJobRow, outcome: 'done' | 'failed'): void {
@@ -615,6 +883,7 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
     rawContent: payload.rawContent,
     externalKey: payload.externalKey,
     replaceSourceId: payload.replaceSourceId ?? undefined,
+    signal: currentRunSignal(payload.runId),
   });
 
   const compiler = result.compiler;
@@ -629,14 +898,14 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
   });
   syncObs.updateRunItem(payload.itemId, {
     source_id: result.sourceId,
-    status: 'succeeded',
-    stage: 'complete',
+    status: 'running',
+    stage: 'enhance',
     chunks: compiler?.chunks ?? null,
     concepts_created: result.newConceptIds.length,
     concepts_updated: result.updatedConceptIds.length,
     evidence: compiler?.evidence ?? null,
     error: null,
-    finished_at: now(),
+    finished_at: null,
   });
 
   if (
@@ -663,9 +932,9 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
     runId: payload.runId,
     itemId: payload.itemId,
     level: 'success',
-    stage: 'complete',
+    stage: 'enhance',
     path: payload.path,
-    message: `分析完成：新增 ${result.newConceptIds.length}，更新 ${result.updatedConceptIds.length}，分块 ${compiler?.chunks ?? 0}`,
+    message: `基础入库完成，增强分析已排队：新增 ${result.newConceptIds.length}，更新 ${result.updatedConceptIds.length}，分块 ${compiler?.chunks ?? 0}`,
   });
   queuePostIngestJobs({
     runId: payload.runId,
@@ -675,11 +944,10 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
     sourcePath: payload.path,
   });
   finishJob({ ...job, source_id: result.sourceId }, 'succeeded');
-  maybeFinishRun(payload.runId);
 }
 
 async function processEmbedding(job: AnalysisJobRow): Promise<void> {
-  const result = await embedSourceChunks(job.source_id);
+  const result = await embedSourceChunks(job.source_id, { signal: currentRunSignal(job.run_id) });
   syncObs.recordEvent({
     runId: job.run_id,
     itemId: job.item_id,
@@ -712,6 +980,7 @@ async function processSummarize(job: AnalysisJobRow): Promise<void> {
     maxTokens: 900,
     task: 'source_summarize',
     promptVersion: job.prompt_version ?? SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
+    signal: currentRunSignal(job.run_id),
   });
   const parsed = parseJSON<{
     summary?: string;
@@ -847,6 +1116,7 @@ async function processRelations(job: AnalysisJobRow): Promise<void> {
     maxTokens: 1400,
     task: 'relation_extract',
     promptVersion: job.prompt_version ?? RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
+    signal: currentRunSignal(job.run_id),
   });
   const parsed = parseJSON<{ relations?: RelationLLMSuggestion[] }>(raw);
   const conceptIds = new Set(sourceConcepts.map((concept) => concept.id));
@@ -918,11 +1188,44 @@ async function processRelations(job: AnalysisJobRow): Promise<void> {
 
 async function processJob(job: AnalysisJobRow): Promise<void> {
   try {
-    if (job.stage === 'github_ingest') await processGithubIngest(job);
-    else if (job.stage === 'embedding') await processEmbedding(job);
-    else if (job.stage === 'summarize') await processSummarize(job);
-    else if (job.stage === 'relations') await processRelations(job);
-    else if (
+    const inputHash = computeStageInputHash(job);
+    getServerDb()
+      .prepare(`UPDATE analysis_jobs SET input_hash = ? WHERE id = ?`)
+      .run(inputHash, job.id);
+    if (getCachedStageStatus(job, inputHash) === 'succeeded') {
+      syncObs.recordEvent({
+        runId: job.run_id,
+        itemId: job.item_id,
+        level: 'success',
+        stage: job.stage,
+        path: job.source_path,
+        message: `输入 fingerprint 未变化，跳过 ${job.stage}`,
+        meta: { event: 'analysis.stage_cache_hit', stage: job.stage },
+      });
+      finishJob(job, 'skipped', 'stage fingerprint unchanged');
+      return;
+    }
+
+    if (isRunCancelled(job.run_id)) {
+      finishJob(job, 'cancelled', 'run cancelled');
+      return;
+    }
+
+    if (job.stage === 'github_ingest') {
+      await withJobHeartbeat(job, () =>
+        withBackgroundLlmBudget('github_ingest', job, () => processGithubIngest(job)),
+      );
+    } else if (job.stage === 'embedding') {
+      await withJobHeartbeat(job, () => processEmbedding(job));
+    } else if (job.stage === 'summarize') {
+      await withJobHeartbeat(job, () =>
+        withBackgroundLlmBudget('summarize', job, () => processSummarize(job)),
+      );
+    } else if (job.stage === 'relations') {
+      await withJobHeartbeat(job, () =>
+        withBackgroundLlmBudget('relations', job, () => processRelations(job)),
+      );
+    } else if (
       job.stage === 'qa_index' ||
       job.stage === 'chunk' ||
       job.stage === 'fts' ||
@@ -933,6 +1236,10 @@ async function processJob(job: AnalysisJobRow): Promise<void> {
       finishJob(job, 'skipped', `unknown stage: ${job.stage}`);
     }
   } catch (err) {
+    if (classifyJobError(err) === 'cancelled') {
+      finishJob(job, 'cancelled', err instanceof Error ? err.message : String(err));
+      return;
+    }
     failJob(job, err);
   }
 }

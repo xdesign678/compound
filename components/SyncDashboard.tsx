@@ -160,14 +160,6 @@ function DashboardInner() {
             '查 COMPOUND_LLM_TIMEOUT_MS / LLM_MODEL / LLM_API_KEY；详细参考 .env.example。',
           );
           return;
-        case 'skip-failed':
-          void runAction(
-            'skip-failed',
-            '跳过失败文件',
-            () => postJson('/api/sync/cancel', { skipFailed: true }),
-            '已把失败文件标记为永久失败，跳过后续重试',
-          );
-          return;
         case 'retry-all':
           void runAction('retry-all', '全部重试', () =>
             postJson('/api/sync/retry', { runId: run?.id }),

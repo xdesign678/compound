@@ -151,7 +151,7 @@ function localEmbedding(
   return normalize(v);
 }
 
-async function remoteEmbeddings(texts: string[]): Promise<Vector[] | null> {
+async function remoteEmbeddings(texts: string[], signal?: AbortSignal): Promise<Vector[] | null> {
   const explicitEmbeddingConfig =
     Boolean(clean(process.env.COMPOUND_EMBEDDING_API_KEY)) ||
     Boolean(clean(process.env.COMPOUND_EMBEDDING_API_URL)) ||
@@ -191,7 +191,10 @@ async function remoteEmbeddings(texts: string[]): Promise<Vector[] | null> {
             text.slice(0, Number(process.env.COMPOUND_EMBEDDING_MAX_CHARS || 8000)),
           ),
         }),
-        signal: AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
+        signal: AbortSignal.any([
+          AbortSignal.timeout(EMBEDDING_TIMEOUT_MS),
+          ...(signal ? [signal] : []),
+        ]),
       });
 
       if (!response.ok) {
@@ -223,8 +226,9 @@ async function remoteEmbeddings(texts: string[]): Promise<Vector[] | null> {
 
 async function embedTexts(
   texts: string[],
+  signal?: AbortSignal,
 ): Promise<{ vectors: Vector[]; provider: string; model: string }> {
-  const remote = await remoteEmbeddings(texts);
+  const remote = await remoteEmbeddings(texts, signal);
   if (remote) return { vectors: remote, provider: 'remote', model: embeddingModel() };
   return {
     vectors: texts.map((text) => localEmbedding(text)),
@@ -239,9 +243,10 @@ function textForChunk(chunk: Record<string, unknown>): string {
 
 async function embedChunkBatch(
   batch: Array<Record<string, unknown>>,
+  signal?: AbortSignal,
 ): Promise<{ vectors: Vector[]; provider: string; model: string }> {
   if (getEmbeddingMode() !== 'remote') {
-    return embedTexts(batch.map(textForChunk));
+    return embedTexts(batch.map(textForChunk), signal);
   }
 
   const model = embeddingModel();
@@ -281,7 +286,10 @@ async function embedChunkBatch(
   }
 
   observeEmbeddingBatchSize({ model, size: uniqueMisses.length });
-  const result = await embedTexts(uniqueMisses.map((item) => item.text));
+  const result = await embedTexts(
+    uniqueMisses.map((item) => item.text),
+    signal,
+  );
   uniqueMisses.forEach((item, index) => {
     const vector = result.vectors[index];
     if (result.provider === 'remote') {
@@ -339,6 +347,7 @@ function cosine(a: Vector, b: Vector): number {
 
 export async function embedSourceChunks(
   sourceId: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<{ total: number; embedded: number; provider: string; model: string }> {
   ensureEmbeddingSchema();
   const chunks = getServerDb()
@@ -357,7 +366,7 @@ export async function embedSourceChunks(
   `);
   for (let i = 0; i < chunks.length; i += batchSize) {
     const batch = chunks.slice(i, i + batchSize);
-    const result = await embedChunkBatch(batch);
+    const result = await embedChunkBatch(batch, options.signal);
     provider = result.provider;
     model = result.model;
     const ts = now();

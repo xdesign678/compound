@@ -533,7 +533,9 @@ Source: [`app/api/sync/cancel/route.ts`](../app/api/sync/cancel/route.ts)
 
 #### POST
 
-_No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` block in `app/api/sync/cancel/route.ts` to document this endpoint._
+Cancel the active GitHub sync run and cooperatively abort in-flight analysis
+calls for that run. Queued and running analysis jobs are marked cancelled;
+failed jobs remain retryable through `/api/sync/retry`.
 
 ### `/api/sync/cron/rescan`
 

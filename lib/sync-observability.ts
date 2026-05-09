@@ -32,6 +32,7 @@ export type SyncStage =
   | 'chunk'
   | 'fts'
   | 'llm'
+  | 'enhance'
   | 'concepts'
   | 'evidence'
   | 'delete'
@@ -45,7 +46,13 @@ export type AnalysisStage =
   | 'concepts'
   | 'relations'
   | 'qa_index';
-export type AnalysisJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped';
+export type AnalysisJobStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'skipped'
+  | 'cancelled';
 
 type JsonObject = Record<string, unknown>;
 
@@ -202,6 +209,7 @@ export interface SyncEventRow {
 }
 
 let schemaReady = false;
+let schemaDb: ReturnType<typeof getServerDb> | null = null;
 
 function stableId(...parts: Array<string | null | undefined>): string {
   return crypto
@@ -234,6 +242,7 @@ const PIPELINE_STAGES: Array<{ stage: string; label: string }> = [
   { stage: 'embedding', label: '向量' },
   { stage: 'summarize', label: '摘要' },
   { stage: 'concepts', label: '概念' },
+  { stage: 'relations', label: '关系' },
   { stage: 'qa_index', label: '问答索引' },
 ];
 
@@ -327,8 +336,8 @@ function json(value: JsonObject | undefined): string | null {
 }
 
 export function ensureSyncObservabilitySchema(): void {
-  if (schemaReady) return;
   const db = getServerDb();
+  if (schemaReady && schemaDb === db) return;
   db.exec(`
     CREATE TABLE IF NOT EXISTS sync_runs (
       id TEXT PRIMARY KEY,
@@ -414,8 +423,13 @@ export function ensureSyncObservabilitySchema(): void {
       output_tokens INTEGER,
       cost_estimate REAL,
       error TEXT,
+      error_category TEXT,
       started_at INTEGER,
       finished_at INTEGER,
+      heartbeat_at INTEGER,
+      input_hash TEXT,
+      output_hash TEXT,
+      duration_ms INTEGER,
       updated_at INTEGER NOT NULL,
       UNIQUE(source_id, source_sha, stage, stage_version, model, prompt_version)
     );
@@ -437,6 +451,7 @@ export function ensureSyncObservabilitySchema(): void {
     CREATE INDEX IF NOT EXISTS idx_sync_events_level_at ON sync_events(level, at DESC);
   `);
   schemaReady = true;
+  schemaDb = db;
 }
 
 export const syncObs = {
@@ -594,17 +609,21 @@ export const syncObs = {
       | SyncRunItemRow
       | undefined;
     if (!row) return;
+    const hasStartedAt = Object.prototype.hasOwnProperty.call(patch, 'started_at');
+    const hasFinishedAt = Object.prototype.hasOwnProperty.call(patch, 'finished_at');
     const next = {
       ...row,
       ...patch,
       updated_at: now(),
-      started_at: patch.started_at ?? row.started_at ?? (patch.status === 'running' ? now() : null),
-      finished_at:
-        patch.finished_at ??
-        row.finished_at ??
-        (['succeeded', 'failed', 'skipped', 'cancelled'].includes(patch.status ?? '')
-          ? now()
-          : null),
+      started_at: hasStartedAt
+        ? (patch.started_at ?? null)
+        : (row.started_at ?? (patch.status === 'running' ? now() : null)),
+      finished_at: hasFinishedAt
+        ? (patch.finished_at ?? null)
+        : (row.finished_at ??
+          (['succeeded', 'failed', 'skipped', 'cancelled'].includes(patch.status ?? '')
+            ? now()
+            : null)),
     };
     getServerDb()
       .prepare(

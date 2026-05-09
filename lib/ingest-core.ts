@@ -22,6 +22,7 @@ export interface IngestLLMInput {
   existingConcepts: Array<{ id: string; title: string; summary: string }>;
   existingCategories?: string[];
   llmConfig?: { apiKey?: string; apiUrl?: string; model?: string };
+  signal?: AbortSignal;
 }
 
 const MAX_RAW = 12000;
@@ -119,6 +120,7 @@ ${categoryList}
     temperature: 0.5,
     maxTokens: 4000,
     llmConfig: input.llmConfig,
+    signal: input.signal,
     task: 'ingest',
     promptVersion: INGEST_SYSTEM_PROMPT_VERSION,
   });

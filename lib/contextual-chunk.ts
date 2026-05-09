@@ -22,6 +22,7 @@ export interface ContextualizeChunkInput {
   chunk: string;
   llmConfig?: LlmConfig;
   contextualizeModel?: string;
+  signal?: AbortSignal;
 }
 
 const MAX_DOC_CHARS = 32_000;
@@ -54,6 +55,7 @@ export async function contextualizeChunk(input: ContextualizeChunkInput): Promis
       maxTokens: MAX_PREFIX_TOKENS,
       llmConfig: input.llmConfig,
       model: input.contextualizeModel || process.env.COMPOUND_CONTEXTUALIZE_MODEL,
+      signal: input.signal,
       task: 'contextualize-chunk',
       promptVersion: CONTEXTUALIZE_CHUNK_PROMPT_VERSION,
     });

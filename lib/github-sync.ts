@@ -61,6 +61,10 @@ function encodeContentPath(path: string): string {
   return path.split('/').map(encodeURIComponent).join('/');
 }
 
+function shouldSkipPath(path: string): boolean {
+  return path.startsWith('.obsidian/') || path.startsWith('.trash/');
+}
+
 function parseRepoSlug(raw: string): { owner: string; repo: string } {
   const cleaned = raw.trim().replace(/\.git$/, '');
   // Support full URLs: https://github.com/owner/repo
@@ -112,6 +116,43 @@ async function githubFetch(
   return res;
 }
 
+interface GithubContentsItem {
+  path: string;
+  sha: string;
+  size?: number;
+  type: 'file' | 'dir' | 'symlink' | 'submodule';
+}
+
+async function listMarkdownFilesViaContents(
+  cfg: GithubConfig,
+  dir = '',
+): Promise<GithubMarkdownFile[]> {
+  const encoded = dir ? `/${encodeContentPath(dir)}` : '';
+  const url = `${GITHUB_API_BASE}/repos/${cfg.owner}/${cfg.repo}/contents${encoded}?ref=${encodeURIComponent(
+    cfg.branch,
+  )}`;
+  const res = await githubFetch(url, cfg);
+  const data = (await res.json()) as GithubContentsItem[] | GithubContentsItem;
+  const items = Array.isArray(data) ? data : [data];
+  const out: GithubMarkdownFile[] = [];
+
+  for (const item of items) {
+    if (shouldSkipPath(`${item.path}/`)) continue;
+    if (item.type === 'dir') {
+      out.push(...(await listMarkdownFilesViaContents(cfg, item.path)));
+      continue;
+    }
+    if (item.type !== 'file' || !/\.md$/i.test(item.path)) continue;
+    out.push({
+      path: item.path,
+      sha: item.sha,
+      size: item.size ?? 0,
+      externalKey: buildExternalKey(cfg, item.path, item.sha),
+    });
+  }
+  return out;
+}
+
 /**
  * List every Markdown file under the configured branch.
  * Uses the git tree API to fetch the entire repository in a single call.
@@ -136,8 +177,9 @@ export async function listMarkdownFiles(
     logger.warn('github_sync.tree_truncated', {
       repo: `${cfg.owner}/${cfg.repo}`,
       branch: cfg.branch,
-      recommendation: 'Very large vaults may need pagination.',
+      recommendation: 'Falling back to contents API traversal to avoid silently missing files.',
     });
+    return listMarkdownFilesViaContents(cfg);
   }
 
   const files: GithubMarkdownFile[] = [];
@@ -145,8 +187,7 @@ export async function listMarkdownFiles(
     if (item.type !== 'blob') continue;
     if (!/\.md$/i.test(item.path)) continue;
     // Skip obvious noise
-    if (item.path.startsWith('.obsidian/')) continue;
-    if (item.path.startsWith('.trash/')) continue;
+    if (shouldSkipPath(item.path)) continue;
     files.push({
       path: item.path,
       sha: item.sha,
