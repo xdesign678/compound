@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { fetchMarkdownContent, listMarkdownFiles } from './github-sync';
+import { fetchMarkdownContent, listChangedSinceCommit, listMarkdownFiles } from './github-sync';
 
 test('fetches markdown content with a known sha in a single network request', async () => {
   const calls: Array<{ url: string; accept: string | null }> = [];
@@ -139,6 +139,76 @@ test('falls back to contents traversal when recursive tree is truncated', async 
     assert.equal(
       calls.some((url) => url.includes('/contents/.obsidian')),
       false,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('listChangedSinceCommit filters compare results to markdown changes', async () => {
+  const calls: string[] = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    calls.push(url);
+    assert.match(url, /\/compare\/base-sha\.\.\.head-sha\?per_page=100&page=1$/);
+    return Response.json({
+      files: [
+        { filename: 'notes/a.md', status: 'modified', sha: 'sha-a' },
+        { filename: 'notes/b.md', status: 'removed' },
+        {
+          filename: 'notes/new.md',
+          previous_filename: 'notes/old.md',
+          status: 'renamed',
+          sha: 'sha-new',
+        },
+        { filename: '.obsidian/workspace.json', status: 'modified', sha: 'sha-noise' },
+        { filename: 'assets/image.png', status: 'modified', sha: 'sha-img' },
+      ],
+    });
+  }) as typeof fetch;
+
+  try {
+    const changed = await listChangedSinceCommit('base-sha', 'head-sha', {
+      owner: 'demo',
+      repo: 'vault',
+      branch: 'main',
+      token: 'secret',
+    });
+
+    assert.equal(calls.length, 1);
+    assert.deepEqual(
+      changed.map((file) => ({
+        path: file.path,
+        previousPath: file.previousPath,
+        sha: file.sha,
+        status: file.status,
+        externalKey: file.externalKey,
+      })),
+      [
+        {
+          path: 'notes/a.md',
+          previousPath: undefined,
+          sha: 'sha-a',
+          status: 'modified',
+          externalKey: 'github:demo/vault:notes/a.md@sha-a',
+        },
+        {
+          path: 'notes/b.md',
+          previousPath: undefined,
+          sha: null,
+          status: 'removed',
+          externalKey: null,
+        },
+        {
+          path: 'notes/new.md',
+          previousPath: 'notes/old.md',
+          sha: 'sha-new',
+          status: 'renamed',
+          externalKey: 'github:demo/vault:notes/new.md@sha-new',
+        },
+      ],
     );
   } finally {
     globalThis.fetch = originalFetch;

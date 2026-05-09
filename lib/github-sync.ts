@@ -38,6 +38,15 @@ export interface GithubMarkdownFile {
   externalKey: string;
 }
 
+export interface GithubChangedFile {
+  path: string;
+  sha: string | null;
+  size: number;
+  status: 'added' | 'modified' | 'removed' | 'renamed';
+  previousPath?: string;
+  externalKey: string | null;
+}
+
 export interface GithubFileContent {
   path: string;
   sha: string;
@@ -142,6 +151,24 @@ interface GithubContentsItem {
   type: 'file' | 'dir' | 'symlink' | 'submodule';
 }
 
+async function getBranchHead(cfg: GithubConfig): Promise<{ commitSha: string; treeSha: string }> {
+  const refUrl = `${GITHUB_API_BASE}/repos/${cfg.owner}/${cfg.repo}/branches/${encodeURIComponent(cfg.branch)}`;
+  const refRes = await githubFetch(refUrl, cfg);
+  const refData = (await refRes.json()) as {
+    commit: { sha: string; commit: { tree: { sha: string } } };
+  };
+  return {
+    commitSha: refData.commit.sha,
+    treeSha: refData.commit.commit.tree.sha,
+  };
+}
+
+export async function getGithubBranchHeadSha(
+  cfg: GithubConfig = getGithubConfig(),
+): Promise<string> {
+  return (await getBranchHead(cfg)).commitSha;
+}
+
 async function listMarkdownFilesViaContents(
   cfg: GithubConfig,
   dir = '',
@@ -180,12 +207,7 @@ export async function listMarkdownFiles(
   cfg: GithubConfig = getGithubConfig(),
 ): Promise<GithubMarkdownFile[]> {
   // 1. Resolve the branch head commit SHA.
-  const refUrl = `${GITHUB_API_BASE}/repos/${cfg.owner}/${cfg.repo}/branches/${encodeURIComponent(cfg.branch)}`;
-  const refRes = await githubFetch(refUrl, cfg);
-  const refData = (await refRes.json()) as {
-    commit: { sha: string; commit: { tree: { sha: string } } };
-  };
-  const treeSha = refData.commit.commit.tree.sha;
+  const { treeSha } = await getBranchHead(cfg);
 
   // 2. Walk the tree recursively (single request, up to 100k entries).
   const treeUrl = `${GITHUB_API_BASE}/repos/${cfg.owner}/${cfg.repo}/git/trees/${treeSha}?recursive=1`;
@@ -213,6 +235,91 @@ export async function listMarkdownFiles(
       size: item.size,
       externalKey: buildExternalKey(cfg, item.path, item.sha),
     });
+  }
+  return files;
+}
+
+function normalizeCompareFile(
+  cfg: GithubConfig,
+  file: {
+    filename: string;
+    previous_filename?: string;
+    sha?: string;
+    status: string;
+  },
+): GithubChangedFile | null {
+  if (!['added', 'modified', 'removed', 'renamed'].includes(file.status)) return null;
+  if (file.status === 'renamed') {
+    const oldIsMarkdown = Boolean(file.previous_filename && /\.md$/i.test(file.previous_filename));
+    const newIsMarkdown = /\.md$/i.test(file.filename);
+    if (oldIsMarkdown && !newIsMarkdown) {
+      if (shouldSkipPath(file.previous_filename!)) return null;
+      return {
+        path: file.previous_filename!,
+        previousPath: file.previous_filename,
+        sha: null,
+        size: 0,
+        status: 'removed',
+        externalKey: null,
+      };
+    }
+    if (!oldIsMarkdown && newIsMarkdown) {
+      if (shouldSkipPath(file.filename)) return null;
+      const sha = file.sha ?? null;
+      return {
+        path: file.filename,
+        previousPath: file.previous_filename,
+        sha,
+        size: 0,
+        status: 'added',
+        externalKey: sha ? buildExternalKey(cfg, file.filename, sha) : null,
+      };
+    }
+  }
+  const candidatePath =
+    /\.md$/i.test(file.filename) || file.status !== 'renamed'
+      ? file.filename
+      : (file.previous_filename ?? file.filename);
+  if (!/\.md$/i.test(candidatePath)) return null;
+  if (shouldSkipPath(candidatePath) || shouldSkipPath(file.filename)) return null;
+  const sha = file.status === 'removed' ? null : (file.sha ?? null);
+  return {
+    path: file.filename,
+    previousPath: file.previous_filename,
+    sha,
+    size: 0,
+    status: file.status as GithubChangedFile['status'],
+    externalKey: sha ? buildExternalKey(cfg, file.filename, sha) : null,
+  };
+}
+
+export async function listChangedSinceCommit(
+  baseSha: string,
+  headSha: string,
+  cfg: GithubConfig = getGithubConfig(),
+): Promise<GithubChangedFile[]> {
+  const files: GithubChangedFile[] = [];
+  let page = 1;
+  while (true) {
+    const url = `${GITHUB_API_BASE}/repos/${cfg.owner}/${cfg.repo}/compare/${encodeURIComponent(
+      baseSha,
+    )}...${encodeURIComponent(headSha)}?per_page=100&page=${page}`;
+    const res = await githubFetch(url, cfg);
+    const data = (await res.json()) as {
+      files?: Array<{
+        filename: string;
+        previous_filename?: string;
+        sha?: string;
+        status: string;
+      }>;
+    };
+    const pageFiles = data.files ?? [];
+    for (const file of pageFiles) {
+      const normalized = normalizeCompareFile(cfg, file);
+      if (normalized) files.push(normalized);
+    }
+    if (pageFiles.length < 100) break;
+    page += 1;
   }
   return files;
 }

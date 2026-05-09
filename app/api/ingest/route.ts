@@ -72,7 +72,7 @@ export const POST = withRequestTracing(async (req: Request) => {
     try {
       const { queueAdvancedAnalysisJob, startAnalysisWorker } =
         await import('@/lib/analysis-worker');
-      for (const stage of ['embedding', 'summarize', 'relations', 'qa_index'] as const) {
+      for (const stage of ['embedding', 'summarize', 'relations'] as const) {
         queueAdvancedAnalysisJob({
           sourceId: result.sourceId,
           sourcePath: result.source.title,
@@ -82,18 +82,9 @@ export const POST = withRequestTracing(async (req: Request) => {
           promptVersion:
             stage === 'summarize'
               ? SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION
-              : stage === 'relations'
-                ? RELATION_EXTRACT_SYSTEM_PROMPT_VERSION
-                : null,
-          priority:
-            stage === 'embedding'
-              ? 40
-              : stage === 'summarize'
-                ? 20
-                : stage === 'relations'
-                  ? 15
-                  : 10,
-          maxAttempts: stage === 'qa_index' ? 1 : 2,
+              : RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
+          priority: stage === 'embedding' ? 40 : stage === 'summarize' ? 20 : 15,
+          maxAttempts: stage === 'embedding' ? 3 : 2,
         });
       }
       startAnalysisWorker('manual_ingest');

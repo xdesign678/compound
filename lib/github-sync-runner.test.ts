@@ -41,6 +41,16 @@ async function waitForAnalysisWorkers(): Promise<void> {
   }
 }
 
+async function waitForSyncLoops(): Promise<void> {
+  const holder = globalThis as unknown as {
+    __activeSyncPromises?: Set<Promise<void>>;
+  };
+  const promises = Array.from(holder.__activeSyncPromises ?? []);
+  if (promises.length > 0) {
+    await Promise.allSettled(promises);
+  }
+}
+
 test('recoverStaleAnalysisJobs requeues stale running jobs and records lease event', async (t) => {
   const env = setupTempDb();
   t.after(env.cleanup);
@@ -315,4 +325,78 @@ test('startGithubSyncFromWebhook records delivery and deduplicates retries', asy
   assert.equal(delivery.status, 'processed');
   assert.equal(delivery.job_id, first.jobId);
   assert.equal(delivery.error, null);
+});
+
+test('webhook sync uses compare API when local sources match the base commit', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const previousEnv = {
+    GITHUB_REPO: process.env.GITHUB_REPO,
+    GITHUB_TOKEN: process.env.GITHUB_TOKEN,
+    GITHUB_BRANCH: process.env.GITHUB_BRANCH,
+  };
+  const originalFetch = globalThis.fetch;
+  process.env.GITHUB_REPO = 'demo/vault';
+  process.env.GITHUB_TOKEN = 'secret';
+  process.env.GITHUB_BRANCH = 'main';
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.includes('/compare/base-sha...head-sha')) {
+      return Response.json({
+        files: [{ filename: 'notes/deleted.md', status: 'removed' }],
+      });
+    }
+    throw new Error(`unexpected url: ${url}`);
+  }) as typeof fetch;
+
+  try {
+    const { getServerDb, repo } = await import('./server-db');
+    const { startGithubSyncFromWebhook } = await import('./github-sync-runner');
+    repo.insertSource({
+      id: 's-deleted',
+      title: 'Deleted',
+      type: 'file',
+      rawContent: '# Deleted',
+      ingestedAt: Date.now(),
+      externalKey: 'github:demo/vault:notes/deleted.md@old-sha',
+      lastSyncedCommitSha: 'base-sha',
+    });
+
+    const result = startGithubSyncFromWebhook({
+      deliveryId: 'delivery-compare',
+      event: 'push',
+      signatureSha256: 'sha256=test',
+      beforeSha: 'base-sha',
+      afterSha: 'head-sha',
+    });
+    await waitForSyncLoops();
+
+    const item = getServerDb()
+      .prepare(`SELECT path, change_type, status FROM sync_run_items WHERE run_id LIKE 'sr-%'`)
+      .get() as { path: string; change_type: string; status: string } | undefined;
+
+    assert.equal(result.existing, false);
+    assert.ok(calls.some((url) => url.includes('/compare/base-sha...head-sha')));
+    assert.equal(
+      calls.some((url) => url.includes('/git/trees/')),
+      false,
+    );
+    assert.deepEqual(item, {
+      path: 'notes/deleted.md',
+      change_type: 'delete',
+      status: 'succeeded',
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
 });

@@ -17,6 +17,7 @@ export interface Source {
    *   - `github:{owner}/{repo}:{path}@{sha}`（GitHub 同步）
    */
   externalKey?: string;
+  lastSyncedCommitSha?: string;
 }
 
 export interface CategoryTag {

@@ -10,7 +10,15 @@
  * working while `/sync` exposes the richer run/item/job dashboard.
  */
 import { nanoid } from 'nanoid';
-import { listMarkdownFiles, fetchMarkdownContent, getGithubConfig } from './github-sync';
+import {
+  listMarkdownFiles,
+  fetchMarkdownContent,
+  getGithubConfig,
+  getGithubBranchHeadSha,
+  listChangedSinceCommit,
+  type GithubChangedFile,
+  type GithubMarkdownFile,
+} from './github-sync';
 import { externalKeyPath } from './github-sync-shared';
 import { getServerDb, repo, type SyncJobRow } from './server-db';
 import { wikiRepo } from './wiki-db';
@@ -45,6 +53,7 @@ interface LocalGithubSource {
   externalKey: string;
   path: string;
   sha: string | null;
+  lastSyncedCommitSha: string | null;
 }
 
 interface PlanItem {
@@ -60,12 +69,16 @@ interface PlanItem {
 export interface StartGithubSyncOptions {
   triggerType?: 'manual' | 'webhook' | 'schedule';
   force?: boolean;
+  beforeSha?: string;
+  afterSha?: string;
 }
 
 export interface GithubWebhookDeliveryInput {
   deliveryId: string;
   event: string;
   signatureSha256: string;
+  beforeSha?: string;
+  afterSha?: string;
 }
 
 type StartGithubSyncResult = {
@@ -159,8 +172,17 @@ function loadLocalGithubSources(): LocalGithubSource[] {
       externalKey: row.externalKey,
       path: externalKeyPath(row.externalKey) || '',
       sha: externalKeySha(row.externalKey),
+      lastSyncedCommitSha: row.lastSyncedCommitSha,
     }))
     .filter((row) => Boolean(row.path));
+}
+
+function shouldUseComparePath(
+  options: StartGithubSyncOptions,
+  local: LocalGithubSource[],
+): boolean {
+  if (!options.beforeSha || !options.afterSha || options.force) return false;
+  return local.some((row) => row.lastSyncedCommitSha === options.beforeSha);
 }
 
 function maybeFinishLegacyJob(jobId: string): void {
@@ -254,7 +276,12 @@ export function startGithubSyncFromWebhook(
     return sync;
   })();
 
-  if (!result.existing) launchGithubSyncLoop(result.jobId, { triggerType: 'webhook' });
+  if (!result.existing)
+    launchGithubSyncLoop(result.jobId, {
+      triggerType: 'webhook',
+      beforeSha: delivery.beforeSha,
+      afterSha: delivery.afterSha,
+    });
   return result;
 }
 
@@ -347,68 +374,156 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
     { current: '扫描 GitHub 仓库…' },
   );
 
-  let remote: Awaited<ReturnType<typeof listMarkdownFiles>>;
+  let remote: GithubMarkdownFile[] = [];
+  let compareChanged: GithubChangedFile[] | null = null;
+  let headSha: string | null = options.afterSha || null;
+  const localSources = loadLocalGithubSources();
+  const useCompare = shouldUseComparePath(options, localSources);
   try {
-    remote = await listMarkdownFiles(cfg);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    syncObs.finishRun(runId, 'failed', message);
-    repo.updateSyncJob(jobId, {
-      status: 'failed',
-      error: `GitHub 列表失败：${message}`,
-      finished_at: Date.now(),
-    });
-    return;
-  }
-
-  const localByPath = new Map(loadLocalGithubSources().map((row) => [row.path, row]));
-  const remoteByPath = new Map(remote.map((row) => [row.path, row]));
-  const plan: PlanItem[] = [];
-
-  for (const f of remote) {
-    const local = localByPath.get(f.path);
-    if (!local) {
-      plan.push({
-        itemId: `sri-${nanoid(10)}`,
-        path: f.path,
-        sha: f.sha,
-        externalKey: f.externalKey,
-        action: 'create',
-      });
-    } else if (options.force || local.externalKey !== f.externalKey) {
-      plan.push({
-        itemId: `sri-${nanoid(10)}`,
-        path: f.path,
-        sha: f.sha,
-        oldSha: local.sha,
-        externalKey: f.externalKey,
-        action: 'update',
-        existingSourceId: local.id,
+    if (!headSha) headSha = await getGithubBranchHeadSha(cfg);
+    if (useCompare) {
+      compareChanged = await listChangedSinceCommit(options.beforeSha!, options.afterSha!, cfg);
+      syncObs.recordEvent({
+        runId,
+        stage: 'scan',
+        message: `Compare 增量扫描：${options.beforeSha} → ${options.afterSha}，changed=${compareChanged.length}`,
+        meta: {
+          event: 'github_sync.compare',
+          compare_base_sha: options.beforeSha,
+          compare_head_sha: options.afterSha,
+          changed: compareChanged.length,
+        },
       });
     } else {
-      syncObs.markSourceFileActive({
-        repo: repoSlug,
-        branch: cfg.branch,
-        path: f.path,
-        sourceId: local.id,
-        externalKey: f.externalKey,
-        blobSha: f.sha,
+      remote = await listMarkdownFiles(cfg);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (useCompare) {
+      syncObs.recordEvent({
         runId,
+        stage: 'scan',
+        level: 'warn',
+        message: `Compare 增量扫描失败，回退全量 tree：${message.slice(0, 180)}`,
+        meta: {
+          event: 'github_sync.compare_fallback',
+          compare_base_sha: options.beforeSha,
+          compare_head_sha: options.afterSha,
+        },
       });
+      try {
+        remote = await listMarkdownFiles(cfg);
+        compareChanged = null;
+      } catch (fallbackErr) {
+        const fallbackMessage =
+          fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+        syncObs.finishRun(runId, 'failed', fallbackMessage);
+        repo.updateSyncJob(jobId, {
+          status: 'failed',
+          error: `GitHub 列表失败：${fallbackMessage}`,
+          finished_at: Date.now(),
+        });
+        return;
+      }
+    } else {
+      syncObs.finishRun(runId, 'failed', message);
+      repo.updateSyncJob(jobId, {
+        status: 'failed',
+        error: `GitHub 列表失败：${message}`,
+        finished_at: Date.now(),
+      });
+      return;
     }
   }
 
-  for (const local of localByPath.values()) {
-    if (!remoteByPath.has(local.path)) {
-      plan.push({
-        itemId: `sri-${nanoid(10)}`,
-        path: local.path,
-        sha: null,
-        oldSha: local.sha,
-        externalKey: local.externalKey,
-        action: 'delete',
-        existingSourceId: local.id,
-      });
+  const localByPath = new Map(localSources.map((row) => [row.path, row]));
+  const remoteByPath = new Map(remote.map((row) => [row.path, row]));
+  const plan: PlanItem[] = [];
+
+  if (compareChanged) {
+    for (const f of compareChanged) {
+      const local = localByPath.get(f.previousPath ?? f.path);
+      if (f.status === 'removed') {
+        if (local) {
+          plan.push({
+            itemId: `sri-${nanoid(10)}`,
+            path: f.previousPath ?? f.path,
+            sha: null,
+            oldSha: local.sha,
+            externalKey: local.externalKey,
+            action: 'delete',
+            existingSourceId: local.id,
+          });
+        }
+        continue;
+      }
+      if (!local) {
+        plan.push({
+          itemId: `sri-${nanoid(10)}`,
+          path: f.path,
+          sha: f.sha,
+          externalKey: f.externalKey,
+          action: 'create',
+        });
+      } else if (options.force || local.externalKey !== f.externalKey || local.path !== f.path) {
+        plan.push({
+          itemId: `sri-${nanoid(10)}`,
+          path: f.path,
+          sha: f.sha,
+          oldSha: local.sha,
+          externalKey: f.externalKey,
+          action: 'update',
+          existingSourceId: local.id,
+        });
+      }
+    }
+  } else {
+    for (const f of remote) {
+      const local = localByPath.get(f.path);
+      if (!local) {
+        plan.push({
+          itemId: `sri-${nanoid(10)}`,
+          path: f.path,
+          sha: f.sha,
+          externalKey: f.externalKey,
+          action: 'create',
+        });
+      } else if (options.force || local.externalKey !== f.externalKey) {
+        plan.push({
+          itemId: `sri-${nanoid(10)}`,
+          path: f.path,
+          sha: f.sha,
+          oldSha: local.sha,
+          externalKey: f.externalKey,
+          action: 'update',
+          existingSourceId: local.id,
+        });
+      } else {
+        syncObs.markSourceFileActive({
+          repo: repoSlug,
+          branch: cfg.branch,
+          path: f.path,
+          sourceId: local.id,
+          externalKey: f.externalKey,
+          blobSha: f.sha,
+          runId,
+        });
+        if (headSha) repo.updateSourceLastSyncedCommitSha(local.id, headSha);
+      }
+    }
+
+    for (const local of localByPath.values()) {
+      if (!remoteByPath.has(local.path)) {
+        plan.push({
+          itemId: `sri-${nanoid(10)}`,
+          path: local.path,
+          sha: null,
+          oldSha: local.sha,
+          externalKey: local.externalKey,
+          action: 'delete',
+          existingSourceId: local.id,
+        });
+      }
     }
   }
 
@@ -417,12 +532,12 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
   const deleted = plan.filter((item) => item.action === 'delete').length;
   syncObs.updateRun(runId, {
     stage: 'diff',
-    total_files: remote.length,
+    total_files: compareChanged ? compareChanged.length : remote.length,
     changed_files: plan.length,
     created_files: created,
     updated_files: updated,
     deleted_files: deleted,
-    skipped_files: Math.max(0, remote.length - created - updated),
+    skipped_files: compareChanged ? 0 : Math.max(0, remote.length - created - updated),
     current: `待处理 ${plan.length} 个文件`,
   });
   repo.updateSyncJob(jobId, { total: plan.length, current: `待处理 ${plan.length} 个文件` });
@@ -440,6 +555,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
   });
 
   if (plan.length === 0) {
+    if (compareChanged && headSha) repo.updateGithubSourcesLastSyncedCommitSha(repoSlug, headSha);
     syncObs.finishRun(runId, 'done');
     repo.updateSyncJob(jobId, {
       status: 'done',
@@ -545,6 +661,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
         branch: cfg.branch,
         path: remoteFile.path,
         sha: remoteFile.sha,
+        headSha,
         externalKey: remoteFile.externalKey,
         title: deriveTitle(remoteFile.path, remoteFile.content),
         rawContent: remoteFile.content,

@@ -15,6 +15,7 @@
 import { CONTEXTUALIZE_CHUNK_PROMPT, CONTEXTUALIZE_CHUNK_PROMPT_VERSION } from './prompts';
 import { logger } from './logging';
 import { runWithLlmBudget } from './llm-budgets';
+import { parseJson } from './utils';
 import type { LlmConfig } from './types';
 
 export interface ContextualizeChunkInput {
@@ -23,6 +24,15 @@ export interface ContextualizeChunkInput {
   chunk: string;
   llmConfig?: LlmConfig;
   contextualizeModel?: string;
+  signal?: AbortSignal;
+}
+
+export interface ContextualizeChunkBatchInput {
+  fullDocument: string;
+  documentTitle: string;
+  chunks: Array<{ id: string; content: string }>;
+  contextualizeModel?: string;
+  llmConfig?: LlmConfig;
   signal?: AbortSignal;
 }
 
@@ -77,5 +87,79 @@ export async function contextualizeChunk(input: ContextualizeChunkInput): Promis
       error: error instanceof Error ? error.message : String(error),
     });
     return '';
+  }
+}
+
+function normalizeBatchPrefix(value: unknown): string {
+  return typeof value === 'string'
+    ? value
+        .trim()
+        .replace(/^```[\w-]*\n?|\n?```$/g, '')
+        .slice(0, 600)
+    : '';
+}
+
+export async function contextualizeChunkBatch(
+  input: ContextualizeChunkBatchInput,
+): Promise<Map<string, string>> {
+  if (process.env.COMPOUND_CONTEXTUAL_RETRIEVAL === 'off') return new Map();
+  const chunks = input.chunks.filter((chunk) => chunk.content.trim());
+  if (chunks.length === 0) return new Map();
+
+  try {
+    const raw = await runWithLlmBudget(
+      'contextualize',
+      async () => {
+        const { chat } = await import('./gateway');
+        return chat({
+          messages: [
+            {
+              role: 'system',
+              content:
+                `${CONTEXTUALIZE_CHUNK_PROMPT}\n\n` +
+                `你会收到同一篇文档中的多个 chunk。请一次性为每个 chunk 生成 50-100 字的定位前缀，` +
+                `只返回严格 JSON 对象，key 必须是 chunk id，value 是对应前缀。`,
+              cache_control: { type: 'ephemeral' },
+            },
+            {
+              role: 'user',
+              content: JSON.stringify({
+                title: input.documentTitle,
+                fullDocument: input.fullDocument.slice(0, MAX_DOC_CHARS),
+                chunks: chunks.map((chunk) => ({
+                  id: chunk.id,
+                  content: chunk.content.slice(0, MAX_CHUNK_CHARS),
+                })),
+              }),
+            },
+          ],
+          responseFormat: 'json_object',
+          temperature: 0.1,
+          maxTokens: Math.max(700, chunks.length * MAX_PREFIX_TOKENS),
+          llmConfig: input.llmConfig,
+          model: input.contextualizeModel || process.env.COMPOUND_CONTEXTUALIZE_MODEL,
+          signal: input.signal,
+          task: 'contextualize-chunk',
+          promptVersion: `${CONTEXTUALIZE_CHUNK_PROMPT_VERSION}:batch`,
+          stream: false,
+        });
+      },
+      { signal: input.signal },
+    );
+
+    const parsed = parseJson<Record<string, unknown>>(raw, {});
+    const out = new Map<string, string>();
+    for (const chunk of chunks) {
+      const prefix = normalizeBatchPrefix(parsed[chunk.id]);
+      if (prefix) out.set(chunk.id, prefix);
+    }
+    return out;
+  } catch (error) {
+    logger.warn('contextualize_chunk_batch.failed', {
+      title: input.documentTitle,
+      chunks: chunks.length,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return new Map();
   }
 }

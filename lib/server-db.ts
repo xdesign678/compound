@@ -132,7 +132,8 @@ function runMigrations(db: DB): void {
       url           TEXT,
       raw_content   TEXT NOT NULL,
       ingested_at   INTEGER NOT NULL,
-      external_key  TEXT
+      external_key  TEXT,
+      last_synced_commit_sha TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_sources_ingested_at ON sources(ingested_at);
     CREATE INDEX IF NOT EXISTS idx_sources_external_key ON sources(external_key);
@@ -224,6 +225,15 @@ function runMigrations(db: DB): void {
     db.exec(`ALTER TABLE sync_jobs ADD COLUMN heartbeat_at INTEGER;`);
   }
 
+  const sourceColumns = new Set(
+    (db.prepare(`PRAGMA table_info(sources)`).all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    ),
+  );
+  if (!sourceColumns.has('last_synced_commit_sha')) {
+    db.exec(`ALTER TABLE sources ADD COLUMN last_synced_commit_sha TEXT;`);
+  }
+
   runCategoryNormalizationIfNeeded(db);
 }
 
@@ -295,6 +305,7 @@ interface SourceRow {
   raw_content: string;
   ingested_at: number;
   external_key: string | null;
+  last_synced_commit_sha: string | null;
 }
 
 interface ConceptRow {
@@ -419,6 +430,7 @@ function rowToSource(r: SourceRow, contentStatus: ContentStatus = 'full'): Sourc
     ingestedAt: r.ingested_at,
     contentStatus,
     externalKey: r.external_key ?? undefined,
+    lastSyncedCommitSha: r.last_synced_commit_sha ?? undefined,
   };
 }
 
@@ -441,7 +453,7 @@ function rowToConcept(r: ConceptRow, contentStatus: ContentStatus = 'full'): Con
 
 function selectSourceColumns(summariesOnly = false): string {
   return summariesOnly
-    ? `id, title, type, author, url, '' AS raw_content, ingested_at, external_key`
+    ? `id, title, type, author, url, '' AS raw_content, ingested_at, external_key, last_synced_commit_sha`
     : '*';
 }
 
@@ -542,8 +554,8 @@ export const repo = {
   insertSource(s: Source): void {
     cachedPrepare(
       `INSERT OR REPLACE INTO sources
-          (id, title, type, author, url, raw_content, ingested_at, external_key)
-          VALUES (@id, @title, @type, @author, @url, @raw_content, @ingested_at, @external_key)`,
+          (id, title, type, author, url, raw_content, ingested_at, external_key, last_synced_commit_sha)
+          VALUES (@id, @title, @type, @author, @url, @raw_content, @ingested_at, @external_key, @last_synced_commit_sha)`,
     ).run({
       id: s.id,
       title: s.title,
@@ -553,6 +565,7 @@ export const repo = {
       raw_content: s.rawContent,
       ingested_at: s.ingestedAt,
       external_key: s.externalKey ?? null,
+      last_synced_commit_sha: s.lastSyncedCommitSha ?? null,
     });
   },
 
@@ -572,6 +585,19 @@ export const repo = {
 
   deleteSource(id: string): void {
     cachedPrepare(`DELETE FROM sources WHERE id = ?`).run(id);
+  },
+
+  updateSourceLastSyncedCommitSha(id: string, commitSha: string): void {
+    cachedPrepare(`UPDATE sources SET last_synced_commit_sha = ? WHERE id = ?`).run(commitSha, id);
+  },
+
+  updateGithubSourcesLastSyncedCommitSha(repoSlug: string, commitSha: string): number {
+    const result = cachedPrepare(
+      `UPDATE sources
+          SET last_synced_commit_sha = ?
+        WHERE external_key LIKE ?`,
+    ).run(commitSha, `github:${repoSlug}:%`);
+    return Number(result.changes || 0);
   },
 
   listSources(options: RecordQueryOptions = {}): Source[] {
@@ -603,11 +629,23 @@ export const repo = {
   /**
    * Return all external keys whose prefix matches `github:`; used for dedup in sync.
    */
-  listGithubExternalKeys(): Array<{ id: string; externalKey: string }> {
+  listGithubExternalKeys(): Array<{
+    id: string;
+    externalKey: string;
+    lastSyncedCommitSha: string | null;
+  }> {
     const rows = cachedPrepare(
-      `SELECT id, external_key FROM sources WHERE external_key LIKE 'github:%'`,
-    ).all() as Array<{ id: string; external_key: string }>;
-    return rows.map((r) => ({ id: r.id, externalKey: r.external_key }));
+      `SELECT id, external_key, last_synced_commit_sha FROM sources WHERE external_key LIKE 'github:%'`,
+    ).all() as Array<{
+      id: string;
+      external_key: string;
+      last_synced_commit_sha: string | null;
+    }>;
+    return rows.map((r) => ({
+      id: r.id,
+      externalKey: r.external_key,
+      lastSyncedCommitSha: r.last_synced_commit_sha,
+    }));
   },
 
   // ---- concepts --------------------------------------------------

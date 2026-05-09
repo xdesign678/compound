@@ -396,6 +396,7 @@ function metricHostForGateway(url: string): string {
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
+  cache_control?: { type: 'ephemeral' };
 }
 
 export interface LlmConfigOverride {

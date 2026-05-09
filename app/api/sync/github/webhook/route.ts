@@ -35,11 +35,19 @@ export async function POST(req: Request) {
   if (event === 'ping') return NextResponse.json({ ok: true, event });
 
   try {
+    let payload: { before?: unknown; after?: unknown } = {};
+    try {
+      payload = JSON.parse(rawBody) as { before?: unknown; after?: unknown };
+    } catch {
+      payload = {};
+    }
     const deliveryId = req.headers.get('x-github-delivery') || '';
     const { jobId, existing } = startGithubSyncFromWebhook({
       deliveryId,
       event,
       signatureSha256: req.headers.get('x-hub-signature-256') || '',
+      beforeSha: typeof payload.before === 'string' ? payload.before : undefined,
+      afterSha: typeof payload.after === 'string' ? payload.after : undefined,
     });
     return NextResponse.json({ jobId, existing: !!existing });
   } catch (err) {

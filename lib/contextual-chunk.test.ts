@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { contextualizeChunk } from './contextual-chunk';
+import { contextualizeChunk, contextualizeChunkBatch } from './contextual-chunk';
 import { resetCircuitBreakersForTests } from './circuit-breaker';
 
 async function withEnv<T>(
@@ -136,3 +136,56 @@ test(
     );
   },
 );
+
+test('contextualizeChunkBatch requests multiple prefixes in one chat call', async () => {
+  resetCircuitBreakersForTests();
+  const requests: unknown[] = [];
+  const mockFetch: typeof fetch = async (_input, init) => {
+    requests.push(JSON.parse(String(init?.body ?? '{}')));
+    return new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                'chunk-1': '第一段上下文',
+                'chunk-2': '第二段上下文',
+              }),
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  await withEnv(
+    {
+      COMPOUND_CONTEXTUAL_RETRIEVAL: 'on',
+      COMPOUND_SKIP_DNS_GUARD: 'true',
+      LLM_API_KEY: 'test-key',
+      LLM_API_URL: 'https://example.com/v1/chat/completions',
+    },
+    async () => {
+      await withMockFetch(mockFetch, async () => {
+        const prefixes = await contextualizeChunkBatch({
+          fullDocument: '# Doc\n\nFull body',
+          documentTitle: 'Doc',
+          chunks: [
+            { id: 'chunk-1', content: 'first chunk' },
+            { id: 'chunk-2', content: 'second chunk' },
+          ],
+        });
+
+        assert.equal(requests.length, 1);
+        assert.equal(prefixes.get('chunk-1'), '第一段上下文');
+        assert.equal(prefixes.get('chunk-2'), '第二段上下文');
+        const body = requests[0] as {
+          messages: Array<{ cache_control?: { type: string }; content: string }>;
+        };
+        assert.deepEqual(body.messages[0]?.cache_control, { type: 'ephemeral' });
+        assert.match(body.messages[1]?.content ?? '', /chunk-1/);
+      });
+    },
+  );
+});

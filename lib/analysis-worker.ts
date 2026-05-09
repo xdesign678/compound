@@ -75,6 +75,7 @@ interface GithubIngestPayload {
   branch: string;
   path: string;
   sha: string;
+  headSha?: string | null;
   externalKey: string;
   title: string;
   rawContent?: string;
@@ -899,16 +900,6 @@ function queuePostIngestJobs(input: {
     priority: 15,
     maxAttempts: 2,
   });
-  queueAdvancedAnalysisJob({
-    runId: input.runId,
-    itemId: input.itemId,
-    sourceId: input.sourceId,
-    sourceSha: input.sourceSha,
-    sourcePath: input.sourcePath,
-    stage: 'qa_index',
-    priority: 10,
-    maxAttempts: 1,
-  });
 }
 
 async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
@@ -976,6 +967,7 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
     type: 'file',
     rawContent,
     externalKey: payload.externalKey,
+    lastSyncedCommitSha: payload.headSha ?? undefined,
     replaceSourceId: payload.replaceSourceId ?? undefined,
     signal: currentRunSignal(payload.runId),
   });

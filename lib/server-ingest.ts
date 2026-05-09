@@ -14,7 +14,7 @@ import { runIngestLLM } from './ingest-core';
 import { compileWikiArtifactsAfterIngest } from './wiki-compiler';
 import { wikiRepo } from './wiki-db';
 import { escapeHTML } from './format';
-import { contextualizeChunk } from './contextual-chunk';
+import { contextualizeChunk, contextualizeChunkBatch } from './contextual-chunk';
 import { logger } from './server-logger';
 import type { Source, Concept, ActivityLog, SourceType, LlmConfig } from './types';
 
@@ -25,6 +25,7 @@ export interface ServerIngestInput {
   url?: string;
   rawContent: string;
   externalKey?: string;
+  lastSyncedCommitSha?: string;
   replaceSourceId?: string;
   llmConfig?: LlmConfig;
   signal?: AbortSignal;
@@ -67,6 +68,7 @@ export async function ingestSourceToServerDb(
     rawContent: input.rawContent,
     ingestedAt: now,
     externalKey: input.externalKey,
+    lastSyncedCommitSha: input.lastSyncedCommitSha,
   };
 
   // 2. Gather existing concepts for LLM context
@@ -254,6 +256,10 @@ const CONTEXTUALIZATION_CONCURRENCY = Math.max(
   1,
   Number(process.env.COMPOUND_CONTEXTUALIZATION_CONCURRENCY || 2),
 );
+const CONTEXTUALIZATION_BATCH_SIZE = Math.max(
+  1,
+  Number(process.env.COMPOUND_CONTEXTUALIZATION_BATCH_SIZE || 12),
+);
 
 async function runContextualizationForSource(opts: {
   source: Source;
@@ -270,6 +276,27 @@ async function runContextualizationForSource(opts: {
   if (chunks.length === 0) return;
 
   const updates: Array<{ chunkId: string; prefix: string }> = [];
+  for (let start = 0; start < chunks.length; start += CONTEXTUALIZATION_BATCH_SIZE) {
+    const batch = chunks.slice(start, start + CONTEXTUALIZATION_BATCH_SIZE);
+    const prefixes = await contextualizeChunkBatch({
+      fullDocument: opts.source.rawContent,
+      documentTitle: opts.source.title,
+      chunks: batch,
+      llmConfig: opts.llmConfig,
+      signal: opts.signal,
+    });
+    for (const chunk of batch) {
+      const prefix = prefixes.get(chunk.id);
+      if (prefix) updates.push({ chunkId: chunk.id, prefix });
+    }
+    if (prefixes.size !== batch.length) break;
+  }
+  if (updates.length === chunks.length) {
+    wikiRepo.applyContextualPrefixes(updates);
+    return;
+  }
+
+  updates.length = 0;
   let cursor = 0;
   const worker = async () => {
     while (cursor < chunks.length) {
