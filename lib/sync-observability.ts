@@ -99,8 +99,22 @@ export interface SyncDashboard {
   coverage: Record<string, number | string | boolean>;
   itemStats: Array<{ stage: string; status: string; count: number }>;
   analysisStats: Array<{ stage: string; status: string; count: number }>;
+  analysisQueueDepth: Array<{ stage: string; count: number }>;
   analysisDurationStats: Array<{ stage: string; avgMs: number; maxMs: number; count: number }>;
+  analysisDurationBuckets: Array<{
+    stage: string;
+    status: string;
+    le: number | string;
+    count: number;
+  }>;
   analysisErrorCategories: Array<{ stage: string; category: string; count: number }>;
+  githubRunDurationStats: Array<{
+    status: string;
+    avgSeconds: number;
+    maxSeconds: number;
+    count: number;
+  }>;
+  webhookDeliveryStats: Array<{ status: string; count: number }>;
   errorStats: Array<{ error: string; count: number; lastAt: number }>;
   pipeline: PipelineStageRow[];
   errorGroups: ErrorGroupRow[];
@@ -295,6 +309,7 @@ const PIPELINE_STAGES: Array<{ stage: string; label: string }> = [
   { stage: 'relations', label: '关系' },
   { stage: 'qa_index', label: '问答索引' },
 ];
+const ANALYSIS_DURATION_BUCKETS_MS = [1_000, 5_000, 15_000, 30_000, 60_000, 180_000, 300_000];
 
 /**
  * Bucket the most recent error rows into stable groups by category +
@@ -896,6 +911,15 @@ export const syncObs = {
         `SELECT stage, status, COUNT(*) AS count FROM analysis_jobs GROUP BY stage, status ORDER BY stage, status`,
       )
       .all() as Array<{ stage: string; status: string; count: number }>;
+    const analysisQueueDepth = db
+      .prepare(
+        `SELECT stage, COUNT(*) AS count
+           FROM analysis_jobs
+          WHERE status = 'queued'
+          GROUP BY stage
+          ORDER BY stage`,
+      )
+      .all() as Array<{ stage: string; count: number }>;
     const analysisDurationStats = db
       .prepare(
         `SELECT stage,
@@ -908,6 +932,73 @@ export const syncObs = {
           ORDER BY stage`,
       )
       .all() as Array<{ stage: string; avgMs: number; maxMs: number; count: number }>;
+    const durationRows = db
+      .prepare(
+        `SELECT stage, status, duration_ms AS durationMs
+           FROM analysis_jobs
+          WHERE duration_ms IS NOT NULL`,
+      )
+      .all() as Array<{ stage: string; status: string; durationMs: number }>;
+    const durationBucketMap = new Map<
+      string,
+      { stage: string; status: string; counts: number[] }
+    >();
+    for (const row of durationRows) {
+      const key = `${row.stage}\x1f${row.status}`;
+      let entry = durationBucketMap.get(key);
+      if (!entry) {
+        entry = {
+          stage: row.stage,
+          status: row.status,
+          counts: ANALYSIS_DURATION_BUCKETS_MS.map(() => 0),
+        };
+        durationBucketMap.set(key, entry);
+      }
+      for (let i = 0; i < ANALYSIS_DURATION_BUCKETS_MS.length; i += 1) {
+        if (Number(row.durationMs || 0) <= ANALYSIS_DURATION_BUCKETS_MS[i]) entry.counts[i] += 1;
+      }
+    }
+    const analysisDurationBuckets = Array.from(durationBucketMap.values()).flatMap((entry) => [
+      ...ANALYSIS_DURATION_BUCKETS_MS.map((bucket, index) => ({
+        stage: entry.stage,
+        status: entry.status,
+        le: bucket / 1000,
+        count: entry.counts[index],
+      })),
+      {
+        stage: entry.stage,
+        status: entry.status,
+        le: '+Inf',
+        count: durationRows.filter(
+          (row) => row.stage === entry.stage && row.status === entry.status,
+        ).length,
+      },
+    ]);
+    const githubRunDurationStats = db
+      .prepare(
+        `SELECT status,
+                AVG((COALESCE(finished_at, ?) - started_at) / 1000.0) AS avgSeconds,
+                MAX((COALESCE(finished_at, ?) - started_at) / 1000.0) AS maxSeconds,
+                COUNT(*) AS count
+           FROM sync_runs
+          WHERE kind = 'github' AND started_at IS NOT NULL
+          GROUP BY status
+          ORDER BY status`,
+      )
+      .all(ts, ts) as Array<{
+      status: string;
+      avgSeconds: number;
+      maxSeconds: number;
+      count: number;
+    }>;
+    const webhookDeliveryStats = db
+      .prepare(
+        `SELECT status, COUNT(*) AS count
+           FROM webhook_deliveries
+          GROUP BY status
+          ORDER BY status`,
+      )
+      .all() as Array<{ status: string; count: number }>;
     const analysisErrorCategories = db
       .prepare(
         `SELECT stage,
@@ -1191,8 +1282,12 @@ export const syncObs = {
       coverage,
       itemStats,
       analysisStats,
+      analysisQueueDepth,
       analysisDurationStats,
+      analysisDurationBuckets,
       analysisErrorCategories,
+      githubRunDurationStats,
+      webhookDeliveryStats,
       errorStats,
       pipeline,
       errorGroups,

@@ -125,8 +125,15 @@ test('renderPrometheusMetrics includes domain gauges and collector errors', () =
       },
       itemStats: [{ stage: 'ingest', status: 'succeeded', count: 3 }],
       analysisStats: [{ stage: 'embedding', status: 'queued', count: 2 }],
+      analysisQueueDepth: [{ stage: 'embedding', count: 2 }],
       analysisDurationStats: [{ stage: 'embedding', avgMs: 1200, maxMs: 2500, count: 2 }],
+      analysisDurationBuckets: [
+        { stage: 'embedding', status: 'succeeded', le: 5, count: 2 },
+        { stage: 'embedding', status: 'succeeded', le: '+Inf', count: 2 },
+      ],
       analysisErrorCategories: [{ stage: 'summarize', category: 'transient', count: 1 }],
+      githubRunDurationStats: [{ status: 'done', avgSeconds: 1, maxSeconds: 1, count: 1 }],
+      webhookDeliveryStats: [{ status: 'processed', count: 3 }],
       errorStats: [],
       pipeline: [],
       errorGroups: [],
@@ -169,8 +176,15 @@ test('renderPrometheusMetrics includes domain gauges and collector errors', () =
   assert.match(body, /compound_sync_run_files\{state="total"\} 10/);
   assert.match(body, /compound_sync_items\{stage="ingest",status="succeeded"\} 3/);
   assert.match(body, /compound_analysis_jobs\{stage="embedding",status="queued"\} 2/);
+  assert.match(body, /compound_analysis_queue_depth\{stage="embedding"\} 2/);
   assert.match(body, /compound_analysis_job_duration_ms\{stage="embedding",stat="avg"\} 1200/);
+  assert.match(
+    body,
+    /compound_analysis_job_duration_seconds_bucket\{stage="embedding",status="succeeded",le="5"\} 2/,
+  );
   assert.match(body, /compound_analysis_job_errors\{stage="summarize",category="transient"\} 1/);
+  assert.match(body, /compound_github_sync_run_duration_seconds\{status="done",stat="avg"\} 1/);
+  assert.match(body, /compound_webhook_delivery_total\{status="processed"\} 3/);
   assert.match(body, /compound_knowledge_records\{kind="sources"\} 8/);
   assert.match(body, /compound_review_items\{status="open"\} 4/);
   assert.match(

@@ -429,6 +429,11 @@ function addSyncMetrics(out: PrometheusTextBuilder, dashboard: SyncDashboard): v
     });
   }
 
+  out.metric('compound_analysis_queue_depth', 'gauge', 'Queued analysis job depth by stage.');
+  for (const item of dashboard.analysisQueueDepth ?? []) {
+    out.sample('compound_analysis_queue_depth', Number(item.count), { stage: item.stage });
+  }
+
   out.metric(
     'compound_analysis_job_duration_ms',
     'gauge',
@@ -446,6 +451,19 @@ function addSyncMetrics(out: PrometheusTextBuilder, dashboard: SyncDashboard): v
   }
 
   out.metric(
+    'compound_analysis_job_duration_seconds',
+    'histogram',
+    'Analysis job duration histogram by stage and final status.',
+  );
+  for (const item of dashboard.analysisDurationBuckets ?? []) {
+    out.sample('compound_analysis_job_duration_seconds_bucket', Number(item.count), {
+      stage: item.stage,
+      status: item.status,
+      le: item.le,
+    });
+  }
+
+  out.metric(
     'compound_analysis_job_errors',
     'gauge',
     'Failed analysis job counts by stage and error category.',
@@ -455,6 +473,27 @@ function addSyncMetrics(out: PrometheusTextBuilder, dashboard: SyncDashboard): v
       stage: item.stage,
       category: item.category,
     });
+  }
+
+  out.metric(
+    'compound_github_sync_run_duration_seconds',
+    'gauge',
+    'GitHub sync run duration statistics by status.',
+  );
+  for (const item of dashboard.githubRunDurationStats ?? []) {
+    out.sample('compound_github_sync_run_duration_seconds', Number(item.avgSeconds || 0), {
+      status: item.status,
+      stat: 'avg',
+    });
+    out.sample('compound_github_sync_run_duration_seconds', Number(item.maxSeconds || 0), {
+      status: item.status,
+      stat: 'max',
+    });
+  }
+
+  out.metric('compound_webhook_delivery_total', 'counter', 'GitHub webhook deliveries by status.');
+  for (const item of dashboard.webhookDeliveryStats ?? []) {
+    out.sample('compound_webhook_delivery_total', Number(item.count), { status: item.status });
   }
 
   out.metric('compound_sync_errors', 'gauge', 'Failed sync item counts grouped by error.');

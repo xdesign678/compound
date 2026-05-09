@@ -100,8 +100,6 @@ const WORKER_MAX_LOOPS = Math.max(
  * that. 5 minutes is a safe ceiling.
  */
 const LEASE_MS = Math.max(60_000, Number(process.env.COMPOUND_ANALYSIS_LEASE_MS || 5 * 60_000));
-/** Max concurrent worker loops. We use DB lease + in-memory counter combined. */
-const MAX_PARALLEL_WORKERS = Math.max(1, Number(process.env.COMPOUND_ANALYSIS_MAX_WORKERS || 2));
 const HEARTBEAT_MS = Math.max(5_000, Number(process.env.COMPOUND_ANALYSIS_HEARTBEAT_MS || 15_000));
 const MARKDOWN_PARSER_VERSION = process.env.COMPOUND_MARKDOWN_PARSER_VERSION || 'wiki-chunk-v1';
 const RELATION_CONFIDENCE_AUTO_APPLY = Math.max(
@@ -125,8 +123,41 @@ const RELATION_KINDS = new Set<ConceptRelationKind>([
 
 let schemaReady = false;
 let schemaDb: ReturnType<typeof getServerDb> | null = null;
-let activeWorkerCount = 0;
+const activeWorkerCounts = new Map<string, number>();
 const cancelControllers = new Map<string, AbortController>();
+
+interface WorkerPoolConfig {
+  name: string;
+  stages: AdvancedAnalysisStage[];
+  maxWorkers: number;
+}
+
+const STAGE_WORKER_POOLS: WorkerPoolConfig[] = [
+  {
+    name: 'github_ingest',
+    stages: ['github_ingest'],
+    maxWorkers: Math.max(
+      1,
+      Number(
+        process.env.COMPOUND_ANALYSIS_STAGE_WORKERS_GITHUB ||
+          process.env.COMPOUND_ANALYSIS_MAX_WORKERS ||
+          2,
+      ),
+    ),
+  },
+  {
+    name: 'post_ingest',
+    stages: ['embedding', 'summarize', 'relations', 'qa_index', 'chunk', 'fts', 'concepts'],
+    maxWorkers: Math.max(
+      1,
+      Number(
+        process.env.COMPOUND_ANALYSIS_STAGE_WORKERS_POST_INGEST ||
+          process.env.COMPOUND_ANALYSIS_MAX_WORKERS ||
+          3,
+      ),
+    ),
+  },
+];
 
 function tableColumns(table: string): Set<string> {
   const rows = getServerDb().prepare(`PRAGMA table_info(${table})`).all() as Array<{
@@ -373,17 +404,47 @@ export function recoverStaleAnalysisJobs(): { jobs: number; items: number } {
   return { jobs: Number(jobsRes.changes ?? 0), items: Number(itemsRes.changes ?? 0) };
 }
 
-function claimJobs(limit: number): AnalysisJobRow[] {
+function activeWorkerCount(): number {
+  return Array.from(activeWorkerCounts.values()).reduce((sum, count) => sum + count, 0);
+}
+
+function stageWhereClause(stages?: AdvancedAnalysisStage[]): {
+  clause: string;
+  params: unknown[];
+} {
+  if (!stages || stages.length === 0) return { clause: '', params: [] };
+  return {
+    clause: ` AND stage IN (${stages.map(() => '?').join(', ')})`,
+    params: stages,
+  };
+}
+
+function queuedJobCount(stages?: AdvancedAnalysisStage[]): number {
+  const filter = stageWhereClause(stages);
+  return Number(
+    (
+      getServerDb()
+        .prepare(
+          `SELECT COUNT(*) AS count FROM analysis_jobs
+            WHERE status = 'queued' AND COALESCE(not_before_at, 0) <= ?${filter.clause}`,
+        )
+        .get(now(), ...filter.params) as { count: number }
+    ).count || 0,
+  );
+}
+
+function claimJobs(limit: number, stages?: AdvancedAnalysisStage[]): AnalysisJobRow[] {
   ensureAnalysisWorkerSchema();
   const db = getServerDb();
+  const filter = stageWhereClause(stages);
   const rows = db
     .prepare(
       `SELECT * FROM analysis_jobs
-       WHERE status = 'queued' AND COALESCE(not_before_at, 0) <= ?
+       WHERE status = 'queued' AND COALESCE(not_before_at, 0) <= ?${filter.clause}
        ORDER BY priority DESC, updated_at ASC
        LIMIT ?`,
     )
-    .all(now(), limit) as AnalysisJobRow[];
+    .all(now(), ...filter.params, limit) as AnalysisJobRow[];
 
   const claimed: AnalysisJobRow[] = [];
   const stmt = db.prepare(
@@ -1332,22 +1393,20 @@ async function processJob(job: AnalysisJobRow): Promise<void> {
   }
 }
 
-export async function runAnalysisWorkerOnce(): Promise<{
+export async function runAnalysisWorkerOnce(
+  options: {
+    stages?: AdvancedAnalysisStage[];
+  } = {},
+): Promise<{
   claimed: number;
   remaining: number;
   recovered: number;
 }> {
   ensureAnalysisWorkerSchema();
   const recovery = recoverStaleAnalysisJobs();
-  const jobs = claimJobs(WORKER_BATCH);
+  const jobs = claimJobs(WORKER_BATCH, options.stages);
   await Promise.all(jobs.map((job) => processJob(job)));
-  const remaining = Number(
-    (
-      getServerDb()
-        .prepare(`SELECT COUNT(*) AS count FROM analysis_jobs WHERE status = 'queued'`)
-        .get() as { count: number }
-    ).count || 0,
-  );
+  const remaining = queuedJobCount(options.stages);
   return { claimed: jobs.length, remaining, recovered: recovery.jobs + recovery.items };
 }
 
@@ -1363,71 +1422,91 @@ export interface StartAnalysisWorkerResult {
   recovered: number;
 }
 
-export function startAnalysisWorker(reason = 'manual'): StartAnalysisWorkerResult {
+export function startAnalysisWorker(
+  reason = 'manual',
+  options: { stages?: AdvancedAnalysisStage[] } = {},
+): StartAnalysisWorkerResult {
   ensureAnalysisWorkerSchema();
   // Always attempt recovery — dashboard polls every 2s, so this gives us a
   // free continuous lease-reaper without spinning a separate timer.
   const recovery = recoverStaleAnalysisJobs();
-
-  const queued = Number(
-    (
-      getServerDb()
-        .prepare(`SELECT COUNT(*) AS count FROM analysis_jobs WHERE status = 'queued'`)
-        .get() as { count: number }
-    ).count || 0,
-  );
+  const pools =
+    options.stages && options.stages.length > 0
+      ? [
+          {
+            name: `custom:${options.stages.join(',')}`,
+            stages: options.stages,
+            maxWorkers: 1,
+          },
+        ]
+      : STAGE_WORKER_POOLS;
+  const queued = pools.reduce((sum, pool) => sum + queuedJobCount(pool.stages), 0);
 
   if (queued === 0) {
     return {
       started: false,
       reason: 'no_queue',
-      activeWorkers: activeWorkerCount,
+      activeWorkers: activeWorkerCount(),
       queued,
       recovered: recovery.jobs + recovery.items,
     };
   }
 
-  if (activeWorkerCount >= MAX_PARALLEL_WORKERS) {
-    return {
-      started: false,
-      reason: 'max_workers',
-      activeWorkers: activeWorkerCount,
-      queued,
-      recovered: recovery.jobs + recovery.items,
-    };
+  let started = 0;
+  let capped = 0;
+  for (const pool of pools) {
+    const poolQueued = queuedJobCount(pool.stages);
+    if (poolQueued === 0) continue;
+    const active = activeWorkerCounts.get(pool.name) ?? 0;
+    const capacity = Math.max(0, pool.maxWorkers - active);
+    if (capacity === 0) {
+      capped += 1;
+      continue;
+    }
+    for (let i = 0; i < capacity; i += 1) {
+      startWorkerLoop(pool, reason, poolQueued);
+      started += 1;
+    }
   }
 
-  activeWorkerCount += 1;
+  return {
+    started: started > 0,
+    reason: started > 0 ? reason : capped > 0 ? 'max_workers' : 'no_queue',
+    activeWorkers: activeWorkerCount(),
+    queued,
+    recovered: recovery.jobs + recovery.items,
+  };
+}
+
+function startWorkerLoop(pool: WorkerPoolConfig, reason: string, queued: number): void {
+  activeWorkerCounts.set(pool.name, (activeWorkerCounts.get(pool.name) ?? 0) + 1);
   syncObs.recordEvent({
     stage: 'llm',
-    message: `分析 worker 启动：${reason}（worker #${activeWorkerCount} · 队列 ${queued}）`,
+    message: `分析 worker 启动：${reason}（pool=${pool.name} · active=${activeWorkerCounts.get(pool.name)} · 队列 ${queued}）`,
+    meta: { event: 'analysis.worker_started', pool: pool.name, stages: pool.stages },
   });
   const workerPromise = (async () => {
     try {
       for (let i = 0; i < WORKER_MAX_LOOPS; i += 1) {
-        const result = await runAnalysisWorkerOnce();
+        const result = await runAnalysisWorkerOnce({ stages: pool.stages });
         if (result.claimed === 0) break;
       }
     } finally {
-      activeWorkerCount = Math.max(0, activeWorkerCount - 1);
-      syncObs.recordEvent({ stage: 'llm', level: 'success', message: '分析 worker 空闲' });
+      activeWorkerCounts.set(pool.name, Math.max(0, (activeWorkerCounts.get(pool.name) ?? 1) - 1));
+      syncObs.recordEvent({
+        stage: 'llm',
+        level: 'success',
+        message: `分析 worker 空闲：${pool.name}`,
+        meta: { event: 'analysis.worker_idle', pool: pool.name },
+      });
     }
   })();
   const g = globalThis as unknown as { __activeAnalysisWorkerPromises?: Set<Promise<void>> };
   g.__activeAnalysisWorkerPromises ??= new Set();
   g.__activeAnalysisWorkerPromises.add(workerPromise);
   void workerPromise.finally(() => g.__activeAnalysisWorkerPromises?.delete(workerPromise));
-
-  return {
-    started: true,
-    reason,
-    activeWorkers: activeWorkerCount,
-    queued,
-    recovered: recovery.jobs + recovery.items,
-  };
 }
 
-/** How many worker loops are currently in flight in this process. */
 /**
  * Check both the in-memory abort controller and the persisted run status. The
  * DB check is the source of truth across worker restarts; the controller lets
