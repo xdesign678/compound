@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import Dexie from 'dexie';
 import DOMPurify from 'dompurify';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -20,6 +20,7 @@ const FILTERS: { key: ActivityFilterType; label: string }[] = [
 const PAGE_SIZE = 100;
 
 export function ActivityLogView() {
+  const listBaseId = useId();
   const filter = useAppStore((s) => s.activityFilter);
   const setFilter = useAppStore((s) => s.setActivityFilter);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -68,12 +69,14 @@ export function ActivityLogView() {
 
   return (
     <div className="activity-log-view">
-      <div className="activity-filter-bar">
+      <div className="activity-filter-bar" role="toolbar" aria-label="活动类型筛选">
         {FILTERS.map((f) => (
           <button
             key={f.key}
+            type="button"
             className={`filter-chip${filter === f.key ? ' active' : ''}`}
             onClick={() => handleSetFilter(f.key)}
+            aria-pressed={filter === f.key}
           >
             {f.label}
           </button>
@@ -81,53 +84,72 @@ export function ActivityLogView() {
       </div>
 
       {!items ? (
-        <div className="empty-state">加载中...</div>
+        <div className="empty-state" role="status" aria-live="polite" aria-busy="true">
+          加载中...
+        </div>
       ) : items.length === 0 ? (
-        <div className="empty-state" style={{ paddingTop: 40 }}>
-          <div className="es-icon">
+        <div className="empty-state" style={{ paddingTop: 40 }} role="status" aria-live="polite">
+          <div className="es-icon" aria-hidden="true">
             <Icon.Activity />
           </div>
           <h3>暂无活动记录</h3>
-          <p>当你添加资料、提问、或运行健康检查时,AI 的动作会记录在这里。</p>
+          <p>当你添加资料、提问、或运行健康检查时，AI 的动作会记录在这里。</p>
         </div>
       ) : (
-        <div className="activity-list">
-          {groupActivityByDate(items).map((g) => (
-            <div key={g.label}>
-              <div className="activity-date-header">{g.label}</div>
-              {g.items.map((it) => (
-                <div
-                  key={it.id}
-                  className={`activity-item type-${it.type}${it.status ? ` status-${it.status}` : ''}`}
-                >
-                  <div className="a-icon">{iconFor(it)}</div>
-                  <div className="a-body">
-                    <div
-                      className="a-title"
-                      dangerouslySetInnerHTML={{
-                        __html: DOMPurify.sanitize(
-                          it.title
-                            .replace(/<em>/g, '<span class="emphasis">')
-                            .replace(/<\/em>/g, '</span>'),
-                        ),
-                      }}
-                    />
-                    <div className="a-details">{it.details}</div>
-                    <div className="a-time">{formatRelativeTime(it.at)}</div>
-                  </div>
+        <section className="activity-list" aria-label="活动时间线">
+          {groupActivityByDate(items).map((g, groupIndex) => {
+            const groupLabelId = `${listBaseId}-date-${groupIndex}`;
+            return (
+              <section key={g.label} aria-labelledby={groupLabelId}>
+                <div id={groupLabelId} className="activity-date-header">
+                  {g.label}
                 </div>
-              ))}
-            </div>
-          ))}
+                {g.items.map((it) => {
+                  const itemTitleId = `${listBaseId}-item-${it.id}`;
+                  return (
+                    <div
+                      key={it.id}
+                      role="article"
+                      aria-labelledby={itemTitleId}
+                      className={`activity-item type-${it.type}${it.status ? ` status-${it.status}` : ''}`}
+                    >
+                      <div className="a-icon" aria-hidden="true">
+                        {iconFor(it)}
+                      </div>
+                      <div className="a-body">
+                        <div
+                          id={itemTitleId}
+                          className="a-title"
+                          dangerouslySetInnerHTML={{
+                            __html: DOMPurify.sanitize(
+                              it.title
+                                .replace(/<em>/g, '<span class="emphasis">')
+                                .replace(/<\/em>/g, '</span>'),
+                            ),
+                          }}
+                        />
+                        <div className="a-details">{it.details}</div>
+                        <time className="a-time" dateTime={new Date(it.at).toISOString()}>
+                          {formatRelativeTime(it.at)}
+                        </time>
+                      </div>
+                    </div>
+                  );
+                })}
+              </section>
+            );
+          })}
           {items.length < (totalCount ?? 0) && (
             <button
+              type="button"
               className="modal-btn"
               onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+              aria-label={`加载更多活动，当前已显示 ${items.length} 条，共 ${totalCount ?? items.length} 条`}
             >
               加载更多（已显示 {items.length} / {totalCount ?? items.length}）
             </button>
           )}
-        </div>
+        </section>
       )}
     </div>
   );

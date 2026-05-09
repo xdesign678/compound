@@ -3341,7 +3341,7 @@ button {
 .activity-item .a-time {
   font-family: var(--font-sans);
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 .activity-spinner {
   width: 14px;
@@ -3355,7 +3355,7 @@ button {
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-weight: 500;
   padding: 20px 0 6px;
 }
@@ -3477,7 +3477,7 @@ button {
 }
 .filter-chip.active {
   background: var(--brand-clay-soft);
-  color: var(--brand-clay);
+  color: var(--brand-clay-text);
 }
 
 /* Health view */

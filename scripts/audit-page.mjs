@@ -51,7 +51,14 @@ export const SURFACES = {
       await page.locator('.source-card').first().click();
     },
   },
-  activity: { url: '/', setup: (page) => page.getByRole('tab', { name: '活动' }).click() },
+  activity: {
+    url: '/',
+    setup: async (page) => {
+      await page.getByRole('tab', { name: '活动' }).click();
+      await page.getByRole('tab', { name: '日志' }).click();
+      await page.waitForSelector('.activity-list, .empty-state', { timeout: 30_000 });
+    },
+  },
   recap: { url: '/recap', setup: async () => {} },
   health: {
     url: '/',
