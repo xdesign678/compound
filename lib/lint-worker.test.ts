@@ -25,7 +25,15 @@ async function withMockFetch<T>(mockFetch: typeof fetch, fn: () => Promise<T> | 
 function setupTempDb() {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), 'compound-lint-'));
   const previousEnv = new Map<string, string | undefined>();
-  for (const key of ['DATA_DIR', 'LLM_API_KEY', 'LLM_API_URL', 'COMPOUND_SKIP_DNS_GUARD']) {
+  for (const key of [
+    'DATA_DIR',
+    'LLM_API_KEY',
+    'LLM_API_URL',
+    'LLM_MODEL',
+    'COMPOUND_SKIP_DNS_GUARD',
+    'COMPOUND_LINT_BATCH_SIZE',
+    'COMPOUND_LINT_MAX_TOKENS',
+  ]) {
     previousEnv.set(key, process.env[key]);
   }
   process.env.DATA_DIR = tempDir;
@@ -47,13 +55,22 @@ function setupTempDb() {
   };
 }
 
-async function seedConcepts(): Promise<void> {
+async function seedConcepts(count = 2): Promise<void> {
   const { repo } = await import('./server-db');
   const now = Date.now();
-  for (const concept of [
-    { id: 'c-a', title: 'Alpha', related: ['c-b'] },
-    { id: 'c-b', title: 'Beta', related: ['c-a'] },
-  ]) {
+  const concepts =
+    count === 2
+      ? [
+          { id: 'c-a', title: 'Alpha', related: ['c-b'] },
+          { id: 'c-b', title: 'Beta', related: ['c-a'] },
+        ]
+      : Array.from({ length: count }, (_, index) => ({
+          id: `c-${index + 1}`,
+          title: `Concept ${index + 1}`,
+          related: index > 0 ? [`c-${index}`] : [],
+        }));
+
+  for (const concept of concepts) {
     repo.upsertConcept({
       id: concept.id,
       title: concept.title,
@@ -165,5 +182,86 @@ test(
       assert.equal(status?.conceptCount, 0);
       assert.deepEqual(status?.findings, []);
     });
+  },
+);
+
+test(
+  'lint-worker requests a larger token budget for reasoning-model deep checks',
+  { concurrency: false },
+  async (t) => {
+    const env = setupTempDb();
+    t.after(env.cleanup);
+    process.env.LLM_MODEL = 'minimax/minimax-m2.7';
+    await seedConcepts();
+
+    const mockFetch: typeof fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body));
+      assert.equal(body.model, 'minimax/minimax-m2.7');
+      assert.ok(body.max_tokens >= 4000);
+      return new Response(
+        [
+          `data: ${JSON.stringify({
+            choices: [{ delta: { content: JSON.stringify({ findings: [] }) } }],
+          })}`,
+          `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}`,
+          'data: [DONE]',
+          '',
+        ].join('\n\n'),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    };
+
+    await withMockFetch(mockFetch, async () => {
+      const { createLintRun, getLintRunStatus, startLintWorker } = await import('./lint-worker');
+      const runId = createLintRun();
+      startLintWorker(runId);
+      await waitForLintRunDone(runId);
+
+      const status = getLintRunStatus(runId);
+      assert.equal(status?.status, 'done');
+    });
+  },
+);
+
+test(
+  'lint-worker batches large concept sets before LLM analysis',
+  { concurrency: false },
+  async (t) => {
+    const env = setupTempDb();
+    t.after(env.cleanup);
+    process.env.COMPOUND_LINT_BATCH_SIZE = '2';
+    await seedConcepts(5);
+
+    const requestedPrompts: string[] = [];
+    const mockFetch: typeof fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body));
+      requestedPrompts.push(body.messages[1].content);
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: { content: JSON.stringify({ findings: [] }) },
+              finish_reason: 'stop',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    };
+
+    await withMockFetch(mockFetch, async () => {
+      const { createLintRun, getLintRunStatus, startLintWorker } = await import('./lint-worker');
+      const runId = createLintRun();
+      startLintWorker(runId);
+      await waitForLintRunDone(runId);
+
+      const status = getLintRunStatus(runId);
+      assert.equal(status?.status, 'done');
+    });
+
+    assert.equal(requestedPrompts.length, 3);
+    for (const prompt of requestedPrompts) {
+      assert.ok((prompt.match(/^\[c-\d+\]/gm) ?? []).length <= 2);
+    }
   },
 );

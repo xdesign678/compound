@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { chat, parseJSON } from '@/lib/gateway';
-import { LINT_SYSTEM_PROMPT, LINT_SYSTEM_PROMPT_VERSION } from '@/lib/prompts';
+import { analyzeLintConcepts } from '@/lib/lint-worker';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
@@ -43,37 +42,7 @@ export const POST = withRequestTracing(async (req: Request) => {
     }
 
     const llmConfig = readLlmConfigOverride(req, body);
-
-    const listing = body.concepts
-      .map(
-        (c) =>
-          `[${c.id}] ${c.title}\n  summary: ${c.summary}\n  related: ${c.related.join(', ') || '(none)'}`,
-      )
-      .join('\n\n');
-
-    const userPrompt = `# 当前 Wiki 的概念索引
-
-${listing}
-
----
-
-请按 system prompt 定义的 JSON schema 输出 lint 发现,只输出 JSON。`;
-
-    const raw = await chat({
-      messages: [
-        { role: 'system', content: LINT_SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt },
-      ],
-      responseFormat: 'json_object',
-      temperature: 0.3,
-      maxTokens: 2000,
-      llmConfig,
-      task: 'lint',
-      promptVersion: LINT_SYSTEM_PROMPT_VERSION,
-    });
-
-    const parsed = parseJSON<LintResponse>(raw);
-    parsed.findings = parsed.findings || [];
+    const parsed: LintResponse = { findings: await analyzeLintConcepts(body.concepts, llmConfig) };
 
     const validIds = new Set(body.concepts.map((c) => c.id));
     parsed.findings = parsed.findings.filter((f) => {
