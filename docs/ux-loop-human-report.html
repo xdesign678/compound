@@ -1,0 +1,1111 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Compound UX/PWA 体检与优化报告</title>
+    <style>
+      :root {
+        --bg: #faf9f5;
+        --paper: #fffdf8;
+        --paper-soft: #f3f0e8;
+        --ink: #171614;
+        --body: rgba(23, 22, 20, 0.84);
+        --muted: #68635b;
+        --line: rgba(23, 22, 20, 0.12);
+        --line-soft: rgba(23, 22, 20, 0.08);
+        --clay: #c96442;
+        --clay-soft: #d97757;
+        --green: #2f7d4f;
+        --blue: #356c9f;
+        --violet: #745aa6;
+        --amber: #a16d1c;
+        --shadow: 0 14px 40px rgba(23, 22, 20, 0.08);
+        --sans:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        --serif: Lora, "Noto Serif SC", Georgia, "Times New Roman", serif;
+        --mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--serif);
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        color: var(--body);
+        line-height: 1.72;
+      }
+
+      a {
+        color: var(--clay);
+      }
+
+      .page {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 32px 20px 72px;
+      }
+
+      .hero {
+        min-height: 72vh;
+        display: grid;
+        align-content: center;
+        gap: 28px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .eyebrow,
+      .label,
+      .tag,
+      th,
+      .metric-name {
+        font-family: var(--sans);
+        letter-spacing: 0;
+      }
+
+      .eyebrow {
+        color: var(--clay);
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4 {
+        margin: 0;
+        color: var(--ink);
+        font-family: var(--sans);
+        letter-spacing: 0;
+        line-height: 1.18;
+      }
+
+      h1 {
+        max-width: 900px;
+        font-size: clamp(40px, 7vw, 78px);
+      }
+
+      h2 {
+        font-size: clamp(28px, 4vw, 44px);
+        margin-bottom: 18px;
+      }
+
+      h3 {
+        font-size: 22px;
+        margin-bottom: 10px;
+      }
+
+      h4 {
+        font-size: 18px;
+      }
+
+      .lead {
+        max-width: 850px;
+        margin: 0;
+        color: var(--body);
+        font-size: clamp(18px, 2vw, 23px);
+      }
+
+      .hero-grid,
+      .metric-grid,
+      .explain-grid,
+      .impact-grid,
+      .story-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .hero-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .metric-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+      }
+
+      .explain-grid,
+      .impact-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .story-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .metric,
+      .panel,
+      .step,
+      .story,
+      .score {
+        background: var(--paper);
+        border: 1px solid var(--line-soft);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+      }
+
+      .metric {
+        padding: 18px;
+        min-height: 120px;
+      }
+
+      .metric strong {
+        display: block;
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: clamp(28px, 4vw, 46px);
+        line-height: 1;
+      }
+
+      .metric span {
+        display: block;
+        margin-top: 10px;
+        color: var(--muted);
+        font-family: var(--sans);
+        font-size: 14px;
+      }
+
+      section {
+        padding: 58px 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .section-intro {
+        max-width: 820px;
+        margin: 0 0 24px;
+        font-size: 18px;
+      }
+
+      .panel {
+        padding: 24px;
+      }
+
+      .plain-list {
+        margin: 14px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .plain-list li {
+        position: relative;
+        padding-left: 22px;
+        margin: 10px 0;
+      }
+
+      .plain-list li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0.75em;
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--clay);
+      }
+
+      .score {
+        padding: 18px;
+      }
+
+      .score-top {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      .score-value {
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 24px;
+        font-weight: 800;
+      }
+
+      .bar {
+        height: 12px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e5e0d5;
+      }
+
+      .bar span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--clay);
+      }
+
+      .bar.green span {
+        background: var(--green);
+      }
+
+      .bar.blue span {
+        background: var(--blue);
+      }
+
+      .bar.violet span {
+        background: var(--violet);
+      }
+
+      .bar.amber span {
+        background: var(--amber);
+      }
+
+      .bar-note {
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line-soft);
+        border-radius: 8px;
+        background: var(--paper);
+        box-shadow: var(--shadow);
+      }
+
+      table {
+        width: 100%;
+        min-width: 900px;
+        border-collapse: collapse;
+        font-size: 15px;
+      }
+
+      th,
+      td {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line-soft);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--ink);
+        background: var(--paper-soft);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      code {
+        padding: 2px 5px;
+        border-radius: 6px;
+        background: var(--paper-soft);
+        color: var(--ink);
+        font-family: var(--mono);
+        font-size: 0.9em;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 26px;
+        padding: 3px 9px;
+        border: 1px solid rgba(201, 100, 66, 0.24);
+        border-radius: 999px;
+        color: var(--clay);
+        background: rgba(201, 100, 66, 0.08);
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .step {
+        display: grid;
+        grid-template-columns: 92px 1fr;
+        gap: 18px;
+        padding: 20px;
+      }
+
+      .step-id {
+        color: var(--clay);
+        font-family: var(--sans);
+        font-size: 18px;
+        font-weight: 900;
+      }
+
+      .step p,
+      .story p,
+      .panel p {
+        margin: 8px 0 0;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 12px;
+      }
+
+      .story {
+        padding: 18px;
+      }
+
+      .story strong {
+        display: block;
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 18px;
+      }
+
+      .small {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .callout {
+        margin-top: 24px;
+        padding: 22px 24px;
+        border-left: 4px solid var(--clay);
+        border-radius: 8px;
+        background: #fff6ef;
+      }
+
+      .callout p {
+        margin: 0;
+      }
+
+      @media (max-width: 860px) {
+        .hero-grid,
+        .metric-grid,
+        .explain-grid,
+        .impact-grid,
+        .story-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .step {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media print {
+        body {
+          background: white;
+        }
+
+        .page {
+          max-width: none;
+          padding: 0;
+        }
+
+        .metric,
+        .panel,
+        .step,
+        .story,
+        .score,
+        .table-wrap {
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <div>
+          <div class="eyebrow">Compound UX/PWA Ralph Loop Report</div>
+          <h1>这 8 个多小时到底做了什么</h1>
+        </div>
+        <p class="lead">
+          这不是一次单纯“美化页面”。这是一轮把 Compound 从“能用的网页应用”推进到“有体检机制、有离线兜底、有
+          PWA 安装体验、有关键流程保护”的系统整理。
+        </p>
+        <div class="hero-grid">
+          <div class="metric">
+            <strong>8h 27m</strong>
+            <span>总运行时间，按本地记录计算</span>
+          </div>
+          <div class="metric">
+            <strong>39</strong>
+            <span>独立提交，每张任务卡一个 commit</span>
+          </div>
+          <div class="metric">
+            <strong>114</strong>
+            <span>涉及文件数量</span>
+          </div>
+          <div class="metric">
+            <strong>21</strong>
+            <span>被纳入体检的页面和界面</span>
+          </div>
+        </div>
+      </header>
+
+      <section>
+        <h2>先看结论</h2>
+        <p class="section-intro">
+          最终结果很明确：核心页面体检通过，严重无障碍问题为 0，原有 225 个代码测试通过，新增的 5 条真实用户流程也通过。
+        </p>
+        <div class="metric-grid">
+          <div class="metric">
+            <strong>100</strong>
+            <span>PWA 最终评分</span>
+          </div>
+          <div class="metric">
+            <strong>100</strong>
+            <span>无障碍最终评分</span>
+          </div>
+          <div class="metric">
+            <strong>100</strong>
+            <span>最佳实践最终评分</span>
+          </div>
+          <div class="metric">
+            <strong>0 / 0</strong>
+            <span>axe 严重/高危问题</span>
+          </div>
+          <div class="metric">
+            <strong>5 / 5</strong>
+            <span>真实用户故事测试</span>
+          </div>
+        </div>
+        <div class="callout">
+          <p>
+            小白版解释：现在不是只靠“我看着还行”，而是有机器真的打开页面、点击功能、检查安装能力、检查无障碍、截图对比、模拟真实用户流程。
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2>这套“体检机器”是什么</h2>
+        <div class="explain-grid">
+          <div class="panel">
+            <h3>它像一个自动质检员</h3>
+            <p>
+              它会自动打开 Compound，进入不同页面，检查页面是不是能访问、按钮是不是有名字、离线页是不是存在、截图有没有明显跑版。
+            </p>
+            <ul class="plain-list">
+              <li>Playwright 负责像真人一样打开浏览器和点击页面。</li>
+              <li>Lighthouse 负责给 PWA、无障碍、最佳实践打分。</li>
+              <li>axe 负责专门检查严重无障碍问题。</li>
+              <li>sharp 负责对比新旧截图，防止页面跑版。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>它不是全天自动监控</h3>
+            <p>
+              现在它主要是“手动触发，自动检查”。你可以让我运行，也可以以后接到 GitHub Actions，让每次推送后自动跑。
+            </p>
+            <ul class="plain-list">
+              <li>查单个页面：<code>npm run audit:ux -- --page=globalShell</code></li>
+              <li>查全站 Lighthouse：<code>npm run audit:ux:all</code></li>
+              <li>查全站无障碍：<code>npm run audit:ux:axe</code></li>
+              <li>查真实流程：<code>npm run test:e2e:stories</code></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>整体提升估算</h2>
+        <p class="section-intro">
+          这些百分比不是线上用户数据，而是按工程质量、PWA 完整度、无障碍、离线兜底和回归保护做的估算。已经有实测数据的地方会标出真实结果。
+        </p>
+        <div class="impact-grid">
+          <div class="score">
+            <div class="score-top">
+              <span class="metric-name">PWA 安装和离线完整度</span>
+              <span class="score-value">+35% ~ +50%</span>
+            </div>
+            <div class="bar green"><span style="width: 92%"></span></div>
+            <p class="bar-note">补齐 manifest、图标、iOS 启动图、离线页、Service Worker 更新策略。</p>
+          </div>
+          <div class="score">
+            <div class="score-top">
+              <span class="metric-name">无障碍和键盘可用性</span>
+              <span class="score-value">+20% ~ +30%</span>
+            </div>
+            <div class="bar blue"><span style="width: 86%"></span></div>
+            <p class="bar-note">最终 axe 严重/高危问题为 0/0，Lighthouse 无障碍 100。</p>
+          </div>
+          <div class="score">
+            <div class="score-top">
+              <span class="metric-name">断网、慢网、失败兜底</span>
+              <span class="score-value">+35% ~ +45%</span>
+            </div>
+            <div class="bar amber"><span style="width: 90%"></span></div>
+            <p class="bar-note">离线页、离线重试、慢网问答、错误边界、同步失败反馈都做了补强。</p>
+          </div>
+          <div class="score">
+            <div class="score-top">
+              <span class="metric-name">以后防止改坏的能力</span>
+              <span class="score-value">+70% ~ +90%</span>
+            </div>
+            <div class="bar violet"><span style="width: 96%"></span></div>
+            <p class="bar-note">新增 21 个 surface 体检、42 张视觉基线、5 条用户故事和跨页扫描。</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>每一步做了什么</h2>
+        <p class="section-intro">
+          下面按真实任务卡顺序列出来。你可以把它理解成：先装体检设备，再补 App 基础能力，再逐页修体验，最后全站验收。
+        </p>
+        <div class="timeline">
+          <article class="step">
+            <div class="step-id">U0.6</div>
+            <div>
+              <h3>生成 UX 循环三件套</h3>
+              <p><span class="tag">文档和流程</span></p>
+              <p>做了什么：生成 <code>PROMPT_UX.md</code> 和本地循环进度文件，让后续每一轮知道该做哪张卡、怎么验收、怎么记录。</p>
+              <p>带来的效果：不是随便改，而是有明确路线图和停止条件。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U0.1</div>
+            <div>
+              <h3>接入 Lighthouse 和阈值</h3>
+              <p><span class="tag">体检基础</span></p>
+              <p>做了什么：加入 PWA、无障碍、最佳实践的最低分要求，低于 90 就不能算通过。</p>
+              <p>带来的效果：以后不是凭感觉说好，而是有分数底线。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U0.2</div>
+            <div>
+              <h3>写单页 UX 体检脚本</h3>
+              <p><span class="tag">自动检查</span></p>
+              <p>做了什么：新增 <code>scripts/audit-page.mjs</code>，可以打开某个页面，跑 Lighthouse、axe 和截图对比。</p>
+              <p>带来的效果：每个页面都有一个可重复的体检入口。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U0.3</div>
+            <div>
+              <h3>给 21 个界面拍标准照</h3>
+              <p><span class="tag">视觉基线</span></p>
+              <p>做了什么：为 21 个 surface 生成手机和桌面截图，共 42 张标准图。</p>
+              <p>带来的效果：以后页面如果跑版，机器能通过截图差异发现。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U0.4</div>
+            <div>
+              <h3>整理 7 维 UX 检查清单</h3>
+              <p><span class="tag">规则清单</span></p>
+              <p>做了什么：把 PWA、无障碍、视觉、移动端、错误状态、反馈状态等规则整理成清单。</p>
+              <p>带来的效果：以后检查有标准，不会漏看关键维度。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U0.5</div>
+            <div>
+              <h3>整理临时产物和提交边界</h3>
+              <p><span class="tag">工程卫生</span></p>
+              <p>做了什么：明确哪些审计结果、临时报告、视觉 diff 不能进提交。</p>
+              <p>带来的效果：仓库不会被临时文件污染。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U1.1</div>
+            <div>
+              <h3>修 PWA manifest</h3>
+              <p><span class="tag">可安装 App</span></p>
+              <p>做了什么：补充 App 名字、显示模式、图标、截图、主题色等安装信息。</p>
+              <p>带来的效果：手机或桌面更容易把 Compound 识别成可安装 App。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U1.2</div>
+            <div>
+              <h3>优化 Service Worker 更新</h3>
+              <p><span class="tag">缓存和更新</span></p>
+              <p>做了什么：让离线缓存和新版代码的更新更可控，减少旧缓存和新页面互相打架。</p>
+              <p>带来的效果：用户打开 App 时更不容易遇到奇怪旧版本。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U1.3</div>
+            <div>
+              <h3>重做离线页</h3>
+              <p><span class="tag">断网体验</span></p>
+              <p>做了什么：把 <code>/offline</code> 改成更清楚的离线说明页，并补充重试路径。</p>
+              <p>带来的效果：断网时用户知道发生了什么，而不是看到生硬错误。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U1.4</div>
+            <div>
+              <h3>补全全局可访问性兜底</h3>
+              <p><span class="tag">基础体验</span></p>
+              <p>做了什么：增强 focus-visible、减弱动画、高对比等全局样式。</p>
+              <p>带来的效果：键盘用户、视觉敏感用户、系统辅助模式用户更容易使用。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U1.5</div>
+            <div>
+              <h3>统一动效变量</h3>
+              <p><span class="tag">动效一致</span></p>
+              <p>做了什么：收敛动画时长和缓动变量。</p>
+              <p>带来的效果：页面反馈更统一，不会有的地方太快、有的地方太慢。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U1.6</div>
+            <div>
+              <h3>统一错误边界</h3>
+              <p><span class="tag">出错兜底</span></p>
+              <p>做了什么：新增统一错误状态组件，改造全局错误页。</p>
+              <p>带来的效果：如果页面出错，用户看到的是可理解的恢复入口，而不是技术报错。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U1.7</div>
+            <div>
+              <h3>补 iOS 启动图</h3>
+              <p><span class="tag">iPhone/iPad PWA</span></p>
+              <p>做了什么：生成多种 iPhone 和 iPad 尺寸的启动图，并接入页面 metadata。</p>
+              <p>带来的效果：添加到主屏幕后，打开更像原生 App。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U1.8</div>
+            <div>
+              <h3>统一遮罩和层级变量</h3>
+              <p><span class="tag">弹窗层级</span></p>
+              <p>做了什么：统一 z-index、遮罩透明度、浮层规则。</p>
+              <p>带来的效果：弹窗、菜单、提示不容易互相盖错。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.01</div>
+            <div>
+              <h3>优化 Wiki 首页语义</h3>
+              <p><span class="tag">首页</span></p>
+              <p>做了什么：增强概念列表、分类、搜索区域的结构和可读性。</p>
+              <p>带来的效果：用户和辅助工具都更容易理解首页内容。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.02</div>
+            <div>
+              <h3>优化 Library 控制区</h3>
+              <p><span class="tag">资料库</span></p>
+              <p>做了什么：改进资料库筛选、按钮和列表控制的可理解性。</p>
+              <p>带来的效果：资料很多时更容易浏览和筛选。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.03</div>
+            <div>
+              <h3>优化 Sources 列表语义</h3>
+              <p><span class="tag">资料页</span></p>
+              <p>做了什么：让资料卡片、状态、入口更清楚。</p>
+              <p>带来的效果：用户更容易判断资料状态和下一步操作。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.04</div>
+            <div>
+              <h3>优化 Ask 问答控制</h3>
+              <p><span class="tag">问答</span></p>
+              <p>做了什么：增强输入框、发送按钮、空状态和消息区域的语义。</p>
+              <p>带来的效果：提问流程更清楚，慢网时也更容易理解系统状态。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.05</div>
+            <div>
+              <h3>优化概念详情</h3>
+              <p><span class="tag">详情阅读</span></p>
+              <p>做了什么：改进概念详情里的标题、引用、阅读结构。</p>
+              <p>带来的效果：读长内容时更稳定，辅助工具更容易理解层级。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.06</div>
+            <div>
+              <h3>优化资料详情</h3>
+              <p><span class="tag">编辑资料</span></p>
+              <p>做了什么：增强资料编辑器、预览和保存反馈。</p>
+              <p>带来的效果：用户编辑资料时更清楚“正在改什么、保存了没有”。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.07</div>
+            <div>
+              <h3>优化活动时间线</h3>
+              <p><span class="tag">活动记录</span></p>
+              <p>做了什么：改进活动日志结构、状态说明和列表语义。</p>
+              <p>带来的效果：用户更容易追踪系统最近做了什么。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.08</div>
+            <div>
+              <h3>增强 Recap 手势</h3>
+              <p><span class="tag">移动端手势</span></p>
+              <p>做了什么：让复盘卡片滑动更谨慎，减少误触。</p>
+              <p>带来的效果：手机上横滑和竖滚更不容易冲突。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U3.1</div>
+            <div>
+              <h3>新增全站 Lighthouse 扫描</h3>
+              <p><span class="tag">全站体检</span></p>
+              <p>做了什么：新增 <code>audit:ux:all</code>，按 registry 遍历所有 surface。</p>
+              <p>带来的效果：可以一次看到全站 PWA、无障碍、最佳实践是否达标。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.09</div>
+            <div>
+              <h3>优化健康页</h3>
+              <p><span class="tag">系统健康</span></p>
+              <p>做了什么：改进健康视图的状态语义和可读性。</p>
+              <p>带来的效果：用户更容易理解系统当前健康状态。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.10</div>
+            <div>
+              <h3>优化设置通用页</h3>
+              <p><span class="tag">设置</span></p>
+              <p>做了什么：改进主题、字体、行高等设置控件。</p>
+              <p>带来的效果：设置项更像真正可操作的控件，而不是一堆文字。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.11</div>
+            <div>
+              <h3>优化设置数据页</h3>
+              <p><span class="tag">数据安全</span></p>
+              <p>做了什么：增强导入、导出、清理等数据操作的提示和危险动作说明。</p>
+              <p>带来的效果：用户更不容易误删或误操作数据。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.12</div>
+            <div>
+              <h3>优化设置模型页</h3>
+              <p><span class="tag">AI 模型设置</span></p>
+              <p>做了什么：改进模型配置、状态反馈和表单语义。</p>
+              <p>带来的效果：用户更清楚当前模型设置是否可用。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.13</div>
+            <div>
+              <h3>优化添加资料弹窗</h3>
+              <p><span class="tag">资料导入</span></p>
+              <p>做了什么：补强输入、提交、失败、加载中的反馈。</p>
+              <p>带来的效果：用户添加资料时更知道系统是否正在处理。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.14</div>
+            <div>
+              <h3>优化 GitHub 同步反馈</h3>
+              <p><span class="tag">GitHub 同步</span></p>
+              <p>做了什么：改进同步弹窗里的状态、失败提示和按钮语义。</p>
+              <p>带来的效果：同步过程更透明，失败后更容易知道下一步。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.15</div>
+            <div>
+              <h3>优化 Obsidian 导入反馈</h3>
+              <p><span class="tag">Obsidian</span></p>
+              <p>做了什么：改进批量导入弹窗的进度、说明和错误反馈。</p>
+              <p>带来的效果：大量导入时更不容易让用户误以为卡死。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.16</div>
+            <div>
+              <h3>优化新手引导选择</h3>
+              <p><span class="tag">首次体验</span></p>
+              <p>做了什么：让新手引导里的选择和入口更清楚。</p>
+              <p>带来的效果：第一次进入时更容易知道可以做什么。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.17</div>
+            <div>
+              <h3>优化命令面板</h3>
+              <p><span class="tag">快捷操作</span></p>
+              <p>做了什么：改进命令搜索、最近使用、键盘操作和弹窗结构。</p>
+              <p>带来的效果：高级用户用快捷入口时更顺手。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.18</div>
+            <div>
+              <h3>优化全局外壳</h3>
+              <p><span class="tag">导航和反馈</span></p>
+              <p>做了什么：改进 Header、TabBar、TaskCenter、Toast 等全局组件。</p>
+              <p>带来的效果：全站导航、提示、任务状态更一致。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.19</div>
+            <div>
+              <h3>优化同步页抽屉</h3>
+              <p><span class="tag">同步 Dashboard</span></p>
+              <p>做了什么：增强 <code>/sync</code> 高级抽屉和同步状态反馈。</p>
+              <p>带来的效果：复杂同步状态更容易被理解。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.20</div>
+            <div>
+              <h3>优化审核队列</h3>
+              <p><span class="tag">Review</span></p>
+              <p>做了什么：改进审核动作、重新打开、状态反馈，并补了相关测试。</p>
+              <p>带来的效果：审核和修复建议处理更稳。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U2.21</div>
+            <div>
+              <h3>优化离线重试反馈</h3>
+              <p><span class="tag">离线恢复</span></p>
+              <p>做了什么：增强离线任务恢复、重试和用户提示。</p>
+              <p>带来的效果：断网后恢复时更可预期。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U3.2</div>
+            <div>
+              <h3>新增全站 axe 扫描</h3>
+              <p><span class="tag">无障碍验收</span></p>
+              <p>做了什么：新增 <code>audit:ux:axe</code>，一次扫描所有 surface 的严重无障碍问题。</p>
+              <p>带来的效果：最终 21 个 surface 的 critical/serious 都是 0/0。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U3.3</div>
+            <div>
+              <h3>新增 5 条真实用户故事</h3>
+              <p><span class="tag">真实流程</span></p>
+              <p>做了什么：用浏览器自动模拟首次进入、断网编辑、安装准备、1000 概念、慢网问答。</p>
+              <p>带来的效果：不只是页面能打开，而是关键使用路径真的跑通。</p>
+            </div>
+          </article>
+
+          <article class="step">
+            <div class="step-id">U3.4</div>
+            <div>
+              <h3>写最终总结并收口</h3>
+              <p><span class="tag">验收报告</span></p>
+              <p>做了什么：汇总 21 个 surface 的最终分数、总耗时、阻塞项和未来 backlog。</p>
+              <p>带来的效果：这轮工作有完整记录，后续能知道哪些机制已经建立。</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <h2>5 条真实用户故事</h2>
+        <p class="section-intro">
+          这部分像“请一个机器人用户真的试用 App”。最终结果是 5 条全部通过。
+        </p>
+        <div class="story-grid">
+          <article class="story">
+            <strong>第一次打开 App</strong>
+            <p>检查新用户进入后能否看到可用 Wiki、搜索框和概念卡片。</p>
+          </article>
+          <article class="story">
+            <strong>断网编辑后保存</strong>
+            <p>先断网编辑资料，再恢复网络保存，确认内容不会丢。</p>
+          </article>
+          <article class="story">
+            <strong>安装准备检查</strong>
+            <p>检查 manifest、图标、Service Worker、桌面安装信息是否齐全。</p>
+          </article>
+          <article class="story">
+            <strong>1000 个概念压力场景</strong>
+            <p>模拟大量概念，确认列表分页和搜索还能正常工作。</p>
+          </article>
+          <article class="story">
+            <strong>慢网问答</strong>
+            <p>模拟接口变慢，确认问答界面仍有反馈，最后能显示答案。</p>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <h2>最终体检结果</h2>
+        <p class="section-intro">
+          下面是实际 registry 里的 21 个页面和界面。计划文字里曾写 22 个 surface，但代码里真实可运行的是 21 个，所以报告按 21 个统计。
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>界面</th>
+                <th>小白解释</th>
+                <th>Lighthouse PWA/无障碍/最佳实践</th>
+                <th>严重无障碍问题</th>
+                <th>结果</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><code>wiki</code></td><td>首页 Wiki 概念流</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>library</code></td><td>资料库视图</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>sources</code></td><td>资料列表</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>ask</code></td><td>问答界面</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>conceptDetail</code></td><td>概念详情页</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>sourceDetail</code></td><td>资料详情和编辑</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>activity</code></td><td>活动记录</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>recap</code></td><td>复盘页</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>health</code></td><td>系统健康页</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>settingsGeneral</code></td><td>设置里的通用页</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>settingsData</code></td><td>设置里的数据页</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>settingsModel</code></td><td>设置里的模型页</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>ingestModal</code></td><td>添加资料弹窗</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>githubSync</code></td><td>GitHub 同步弹窗</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>obsidianImport</code></td><td>Obsidian 导入弹窗</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>onboarding</code></td><td>新手引导</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>commandPalette</code></td><td>命令面板</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>globalShell</code></td><td>全局外壳，含导航和底部栏</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>sync</code></td><td>同步页</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>review</code></td><td>审核页</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+              <tr><td><code>offline</code></td><td>离线页</td><td>100/100/100</td><td>0/0</td><td>通过</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>改动范围</h2>
+        <div class="explain-grid">
+          <div class="panel">
+            <h3>主要改了哪些地方</h3>
+            <ul class="plain-list">
+              <li><code>components/views/*</code>：Wiki、资料、问答、活动、健康、复盘等主要页面。</li>
+              <li><code>components/settings/*</code>：设置里的通用、数据、模型页面。</li>
+              <li><code>components/*Modal.tsx</code>：添加资料、GitHub 同步、Obsidian 导入弹窗。</li>
+              <li><code>app/offline/*</code>：离线页体验。</li>
+              <li><code>public/manifest.json</code>、<code>public/sw.js</code>、<code>public/icons/*</code>：PWA 安装和离线能力。</li>
+              <li><code>scripts/audit-*.mjs</code>、<code>tests/e2e/*</code>：体检脚本和测试。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>用数字看这轮工作</h3>
+            <ul class="plain-list">
+              <li>总耗时：8 小时 27 分 13 秒。</li>
+              <li>提交数：39 个。</li>
+              <li>涉及文件：114 个。</li>
+              <li>代码变化：7203 行新增，1160 行删除。</li>
+              <li>视觉基线：21 个 surface，手机和桌面共 42 张。</li>
+              <li>自动测试：225 个原有逻辑测试通过，5 条新增用户故事通过。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>最重要的收益</h2>
+        <div class="explain-grid">
+          <div class="panel">
+            <h3>短期收益</h3>
+            <ul class="plain-list">
+              <li>页面反馈更清楚，用户更知道系统在干什么。</li>
+              <li>断网、慢网、失败时不容易让用户懵。</li>
+              <li>手机安装到桌面后的体验更完整。</li>
+              <li>按钮、弹窗、表单对辅助工具更友好。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>长期收益</h3>
+            <ul class="plain-list">
+              <li>以后改功能前后可以跑体检，减少偷偷改坏的风险。</li>
+              <li>全站关键页面有截图基线，可以发现明显跑版。</li>
+              <li>关键用户路径有自动测试，不只靠人工点。</li>
+              <li>质量标准写进项目里，新对话或新开发者也能照着执行。</li>
+            </ul>
+          </div>
+        </div>
+        <div class="callout">
+          <p>
+            诚实评价：这次没有发现“网站完全不能用”的大事故。它解决的是产品成熟度问题：离线兜底、PWA 完整度、无障碍、反馈状态、视觉回归和关键流程保护。
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2>还可以继续升级什么</h2>
+        <p class="section-intro">
+          现在是本地可手动触发的体检系统。下一步如果要更像成熟产品，可以把它接到自动化平台。
+        </p>
+        <div class="explain-grid">
+          <div class="panel">
+            <h3>推荐下一步</h3>
+            <ul class="plain-list">
+              <li>接入 GitHub Actions，让每次推送后自动跑核心体检。</li>
+              <li>保存每次体检报告，形成质量趋势。</li>
+              <li>给线上版本接错误监控，发现真实用户遇到的问题。</li>
+              <li>补真实用户性能数据，比如打开速度、慢网耗时、安装成功率。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>你以后可以怎么用</h3>
+            <ul class="plain-list">
+              <li>改页面后说：“帮我跑一下 UX 体检”。</li>
+              <li>发布前说：“帮我跑全站 UX/PWA 体检”。</li>
+              <li>怀疑某个功能坏了说：“帮我跑用户故事测试”。</li>
+              <li>看到失败报告后说：“按失败项修复，不要凭感觉”。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <footer class="small">
+        报告文件：<code>docs/ux-loop-human-report.html</code>。最终 commit：<code>a7925c8</code>。统计来自本地
+        <code>docs/plans/ralph-ux-progress.md</code>、git 历史和最终验证输出。
+      </footer>
+    </main>
+  </body>
+</html>
