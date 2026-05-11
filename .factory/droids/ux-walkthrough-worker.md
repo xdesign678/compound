@@ -23,8 +23,8 @@ return structured findings; the parent consolidates the final report.
 5. **States** — `normal`, `empty`, `loading`, `error` (subset is fine).
 6. **Dev server URL** — base URL (e.g. `http://localhost:3000`).
 7. **Reference files** — absolute paths to
-   `.factory/skills/体验走查/references/nielsen-checklist.md` and
-   `.factory/skills/体验走查/references/finding-template.md`.
+   `.factory/skills/ux-walkthrough/references/nielsen-checklist.md` and
+   `.factory/skills/ux-walkthrough/references/finding-template.md`.
 
 If any of the above is missing, return an explicit `blocked` status describing
 what you need; do not guess. If `Mode` is missing, default to `quick`.
