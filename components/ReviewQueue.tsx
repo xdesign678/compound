@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
 import { withRequestId } from '@/lib/trace-client';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, friendlyErrorMessage } from '@/lib/store';
 
 type ReviewItem = {
   id: string;
@@ -369,8 +369,76 @@ export default function ReviewQueue() {
       </header>
 
       {error ? (
-        <div className="ops-alert" role="alert">
-          {error}
+        <div
+          role="alert"
+          style={{
+            display: 'flex',
+            gap: 16,
+            padding: '20px 24px',
+            borderRadius: 10,
+            background: 'var(--ops-state-error-soft, #fef2f2)',
+            border: '1px solid var(--ops-state-error, #dc2626)',
+            borderLeftWidth: 4,
+            fontFamily: 'var(--font-reading, Lora, serif)',
+            lineHeight: 1.6,
+          }}
+        >
+          <div style={{ fontSize: 24, flexShrink: 0 }} aria-hidden="true">
+            {error.includes('401') || error.toLowerCase().includes('unauthorized')
+              ? '🔒'
+              : error.includes('403')
+                ? '🚫'
+                : error.includes('500')
+                  ? '💥'
+                  : error.toLowerCase().includes('离线') || error.toLowerCase().includes('offline')
+                    ? '📡'
+                    : '⚠️'}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: 16,
+                fontWeight: 600,
+                color: 'var(--text-primary, #141413)',
+              }}
+            >
+              {error.includes('401') || error.toLowerCase().includes('unauthorized')
+                ? '需要认证'
+                : error.includes('403')
+                  ? '权限不足'
+                  : error.includes('500')
+                    ? '服务器出了点问题'
+                    : '加载审核队列失败'}
+            </h3>
+            <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary, #5e5d59)' }}>
+              {friendlyErrorMessage(error)}
+            </p>
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              <button type="button" className="ops-btn" onClick={() => void load()}>
+                重试
+              </button>
+              <Link href="/" className="ops-btn subtle">
+                返回首页
+              </Link>
+            </div>
+            <details style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted, #9c9a93)' }}>
+              <summary style={{ cursor: 'pointer', userSelect: 'none' }}>技术详情</summary>
+              <pre
+                style={{
+                  margin: '8px 0 0',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  fontSize: 11,
+                  background: 'var(--bg-secondary, #f5f5f0)',
+                  padding: '8px 12px',
+                  borderRadius: 6,
+                }}
+              >
+                {error}
+              </pre>
+            </details>
+          </div>
         </div>
       ) : null}
       {!isOnline ? (

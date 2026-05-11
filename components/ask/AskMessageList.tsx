@@ -42,6 +42,15 @@ export function AskMessageList({
     return lastAnswer ? isAskFailureMessage(lastAnswer.text) : false;
   })();
 
+  // Find the last user question (for retry functionality)
+  const lastUserQuestion = (() => {
+    const msgs = history ?? [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === 'user') return msgs[i].text;
+    }
+    return null;
+  })();
+
   return (
     <div className="ask-messages" ref={messagesRef}>
       <div className="ask-stream">
@@ -97,7 +106,45 @@ export function AskMessageList({
                           通常是模型 API
                           或服务端配置暂时不可用。你可以检查设置里的模型配置，或者稍后重新提问。
                         </p>
-                        {failureDetail && <pre className="ask-failure-detail">{failureDetail}</pre>}
+                        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                          {userQuestion && (
+                            <button
+                              type="button"
+                              className="ask-reset-btn"
+                              disabled={loading}
+                              onClick={() => void onSendSuggestion(userQuestion)}
+                              style={{
+                                background: 'var(--accent, #c96442)',
+                                color: '#fff',
+                                border: 'none',
+                              }}
+                            >
+                              重新提问
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="ask-reset-btn"
+                            onClick={() => void onRestart()}
+                          >
+                            新对话
+                          </button>
+                        </div>
+                        {failureDetail && (
+                          <details style={{ marginTop: 10 }}>
+                            <summary
+                              style={{
+                                cursor: 'pointer',
+                                fontSize: 12,
+                                color: 'var(--text-muted, #9c9a93)',
+                                userSelect: 'none',
+                              }}
+                            >
+                              查看详情
+                            </summary>
+                            <pre className="ask-failure-detail">{failureDetail}</pre>
+                          </details>
+                        )}
                       </div>
                     ) : (
                       <>
@@ -235,8 +282,13 @@ function isAskFailureMessage(text: string) {
 }
 
 function getAskFailureDetail(text: string) {
+  // Extract raw detail from <!-- error-detail:... --> or <!-- raw:... --> comment
+  const detailMatch = text.match(/<!-- (?:error-detail|raw):([\s\S]*?) -->/);
+  if (detailMatch) return detailMatch[1].trim();
+  // Fallback: strip the known wrappers
   return text
     .replace(/^\*\*问答失败\*\*:\s*/u, '')
     .replace(/\n\n请检查 API 配置[\s\S]*$/u, '')
+    .replace(/\n\n<!-- [\s\S]*$/u, '')
     .trim();
 }

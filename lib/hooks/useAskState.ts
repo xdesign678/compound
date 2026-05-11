@@ -5,7 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { nanoid } from 'nanoid';
 import { getDb } from '@/lib/db';
 import { LRUMap } from '@/lib/lru-cache';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, friendlyErrorMessage } from '@/lib/store';
 import { askWikiStream, archiveAnswerAsConcept } from '@/lib/api-client';
 import { pickStableConceptTitles } from '@/lib/ask-suggestions';
 import {
@@ -447,11 +447,14 @@ export function useAskState() {
         };
         await db.askHistory.put(aiMsg);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const raw = err instanceof Error ? err.message : String(err);
+        const friendly = friendlyErrorMessage(raw);
+        // Store structured error: friendly message for display, raw detail in hidden block
+        const rawEncoded = raw.slice(0, 300).replace(/-->/g, '— >');
         await db.askHistory.put({
           id: 'm-' + nanoid(8),
           role: 'ai',
-          text: `**问答失败**: ${msg.slice(0, 160)}\n\n请检查 API 配置,或确认 Wiki 中已有内容可供查询。`,
+          text: `**问答失败**: ${friendly}\n\n请检查 API 配置，或确认 Wiki 中已有内容可供查询。\n\n<!-- error-detail:${rawEncoded} -->`,
           at: Date.now(),
         });
       } finally {

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
 import { withRequestId } from '@/lib/trace-client';
+import { friendlyErrorMessage } from '@/lib/store';
 import HeroStatus from './sync/HeroStatus';
 import PhaseTimeline from './sync/PhaseTimeline';
 import ActiveFilesList from './sync/ActiveFilesList';
@@ -222,7 +223,77 @@ function DashboardInner() {
         </div>
       </div>
 
-      {loadError ? <div className="sync-v2-alert">{loadError}</div> : null}
+      {loadError ? (
+        <div
+          role="alert"
+          style={{
+            display: 'flex',
+            gap: 16,
+            padding: '20px 24px',
+            borderRadius: 10,
+            background: 'var(--ops-state-error-soft, #fef2f2)',
+            border: '1px solid var(--ops-state-error, #dc2626)',
+            borderLeftWidth: 4,
+            fontFamily: 'var(--font-reading, Lora, serif)',
+            lineHeight: 1.6,
+          }}
+        >
+          <div style={{ fontSize: 24, flexShrink: 0 }} aria-hidden="true">
+            {loadError.includes('401') || loadError.toLowerCase().includes('unauthorized')
+              ? '🔒'
+              : loadError.includes('403')
+                ? '🚫'
+                : loadError.includes('500')
+                  ? '💥'
+                  : '⚠️'}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: 16,
+                fontWeight: 600,
+                color: 'var(--text-primary, #141413)',
+              }}
+            >
+              {loadError.includes('401') || loadError.toLowerCase().includes('unauthorized')
+                ? '需要认证'
+                : loadError.includes('403')
+                  ? '权限不足'
+                  : loadError.includes('500')
+                    ? '服务器出了点问题'
+                    : '无法加载同步面板'}
+            </h3>
+            <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary, #5e5d59)' }}>
+              {friendlyErrorMessage(loadError)}
+            </p>
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              <button type="button" className="sync-v2-btn" onClick={() => void load()}>
+                重试
+              </button>
+              <Link href="/" className="sync-v2-btn sync-v2-btn-ghost">
+                返回首页
+              </Link>
+            </div>
+            <details style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted, #9c9a93)' }}>
+              <summary style={{ cursor: 'pointer', userSelect: 'none' }}>技术详情</summary>
+              <pre
+                style={{
+                  margin: '8px 0 0',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  fontSize: 11,
+                  background: 'var(--bg-secondary, #f5f5f0)',
+                  padding: '8px 12px',
+                  borderRadius: 6,
+                }}
+              >
+                {loadError}
+              </pre>
+            </details>
+          </div>
+        </div>
+      ) : null}
 
       {!dashboard && !loadError ? (
         <div
