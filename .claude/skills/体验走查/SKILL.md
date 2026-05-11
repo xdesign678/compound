@@ -1,9 +1,9 @@
 ---
-name: ux-walkthrough
-description: Use when the user wants to review, audit, or improve the user experience of a web app or PWA — includes full-page walkthrough, heuristic evaluation, edge-state testing, mobile/responsive checking, or CSS design-system compliance. Also trigger when user says 走查, 体验审计, UX review, 体验走查, Nielsen评估, 启发式评估, or asks to find UX issues across pages.
+name: 体验走查
+description: Use when the user wants to review, audit, or improve the user experience of a web app or PWA — includes full-page walkthrough, heuristic evaluation, edge-state testing, mobile/responsive checking, or CSS design-system compliance. Also trigger when user says 体验走查, 走查, 体验审计, UX review, UX audit, Nielsen评估, 启发式评估, or asks to find UX issues across pages.
 ---
 
-# UX Walkthrough
+# 体验走查
 
 Playwright 实机走查 + Nielsen 启发式评估，系统化发现 Web/PWA 应用的体验问题。
 
