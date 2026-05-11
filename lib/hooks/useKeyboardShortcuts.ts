@@ -83,7 +83,8 @@ export function useKeyboardShortcuts() {
       if (e.key === '?') {
         e.preventDefault();
         store.openCommandPalette();
-        window.dispatchEvent(new CustomEvent('command-palette-help'));
+        // Delay event so CommandPalette mounts & effects run before dispatch
+        setTimeout(() => window.dispatchEvent(new CustomEvent('command-palette-help')), 0);
         return;
       }
 

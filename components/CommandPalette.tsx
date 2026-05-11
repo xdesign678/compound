@@ -248,11 +248,12 @@ export function CommandPalette() {
 
   // Clamp selectedIndex when items change (prevents out-of-bounds from useDeferredValue lag)
   const clampedIndex = items.length === 0 ? 0 : Math.min(selectedIndex, items.length - 1);
-  if (clampedIndex !== selectedIndex) {
-    // Sync state if clamping was needed (will re-render)
-    // Using a ref check to avoid infinite loop
-    setSelectedIndex(clampedIndex);
-  }
+
+  useEffect(() => {
+    if (clampedIndex !== selectedIndex) {
+      setSelectedIndex(clampedIndex);
+    }
+  }, [clampedIndex, selectedIndex]);
 
   const activeItemId =
     !showHelp && items[clampedIndex] ? `cmd-item-${items[clampedIndex].id}` : undefined;
