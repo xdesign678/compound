@@ -10,7 +10,6 @@ import { DESKTOP_LAYOUT_MIN_WIDTH, isDesktopWidth } from '@/lib/responsive';
 
 import { Header } from '@/components/Header';
 import { TabBar } from '@/components/TabBar';
-import { Toast } from '@/components/Toast';
 import { CommandPalette } from '@/components/CommandPalette';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { TaskCenter } from '@/components/TaskCenter';
@@ -333,7 +332,6 @@ export default function Page() {
   if (isDesktop) {
     return (
       <div className="app-shell desktop-shell">
-        <Toast />
         <CommandPalette />
         <OfflineBanner />
 
@@ -449,7 +447,6 @@ export default function Page() {
 
   return (
     <div className="app-shell">
-      <Toast />
       <CommandPalette />
       <OfflineBanner />
       <SwipeBack />

@@ -5,6 +5,7 @@ import path from 'node:path';
 import './globals.css';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { ViewportObserver } from '@/components/ViewportObserver';
+import { GlobalToast } from '@/components/GlobalToast';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -174,6 +175,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         {children}
+        <GlobalToast />
         <ViewportObserver />
         <ServiceWorkerRegister />
       </body>

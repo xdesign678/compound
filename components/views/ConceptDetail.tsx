@@ -151,10 +151,14 @@ export function ConceptDetail({ id }: { id: string }) {
   const showToast = useAppStore((s) => s.showToast);
   const showErrorToast = useAppStore((s) => s.showErrorToast);
   const freshIds = useAppStore((s) => s.freshConceptIds);
+  const back = useAppStore((s) => s.back);
   const [, setHydrating] = useState(false);
   const [hydrateError, setHydrateError] = useState<string | null>(null);
   const [hydrateAttempt, setHydrateAttempt] = useState(0);
   const [retrying, setRetrying] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [flagging, setFlagging] = useState(false);
   const [versionDialog, setVersionDialog] = useState<VersionDialogState>({
     open: false,
     loading: false,
@@ -382,6 +386,46 @@ export function ConceptDetail({ id }: { id: string }) {
     }
   }, [concept?.title, creatingFromSelection, id, selectionPopover.text, showToast, showErrorToast]);
 
+  const handleFlagConcept = useCallback(async () => {
+    if (flagging) return;
+    setFlagging(true);
+    try {
+      const db = getDb();
+      await db.activity.add({
+        id: `flag-${id}-${Date.now()}`,
+        type: 'lint',
+        title: `标记有误：${concept?.title ?? id}`,
+        details: `用户手动标记概念 "${concept?.title ?? id}" 需要审核`,
+        status: 'success',
+        relatedConceptIds: [id],
+        at: Date.now(),
+      });
+      showToast('已标记为有误，将在下次同步时审核');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '标记失败';
+      showErrorToast(message);
+    } finally {
+      setFlagging(false);
+    }
+  }, [concept?.title, flagging, id, showToast, showErrorToast]);
+
+  const handleDeleteConcept = useCallback(async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      const db = getDb();
+      await db.concepts.delete(id);
+      showToast('概念已删除');
+      back();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '删除失败';
+      showErrorToast(message);
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  }, [back, deleting, id, showToast, showErrorToast]);
+
   useEffect(() => {
     if (!concept || hasFullBody) return;
     void hydrateBody();
@@ -444,6 +488,9 @@ export function ConceptDetail({ id }: { id: string }) {
       <div className="detail-kicker-row">
         <div className="detail-kicker">概念页</div>
         {isFresh && <div className="detail-status">刚更新</div>}
+        <button className="detail-close-btn" type="button" onClick={back} aria-label="关闭详情面板">
+          ×
+        </button>
       </div>
       <h1>{concept.title}</h1>
       <div className="detail-meta">
@@ -664,6 +711,62 @@ export function ConceptDetail({ id }: { id: string }) {
             ) : (
               <p className="modal-desc">这版还没有详细改动记录。</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="detail-section detail-actions">
+        <button
+          className="modal-btn detail-action-btn"
+          type="button"
+          disabled={flagging}
+          onClick={handleFlagConcept}
+        >
+          {flagging ? '标记中...' : '⚠ 标记有误'}
+        </button>
+        <button
+          className="modal-btn detail-action-btn detail-action-danger"
+          type="button"
+          onClick={() => setShowDeleteConfirm(true)}
+        >
+          删除概念
+        </button>
+      </div>
+
+      {/* Delete confirmation dialog */}
+      {showDeleteConfirm && (
+        <div className="modal-overlay visible" onClick={() => setShowDeleteConfirm(false)}>
+          <div
+            className="modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-confirm-title"
+            aria-describedby="delete-confirm-desc"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-handle" />
+            <h3 id="delete-confirm-title">确认删除</h3>
+            <p id="delete-confirm-desc" className="modal-desc">
+              确定要删除「{concept.title}」吗？此操作不可撤销。
+            </p>
+            <div className="modal-actions">
+              <button
+                className="modal-btn"
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                取消
+              </button>
+              <button
+                className="modal-btn modal-btn-danger"
+                type="button"
+                disabled={deleting}
+                onClick={handleDeleteConcept}
+              >
+                {deleting ? '删除中...' : '确认删除'}
+              </button>
+            </div>
           </div>
         </div>
       )}
