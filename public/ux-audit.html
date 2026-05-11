@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>Compound UX 审计报告</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Noto+Serif+SC:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #faf9f5;
+      --bg-secondary: #f0eee6;
+      --bg-card: #fefdfb;
+      --bg-muted: #f5f4f0;
+      --text-primary: #141413;
+      --text-body: rgba(20, 20, 19, 0.86);
+      --text-secondary: #5e5d59;
+      --text-tertiary: #77746c;
+      --brand-clay: #c86645;
+      --brand-soft: #f4dfd4;
+      --critical: #b85b44;
+      --critical-bg: #fdf0ec;
+      --major: #c4834a;
+      --major-bg: #fdf5ed;
+      --minor: #8a7a3a;
+      --minor-bg: #faf7ed;
+      --enhance: #466c8c;
+      --enhance-bg: #eef4f8;
+      --success: #5a856a;
+      --success-bg: #eef5f1;
+      --border-light: rgba(20, 20, 19, 0.08);
+      --border-default: rgba(20, 20, 19, 0.14);
+      --shadow-sm: 0 1px 3px rgba(20, 20, 19, 0.08);
+      --shadow-md: 0 8px 28px rgba(20, 20, 19, 0.08);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+      --font-reading: Lora, Georgia, "Noto Serif SC", serif;
+      --font-mono: "SFMono-Regular", Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; background: var(--bg-primary); }
+
+    body {
+      margin: 0;
+      background: var(--bg-primary);
+      color: var(--text-body);
+      font-family: var(--font-reading);
+      font-size: 17px;
+      line-height: 1.72;
+    }
+
+    a {
+      color: inherit;
+      text-decoration-color: rgba(200, 102, 69, 0.5);
+      text-underline-offset: 3px;
+    }
+
+    ::selection {
+      background: rgba(204, 120, 92, 0.35);
+      color: inherit;
+    }
+
+    .page {
+      width: min(100%, 980px);
+      margin: 0 auto;
+      padding: max(22px, env(safe-area-inset-top)) 20px max(56px, env(safe-area-inset-bottom));
+    }
+
+    /* Hero */
+    .hero { padding: 40px 0 28px; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      margin: 0 0 14px; color: var(--brand-clay);
+      font-family: var(--font-sans); font-size: 12px; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .eyebrow::before {
+      width: 8px; height: 8px; border-radius: 999px;
+      background: var(--brand-clay); content: "";
+    }
+
+    h1, h2, h3 {
+      color: var(--text-primary); font-family: var(--font-sans); line-height: 1.18;
+    }
+    h1 { max-width: 820px; margin: 0; font-size: clamp(2rem, 7vw, 3.2rem); font-weight: 760; }
+    h2 { margin: 52px 0 18px; font-size: clamp(1.4rem, 4.5vw, 2rem); font-weight: 720; }
+    h3 { margin: 0 0 8px; font-size: 1.05rem; font-weight: 700; }
+    .lead {
+      max-width: 760px; margin: 16px 0 0;
+      color: var(--text-secondary); font-size: clamp(1rem, 3.5vw, 1.15rem); line-height: 1.68;
+    }
+
+    /* Sticky Nav */
+    .sticky-nav {
+      position: sticky; top: 0; z-index: 5;
+      display: flex; gap: 8px; overflow-x: auto;
+      margin: 0 -20px 28px; padding: 10px 20px;
+      border-block: 1px solid var(--border-light);
+      background: rgba(250, 249, 245, 0.94);
+      backdrop-filter: blur(16px);
+      font-family: var(--font-sans); scrollbar-width: none;
+    }
+    .sticky-nav::-webkit-scrollbar { display: none; }
+    .sticky-nav a {
+      flex: 0 0 auto; min-height: 38px; padding: 8px 14px;
+      border: 1px solid var(--border-light); border-radius: 999px;
+      background: var(--bg-card); color: var(--text-secondary);
+      font-size: 13px; font-weight: 500; text-decoration: none;
+      box-shadow: var(--shadow-sm); white-space: nowrap;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .sticky-nav a:hover { background: var(--bg-muted); color: var(--text-primary); }
+
+    .section { scroll-margin-top: 74px; margin: 24px 0; }
+
+    /* Summary box */
+    .summary-box {
+      padding: 22px; border: 1px solid rgba(200, 102, 69, 0.18);
+      border-radius: var(--radius-md); background: var(--bg-card);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Stat cards */
+    .stat-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0 0;
+    }
+    .stat-card {
+      padding: 16px 14px; border-radius: var(--radius-md);
+      text-align: center; font-family: var(--font-sans);
+    }
+    .stat-card.critical { background: var(--critical-bg); color: var(--critical); }
+    .stat-card.major { background: var(--major-bg); color: var(--major); }
+    .stat-card.minor { background: var(--minor-bg); color: var(--minor); }
+    .stat-card.enhance { background: var(--enhance-bg); color: var(--enhance); }
+    .stat-num { font-size: 2rem; font-weight: 800; line-height: 1; }
+    .stat-label { font-size: 12px; font-weight: 600; margin-top: 4px; letter-spacing: 0.02em; }
+
+    /* Issue cards */
+    .issue-list { display: grid; gap: 14px; margin: 16px 0 0; }
+    .issue {
+      padding: 18px 20px; border-radius: var(--radius-md);
+      background: var(--bg-card); border: 1px solid var(--border-light);
+      box-shadow: var(--shadow-sm);
+    }
+    .issue-header {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-family: var(--font-sans); margin-bottom: 10px;
+    }
+    .issue-badge {
+      flex-shrink: 0; padding: 3px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .issue-badge.critical { background: var(--critical); color: #fff; }
+    .issue-badge.major { background: var(--major); color: #fff; }
+    .issue-badge.minor { background: var(--minor-bg); color: var(--minor); border: 1px solid rgba(138,122,58,0.2); }
+    .issue-badge.enhance { background: var(--enhance-bg); color: var(--enhance); border: 1px solid rgba(70,108,140,0.2); }
+    .issue-title {
+      font-family: var(--font-sans); font-size: 15px; font-weight: 700;
+      color: var(--text-primary); line-height: 1.3;
+    }
+    .issue-meta {
+      display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0;
+      font-family: var(--font-sans); font-size: 12px;
+    }
+    .meta-tag {
+      padding: 2px 8px; border-radius: 999px; font-weight: 500;
+      background: var(--bg-muted); color: var(--text-secondary);
+    }
+    .issue-body { margin: 10px 0 0; font-size: 15.5px; line-height: 1.65; }
+    .issue-body strong { color: var(--text-primary); }
+    .issue-fix {
+      margin: 10px 0 0; padding: 10px 14px;
+      border-radius: var(--radius-sm); background: var(--bg-muted);
+      font-family: var(--font-sans); font-size: 13.5px; line-height: 1.55;
+      color: var(--text-secondary);
+    }
+    .issue-fix::before {
+      content: "💡 修复建议："; font-weight: 600; color: var(--text-primary);
+    }
+
+    /* Top 5 */
+    .top5 { counter-reset: topitem; margin: 16px 0 0; }
+    .top5-item {
+      display: flex; gap: 14px; padding: 14px 0;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .top5-item:last-child { border-bottom: 0; }
+    .top5-num {
+      flex-shrink: 0; width: 32px; height: 32px; display: flex;
+      align-items: center; justify-content: center;
+      border-radius: 999px; background: var(--brand-clay); color: #fff;
+      font-family: var(--font-sans); font-size: 14px; font-weight: 700;
+    }
+    .top5-text { font-size: 15.5px; line-height: 1.6; }
+    .top5-text strong { color: var(--text-primary); }
+
+    /* Highlights */
+    .highlight-grid { display: grid; gap: 10px; margin: 16px 0 0; }
+    .highlight-item {
+      display: flex; gap: 10px; padding: 12px 16px; align-items: flex-start;
+      border-radius: var(--radius-sm); background: var(--success-bg);
+      font-family: var(--font-sans); font-size: 14px; line-height: 1.5;
+      color: var(--success);
+    }
+    .highlight-icon { flex-shrink: 0; font-size: 16px; }
+
+    /* CSS audit section */
+    .phase-list { display: grid; gap: 10px; margin: 16px 0 0; counter-reset: phase; }
+    .phase-item {
+      display: flex; gap: 14px; padding: 14px 18px;
+      border-radius: var(--radius-sm); background: var(--bg-card);
+      border: 1px solid var(--border-light); box-shadow: var(--shadow-sm);
+      font-family: var(--font-sans); font-size: 14px; line-height: 1.5;
+    }
+    .phase-num {
+      counter-increment: phase; flex-shrink: 0;
+      width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+      border-radius: 999px; background: var(--bg-muted); color: var(--text-secondary);
+      font-size: 12px; font-weight: 700;
+    }
+    .phase-num::after { content: counter(phase); }
+    .phase-label { font-weight: 600; color: var(--text-primary); }
+
+    /* Route plan */
+    .route-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0 0; }
+    .route-card {
+      padding: 18px 16px; border-radius: var(--radius-md);
+      background: var(--bg-card); border: 1px solid var(--border-light);
+      box-shadow: var(--shadow-sm);
+    }
+    .route-wave {
+      font-family: var(--font-sans); font-size: 12px; font-weight: 700;
+      letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 6px;
+    }
+    .route-wave.w1 { color: var(--critical); }
+    .route-wave.w2 { color: var(--major); }
+    .route-wave.w3 { color: var(--enhance); }
+    .route-title { font-family: var(--font-sans); font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+    .route-body { font-size: 14px; line-height: 1.55; }
+
+    /* Conformance table */
+    .table-wrap {
+      overflow-x: auto; margin: 16px 0 0;
+      border: 1px solid var(--border-light); border-radius: var(--radius-md);
+      background: var(--bg-card);
+    }
+    table {
+      width: 100%; min-width: 540px; border-collapse: collapse;
+      font-family: var(--font-sans); font-size: 13px; line-height: 1.45;
+    }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
+    th { color: var(--text-primary); background: var(--bg-muted); font-weight: 720; }
+    tr:last-child td { border-bottom: 0; }
+    .check { color: var(--success); } .warn { color: var(--major); }
+
+    code {
+      padding: 2px 5px; border-radius: 6px; background: var(--bg-muted);
+      color: var(--text-primary); font-family: var(--font-mono); font-size: 0.88em;
+    }
+
+    .footer {
+      margin-top: 54px; padding-top: 18px; border-top: 1px solid var(--border-light);
+      color: var(--text-tertiary); font-family: var(--font-sans); font-size: 13px; line-height: 1.55;
+    }
+
+    @media (max-width: 680px) {
+      body { font-size: 16.5px; }
+      .page { padding-inline: 14px; }
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .route-grid { grid-template-columns: 1fr; }
+      .sticky-nav { margin: 0 -14px 28px; padding: 10px 14px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <p class="eyebrow">UX Audit Report</p>
+      <h1>Compound 知识 Wiki<br>全面体验审计</h1>
+      <p class="lead">Playwright 实机走查 + Nielsen 10 大启发式评估，覆盖桌面端、平板和手机 PWA，5 个专项 Agent 并行审计，共发现 54 条体验问题与优化机会。</p>
+    </header>
+
+    <nav class="sticky-nav" aria-label="页面导航">
+      <a href="#overview">审计概览</a>
+      <a href="#top5">Top 5 改进</a>
+      <a href="#critical">Critical 问题</a>
+      <a href="#major">Major 问题</a>
+      <a href="#minor">Minor 问题</a>
+      <a href="#css">CSS 重构</a>
+      <a href="#conformance">设计对照</a>
+      <a href="#highlights">做得好的</a>
+      <a href="#next">修复路线</a>
+    </nav>
+
+    <!-- Overview -->
+    <section id="overview" class="section">
+      <h2>审计概览</h2>
+      <div class="summary-box">
+        <p style="margin:0;font-size:16px;line-height:1.65;">Compound 已是一个<strong>设计基础扎实的产品</strong>（温暖文学风、书籍品质排版、完整离线架构），但在<strong>导航稳定性</strong>和 <strong>CSS 设计系统落地</strong>两个方面存在系统性问题。7 个 Critical 中有 4 个是导航/交互 Bug，3 个是 CSS 架构债；修复后产品体验将从"好用"跃升至"优秀"。</p>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-card critical"><div class="stat-num">7</div><div class="stat-label">Critical</div></div>
+        <div class="stat-card major"><div class="stat-num">19</div><div class="stat-label">Major</div></div>
+        <div class="stat-card minor"><div class="stat-num">18</div><div class="stat-label">Minor</div></div>
+        <div class="stat-card enhance"><div class="stat-num">10</div><div class="stat-label">Enhancement</div></div>
+      </div>
+      <div style="margin-top:16px;font-family:var(--font-sans);font-size:13px;color:var(--text-tertiary);display:flex;flex-wrap:wrap;gap:12px;">
+        <span>审计日期：2026-05-11</span>
+        <span>视口：Desktop 1280 / Tablet 768 / Mobile 375</span>
+        <span>参考标准：Claude Design Style</span>
+      </div>
+    </section>
+
+    <!-- Top 5 -->
+    <section id="top5" class="section">
+      <h2>Top 5 最有影响力的改进</h2>
+      <div class="top5">
+        <div class="top5-item">
+          <div class="top5-num">1</div>
+          <div class="top5-text"><strong>修复首页自动重定向 + Escape 键跳转 bug</strong> — 用户无法稳定停留在首页，加载 2-3 秒后跳转到 /sync 或 /recap，严重破坏基础使用体验。</div>
+        </div>
+        <div class="top5-item">
+          <div class="top5-num">2</div>
+          <div class="top5-text"><strong>消除 CSS !important 战争</strong> — globals.css 中 111 处 !important 覆盖，是技术债的核心。同一个元素的 border-radius 被 4 处声明覆盖 (18px→8px→12px→16px)。</div>
+        </div>
+        <div class="top5-item">
+          <div class="top5-num">3</div>
+          <div class="top5-text"><strong>Token 化 CSS 硬编码值</strong> — font-size token 使用率仅 12%（465 处声明中只有 57 处用了变量），spacing 仅 1.2%。设计系统形同虚设。</div>
+        </div>
+        <div class="top5-item">
+          <div class="top5-num">4</div>
+          <div class="top5-text"><strong>统一认证错误处理</strong> — /sync 和 /review 页面暴露原始英文 "Unauthorized" 文本，无样式、无说明、无操作指引。</div>
+        </div>
+        <div class="top5-item">
+          <div class="top5-num">5</div>
+          <div class="top5-text"><strong>修复移动端搜索按钮</strong> — 点击搜索图标后跳转到 /offline（离线页面）而非打开搜索，核心功能路径错误。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Critical -->
+    <section id="critical" class="section">
+      <h2>Critical 问题 <span style="font-weight:400;font-size:0.7em;color:var(--critical);">7 条</span></h2>
+      <div class="issue-list">
+        <div class="issue">
+          <div class="issue-header">
+            <span class="issue-badge critical">Critical</span>
+            <span class="issue-title">C-01 首页频繁自动重定向到其他页面</span>
+          </div>
+          <div class="issue-meta"><span class="meta-tag">H3 用户控制</span><span class="meta-tag">H7 灵活高效</span><span class="meta-tag">Desktop + Mobile</span></div>
+          <div class="issue-body">加载首页 2-3 秒后自动跳转到 <code>/sync</code>、<code>/recap</code> 或 <code>/review</code>，行为不确定且不可预测，用户完全无法稳定停留在首页。</div>
+          <div class="issue-fix">去除自动导航逻辑，或限定为仅在明确条件下触发并给用户选择权。文件：<code>app/page.tsx</code></div>
+        </div>
+
+        <div class="issue">
+          <div class="issue-header">
+            <span class="issue-badge critical">Critical</span>
+            <span class="issue-title">C-02 Escape 键触发意外跳转到 /sync</span>
+          </div>
+          <div class="issue-meta"><span class="meta-tag">H3 用户控制</span><span class="meta-tag">Desktop</span></div>
+          <div class="issue-body">在首页按 Escape 键（无论场景），页面会意外导航到 <code>/sync</code>。用户频繁丢失当前工作上下文。</div>
+          <div class="issue-fix">检查 Escape 键事件处理链，确保只在有弹窗/overlay 打开时触发关闭。文件：<code>lib/hooks/useKeyboardShortcuts.ts</code></div>
+        </div>
+
+        <div class="issue">
+          <div class="issue-header">
+            <span class="issue-badge critical">Critical</span>
+            <span class="issue-title">C-03 移动端搜索按钮跳转到离线页面</span>
+          </div>
+          <div class="issue-meta"><span class="meta-tag">H2 现实匹配</span><span class="meta-tag">Mobile 375</span></div>
+          <div class="issue-body">点击 Header 搜索图标后跳转到 <code>/offline</code>（离线模式页面），而非打开搜索面板。核心功能路径完全错误。</div>
+          <div class="issue-fix">修复搜索按钮的 onClick 事件绑定。文件：<code>components/Header.tsx</code></div>
+        </div>
+
+        <div class="issue">
+          <div class="issue-header">
+            <span class="issue-badge critical">Critical</span>
+            <span class="issue-title">C-04 /sync 和 /review 暴露原始 "Unauthorized"</span>
+          </div>
+          <div class="issue-meta"><span class="meta-tag">H1 状态可见</span><span class="meta-tag">H9 错误恢复</span><span class="meta-tag">Desktop + Mobile</span></div>
+          <div class="issue-body">页面顶部显示裸露的英文 "Unauthorized" 文本，无样式、无说明、无操作指引。代码中已有 <code>ERROR_MESSAGES['401']</code> 映射但未接入。</div>
+          <div class="issue-fix">使用已有的错误映射显示中文消息，添加"前往设置配置 Token"操作按钮。文件：<code>app/sync/page.tsx</code></div>
+        </div>
+
+        <div class="issue">
+          <div class="issue-header">
+            <span class="issue-badge critical">Critical</span>
+            <span class="issue-title">C-05 CSS !important 样式战争 (111 处)</span>
+          </div>
+          <div class="issue-meta"><span class="meta-tag">H4 一致性</span><span class="meta-tag">globals.css</span></div>
+          <div class="issue-body">"CLAUDE DESIGN SYSTEM OVERRIDES" 段使用 111 个 <code>!important</code> 强制覆盖前面的样式。<code>.msg-user</code> 的 border-radius 被 4 处声明覆盖 (18px→8px→12px→16px)。</div>
+          <div class="issue-fix">将 OVERRIDES 段的值合并回组件原始定义，使用 CSS <code>@layer</code> 替代。目标：!important < 15 处。</div>
+        </div>
+
+        <div class="issue">
+          <div class="issue-header">
+            <span class="issue-badge critical">Critical</span>
+            <span class="issue-title">C-06 font-size Token 使用率仅 12%</span>
+          </div>
+          <div class="issue-meta"><span class="meta-tag">H4 一致性</span><span class="meta-tag">globals.css 全文</span></div>
+          <div class="issue-body">定义了完整的 8 级 type-scale token，但 465 处 font-size 声明中仅 57 处使用了 token。其余 408 处硬编码像素值，含 42 处不在 scale 上的半像素值。</div>
+          <div class="issue-fix">批量替换 12px→<code>var(--text-xs)</code>、13px→<code>var(--text-sm)</code>、15px→<code>var(--text-base)</code>。</div>
+        </div>
+
+        <div class="issue">
+          <div class="issue-header">
+            <span class="issue-badge critical">Critical</span>
+            <span class="issue-title">C-07 Cmd+K 命令面板触发 JS 崩溃</span>
+          </div>
+          <div class="issue-meta"><span class="meta-tag">H5 错误预防</span><span class="meta-tag">Desktop</span></div>
+          <div class="issue-body">从概念详情页返回后按 <code>Meta+k</code> 触发全页面错误 "页面遇到问题"，显示 Sentry 错误。快捷键不应导致页面崩溃。</div>
+          <div class="issue-fix">检查命令面板初始化逻辑的 null safety。文件：<code>components/CommandPalette.tsx</code></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Major -->
+    <section id="major" class="section">
+      <h2>Major 问题 <span style="font-weight:400;font-size:0.7em;color:var(--major);">19 条</span></h2>
+      <div class="issue-list">
+        <div class="issue">
+          <div class="issue-header"><span class="issue-badge major">Major</span><span class="issue-title">M-01 "活动" Tab 名称与内容严重不匹配</span></div>
+          <div class="issue-body">侧边栏点击"活动"→跳到 /review；tabpanel 显示"健康检查"。"活动"让用户联想到 activity feed，但实际是运维功能。</div>
+        </div>
+        <div class="issue">
+          <div class="issue-header"><span class="issue-badge major">Major</span><span class="issue-title">M-02 Tab 切换状态不一致</span></div>
+          <div class="issue-body">首次点击"问答"后页面仍显示 Wiki 内容；<code>selected</code>/<code>active</code> 属性同时出现在两个 Tab 上。</div>
+        </div>
+        <div class="issue">
+          <div class="issue-header"><span class="issue-badge major">Major</span><span class="issue-title">M-03 桌面端导航布局不一致</span></div>
+          <div class="issue-body">Wiki Tab 用侧边栏导航，资料/问答 Tab 切换到底部 Tab 栏+顶部 Header，用户需记忆不同页面的导航位置。</div>
+        </div>
+        <div class="issue">
+          <div class="issue-header"><span class="issue-badge major">Major</span><span class="issue-title">M-04 搜索输入触发页面崩溃</span></div>
+          <div class="issue-body">某些情况下在搜索框输入文字会触发 JavaScript 错误，显示错误边界。搜索是核心功能路径。</div>
+        </div>
+        <div class="issue">
+          <div class="issue-header"><span class="issue-badge major">Major</span><span class="issue-title">M-05 概念详情页 URL 直链 404</span></div>
+          <div class="issue-body">某些交互路径产生 <code>/concept/c-seed-2</code> URL，但该路由不存在。概念无法通过 URL 分享。</div>
+        </div>
+        <div class="issue">
+          <div class="issue-header"><span class="issue-badge major">Major</span><span class="issue-title">M-06 ~ M-10 CSS Token 使用率极低</span></div>
+          <div class="issue-body">Spacing token 使用率 1.2%（859 处中仅 10 处用变量）；114+ 处硬编码 rgba 颜色值；border-radius 11+ 种值碎片化；10+ 种媒体查询断点；79 处硬编码 transition。</div>
+        </div>
+        <div class="issue">
+          <div class="issue-header"><span class="issue-badge major">Major</span><span class="issue-title">M-11 视口切换时 Tab 状态丢失</span></div>
+          <div class="issue-body">Desktop 选中 Wiki Tab 后 resize 到 768px，页面变成"问答"Tab。Tab 状态不跟随布局持久化。</div>
+        </div>
+        <div class="issue">
+          <div class="issue-header"><span class="issue-badge major">Major</span><span class="issue-title">M-12 Toast 系统在主页未挂载</span></div>
+          <div class="issue-body">DOM 中无 toast 容器元素，操作反馈可能在某些路由上丢失。</div>
+        </div>
+        <div class="issue">
+          <div class="issue-header"><span class="issue-badge major">Major</span><span class="issue-title">SM-01 概念详情无编辑/删除操作</span></div>
+          <div class="issue-body">AI 生成的概念用户完全无法修改或删除，缺乏用户控制感。</div>
+        </div>
+        <div class="issue">
+          <div class="issue-header"><span class="issue-badge major">Major</span><span class="issue-title">SM-02 桌面分栏无关闭按钮</span></div>
+          <div class="issue-body">概念详情分栏显示没有 X 按钮，新用户不知道如何关闭。</div>
+        </div>
+        <div class="issue">
+          <div class="issue-header"><span class="issue-badge major">Major</span><span class="issue-title">SM-03 ~ SM-07 错误恢复 + 移动端补充</span></div>
+          <div class="issue-body">问答失败缺"重试"按钮；无自定义 404 页面；Ask 暴露 JSON 错误；分类横向滚动无视觉暗示；Recap 返回按钮仅 36px。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Minor -->
+    <section id="minor" class="section">
+      <h2>Minor 问题 + Enhancement <span style="font-weight:400;font-size:0.7em;color:var(--text-tertiary);">28 条</span></h2>
+      <div class="issue-list">
+        <div class="issue">
+          <div class="issue-header"><span class="issue-badge minor">Minor ×18</span><span class="issue-title">小问题汇总</span></div>
+          <div class="issue-body" style="font-size:14.5px;">
+            Motion token 冗余别名 · 17 个 dead CSS 变量 · /sync 和 /review 独立 token 体系 · 术语不一致（"活动"="同步控制台"）· letter-spacing 不统一(0.22em vs 0.08em) · "COMPOUND OPS" 品牌变体 · 暗色模式 Tab 对比度不足 · <code>/</code> 快捷键未绑搜索 · <code>?</code> 快捷键异常 · 侧边栏图标无 tooltip · 链接辨识度低 · box-shadow 硬编码 30+ 处 · z-index 部分硬编码 · "+"按钮视觉 40px · filter-chip 36px · 搜索无取消按钮 · 暗色模式 tabbar 边界 · 搜索无结果缺引导
+          </div>
+        </div>
+        <div class="issue">
+          <div class="issue-header"><span class="issue-badge enhance">Enhancement ×10</span><span class="issue-title">优化建议汇总</span></div>
+          <div class="issue-body" style="font-size:14.5px;">
+            命令面板添加"最近访问" · 概念详情添加面包屑 · 批量操作功能 · Recap 进度指示 · 连接状态指示器 · letter-spacing token 化 · SwipeBack 扩展到 recap · Tab 触觉反馈 · 阅读进度条 · PWA 安装引导
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CSS Refactor -->
+    <section id="css" class="section">
+      <h2>CSS 设计系统重构路线</h2>
+      <p>globals.css 共 13,124 行、1,656 个选择器。设计 Token 定义完整但执行率极低——这是所有视觉一致性问题的根因。</p>
+      <div class="phase-list">
+        <div class="phase-item">
+          <div class="phase-num"></div>
+          <div><span class="phase-label">消除技术债</span> — 合并 DESIGN SYSTEM OVERRIDES 段（111 个 !important），使用 CSS @layer 替代；清理 17 个未用变量</div>
+        </div>
+        <div class="phase-item">
+          <div class="phase-num"></div>
+          <div><span class="phase-label">font-size Token 化</span> — 408 处硬编码 → var(--text-*)，目标使用率 80%+</div>
+        </div>
+        <div class="phase-item">
+          <div class="phase-num"></div>
+          <div><span class="phase-label">spacing Token 化</span> — 849 处硬编码 → var(--space-*)，目标使用率 60%+</div>
+        </div>
+        <div class="phase-item">
+          <div class="phase-num"></div>
+          <div><span class="phase-label">border-radius 统一</span> — 11 种值 → 4 级 token（4/8/12/999px），7.5px 统一为 8px</div>
+        </div>
+        <div class="phase-item">
+          <div class="phase-num"></div>
+          <div><span class="phase-label">rgba 颜色提取</span> — 114+ 处硬编码 → 语义 CSS 变量，暗色模式自动适配</div>
+        </div>
+        <div class="phase-item">
+          <div class="phase-num"></div>
+          <div><span class="phase-label">断点/transition/shadow 标准化</span> — 统一为 3-4 级标准断点；motion token 替换；shadow scale 扩展</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Claude Design Style Conformance -->
+    <section id="conformance" class="section">
+      <h2>Claude Design Style 对照</h2>
+      <p>以 Anthropic 设计系统为参考标准，检查当前实现的符合度。</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>标准项</th><th>状态</th><th>备注</th></tr></thead>
+          <tbody>
+            <tr><td>背景色 #faf9f5</td><td class="check">&#10003; 一致</td><td></td></tr>
+            <tr><td>暗色背景 #1a1a18</td><td class="check">&#10003; 一致</td><td>温暖深色调</td></tr>
+            <tr><td>品牌色 clay #d97757</td><td class="check">&#10003; 正确使用</td><td></td></tr>
+            <tr><td>按钮圆角 7.5px</td><td class="warn">&#9888; 混用</td><td>7.5px 和 8px 混用（55 处 8px vs 24 处 7.5px）</td></tr>
+            <tr><td>Serif 阅读体 (Lora)</td><td class="check">&#10003; 一致</td><td>Lora + Noto Serif SC</td></tr>
+            <tr><td>Sans UI 体 (Inter)</td><td class="check">&#10003; 一致</td><td></td></tr>
+            <tr><td>Body line-height 1.6</td><td class="check">&#10003; 可接受</td><td>使用 1.7，略宽但适合中文</td></tr>
+            <tr><td>内容 max-width ~640px</td><td class="check">&#10003; 一致</td><td></td></tr>
+            <tr><td>链接 color:inherit + underline</td><td class="warn">&#9888; 辨识度不足</td><td>需增加下划线对比度</td></tr>
+            <tr><td>过渡 150-300ms</td><td class="warn">&#9888; 大量硬编码</td><td>79 处未用 motion token</td></tr>
+            <tr><td>无渐变/无纯黑白</td><td class="check">&#10003; 遵循</td><td></td></tr>
+            <tr><td>::selection clay 色</td><td class="check">&#10003; 一致</td><td></td></tr>
+            <tr><td>prefers-reduced-motion</td><td class="check">&#10003; 完善</td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Highlights -->
+    <section id="highlights" class="section">
+      <h2>做得好的方面</h2>
+      <p>这些是审计中确认的亮点——已经达到或超过行业标准的设计实践。</p>
+      <div class="highlight-grid">
+        <div class="highlight-item"><span class="highlight-icon">&#10003;</span>暗色模式品牌一致性优秀——温暖深色调 + clay 亮度提升</div>
+        <div class="highlight-item"><span class="highlight-icon">&#10003;</span>概念详情页信息层次清晰——标题→元数据→正文(serif)→引用→相关概念→版本历史</div>
+        <div class="highlight-item"><span class="highlight-icon">&#10003;</span>双向链接知识图谱导航——概念与资料的关联清晰可见</div>
+        <div class="highlight-item"><span class="highlight-icon">&#10003;</span>完整离线架构——OfflineBanner + 任务队列暂停 + 自动重连同步</div>
+        <div class="highlight-item"><span class="highlight-icon">&#10003;</span>SwipeBack 手势 + PullToRefresh + 触觉反馈——原生感出色</div>
+        <div class="highlight-item"><span class="highlight-icon">&#10003;</span>底部 Tab 触摸目标 75x65px，远超 Apple HIG 44px 标准</div>
+        <div class="highlight-item"><span class="highlight-icon">&#10003;</span>ViewportObserver 实时跟踪软键盘高度——输入体验优秀</div>
+        <div class="highlight-item"><span class="highlight-icon">&#10003;</span>Safe Area 在 13 处引用——iPhone 刘海/Home 指示器全覆盖</div>
+        <div class="highlight-item"><span class="highlight-icon">&#10003;</span>全局 ErrorBoundary 设计周到——重试+回首页+复制 Sentry ID</div>
+        <div class="highlight-item"><span class="highlight-icon">&#10003;</span>IngestModal 错误处理是全应用最佳范例——重试+复制日志+关闭</div>
+      </div>
+    </section>
+
+    <!-- Next Steps -->
+    <section id="next" class="section">
+      <h2>推荐修复路线</h2>
+      <div class="route-grid">
+        <div class="route-card">
+          <div class="route-wave w1">第一波 · 修 Bug</div>
+          <div class="route-title">导航与交互稳定性</div>
+          <div class="route-body" style="font-size:14px;line-height:1.55;">
+            首页重定向 · Escape 跳转 · 搜索按钮 · Cmd+K 崩溃 · Unauthorized 友好化 · 搜索崩溃
+          </div>
+        </div>
+        <div class="route-card">
+          <div class="route-wave w2">第二波 · 补体验</div>
+          <div class="route-title">功能完善与错误恢复</div>
+          <div class="route-body" style="font-size:14px;line-height:1.55;">
+            概念编辑/删除 · 分栏关闭按钮 · 问答重试 · 自定义 404 · Toast 挂载 · 触摸目标
+          </div>
+        </div>
+        <div class="route-card">
+          <div class="route-wave w3">第三波 · 重构 CSS</div>
+          <div class="route-title">设计系统落地</div>
+          <div class="route-body" style="font-size:14px;line-height:1.55;">
+            消除 !important · font-size Token 化 · spacing Token 化 · 断点统一 · 圆角/颜色/动效标准化
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>Compound UX 审计报告 · 2026-05-11 · 5 Agent Team (Playwright + Nielsen) · 完整 Markdown 版：<code>docs/ux-audit-report.md</code></p>
+    </footer>
+  </main>
+</body>
+</html>
