@@ -488,7 +488,27 @@ export function ConceptDetail({ id }: { id: string }) {
       <div className="detail-kicker-row">
         <div className="detail-kicker">概念页</div>
         {isFresh && <div className="detail-status">刚更新</div>}
-        <button className="detail-close-btn" type="button" onClick={back} aria-label="关闭详情面板">
+        <button
+          className="detail-close-btn"
+          type="button"
+          onClick={back}
+          aria-label="关闭详情面板"
+          style={{
+            marginLeft: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 28,
+            height: 28,
+            border: 'none',
+            background: 'transparent',
+            borderRadius: 6,
+            fontSize: 18,
+            lineHeight: 1,
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+          }}
+        >
           ×
         </button>
       </div>
@@ -716,19 +736,29 @@ export function ConceptDetail({ id }: { id: string }) {
       )}
 
       {/* Action buttons */}
-      <div className="detail-section detail-actions">
+      <div
+        className="detail-section"
+        style={{
+          display: 'flex',
+          gap: 10,
+          paddingTop: 16,
+          borderTop: '1px solid var(--border-subtle)',
+        }}
+      >
         <button
-          className="modal-btn detail-action-btn"
+          className="modal-btn"
           type="button"
           disabled={flagging}
           onClick={handleFlagConcept}
+          style={{ flex: 1, width: 'auto', padding: '10px 16px', fontSize: 14 }}
         >
           {flagging ? '标记中...' : '⚠ 标记有误'}
         </button>
         <button
-          className="modal-btn detail-action-btn detail-action-danger"
+          className="modal-btn danger"
           type="button"
           onClick={() => setShowDeleteConfirm(true)}
+          style={{ flex: 1, width: 'auto', padding: '10px 16px', fontSize: 14 }}
         >
           删除概念
         </button>
@@ -750,19 +780,21 @@ export function ConceptDetail({ id }: { id: string }) {
             <p id="delete-confirm-desc" className="modal-desc">
               确定要删除「{concept.title}」吗？此操作不可撤销。
             </p>
-            <div className="modal-actions">
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button
                 className="modal-btn"
                 type="button"
                 onClick={() => setShowDeleteConfirm(false)}
+                style={{ flex: 1 }}
               >
                 取消
               </button>
               <button
-                className="modal-btn modal-btn-danger"
+                className="modal-btn danger"
                 type="button"
                 disabled={deleting}
                 onClick={handleDeleteConcept}
+                style={{ flex: 1 }}
               >
                 {deleting ? '删除中...' : '确认删除'}
               </button>
