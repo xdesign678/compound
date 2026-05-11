@@ -246,8 +246,16 @@ export function CommandPalette() {
       .map(({ item }) => item);
   }, [deferredQuery, recentItems, concepts, sources]);
 
+  // Clamp selectedIndex when items change (prevents out-of-bounds from useDeferredValue lag)
+  const clampedIndex = items.length === 0 ? 0 : Math.min(selectedIndex, items.length - 1);
+  if (clampedIndex !== selectedIndex) {
+    // Sync state if clamping was needed (will re-render)
+    // Using a ref check to avoid infinite loop
+    setSelectedIndex(clampedIndex);
+  }
+
   const activeItemId =
-    !showHelp && items[selectedIndex] ? `cmd-item-${items[selectedIndex].id}` : undefined;
+    !showHelp && items[clampedIndex] ? `cmd-item-${items[clampedIndex].id}` : undefined;
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -261,18 +269,30 @@ export function CommandPalette() {
     }
   }, [open]);
 
+  // Listen for help mode event from keyboard shortcuts
+  useEffect(() => {
+    function onHelpEvent() {
+      setShowHelp(true);
+    }
+    window.addEventListener('command-palette-help', onHelpEvent);
+    return () => window.removeEventListener('command-palette-help', onHelpEvent);
+  }, []);
+
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
-    const selected = el.children[selectedIndex] as HTMLElement | undefined;
+    const idx = items.length === 0 ? -1 : Math.min(selectedIndex, items.length - 1);
+    if (idx < 0) return;
+    const selected = el.children[idx] as HTMLElement | undefined;
     selected?.scrollIntoView({ block: 'nearest' });
-  }, [selectedIndex]);
+  }, [selectedIndex, items.length]);
 
   function handleClose() {
     closeCommandPalette();
   }
 
   function handleSelect(index: number) {
+    if (index < 0 || index >= items.length) return;
     const item = items[index];
     if (item) item.action();
   }
@@ -285,7 +305,7 @@ export function CommandPalette() {
     }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex((i) => Math.min(i + 1, Math.max(0, items.length - 1)));
+      setSelectedIndex((i) => (items.length === 0 ? 0 : Math.min(i + 1, items.length - 1)));
       return;
     }
     if (e.key === 'ArrowUp') {
@@ -300,12 +320,14 @@ export function CommandPalette() {
     }
     if (e.key === 'End') {
       e.preventDefault();
-      setSelectedIndex(Math.max(0, items.length - 1));
+      setSelectedIndex(items.length === 0 ? 0 : items.length - 1);
       return;
     }
     if (e.key === 'Enter') {
       e.preventDefault();
-      handleSelect(selectedIndex);
+      if (items.length > 0) {
+        handleSelect(Math.min(selectedIndex, items.length - 1));
+      }
       return;
     }
   }
@@ -368,11 +390,11 @@ export function CommandPalette() {
               <button
                 key={item.id}
                 id={`cmd-item-${item.id}`}
-                className={`cmd-item${i === selectedIndex ? ' selected' : ''}`}
+                className={`cmd-item${i === clampedIndex ? ' selected' : ''}`}
                 onClick={() => handleSelect(i)}
                 onMouseEnter={() => setSelectedIndex(i)}
                 role="option"
-                aria-selected={i === selectedIndex}
+                aria-selected={i === clampedIndex}
                 type="button"
               >
                 <span className="cmd-item-icon" aria-hidden="true">

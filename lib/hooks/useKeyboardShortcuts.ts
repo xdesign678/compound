@@ -26,7 +26,32 @@ export function useKeyboardShortcuts() {
       // Don't intercept when typing in inputs (except Escape)
       if (isInput && e.key !== 'Escape') return;
 
-      // Don't intercept when any modal/drawer is open
+      // Escape: layered close (command palette > modals > detail > no-op)
+      if (e.key === 'Escape') {
+        if (store.commandPaletteOpen) {
+          e.preventDefault();
+          store.closeCommandPalette();
+        } else if (store.modalOpen) {
+          e.preventDefault();
+          store.closeModal();
+        } else if (store.settingsOpen) {
+          e.preventDefault();
+          store.closeSettings();
+        } else if (store.obsidianImportOpen) {
+          e.preventDefault();
+          store.closeObsidianImport();
+        } else if (store.githubSyncOpen) {
+          e.preventDefault();
+          store.closeGithubSync();
+        } else if (store.detail) {
+          e.preventDefault();
+          store.back();
+        }
+        // If nothing is open, do nothing
+        return;
+      }
+
+      // Don't intercept other keys when any modal/drawer is open
       if (
         store.modalOpen ||
         store.settingsOpen ||
@@ -34,20 +59,6 @@ export function useKeyboardShortcuts() {
         store.githubSyncOpen ||
         store.commandPaletteOpen
       ) {
-        // Escape closes the command palette
-        if (e.key === 'Escape' && store.commandPaletteOpen) {
-          e.preventDefault();
-          store.closeCommandPalette();
-        }
-        return;
-      }
-
-      // Escape: go back or close detail
-      if (e.key === 'Escape') {
-        if (store.detail) {
-          e.preventDefault();
-          store.back();
-        }
         return;
       }
 
@@ -72,6 +83,7 @@ export function useKeyboardShortcuts() {
       if (e.key === '?') {
         e.preventDefault();
         store.openCommandPalette();
+        window.dispatchEvent(new CustomEvent('command-palette-help'));
         return;
       }
 
