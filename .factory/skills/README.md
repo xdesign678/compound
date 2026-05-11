@@ -12,6 +12,7 @@ frontmatter declaring `name` and `description`.
 | [`add-node-test`](./add-node-test/SKILL.md)             | Write a `lib/*.test.ts` test file picked up by `scripts/run-node-tests.mjs`.                 |
 | [`measure-build`](./measure-build/SKILL.md)             | Use `npm run build:measure` to record build duration, cache hits, and bundle size.           |
 | [`server-db-migration`](./server-db-migration/SKILL.md) | Evolve the `better-sqlite3` schema in `lib/server-db.ts` / `lib/wiki-db.ts` safely.          |
+| [`体验走查`](./体验走查/SKILL.md)                       | Playwright 实机走查 + Nielsen 启发式评估，系统化发现 Web/PWA 的体验问题。                    |
 
 ## How an agent uses these skills
 
