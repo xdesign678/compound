@@ -15,18 +15,19 @@ return structured findings; the parent consolidates the final report.
 
 ## Inputs you must expect from the parent prompt
 
-1. **Dimension** — one of `A` / `B` / `C` / `D` / `E` (see mapping below).
-2. **Pages** — list of routes to test (e.g. `/`, `/library`, `/ask`).
-3. **Viewports** — typically `Desktop 1280x800`, `Mobile 375x812`, optionally
+1. **Mode** — `quick` or `deep`. Determines which execution loop to run.
+2. **Dimension** — one of `A` / `B` / `C` / `D` / `E` (see mapping below).
+3. **Pages** — list of routes to test (e.g. `/`, `/library`, `/ask`).
+4. **Viewports** — typically `Desktop 1280x800`, `Mobile 375x812`, optionally
    `Tablet 768x1024`.
-4. **States** — `normal`, `empty`, `loading`, `error` (subset is fine).
-5. **Dev server URL** — base URL (e.g. `http://localhost:3000`).
-6. **Reference files** — absolute paths to
+5. **States** — `normal`, `empty`, `loading`, `error` (subset is fine).
+6. **Dev server URL** — base URL (e.g. `http://localhost:3000`).
+7. **Reference files** — absolute paths to
    `.factory/skills/体验走查/references/nielsen-checklist.md` and
    `.factory/skills/体验走查/references/finding-template.md`.
 
 If any of the above is missing, return an explicit `blocked` status describing
-what you need; do not guess.
+what you need; do not guess. If `Mode` is missing, default to `quick`.
 
 ## Dimension mapping
 
@@ -55,16 +56,43 @@ record them under `out_of_scope_notes`; do not expand scope.
 
 ## Workflow per assignment
 
-1. Read the two reference files passed in to load the checklist and finding
-   template.
-2. For each `(page × viewport × state)` cell:
-   1. Navigate to the page.
-   2. Resize viewport.
-   3. Trigger target state if applicable (empty/loading/error).
-   4. Snapshot accessibility tree and take a screenshot.
-   5. Run the dimension checklist line by line.
-   6. Record findings with severity per the template.
-3. Close the browser instance.
+Always start by reading the two reference files passed in (checklist + finding
+template). Then branch by `Mode`:
+
+### Mode = `quick` (intuitive walkthrough, Playwright-driven)
+
+```
+对于每个页面:
+  对于每个视口 (Desktop, Mobile):
+    1. Navigate to the page.
+    2. Resize viewport.
+    3. Snapshot accessibility tree and take a screenshot.
+    4. Operate like a user (click / type / switch / back).
+       Also trigger each requested State (empty/loading/error) if reachable.
+    5. Record any "doesn't feel right" observation as a finding.
+    6. After recording, tag it with the matching Nielsen principle.
+```
+
+In `quick` mode, do NOT iterate over every checklist item; use the checklist
+as a mental prompt only.
+
+### Mode = `deep` (checklist-driven heuristic evaluation)
+
+```
+对于分配维度下的每条 Nielsen 原则:
+  对于 checklist 里的每个检查项:
+    对于每个页面 (× 视口 × 状态, if relevant):
+      1. Navigate / set viewport / trigger state.
+      2. Verify this specific checklist item.
+      3. Record ✅ / ⚠️ / ❌ / N/A with one-line reason
+         in `compliance_matrix`.
+      4. If ❌ or notable ⚠️, also emit a full finding card.
+```
+
+In `deep` mode, you MUST emit a `compliance_matrix` (see Output contract).
+Coverage of every checklist item is required, even if the result is `N/A`.
+
+Close the browser instance before returning.
 
 ## Output contract
 
@@ -72,6 +100,7 @@ Return exactly one JSON code block as your final message. No prose around it.
 
 ```json
 {
+  "mode": "quick",
   "dimension": "A",
   "pages_covered": ["/", "/library", "/ask"],
   "viewports_covered": ["desktop", "mobile"],
@@ -85,15 +114,50 @@ Return exactly one JSON code block as your final message. No prose around it.
       "title": "...",
       "evidence_screenshot": "tmp/ux-audit/A/library-mobile-loading.png",
       "description": "...",
+      "nielsen_principle": "H1",
       "suggested_fix": "..."
     }
   ],
+  "compliance_matrix": null,
   "out_of_scope_notes": [
     {"page": "/ask", "note": "..."}
   ],
   "status": "ok"
 }
 ```
+
+In `mode: deep`, `compliance_matrix` MUST be present and shaped like:
+
+```json
+"compliance_matrix": {
+  "checklist_items": [
+    {"principle": "H1", "id": "H1.1", "label": "加载状态可见"},
+    {"principle": "H1", "id": "H1.2", "label": "同步状态有时间戳"}
+  ],
+  "rows": [
+    {
+      "page": "/library",
+      "results": {
+        "H1.1": {"status": "ok",      "note": ""},
+        "H1.2": {"status": "warning", "note": "无时间戳"}
+      }
+    },
+    {
+      "page": "/ask",
+      "results": {
+        "H1.1": {"status": "fail", "note": "无 skeleton"},
+        "H1.2": {"status": "na",   "note": ""}
+      }
+    }
+  ]
+}
+```
+
+`status` values inside the matrix: `ok` / `warning` / `fail` / `na`. Every
+checklist item that maps to your dimension must appear, even when all rows
+are `na`.
+
+In `mode: quick`, set `"compliance_matrix": null`.
 
 Use `"status": "blocked"` plus a top-level `"blocker"` field if you cannot
 proceed (e.g. dev server unreachable, references missing).
