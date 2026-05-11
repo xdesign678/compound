@@ -1,0 +1,4 @@
+interface:
+  display_name: "Output Webpage"
+  short_description: "Turn plans into mobile-friendly HTML pages"
+  default_prompt: "Use $output-webpage 把这个计划整理成中文、适合手机阅读的网页，推送后查找并验证 Zeabur 预览地址。"
