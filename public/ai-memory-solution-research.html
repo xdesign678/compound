@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light" />
+    <title>Compound AI 长期记忆方案研究</title>
+    <style>
+      :root {
+        --bg-primary: #faf9f5;
+        --bg-secondary: #f0eee6;
+        --bg-card: #fefdfb;
+        --bg-muted: #f5f4f0;
+        --text-primary: #141413;
+        --text-body: rgba(20, 20, 19, 0.86);
+        --text-secondary: #5e5d59;
+        --text-tertiary: #77746c;
+        --brand-clay: #c86645;
+        --brand-soft: #f4dfd4;
+        --success: #2f7d57;
+        --warning: #9a5b16;
+        --info: #466c8c;
+        --border-light: rgba(20, 20, 19, 0.08);
+        --border-default: rgba(20, 20, 19, 0.14);
+        --shadow-sm: 0 1px 3px rgba(20, 20, 19, 0.08);
+        --shadow-md: 0 8px 28px rgba(20, 20, 19, 0.08);
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --font-sans:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          'Noto Sans SC', sans-serif;
+        --font-reading: Lora, Georgia, 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
+        --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+        background: var(--bg-primary);
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg-primary);
+        color: var(--text-body);
+        font-family: var(--font-reading);
+        font-size: 17px;
+        line-height: 1.72;
+        letter-spacing: 0;
+      }
+
+      a {
+        color: inherit;
+        text-decoration-color: rgba(200, 102, 69, 0.5);
+        text-underline-offset: 3px;
+      }
+
+      .page {
+        width: min(100%, 1040px);
+        margin: 0 auto;
+        padding: max(22px, env(safe-area-inset-top)) 16px max(56px, env(safe-area-inset-bottom));
+      }
+
+      .hero {
+        padding: 34px 0 22px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 14px;
+        color: var(--brand-clay);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--brand-clay);
+        content: '';
+      }
+
+      h1,
+      h2,
+      h3 {
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        line-height: 1.18;
+        letter-spacing: 0;
+      }
+
+      h1 {
+        max-width: 840px;
+        margin: 0;
+        font-size: clamp(2.15rem, 8vw, 4rem);
+        font-weight: 760;
+      }
+
+      h2 {
+        margin: 48px 0 16px;
+        font-size: clamp(1.55rem, 5vw, 2.35rem);
+        font-weight: 720;
+      }
+
+      h3 {
+        margin: 0 0 10px;
+        font-size: 1.24rem;
+        font-weight: 700;
+      }
+
+      p {
+        margin: 0 0 16px;
+      }
+
+      code {
+        padding: 2px 5px;
+        border-radius: 4px;
+        background: var(--bg-muted);
+        font-family: var(--font-mono);
+        font-size: 0.88em;
+      }
+
+      .lead {
+        max-width: 780px;
+        margin: 18px 0 0;
+        color: var(--text-secondary);
+        font-size: clamp(1.05rem, 3.8vw, 1.24rem);
+        line-height: 1.68;
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 20px;
+        font-family: var(--font-sans);
+      }
+
+      .meta span {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 5px 10px;
+        border: 1px solid var(--border-light);
+        border-radius: 999px;
+        background: var(--bg-card);
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .sticky-nav {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        margin: 0 -16px 26px;
+        padding: 10px 16px;
+        border-block: 1px solid var(--border-light);
+        background: rgba(250, 249, 245, 0.94);
+        backdrop-filter: blur(16px);
+        font-family: var(--font-sans);
+        scrollbar-width: none;
+      }
+
+      .sticky-nav::-webkit-scrollbar {
+        display: none;
+      }
+
+      .sticky-nav a {
+        flex: 0 0 auto;
+        min-height: 38px;
+        padding: 8px 12px;
+        border: 1px solid var(--border-light);
+        border-radius: 999px;
+        background: var(--bg-card);
+        color: var(--text-secondary);
+        font-size: 13px;
+        text-decoration: none;
+        box-shadow: var(--shadow-sm);
+      }
+
+      .section {
+        scroll-margin-top: 74px;
+        margin: 22px 0;
+      }
+
+      .summary {
+        padding: 20px;
+        border: 1px solid rgba(200, 102, 69, 0.18);
+        border-radius: var(--radius-md);
+        background: var(--bg-card);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .summary strong {
+        color: var(--text-primary);
+      }
+
+      .grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      .cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .card {
+        min-width: 0;
+        padding: 16px;
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        background: var(--bg-card);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .card p:last-child {
+        margin-bottom: 0;
+      }
+
+      .card-tag {
+        display: inline-flex;
+        margin-bottom: 10px;
+        color: var(--brand-clay);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 14px 0 0;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 5px 10px;
+        border: 1px solid var(--border-light);
+        border-radius: 999px;
+        background: var(--bg-muted);
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        margin: 14px 0 0;
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        background: var(--bg-card);
+      }
+
+      table {
+        width: 100%;
+        min-width: 680px;
+        border-collapse: collapse;
+        font-family: var(--font-sans);
+        font-size: 14px;
+        line-height: 1.52;
+      }
+
+      th,
+      td {
+        padding: 13px 14px;
+        border-bottom: 1px solid var(--border-light);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--text-primary);
+        background: var(--bg-secondary);
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .step {
+        display: grid;
+        grid-template-columns: 34px 1fr;
+        gap: 12px;
+        align-items: start;
+        padding: 14px;
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        background: var(--bg-card);
+      }
+
+      .step-number {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--brand-soft);
+        color: var(--brand-clay);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .step h3 {
+        margin-top: 4px;
+      }
+
+      .quote {
+        margin: 18px 0;
+        padding: 18px 18px 18px 20px;
+        border-left: 4px solid var(--brand-clay);
+        border-radius: var(--radius-sm);
+        background: var(--bg-card);
+        color: var(--text-primary);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .source-list {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .source-list li {
+        padding: 12px 14px;
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-sm);
+        background: var(--bg-card);
+        font-family: var(--font-sans);
+        font-size: 14px;
+      }
+
+      .footer {
+        margin-top: 58px;
+        padding-top: 22px;
+        border-top: 1px solid var(--border-light);
+        color: var(--text-tertiary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+
+      @media (max-width: 760px) {
+        body {
+          font-size: 16px;
+        }
+
+        .page {
+          padding-inline: 14px;
+        }
+
+        .hero {
+          padding-top: 28px;
+        }
+
+        .cards {
+          grid-template-columns: 1fr;
+        }
+
+        .step {
+          grid-template-columns: 30px 1fr;
+          padding: 12px;
+        }
+
+        .step-number {
+          width: 30px;
+          height: 30px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <div class="eyebrow">Compound Research · 2026-05-08</div>
+        <h1>AI 长期记忆方案研究：Compound 不该照搬，而该组合吸收</h1>
+        <p class="lead">
+          这份研究把 GBrain、Microsoft GraphRAG、Graphify 和 LLM Wiki
+          放在一起比较，结论不是换成某个开源框架，而是明确 Compound 自己该走的路线：用可读 Wiki
+          做产品骨架，用轻量图谱增强检索，用 SQLite 和审查机制保证可追溯。
+        </p>
+        <div class="meta">
+          <span>来源：docs/ai-memory-solution-research.md</span>
+          <span>输出：中文网页</span>
+          <span>面向：产品与工程决策</span>
+        </div>
+      </header>
+
+      <nav class="sticky-nav" aria-label="页面导航">
+        <a href="#conclusion">一句话结论</a>
+        <a href="#why">为什么重要</a>
+        <a href="#references">参考项目</a>
+        <a href="#fit">适配判断</a>
+        <a href="#direction">升级方向</a>
+        <a href="#proof">怎么证明</a>
+        <a href="#risks">风险</a>
+        <a href="#next">下一步</a>
+      </nav>
+
+      <section id="conclusion" class="section">
+        <h2>一句话结论</h2>
+        <div class="summary">
+          <p>
+            <strong>Compound 最适合做成“私有、可审查、可导出的 LLM Wiki”。</strong>
+            它不需要把系统替换成 GBrain、GraphRAG 或
+            Graphify，而应该把这些方案里最适合自己的部分拆出来：LLM Wiki 负责产品形态，GraphRAG-lite
+            负责关系检索，GBrain 负责区分知识记忆和运行状态，Graphify 只作为开发维护辅助。
+          </p>
+          <div class="pill-row">
+            <span class="pill">LLM Wiki：产品模型</span>
+            <span class="pill">GraphRAG-lite：检索模型</span>
+            <span class="pill">GBrain：运营记忆边界</span>
+            <span class="pill">Graphify：代码地图辅助</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="why" class="section">
+        <h2>为什么重要</h2>
+        <div class="grid cards">
+          <article class="card">
+            <span class="card-tag">避免架构误判</span>
+            <h3>不是看到明星项目就迁移</h3>
+            <p>
+              星标数只能说明关注度，不能证明适合
+              Compound。研究明确指出：外部项目应该作为参考，而不是成为新依赖或重写理由。
+            </p>
+          </article>
+          <article class="card">
+            <span class="card-tag">保护核心资产</span>
+            <h3>知识必须可读、可追溯</h3>
+            <p>
+              Compound
+              的价值不只是“能回答问题”，而是把原始材料、概念页、证据、关系和版本历史连起来，让人可以审查和导出。
+            </p>
+          </article>
+          <article class="card">
+            <span class="card-tag">控制成本</span>
+            <h3>轻量图谱优先</h3>
+            <p>
+              完整 GraphRAG 对个人或小团队知识库偏重。更稳的路线是先做 typed
+              relations、证据片段、主题摘要和低置信度审查。
+            </p>
+          </article>
+          <article class="card">
+            <span class="card-tag">服务现有系统</span>
+            <h3>把已有 SQLite 基础用好</h3>
+            <p>
+              仓库已经有概念、来源、证据、关系、审查队列和模型运行记录。升级重点是闭环一致性，而不是另起炉灶。
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="references" class="section">
+        <h2>参考项目</h2>
+        <p>
+          研究对照了三个 GitHub 开源项目和一个知识库设计模式。下面的“借鉴点”是适合 Compound
+          吸收的部分，不等于要直接引入为运行时依赖。
+        </p>
+        <div class="table-wrap" role="region" aria-label="参考项目对照表" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th>参考</th>
+                <th>它解决什么</th>
+                <th>Compound 应该怎么用</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="https://github.com/garrytan/gbrain">GBrain</a></td>
+                <td>面向运行中 AI agent 的长期大脑，强调持久知识和运行状态的分离。</td>
+                <td>借鉴“知识记忆”和“运营记忆”分层，不作为产品运行时依赖。</td>
+              </tr>
+              <tr>
+                <td><a href="https://github.com/microsoft/graphrag">Microsoft GraphRAG</a></td>
+                <td>从非结构化文档中抽取实体、关系和社区摘要，增强跨文档综合问答。</td>
+                <td>先做 GraphRAG-lite：概念关系、证据、置信度、审查门禁和主题摘要。</td>
+              </tr>
+              <tr>
+                <td><a href="https://github.com/safishamsi/graphify">Graphify</a></td>
+                <td>把代码项目变成可查询知识图谱，帮助 coding agent 理解仓库结构。</td>
+                <td>只用于生成本地代码地图，帮助维护者和 agent 定位模块，不进入生产路径。</td>
+              </tr>
+              <tr>
+                <td>
+                  <a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f"
+                    >LLM Wiki</a
+                  >
+                </td>
+                <td>一种用 LLM 维护 Markdown 知识库的产品模式，强调原始材料和编译 Wiki 分层。</td>
+                <td>作为 Compound 的核心产品模型：人能读、Git 能版本化、系统能追溯来源。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="fit" class="section">
+        <h2>适配判断</h2>
+        <div class="quote">
+          Compound 的主线不是“换框架”，而是做一个混合体：私有 LLM Wiki + SQLite 证据链 + 轻量图谱 +
+          审查队列 + 可导出的 Markdown。
+        </div>
+        <div class="grid cards">
+          <article class="card">
+            <h3>已有基础</h3>
+            <p>
+              <code>sources</code> 保存原始材料，<code>concepts</code> 保存 Wiki 页面，<code
+                >concept_evidence</code
+              >
+              连接证据，<code>concept_relations</code> 是图谱层，Ask
+              检索已经有改写、混合召回、图扩展、重排和引用检查。
+            </p>
+          </article>
+          <article class="card">
+            <h3>主要缺口</h3>
+            <p>
+              研究认为缺口不是大架构，而是闭环：关系抽取要真正落地，概念改动要同步索引和版本，Wiki
+              搜索要使用服务端检索能力，Markdown 导入导出要支持 frontmatter 和 roundtrip。
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="direction" class="section">
+        <h2>升级方向</h2>
+        <div class="timeline">
+          <article class="step">
+            <div class="step-number">1</div>
+            <div>
+              <h3>数据一致性优先</h3>
+              <p>
+                所有概念改动都要同步更新概念表、版本表、全文索引、证据、关系和活动记录，避免 UI、Ask
+                检索和导出结果互相漂移。
+              </p>
+            </div>
+          </article>
+          <article class="step">
+            <div class="step-number">2</div>
+            <div>
+              <h3>GraphRAG-lite 关系层</h3>
+              <p>
+                抽取 <code>supports</code>、<code>depends_on</code>、<code>contradicts</code>、<code
+                  >same_as</code
+                >
+                等关系，并为每条边保留置信度、解释和证据。
+              </p>
+            </div>
+          </article>
+          <article class="step">
+            <div class="step-number">3</div>
+            <div>
+              <h3>审查门禁</h3>
+              <p>
+                低置信度关系不能悄悄改图。它们应该进入 review
+                queue，让人选择批准、拒绝或只标记已处理。
+              </p>
+            </div>
+          </article>
+          <article class="step">
+            <div class="step-number">4</div>
+            <div>
+              <h3>Markdown 往返</h3>
+              <p>
+                导出 <code>wiki/index.md</code>、<code>wiki/concepts/*.md</code>、<code
+                  >wiki/graph.json</code
+                >
+                和主题摘要；导入时按稳定 ID 回写版本并重建搜索与图谱。
+              </p>
+            </div>
+          </article>
+          <article class="step">
+            <div class="step-number">5</div>
+            <div>
+              <h3>检索和运营记忆升级</h3>
+              <p>
+                UI 搜索使用服务端 Wiki context
+                API；模型用量、成本、延迟、失败、同步和分析积压作为运营记忆展示出来。
+              </p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="proof" class="section">
+        <h2>怎么证明</h2>
+        <p>原研究记录了已落地的实现项，说明方向不是停留在概念层。</p>
+        <div class="grid cards">
+          <article class="card">
+            <h3>图谱和审查已经进入代码</h3>
+            <p>
+              typed relation 持久化、关系查询、关系抽取 worker、<code>relation_suggestion</code>
+              审批应用已经落到对应模块。
+            </p>
+          </article>
+          <article class="card">
+            <h3>Wiki 往返和搜索已补齐</h3>
+            <p>
+              Markdown export/import、topic summaries、Wiki UI search、Ask answer archiving、source
+              edit artifact recompilation 都已经进入现有 API 或界面路径。
+            </p>
+          </article>
+          <article class="card">
+            <h3>运营记忆开始可见</h3>
+            <p>
+              模型运行汇总接口和设置页模型用量/成本汇总已经存在，后续可以继续加按日成本图和异常分析。
+            </p>
+          </article>
+          <article class="card">
+            <h3>维护辅助已独立</h3>
+            <p>
+              本地代码地图生成命令是 <code>npm run docs:code-map</code>，符合 Graphify
+              思路，但不污染运行时架构。
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="risks" class="section">
+        <h2>风险和注意事项</h2>
+        <div class="grid cards">
+          <article class="card">
+            <h3>不要用星标数做决策</h3>
+            <p>
+              stars 是热度信号，不是架构适配度。真正要看的是 Compound
+              的数据模型、成本、可审查性和用户工作流。
+            </p>
+          </article>
+          <article class="card">
+            <h3>不要每次小改都跑完整 GraphRAG</h3>
+            <p>完整索引成本高，容易慢。应先做增量关系、局部主题摘要和重要来源回填。</p>
+          </article>
+          <article class="card">
+            <h3>不要让 Markdown 脱离 SQLite</h3>
+            <p>
+              除非设计完整 canonical-file 模式，否则 SQLite 仍应是可追溯事实层，Markdown
+              是可读与可导出的表现层。
+            </p>
+          </article>
+          <article class="card">
+            <h3>不要丢掉 provenance</h3>
+            <p>LLM Wiki 会压缩信息，压缩本身有损。每个结论都要能回到来源、证据和版本。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="next" class="section">
+        <h2>下一步</h2>
+        <div class="timeline">
+          <article class="step">
+            <div class="step-number">1</div>
+            <div>
+              <h3>补评测</h3>
+              <p>
+                为关系抽取和图扩展增加 evaluation
+                fixtures，避免图谱增强后出现“看起来更聪明、实际更不准”。
+              </p>
+            </div>
+          </article>
+          <article class="step">
+            <div class="step-number">2</div>
+            <div>
+              <h3>补可视化</h3>
+              <p>增加单个概念的一跳、二跳关系图，让用户能看见系统为什么把两个知识点连起来。</p>
+            </div>
+          </article>
+          <article class="step">
+            <div class="step-number">3</div>
+            <div>
+              <h3>补导入预览</h3>
+              <p>Markdown roundtrip 不应只有 API。导入前要让用户预览会新增、更新、冲突哪些概念。</p>
+            </div>
+          </article>
+          <article class="step">
+            <div class="step-number">4</div>
+            <div>
+              <h3>补成本和回填</h3>
+              <p>
+                当
+                <code>model_runs.cost_usd</code>
+                数据足够后加按日成本图；对重要来源执行重建索引和关系抽取回填。
+              </p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>原始参考</h2>
+        <ul class="source-list">
+          <li><a href="https://github.com/garrytan/gbrain">GBrain</a></li>
+          <li><a href="https://github.com/microsoft/graphrag">Microsoft GraphRAG</a></li>
+          <li><a href="https://github.com/safishamsi/graphify">Graphify</a></li>
+          <li>
+            <a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f"
+              >LLM Wiki gist</a
+            >
+          </li>
+          <li><code>docs/architecture.md</code></li>
+          <li><code>docs/code-map.md</code></li>
+        </ul>
+      </section>
+
+      <footer class="footer">
+        <p>
+          本页由
+          <code>docs/ai-memory-solution-research.md</code>
+          转写生成，保留研究结论和工程取向，面向手机和桌面阅读优化。
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>
