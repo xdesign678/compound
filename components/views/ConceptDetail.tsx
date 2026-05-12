@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { marked } from 'marked';
 import { getDb } from '@/lib/db';
 import { ensureConceptHydrated } from '@/lib/cloud-sync';
 import { hasConceptBodyContent } from '@/lib/content-status';
@@ -42,6 +43,11 @@ const MIN_SELECTION_CHARS = 2;
 const MAX_SELECTION_CHARS = 4_000;
 const POPOVER_ESTIMATED_WIDTH = 180;
 const POPOVER_ESTIMATED_HEIGHT = 44;
+
+interface ConceptTocItem {
+  level: number;
+  title: string;
+}
 
 function isUsefulRect(rect: DOMRect): boolean {
   return rect.width > 0 && rect.height > 0;
@@ -172,6 +178,10 @@ export function ConceptDetail({ id }: { id: string }) {
     text: '',
   });
   const [creatingFromSelection, setCreatingFromSelection] = useState(false);
+  const [tocOpen, setTocOpen] = useState(false);
+  const [tocVisible, setTocVisible] = useState(false);
+  const tocTitleId = useId();
+  const tocCloseTimerRef = useRef<number | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const bodyShellRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -192,6 +202,29 @@ export function ConceptDetail({ id }: { id: string }) {
     return items.filter(Boolean);
   }, [concept?.related.join(',')]);
   const hasFullBody = hasConceptBodyContent(concept);
+
+  // TOC derived from concept.body markdown headings
+  const tocItems = useMemo<ConceptTocItem[]>(() => {
+    if (!concept?.body) return [];
+    const tokens = marked.lexer(concept.body);
+    return tokens
+      .filter(
+        (token) =>
+          token.type === 'heading' &&
+          'depth' in token &&
+          typeof token.depth === 'number' &&
+          token.depth >= 1 &&
+          token.depth <= 4,
+      )
+      .map((token) => {
+        const text = 'text' in token && typeof token.text === 'string' ? token.text : '';
+        return {
+          level: (token as { depth: number }).depth,
+          title: text.trim(),
+        };
+      })
+      .filter((item) => Boolean(item.title));
+  }, [concept?.body]);
 
   const hydrateBody = useCallback(async () => {
     setHydrateError(null);
@@ -227,6 +260,76 @@ export function ConceptDetail({ id }: { id: string }) {
   const dismissSelectionPopover = useCallback(() => {
     setSelectionPopover((state) => (state.visible ? { ...state, visible: false } : state));
   }, []);
+
+  // TOC open / close
+  const openToc = useCallback(() => {
+    if (tocCloseTimerRef.current) {
+      window.clearTimeout(tocCloseTimerRef.current);
+      tocCloseTimerRef.current = null;
+    }
+    setTocOpen(true);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => setTocVisible(true));
+    });
+  }, []);
+
+  const closeToc = useCallback(() => {
+    setTocVisible(false);
+    if (tocCloseTimerRef.current) {
+      window.clearTimeout(tocCloseTimerRef.current);
+    }
+    tocCloseTimerRef.current = window.setTimeout(() => {
+      setTocOpen(false);
+      tocCloseTimerRef.current = null;
+    }, 260);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (tocCloseTimerRef.current) {
+        window.clearTimeout(tocCloseTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!tocOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeToc();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [closeToc, tocOpen]);
+
+  useEffect(() => {
+    const handleOpenToc = () => {
+      openToc();
+    };
+    window.addEventListener('compound:open-concept-toc', handleOpenToc);
+    return () => window.removeEventListener('compound:open-concept-toc', handleOpenToc);
+  }, [openToc]);
+
+  const handleTocJump = useCallback(
+    (title: string, level: number) => {
+      closeToc();
+      window.setTimeout(() => {
+        const shell = bodyShellRef.current;
+        if (!shell) return;
+        // Find heading elements matching the title text
+        const selector = `h${level}`;
+        const headings = shell.querySelectorAll<HTMLElement>(selector);
+        for (const heading of headings) {
+          if (heading.textContent?.trim() === title) {
+            heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            break;
+          }
+        }
+      }, 280);
+    },
+    [closeToc],
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -488,29 +591,6 @@ export function ConceptDetail({ id }: { id: string }) {
       <div className="detail-kicker-row">
         <div className="detail-kicker">概念页</div>
         {isFresh && <div className="detail-status">刚更新</div>}
-        <button
-          className="detail-close-btn"
-          type="button"
-          onClick={back}
-          aria-label="关闭详情面板"
-          style={{
-            marginLeft: 'auto',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 28,
-            height: 28,
-            border: 'none',
-            background: 'transparent',
-            borderRadius: 6,
-            fontSize: 18,
-            lineHeight: 1,
-            color: 'var(--text-secondary)',
-            cursor: 'pointer',
-          }}
-        >
-          ×
-        </button>
       </div>
       <h1>{concept.title}</h1>
       <div className="detail-meta">
@@ -731,6 +811,57 @@ export function ConceptDetail({ id }: { id: string }) {
             ) : (
               <p className="modal-desc">这版还没有详细改动记录。</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* TOC dialog */}
+      {tocOpen && (
+        <div
+          className={`modal-overlay source-toc-overlay${tocVisible ? ' visible' : ''}`}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={tocTitleId}
+          onClick={closeToc}
+        >
+          <div className="modal source-toc-dialog" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-handle" />
+            <div className="settings-hero source-toc-head">
+              <div>
+                <div className="settings-kicker source-toc-kicker">文章目录</div>
+                <h2 id={tocTitleId}>跳转到标题</h2>
+              </div>
+              <button
+                type="button"
+                className="settings-close-btn source-toc-close"
+                onClick={closeToc}
+                aria-label="关闭目录"
+              >
+                关闭
+              </button>
+            </div>
+
+            <div className="source-toc-list">
+              {tocItems.length > 0 ? (
+                tocItems.map((item, index) => (
+                  <button
+                    key={`${item.level}-${item.title}-${index}`}
+                    type="button"
+                    className="source-toc-item"
+                    style={{ paddingLeft: `${12 + Math.max(0, item.level - 1) * 14}px` }}
+                    onClick={() => handleTocJump(item.title, item.level)}
+                    aria-label={`跳转到标题：${item.title}`}
+                  >
+                    <span className="source-toc-item-marker" aria-hidden="true" />
+                    <span>{item.title}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="source-toc-empty" role="status" aria-live="polite">
+                  暂未识别到标题
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

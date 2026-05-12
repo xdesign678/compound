@@ -270,6 +270,8 @@ button {
 .detail-header {
   position: relative;
   z-index: 60;
+  padding: 6px 20px;
+  min-height: auto;
 }
 .detail-header-actions {
   margin-left: auto;

@@ -193,6 +193,9 @@ export function Header(props: HeaderProps) {
   const handleOpenSourceToc = () => {
     window.dispatchEvent(new CustomEvent('compound:open-source-toc'));
   };
+  const handleOpenConceptToc = () => {
+    window.dispatchEvent(new CustomEvent('compound:open-concept-toc'));
+  };
 
   if (detail) {
     return (
@@ -203,12 +206,12 @@ export function Header(props: HeaderProps) {
           </span>
           <span>{t('header.back')}</span>
         </button>
-        {detail.type === 'source' && (
+        {(detail.type === 'source' || detail.type === 'concept') && (
           <div className="header-actions detail-header-actions">
             <button
               type="button"
               className="icon-btn detail-toc-btn"
-              onClick={handleOpenSourceToc}
+              onClick={detail.type === 'source' ? handleOpenSourceToc : handleOpenConceptToc}
               aria-label={t('header.toc')}
               title={t('header.toc')}
             >
