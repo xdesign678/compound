@@ -1689,6 +1689,42 @@ button {
   flex-wrap: wrap;
   gap: var(--space-xs);
 }
+.source-hero-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.source-hero-tags-label {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.source-hero-tags-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+.source-hero-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border-light);
+}
+.source-hero-tag-chip::before {
+  content: '#';
+  margin-right: 2px;
+  opacity: 0.55;
+}
 .source-hero-divider {
   border: 0;
   height: 1px;
@@ -1817,6 +1853,66 @@ button {
 /* Hide the leading duplicate title (echo of page heading) */
 .source-editor-content .source-title-echo {
   display: none;
+}
+
+/* Block-canvas editor (single-canvas WYSIWYG) */
+.source-block-editor {
+  display: flex;
+  flex-direction: column;
+}
+.source-block {
+  padding: 4px 0;
+  transition: background 120ms;
+  border-radius: 6px;
+  cursor: text;
+}
+.source-block:hover .source-block-render {
+  background: rgba(0, 0, 0, 0.025);
+}
+.dark .source-block:hover .source-block-render {
+  background: rgba(255, 255, 255, 0.03);
+}
+.source-block-render {
+  font-family: var(--font-reading);
+  font-size: var(--prose-font-size, 16px);
+  line-height: var(--prose-line-height, 1.85);
+  color: var(--text-body);
+  border-radius: 6px;
+  padding: 2px 0;
+}
+.source-block-render > *:first-child {
+  margin-top: 0;
+}
+.source-block-render > *:last-child {
+  margin-bottom: 0;
+}
+.source-block.is-editing .source-block-render {
+  display: none;
+}
+.source-block-textarea {
+  display: block;
+  width: 100%;
+  min-height: 1.5em;
+  resize: none;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-body);
+  padding: 4px 8px;
+  font-family: var(--font-reading);
+  font-size: var(--prose-font-size, 16px);
+  line-height: var(--prose-line-height, 1.85);
+  letter-spacing: 0.005em;
+  white-space: pre-wrap;
+  outline: none;
+  caret-color: var(--brand-clay);
+  transition: box-shadow 120ms ease;
+}
+.dark .source-block-textarea {
+  background: rgba(255, 255, 255, 0.04);
+}
+.source-block-textarea:focus {
+  box-shadow: inset 2px 0 0 0 var(--brand-clay);
 }
 
 .source-toc-overlay {

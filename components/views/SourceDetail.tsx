@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { marked } from 'marked';
 import { getDb } from '@/lib/db';
 import { ensureSourceHydrated } from '@/lib/cloud-sync';
 import { updateSourceContent } from '@/lib/api-client';
@@ -11,6 +12,14 @@ import {
   applyMarkdownSelectionEdit,
   type MarkdownEditCommand,
 } from '@/lib/markdown-editor/selection';
+import {
+  type SourceBlock,
+  splitMarkdownBlocks,
+  joinBlocksToMarkdown,
+  extractFrontmatterTags,
+  replaceBlockRaw,
+} from '@/lib/markdown-editor/block-split';
+import { SourceBlockEditor } from './SourceBlockEditor';
 
 interface SourceTocItem {
   id: string;
@@ -30,60 +39,19 @@ function formatSourceHost(url: string): string {
   }
 }
 
-/**
- * 如果渲染出来的 HTML 第一个块级元素是 h1，且文本与页头标题一致，
- * 就给它打上 `.source-title-echo` class，由 CSS 隐藏（保留 DOM，
- * 不破坏 rawContent 数据完整性）。
- */
-function markLeadingTitleEcho(html: string, title: string): string {
-  if (typeof window === 'undefined') return html;
-  const trimmed = title.trim();
-  if (!trimmed) return html;
-  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
-  const root = doc.body.firstElementChild;
-  if (!root) return html;
-  const firstElement = root.firstElementChild;
-  if (firstElement && firstElement.tagName === 'H1') {
-    const text = (firstElement.textContent || '').trim();
-    if (text === trimmed) {
-      firstElement.classList.add('source-title-echo');
-    }
-  }
-  return root.innerHTML;
-}
-
-function collectSourceToc(root: HTMLElement): SourceTocItem[] {
-  return Array.from(root.querySelectorAll<HTMLHeadingElement>('h1, h2, h3, h4'))
-    .filter((heading) => !heading.classList.contains('source-title-echo'))
-    .map((heading, index) => {
-      const title = normalizeText(heading.textContent || '').trim();
-      if (!title) return null;
-      const id = heading.id || `source-heading-${index + 1}`;
-      heading.id = id;
-      return {
-        id,
-        level: Number(heading.tagName[1]),
-        title,
-      };
-    })
-    .filter((item): item is SourceTocItem => item !== null);
-}
-
 export function SourceDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
   const sourceTitleId = useId();
-  const editorId = useId();
   const saveStatusId = useId();
   const tocTitleId = useId();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
   const tocCloseTimerRef = useRef<number | null>(null);
-  const [draftContent, setDraftContent] = useState('');
+  const [blocks, setBlocks] = useState<SourceBlock[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [tocOpen, setTocOpen] = useState(false);
   const [tocVisible, setTocVisible] = useState(false);
-  const [tocItems, setTocItems] = useState<SourceTocItem[]>([]);
+  const textareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
+  const activeBlockIdRef = useRef<string | null>(null);
 
   const source = useLiveQuery(async () => getDb().sources.get(id), [id]);
   const generated = useLiveQuery(
@@ -91,6 +59,30 @@ export function SourceDetail({ id }: { id: string }) {
     [id],
   );
   const hasFullContent = Boolean(source?.rawContent.trim()) || source?.contentStatus === 'full';
+
+  // TOC derived from blocks (skip leading-title)
+  const tocItems = useMemo(() => {
+    return blocks
+      .filter(
+        (b) =>
+          b.type === 'heading' &&
+          b.kind !== 'leading-title' &&
+          b.depth &&
+          b.depth >= 1 &&
+          b.depth <= 4,
+      )
+      .map((b) => {
+        const tokens = marked.lexer(b.raw);
+        const first = tokens[0];
+        const text = first && 'text' in first && typeof first.text === 'string' ? first.text : '';
+        return {
+          id: b.id,
+          level: b.depth ?? 1,
+          title: normalizeText(text).trim(),
+        };
+      })
+      .filter((item): item is SourceTocItem => Boolean(item.title));
+  }, [blocks]);
 
   useEffect(() => {
     return () => {
@@ -112,22 +104,16 @@ export function SourceDetail({ id }: { id: string }) {
     void getDb().sources.update(id, { contentStatus: 'full' });
   }, [id, source]);
 
-  const refreshToc = useCallback(() => {
-    const preview = previewRef.current;
-    setTocItems(preview ? collectSourceToc(preview) : []);
-  }, []);
-
   const openToc = useCallback(() => {
     if (tocCloseTimerRef.current) {
       window.clearTimeout(tocCloseTimerRef.current);
       tocCloseTimerRef.current = null;
     }
-    refreshToc();
     setTocOpen(true);
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => setTocVisible(true));
     });
-  }, [refreshToc]);
+  }, []);
 
   const closeToc = useCallback(() => {
     setTocVisible(false);
@@ -141,16 +127,16 @@ export function SourceDetail({ id }: { id: string }) {
   }, []);
 
   useEffect(() => {
-    setDraftContent('');
+    setBlocks([]);
     setIsDirty(false);
     setSaveStatus('idle');
     closeToc();
-    setTocItems([]);
   }, [closeToc, id]);
 
   useEffect(() => {
     if (!source || !hasFullContent || isDirty) return;
-    setDraftContent(source.rawContent);
+    const nextBlocks = splitMarkdownBlocks(source.rawContent, source.title);
+    setBlocks(nextBlocks);
   }, [hasFullContent, isDirty, source]);
 
   useEffect(() => {
@@ -159,72 +145,69 @@ export function SourceDetail({ id }: { id: string }) {
     return () => window.clearTimeout(timer);
   }, [saveStatus]);
 
-  const updateDraftContent = useCallback(
-    (nextMarkdown: string) => {
-      setDraftContent(nextMarkdown);
-      setIsDirty(nextMarkdown !== (source?.rawContent ?? ''));
+  const handleBlocksChange = useCallback(
+    (nextBlocks: SourceBlock[]) => {
+      setBlocks(nextBlocks);
+      const joined = joinBlocksToMarkdown(nextBlocks);
+      setIsDirty(joined !== (source?.rawContent ?? ''));
       setSaveStatus((current) => (current === 'idle' ? current : 'idle'));
     },
     [source?.rawContent],
   );
 
-  const handleDraftChange = useCallback(
-    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const nextMarkdown = event.target.value;
-      updateDraftContent(nextMarkdown);
-      window.requestAnimationFrame(refreshToc);
-    },
-    [refreshToc, updateDraftContent],
-  );
-
   const applyMarkdownCommand = useCallback(
     (command: MarkdownEditCommand) => {
-      const textarea = textareaRef.current;
+      const activeId = activeBlockIdRef.current;
+      if (!activeId) return;
+      const textarea = textareaRefs.current.get(activeId);
       if (!textarea) return;
+      const block = blocks.find((b) => b.id === activeId);
+      if (!block) return;
+
       const result = applyMarkdownSelectionEdit({
-        value: draftContent,
+        value: block.raw,
         selectionStart: textarea.selectionStart,
         selectionEnd: textarea.selectionEnd,
         command,
       });
-      updateDraftContent(result.value);
+
+      const nextBlocks = replaceBlockRaw(blocks, activeId, result.value);
+      setBlocks(nextBlocks);
+      const joined = joinBlocksToMarkdown(nextBlocks);
+      setIsDirty(joined !== (source?.rawContent ?? ''));
+      setSaveStatus((current) => (current === 'idle' ? current : 'idle'));
+
       window.requestAnimationFrame(() => {
-        textarea.focus();
-        textarea.setSelectionRange(result.selectionStart, result.selectionEnd);
-        refreshToc();
+        const updatedTextarea = textareaRefs.current.get(activeId);
+        if (updatedTextarea) {
+          updatedTextarea.focus();
+          updatedTextarea.setSelectionRange(result.selectionStart, result.selectionEnd);
+        }
       });
     },
-    [draftContent, refreshToc, updateDraftContent],
+    [blocks, source?.rawContent],
   );
 
-  const previewHtml = useMemo(() => {
-    if (!source) return '';
-    return markLeadingTitleEcho(renderMarkdown(draftContent), source.title);
-  }, [draftContent, source]);
-
-  useEffect(() => {
-    refreshToc();
-  }, [previewHtml, refreshToc]);
-
   const handleResetDraft = useCallback(() => {
-    const originalContent = source?.rawContent ?? '';
-    updateDraftContent(originalContent);
+    if (!source) return;
+    const nextBlocks = splitMarkdownBlocks(source.rawContent, source.title);
+    setBlocks(nextBlocks);
     setIsDirty(false);
     setSaveStatus('idle');
-    window.requestAnimationFrame(refreshToc);
-  }, [refreshToc, source?.rawContent, updateDraftContent]);
+  }, [source]);
 
   const canEdit = hasFullContent;
   const canSave = canEdit && isDirty && saveStatus !== 'saving';
 
   const handleSave = useCallback(async () => {
-    if (!canEdit || !isDirty || saveStatus === 'saving') return;
+    const joined = joinBlocksToMarkdown(blocks);
+    if (!canEdit || joined === (source?.rawContent ?? '') || saveStatus === 'saving') return;
     setSaveStatus('saving');
     try {
       await updateSourceContent({
         id,
         title: source?.title,
-        rawContent: draftContent,
+        rawContent: joined,
       });
       setIsDirty(false);
       setSaveStatus('saved');
@@ -232,12 +215,19 @@ export function SourceDetail({ id }: { id: string }) {
       console.warn('[source-detail] save failed:', err);
       setSaveStatus('error');
     }
-  }, [canEdit, draftContent, id, isDirty, saveStatus, source?.title]);
+  }, [canEdit, id, saveStatus, source?.rawContent, source?.title, blocks]);
 
-  const handleTextareaBlur = useCallback(() => {
-    if (!isDirty) return;
-    void handleSave();
-  }, [handleSave, isDirty]);
+  const handleCommit = useCallback(() => {
+    if (!source) return;
+    const joined = joinBlocksToMarkdown(blocks);
+    const nextBlocks = splitMarkdownBlocks(joined, source.title);
+    setBlocks(nextBlocks);
+    const stillDirty = joined !== source.rawContent;
+    setIsDirty(stillDirty);
+    if (stillDirty) {
+      void handleSave();
+    }
+  }, [blocks, source, handleSave]);
 
   useEffect(() => {
     if (!canEdit || !isDirty || saveStatus === 'saving') return;
@@ -290,16 +280,35 @@ export function SourceDetail({ id }: { id: string }) {
 
   const handleTocJump = useCallback(
     (headingId: string) => {
-      const target = Array.from(
-        previewRef.current?.querySelectorAll<HTMLElement>('h1, h2, h3, h4') ?? [],
-      ).find((heading) => heading.id === headingId);
       closeToc();
       window.setTimeout(() => {
+        const target = document.getElementById(headingId);
         target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 280);
     },
     [closeToc],
   );
+
+  const registerTextareaRef = useCallback((blockId: string, el: HTMLTextAreaElement | null) => {
+    if (el) {
+      textareaRefs.current.set(blockId, el);
+    } else {
+      textareaRefs.current.delete(blockId);
+    }
+  }, []);
+
+  const handleActiveBlockChange = useCallback((activeId: string | null) => {
+    activeBlockIdRef.current = activeId;
+  }, []);
+
+  const renderBlockHtml = useCallback((block: SourceBlock) => {
+    if (block.kind === 'leading-title' || block.kind === 'frontmatter-tags') {
+      return '';
+    }
+    return renderMarkdown(block.raw);
+  }, []);
+
+  const tags = useMemo(() => extractFrontmatterTags(blocks), [blocks]);
 
   if (!source) {
     return (
@@ -311,15 +320,10 @@ export function SourceDetail({ id }: { id: string }) {
 
   const generatedCount = generated?.length ?? 0;
   const generatedItems = generated ?? [];
-  const displayMarkdown = isDirty ? draftContent : source.rawContent;
-  const wordCount = displayMarkdown.length;
+  const currentMarkdown = joinBlocksToMarkdown(blocks);
+  const wordCount = currentMarkdown.length;
   const readingMinutes = wordCount > 0 ? Math.max(1, Math.round(wordCount / 400)) : 0;
   const sourceHost = source.url ? formatSourceHost(source.url) : null;
-
-  const handleFormat = (command: MarkdownEditCommand) => (event: React.MouseEvent) => {
-    event.preventDefault();
-    applyMarkdownCommand(command);
-  };
 
   return (
     <article className="concept-detail source-detail-page">
@@ -386,6 +390,19 @@ export function SourceDetail({ id }: { id: string }) {
           </div>
         )}
 
+        {tags.length > 0 && (
+          <div className="source-hero-tags">
+            <div className="source-hero-tags-label">标签</div>
+            <div className="source-hero-tags-chips">
+              {tags.map((tag) => (
+                <span key={tag} className="source-hero-tag-chip">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         <hr className="source-hero-divider" aria-hidden="true" />
       </header>
 
@@ -400,77 +417,15 @@ export function SourceDetail({ id }: { id: string }) {
             原文加载中...
           </div>
         ) : (
-          <div className="source-editor-shell">
-            <div
-              className="source-editor-toolbar"
-              role="toolbar"
-              aria-label="Markdown 格式"
-              aria-controls={editorId}
-            >
-              <button
-                type="button"
-                className="source-editor-toolbar-btn"
-                onMouseDown={handleFormat('bold')}
-                aria-label="加粗"
-              >
-                <strong>B</strong>
-              </button>
-              <button
-                type="button"
-                className="source-editor-toolbar-btn"
-                onMouseDown={handleFormat('italic')}
-                aria-label="斜体"
-              >
-                <em>I</em>
-              </button>
-              <span className="source-editor-toolbar-divider" aria-hidden="true" />
-              <button
-                type="button"
-                className="source-editor-toolbar-btn"
-                onMouseDown={handleFormat('heading')}
-                aria-label="标题"
-              >
-                H
-              </button>
-              <button
-                type="button"
-                className="source-editor-toolbar-btn"
-                onMouseDown={handleFormat('list')}
-                aria-label="列表"
-              >
-                ☰
-              </button>
-              <button
-                type="button"
-                className="source-editor-toolbar-btn"
-                onMouseDown={handleFormat('quote')}
-                aria-label="引用"
-              >
-                ❞
-              </button>
-            </div>
-
-            <textarea
-              id={editorId}
-              ref={textareaRef}
-              className="source-editor-textarea"
-              value={draftContent}
-              onChange={handleDraftChange}
-              onBlur={handleTextareaBlur}
-              spellCheck={false}
-              aria-label="资料正文 Markdown 编辑器"
-              aria-multiline="true"
-              placeholder="直接用 Markdown 整理这份资料..."
-            />
-
-            <div
-              ref={previewRef}
-              className="prose source-editor-content source-editor-preview"
-              dangerouslySetInnerHTML={{ __html: previewHtml }}
-              role="region"
-              aria-label="资料正文预览"
-            />
-          </div>
+          <SourceBlockEditor
+            blocks={blocks}
+            onBlocksChange={handleBlocksChange}
+            onCommit={handleCommit}
+            registerTextareaRef={registerTextareaRef}
+            renderBlockHtml={renderBlockHtml}
+            editable={canEdit}
+            onActiveBlockChange={handleActiveBlockChange}
+          />
         )}
       </section>
 

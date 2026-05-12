@@ -94,3 +94,6 @@ tmp/profiles/
 # Sentry
 .sentryclirc
 .env.sentry-build-plugin
+
+# GoalSwarm run directory
+.swarm/
