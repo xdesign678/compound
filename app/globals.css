@@ -1919,7 +1919,7 @@ button {
 }
 
 .modal-overlay.source-toc-overlay {
-  position: fixed;
+  position: fixed !important;
   z-index: var(--z-modal);
   align-items: flex-end;
 }

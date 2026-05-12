@@ -816,55 +816,58 @@ export function ConceptDetail({ id }: { id: string }) {
       )}
 
       {/* TOC dialog */}
-      {tocOpen && (
-        <div
-          className={`modal-overlay source-toc-overlay${tocVisible ? ' visible' : ''}`}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={tocTitleId}
-          onClick={closeToc}
-        >
-          <div className="modal source-toc-dialog" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-handle" />
-            <div className="settings-hero source-toc-head">
-              <div>
-                <div className="settings-kicker source-toc-kicker">文章目录</div>
-                <h2 id={tocTitleId}>跳转到标题</h2>
-              </div>
-              <button
-                type="button"
-                className="settings-close-btn source-toc-close"
-                onClick={closeToc}
-                aria-label="关闭目录"
-              >
-                关闭
-              </button>
-            </div>
-
-            <div className="source-toc-list">
-              {tocItems.length > 0 ? (
-                tocItems.map((item, index) => (
-                  <button
-                    key={`${item.level}-${item.title}-${index}`}
-                    type="button"
-                    className="source-toc-item"
-                    style={{ paddingLeft: `${12 + Math.max(0, item.level - 1) * 14}px` }}
-                    onClick={() => handleTocJump(item.title, item.level)}
-                    aria-label={`跳转到标题：${item.title}`}
-                  >
-                    <span className="source-toc-item-marker" aria-hidden="true" />
-                    <span>{item.title}</span>
-                  </button>
-                ))
-              ) : (
-                <div className="source-toc-empty" role="status" aria-live="polite">
-                  暂未识别到标题
+      {tocOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className={`modal-overlay source-toc-overlay${tocVisible ? ' visible' : ''}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={tocTitleId}
+            onClick={closeToc}
+          >
+            <div className="modal source-toc-dialog" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-handle" />
+              <div className="settings-hero source-toc-head">
+                <div>
+                  <div className="settings-kicker source-toc-kicker">文章目录</div>
+                  <h2 id={tocTitleId}>跳转到标题</h2>
                 </div>
-              )}
+                <button
+                  type="button"
+                  className="settings-close-btn source-toc-close"
+                  onClick={closeToc}
+                  aria-label="关闭目录"
+                >
+                  关闭
+                </button>
+              </div>
+
+              <div className="source-toc-list">
+                {tocItems.length > 0 ? (
+                  tocItems.map((item, index) => (
+                    <button
+                      key={`${item.level}-${item.title}-${index}`}
+                      type="button"
+                      className="source-toc-item"
+                      style={{ paddingLeft: `${12 + Math.max(0, item.level - 1) * 14}px` }}
+                      onClick={() => handleTocJump(item.title, item.level)}
+                      aria-label={`跳转到标题：${item.title}`}
+                    >
+                      <span className="source-toc-item-marker" aria-hidden="true" />
+                      <span>{item.title}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="source-toc-empty" role="status" aria-live="polite">
+                    暂未识别到标题
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
 
       {/* Action buttons */}
       <div
