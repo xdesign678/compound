@@ -506,7 +506,7 @@ export default function Page() {
         </div>
       )}
 
-      <TabBar />
+      {!(detail && tab !== 'ask') && <TabBar />}
       <SelectionWikiProgress />
       <TaskCenter />
       {renderModal && <IngestModal />}
