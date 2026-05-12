@@ -8,6 +8,7 @@ const DEFAULT_EDGE_WIDTH = 36; // px from left edge to start
 const IOS_EDGE_WIDTH = 20; // Reduced to avoid iOS native back gesture conflict
 const MIN_DISTANCE = 80; // px to trigger back (raised from 60 to avoid iOS conflict)
 const MAX_Y_DRIFT = 100; // px vertical drift tolerance
+const VERTICAL_CANCEL_RATIO = 0.8; // if dy > dx * ratio, it's more vertical than horizontal — cancel
 
 /** Detect iOS Safari (non-standalone PWA) where system back gesture conflicts */
 function getIsIOSSafariNonStandalone(): boolean {
@@ -56,6 +57,9 @@ export function SwipeBack() {
     const onTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];
       if (touch.clientX <= edgeWidth) {
+        // Don't track if touch starts on a RecapView swipe card
+        const target = e.target as HTMLElement;
+        if (target.closest('.recap-card')) return;
         startRef.current = { x: touch.clientX, y: touch.clientY, t: Date.now() };
         hasHapticRef.current = false;
       }
@@ -74,7 +78,21 @@ export function SwipeBack() {
         return;
       }
 
+      // Cancel if the gesture is more vertical than horizontal
+      // (e.g. diagonal down-left or down-right from edge)
+      if (dx <= 0 && dy > Math.abs(dx) * VERTICAL_CANCEL_RATIO) {
+        startRef.current = null;
+        updateIndicator(0);
+        return;
+      }
+
       if (dx > 0) {
+        // Cancel if vertical component rivals horizontal (near-diagonal)
+        if (dy > dx * VERTICAL_CANCEL_RATIO) {
+          startRef.current = null;
+          updateIndicator(0);
+          return;
+        }
         // Confirm horizontal swipe direction — fire haptic once
         if (!hasHapticRef.current && dx > 10) {
           hasHapticRef.current = true;

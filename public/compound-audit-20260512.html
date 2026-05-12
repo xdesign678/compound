@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compound 核心页面全面走查报告 — 2026-05-12</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --card-bg: #ffffff;
+    --text: #1a1a1a;
+    --text-secondary: #666666;
+    --border: #e5e5e5;
+    --primary: #2563eb;
+    --p0: #dc2626;
+    --p1: #ea580c;
+    --p2: #ca8a04;
+    --p3: #16a34a;
+    --pass: #16a34a;
+    --fail: #dc2626;
+    --skip: #6b7280;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    margin: 0;
+    padding: 0;
+  }
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
+  }
+  h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin: 32px 0 16px;
+    padding-bottom: 12px;
+    border-bottom: 3px solid var(--primary);
+  }
+  h2 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin: 28px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+    color: #111;
+  }
+  h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 20px 0 10px;
+    color: #222;
+  }
+  h4 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 16px 0 8px;
+    color: #333;
+  }
+  p { margin: 10px 0; }
+  a { color: var(--primary); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: white;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .badge.p0 { background: var(--p0); }
+  .badge.p1 { background: var(--p1); }
+  .badge.p2 { background: var(--p2); }
+  .badge.p3 { background: var(--p3); }
+  
+  .check {
+    display: inline-block;
+    width: 20px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.1rem;
+  }
+  .check.pass { color: var(--pass); }
+  .check.fail { color: var(--fail); }
+  .check.skip { color: var(--skip); }
+  
+  .star { color: #f59e0b; font-size: 1.2rem; }
+  .star-empty { color: #d1d5db; font-size: 1.2rem; }
+  
+  blockquote.tip {
+    background: #eff6ff;
+    border-left: 4px solid var(--primary);
+    margin: 12px 0;
+    padding: 12px 16px;
+    border-radius: 0 8px 8px 0;
+    color: #1e3a5f;
+    font-size: 0.95rem;
+  }
+  blockquote.tip p { margin: 6px 0; }
+  
+  table.styled-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 0.92rem;
+    background: var(--card-bg);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  table.styled-table th {
+    background: #f3f4f6;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid var(--border);
+    color: #374151;
+  }
+  table.styled-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table.styled-table tr:last-child td { border-bottom: none; }
+  table.styled-table tr:hover td { background: #f9fafb; }
+  
+  code {
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Monaco, Consolas, monospace;
+    font-size: 0.88rem;
+    color: #c7254e;
+  }
+  pre {
+    background: #1f2937;
+    color: #f3f4f6;
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+  pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+  }
+  
+  ul, ol { margin: 8px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+  
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 28px 0;
+  }
+  
+  .summary-box {
+    background: linear-gradient(135deg, #fee2e2 0%, #fff7ed 100%);
+    border: 1px solid #fca5a5;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+  }
+  .summary-box h3 {
+    margin-top: 0;
+    color: #991b1b;
+  }
+  
+  @media (max-width: 640px) {
+    .container { padding: 16px 12px 48px; }
+    h1 { font-size: 1.5rem; }
+    h2 { font-size: 1.2rem; }
+    table.styled-table { font-size: 0.82rem; }
+    table.styled-table th, table.styled-table td { padding: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<h1 id="compound">Compound 核心页面与交互全面走查报告</h1>
+<blockquote class="tip">
+<p><strong>Run ID</strong>: <code>20260512T155116Z-全面走查-compound-核心页面和交互覆盖线上部署环境-https-compund-zeab</code><br />
+<strong>审计时间</strong>: 2026-05-12<br />
+<strong>线上环境</strong>: https://compund.zeabur.app<br />
+<strong>审计模式</strong>: 纯审计（read-only），未修改任何源代码</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 一句话结论</h2>
+<p><strong>本次走查未通过</strong> —— 15 个验收断言中 <strong>10 个通过、2 个失败、1 个待执行</strong>。代码质量门（lint / typecheck / build / smoke / 可访问性）全部绿灯，但线上前端存在 <strong>1 个阻断级（P0）路由 bug</strong> 和 <strong>5 个高优先（P1）交互缺陷</strong>，主要影响移动端用户体验和未登录访客的第一印象。</p>
+<blockquote class="tip">
+<p><strong>对你的意义</strong>：网站能正常打开、代码没坏，但用手机访问某些页面时，看到的和电脑完全不一样，而且菜单点不动、红色报错很吓人，这些都会让新用户流失。</p>
+</blockquote>
+<hr />
+<h2 id="2">2. 这次任务为什么重要</h2>
+<p>Compound 是一个个人知识管理工具（PWA），用户既会在电脑上整理资料，也会在手机上随时复习和查看。如果同一网址在手机和电脑上显示完全不同的功能，或者菜单点不透、到处飘红报错，用户会立刻觉得这个产品"不靠谱"，直接关闭页面。</p>
+<p>这次走查覆盖的是 <strong>线上真实部署环境</strong>，不是本地开发机，所以发现的问题都是真实用户正在遇到的。</p>
+<hr />
+<h2 id="3">3. 蜂群是怎么分工的</h2>
+<p>本次走查由 8 个智能体协同完成：</p>
+<ul>
+<li><strong>commander（主线程）</strong>：统筹全局，分配任务，合并结果，最终把关。</li>
+<li><strong>explorer（minimax-m2.7）</strong>：先摸清 Compound 有哪些页面、哪些组件、交互怎么流转，输出页面清单。</li>
+<li><strong>ui-worker × 4（kimi-k2.6）</strong>：分别用真实浏览器访问线上地址，截取桌面端（1280×800）和移动端（375×812）截图，检查布局、交互、文字截断、手势、弹层定位。4 组分别负责：首页、库/资料/概念详情、复习/回顾、同步/全局交互。</li>
+<li><strong>tester（glm-5.1）</strong>：在本地跑 lint、typecheck、build、smoke、可访问性审计，验证代码质量门。</li>
+<li><strong>reviewer（deepseek-v4-pro）</strong>：汇总全部子代理报告，去重合并 28 条原始发现为 22 条独立问题，按 P0/P1/P2/P3 分级。</li>
+<li><strong>reporter（kimi-k2.6，即本文）</strong>：把技术报告翻译成面向普通用户的中文 HTML 报告。</li>
+</ul>
+<blockquote class="tip">
+<p>reviewer 发现 P0 级路由异常后，建议升级到 Opus 4.7 Max 做深度安全/路由审计，但本次未实际升级（仅建议）。</p>
+</blockquote>
+<hr />
+<h2 id="4-validation-contract">4. 验收清单（Validation Contract 结果）</h2>
+<blockquote class="tip">
+<p><strong>15 个断言：10 个通过、2 个失败、1 个待执行、2 个干净通过。</strong></p>
+</blockquote>
+<table class="styled-table">
+<thead>
+<tr>
+<th>id</th>
+<th>标题</th>
+<th>状态</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VAL-001</td>
+<td>首页桌面端正常</td>
+<td>✅ pass</td>
+<td>T2-ui-home 报告 + 截图：页面加载成功，有已知非阻断问题</td>
+</tr>
+<tr>
+<td>VAL-002</td>
+<td>首页移动端正常</td>
+<td>✅ pass</td>
+<td>T2-ui-home 报告 + 截图：页面加载成功，有已知非阻断问题</td>
+</tr>
+<tr>
+<td>VAL-003</td>
+<td>库/资料/概念详情桌面端正常</td>
+<td>✅ pass</td>
+<td>T3-ui-library 报告 + 截图：页面加载成功，有已知非阻断问题</td>
+</tr>
+<tr>
+<td>VAL-004</td>
+<td>库/资料/概念详情移动端正常</td>
+<td>✅ pass</td>
+<td>T3-ui-library 报告 + 截图：页面加载成功，有已知非阻断问题</td>
+</tr>
+<tr>
+<td>VAL-005</td>
+<td>复习/回顾桌面端正常</td>
+<td>✅ pass</td>
+<td>T4-ui-review-recap 报告 + 截图：页面加载成功，有已知非阻断问题</td>
+</tr>
+<tr>
+<td>VAL-006</td>
+<td>复习/回顾移动端正常</td>
+<td>❌ fail</td>
+<td>T4-ui-review-recap 报告：<code>/review</code> 移动端渲染完全不同的功能（P0-001）</td>
+</tr>
+<tr>
+<td>VAL-007</td>
+<td>同步/全局交互桌面端正常</td>
+<td>✅ pass</td>
+<td>T5-ui-sync-global 报告 + 截图：页面加载成功，有已知非阻断问题</td>
+</tr>
+<tr>
+<td>VAL-008</td>
+<td>同步/全局交互移动端正常</td>
+<td>❌ fail</td>
+<td>T5-ui-sync-global 报告：点透、/qa 错误、误离线（P1+P2）</td>
+</tr>
+<tr>
+<td>VAL-009</td>
+<td>Lint 通过</td>
+<td>✅ pass</td>
+<td><code>evidence/lint-output.txt</code> — exit code 0，15.8s</td>
+</tr>
+<tr>
+<td>VAL-010</td>
+<td>TypeCheck 通过</td>
+<td>✅ pass</td>
+<td><code>evidence/typecheck-output.txt</code> — exit code 0，11.0s</td>
+</tr>
+<tr>
+<td>VAL-011</td>
+<td>Build 通过</td>
+<td>✅ pass</td>
+<td><code>evidence/build-output.txt</code> — exit code 0，106.2s，45 个静态页</td>
+</tr>
+<tr>
+<td>VAL-012</td>
+<td>Smoke 通过</td>
+<td>✅ pass</td>
+<td><code>evidence/smoke-*.txt</code> — 4 页 HTTP 200，&lt;350ms</td>
+</tr>
+<tr>
+<td>VAL-013</td>
+<td>可访问性审计</td>
+<td>✅ pass</td>
+<td><code>evidence/a11y-output.txt</code> — 4/4 Playwright + Axe 通过</td>
+</tr>
+<tr>
+<td>VAL-014</td>
+<td>风险分级完成</td>
+<td>✅ pass</td>
+<td><code>agents/T7-reviewer-report.json</code> — 本审查即为分级产物</td>
+</tr>
+<tr>
+<td>VAL-015</td>
+<td>最终 HTML 报告生成</td>
+<td>⏭️ skipped</td>
+<td>swarm-reporter（本文）职责，正在执行</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="tip">
+<p><strong>对你的意义</strong>：代码编译和基础测试都没问题，网站也能打开，但有两个核心断言挂了——意味着"能用"和"好用"之间还有明显差距。</p>
+</blockquote>
+<hr />
+<h2 id="5">5. 发现了什么 / 修了什么</h2>
+<p>本次审计共发现 <strong>22 个独立问题</strong>（去重后），按严重级别分组如下。</p>
+<h3 id="p0-1">🔴 P0 — 阻断级（1 个）</h3>
+<h4 id="p0-001-review">P0-001: <code>/review</code> 同一网址在电脑和手机上显示完全不同的功能</h4>
+<ul>
+<li><strong>来源</strong>: T4-ui-review-recap</li>
+<li><strong>证据</strong>: <code>agents/T4-ui-review-recap-report.md</code>、<code>evidence/review-desktop.png</code>、<code>evidence/review-mobile.png</code></li>
+<li><strong>现象</strong>：</li>
+<li><strong>电脑端</strong>打开 <code>https://compund.zeabur.app/review</code> → 看到"概念复盘队列"，有 9 个概念卡片，可以按分类筛选。</li>
+<li><strong>手机端</strong>打开同一个网址 → 看到"审核队列"，内容变成"批量入库、低置信度抽取、同步冲突"，还有一大块红色"需要认证 Unauthorized"报错。</li>
+<li><strong>严重程度</strong>：这不是"电脑版功能多、手机版精简"的正常响应式差异，而是<strong>完全两个不同的功能</strong>塞进同一个网址。用户收藏了网址在电脑上复习，换手机打开却变成一个审核后台——会以为网站被黑了。</li>
+<li><strong>建议</strong>：两个功能必须用不同的网址（比如 <code>/review</code> 和 <code>/audit</code>）；如果未登录，手机端也应该显示同样的复习内容（只读模式），而不是跳到一个毫不相关的页面。</li>
+</ul>
+<blockquote class="tip">
+<p><strong>对你的意义</strong>：你发给朋友的复习链接，朋友用手机打开后看到的完全是另一套东西，直接懵掉。</p>
+</blockquote>
+<h3 id="p1-5">🟠 P1 — 高优先级（5 个）</h3>
+<h4 id="p1-001-401">P1-001: 未登录时控制台疯狂报 401 错误</h4>
+<ul>
+<li><strong>来源</strong>: T2/T3/T4/T5 均报告</li>
+<li><strong>证据</strong>: 各页面 console 日志截图</li>
+<li><strong>现象</strong>：不登录访问任何页面，浏览器控制台会刷出 6-10 条红色 <code>401 Unauthorized</code> 错误，内容是 <code>[cloud-sync] snapshot pull failed</code>。</li>
+<li><strong>影响</strong>：虽然普通用户不会天天开着控制台，但开发者看到的全是噪音；更关键的是这说明<strong>未登录体验没有被优雅处理</strong>——系统在不断尝试做一件没权限做的事，而不是安静跳过。</li>
+<li><strong>建议</strong>：未登录时直接跳过云同步拉取，不要在控制台抛错；或在 UI 上给一个温和的"登录以开启同步"提示。</li>
+</ul>
+<h4 id="p1-002">P1-002: 电脑三栏布局中间太挤、右边太空</h4>
+<ul>
+<li><strong>来源</strong>: T3-ui-library</li>
+<li><strong>证据</strong>: <code>evidence/desktop-sources-list-v3.png</code></li>
+<li><strong>现象</strong>：在 1280-1440px 宽度的电脑上，库页面左边导航栏 + 中间资料列表 + 右边详情预览的三栏布局中，中间资料列表被压得很窄，卡片标题 truncation（显示不全）严重，而右边详情区留白过大。</li>
+<li><strong>建议</strong>：把三栏比例从约 20%/35%/45% 调为 18%/42%/40%，或者在 1280px 以下直接改为两栏布局（左边收成小图标，中间列表占满）。</li>
+</ul>
+<blockquote class="tip">
+<p><strong>对你的意义</strong>：用笔记本看资料库时，中间列表挤得看不清标题，像在看一列被压扁的便利贴。</p>
+</blockquote>
+<h4 id="p1-003-click-through">P1-003: 手机"更多操作"菜单点不透（click-through）</h4>
+<ul>
+<li><strong>来源</strong>: T5-ui-sync-global / T2-ui-home</li>
+<li><strong>证据</strong>: <code>evidence/mobile-more-menu-open.png</code>、<code>evidence/settings-mobile-final.png</code></li>
+<li><strong>现象</strong>：手机端点击右上角"⋮"更多操作按钮，菜单展开后，再点菜单里的"设置"或"从 GitHub 同步"，菜单收起来了，但对应的弹窗/页面没打开，反而触发了菜单下面那个位置的按钮（比如某个分类 pill 或概念卡片），直接跳到了别的页面。</li>
+<li><strong>严重程度</strong>：这是典型的移动端<strong>触摸事件穿透</strong>（click-through）bug，菜单没拦住手指的点击，让它漏到了下面的元素上。这是严重的交互缺陷。</li>
+<li><strong>建议</strong>：给菜单容器加上事件拦截（stopPropagation / preventDefault），或者把菜单改成真正的模态浮层（Portal），确保菜单打开时下面的页面不可点击。</li>
+</ul>
+<blockquote class="tip">
+<p><strong>对你的意义</strong>：手机上的菜单点了跟没点一样，反而莫名其妙跳到了别的页面，很烦躁。</p>
+</blockquote>
+<h4 id="p1-004">P1-004: 手机"问答"页面完全不可用，显示的是首页</h4>
+<ul>
+<li><strong>来源</strong>: T5-ui-sync-global（原评 P2，升级为 P1）</li>
+<li><strong>证据</strong>: <code>evidence/qa-mobile.png</code>、<code>evidence/qa-mobile-v2.png</code></li>
+<li><strong>现象</strong>：手机端访问 <code>/qa</code> 或点底部 TabBar 的"问答"Tab，页面内容和首页一模一样，没有问答专属内容。同时 TabBar 里"问答"也没被高亮，高亮的还是"Wiki"。</li>
+<li><strong>严重程度</strong>：整个问答功能在移动端<strong>完全缺失</strong>。</li>
+<li><strong>建议</strong>：检查 <code>/qa</code> 路由的渲染逻辑，确认没有错误地 fallback 到首页组件；同时修复 TabBar 的当前选中状态。</li>
+</ul>
+<blockquote class="tip">
+<p><strong>对你的意义</strong>：手机上的"问答"入口是个摆设，点进去还是首页。</p>
+</blockquote>
+<h4 id="p1-005">P1-005: 未登录状态的红色认证横幅太吓人</h4>
+<ul>
+<li><strong>来源</strong>: T4-ui-review-recap / T5-ui-sync-global</li>
+<li><strong>证据</strong>: <code>evidence/sync-desktop.png</code>、<code>evidence/review-mobile.png</code></li>
+<li><strong>现象</strong>：未登录时访问 <code>/sync</code> 或 <code>/review</code>，页面顶部会出现大块<strong>粉红色/红色</strong>的报错卡片，写着"需要认证 Unauthorized"，还有一个"重试"按钮——但不登录的话，点多少次重试都没用。</li>
+<li><strong>影响</strong>：大面积红色会制造恐慌感，让访客以为网站坏了。实际上未登录访客本来就应该看到这些功能的只读版本或引导登录。</li>
+<li><strong>建议</strong>：把红色错误态降级为温和的蓝色/灰色信息卡片，文案改成"登录后查看同步状态"，去掉无效的"重试"按钮。</li>
+</ul>
+<blockquote class="tip">
+<p><strong>对你的意义</strong>：新访客打开页面就被一片红吓到，第一反应是"这个网站是不是挂了"，然后关掉走人。</p>
+</blockquote>
+<h3 id="p2-11">🟡 P2 — 中优先级（11 个，摘要列表）</h3>
+<table class="styled-table">
+<thead>
+<tr>
+<th>ID</th>
+<th>问题</th>
+<th>一句话解释</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P2-001</td>
+<td>Ctrl+K 在不同页面表现不一样</td>
+<td>在首页按 Ctrl+K 直接跳到复习页；在同步页按却打开设置弹窗。用户记不住快捷键到底会干嘛。</td>
+<td><code>evidence/commandpalette-desktop.png</code>、<code>evidence/commandpalette-desktop2.png</code></td>
+</tr>
+<tr>
+<td>P2-002</td>
+<td><code>/sources</code> 和 <code>/activity</code> 正常网络下显示"离线模式"</td>
+<td>网络明明是好的，这两页却显示"离线模式"，可能是 ServiceWorker（一种让网页离线也能用的技术）判断错了。</td>
+<td><code>evidence/sources-mobile-v2.png</code>、<code>evidence/activity-mobile-v2.png</code></td>
+</tr>
+<tr>
+<td>P2-003</td>
+<td>设置弹窗也存在点透</td>
+<td>和 P1-003 类似的点击穿透问题，发生在设置弹窗内，点弹窗里的 tab 却触发了底层页面跳转。</td>
+<td>T5-ui-sync-global 报告</td>
+</tr>
+<tr>
+<td>P2-004</td>
+<td>手机端资料目录弹窗为空时没提示</td>
+<td>点击资料详情页"显示目录"，如果资料没有标题层级，弹窗里什么字都没有，用户不知道是正在加载还是真的没有目录。</td>
+<td><code>evidence/mobile-source-detail-toc.png</code></td>
+</tr>
+<tr>
+<td>P2-005</td>
+<td>回顾页没有上一张/下一张按钮</td>
+<td><code>/recap</code> 页面只显示"1 / 8"的分页计数，但没有左右箭头按钮，用户不知道怎么翻到下一张卡片。</td>
+<td><code>evidence/recap-desktop.png</code>、<code>evidence/recap-mobile.png</code></td>
+</tr>
+<tr>
+<td>P2-006</td>
+<td>手机回顾卡片左右留白太多</td>
+<td>手机本来屏幕就窄，回顾卡片还留了很大的左右边距，文字区域只剩屏幕宽度的 70% 左右，读起来很憋屈。</td>
+<td><code>evidence/recap-mobile.png</code></td>
+</tr>
+<tr>
+<td>P2-007</td>
+<td>回顾/复习页面键盘导航看不清焦点</td>
+<td>用键盘 Tab 键浏览时，不知道当前焦点在哪张卡片或哪个按钮上，对键盘用户和某些辅助设备用户不友好。</td>
+<td>T4-ui-review-recap 报告</td>
+</tr>
+<tr>
+<td>P2-008</td>
+<td>底部 TabBar 缺了一个"更多"tab</td>
+<td>设计预期有 5 个 tab（Wiki / 资料 / 问答 / 活动 / 更多），实际只有 4 个，"更多"入口消失了。</td>
+<td><code>evidence/home-mobile.png</code></td>
+</tr>
+<tr>
+<td>P2-009</td>
+<td><code>/sync</code> 页面在手机没有底部 TabBar</td>
+<td>进了同步页之后，底部导航栏消失了，用户只能依赖手机系统的返回键才能回到其他页面。</td>
+<td><code>evidence/sync-mobile-final.png</code></td>
+</tr>
+<tr>
+<td>P2-010</td>
+<td><code>better-sqlite3</code> 原生模块版本不匹配</td>
+<td>只在本地开发时影响（Node 版本和编译模块不匹配），不影响线上。</td>
+<td><code>evidence/build-output.txt</code></td>
+</tr>
+<tr>
+<td>P2-011</td>
+<td><code>import-in-the-middle</code> npm 包版本漂移</td>
+<td>两个依赖引用了不同版本的同一个包，只在开发服务器产生警告，不影响线上。</td>
+<td>T6-tester 报告</td>
+</tr>
+</tbody>
+</table>
+<h3 id="p3-2">🟢 P3 — 低优先级（2 个）</h3>
+<table class="styled-table">
+<thead>
+<tr>
+<th>ID</th>
+<th>问题</th>
+<th>一句话解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P3-001</td>
+<td>首页首屏加载可进一步优化</td>
+<td>首页偶尔有短暂白屏，可以加骨架屏或提前加载关键样式。</td>
+</tr>
+<tr>
+<td>P3-002</td>
+<td>暗色模式未测试</td>
+<td>本次只在亮色模式下走查，没验证暗色模式的对比度和可读性。</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6">6. 影响到哪些页面、功能或文件</h2>
+<table class="styled-table">
+<thead>
+<tr>
+<th>路径/功能</th>
+<th>做什么用的</th>
+<th>影响程度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/review</code></td>
+<td>概念复习队列（间隔重复学习）</td>
+<td>🔴 P0 — 手机端完全变成另一个功能</td>
+</tr>
+<tr>
+<td><code>/sync</code></td>
+<td>与 GitHub 同步资料</td>
+<td>🟠 P1 — 未登录时大面积红色报错</td>
+</tr>
+<tr>
+<td><code>/qa</code>（手机端）</td>
+<td>问答功能</td>
+<td>🟠 P1 — 实际显示首页内容，功能不可用</td>
+</tr>
+<tr>
+<td>首页 <code>/</code></td>
+<td>知识库总览、搜索入口</td>
+<td>🟠 P1 — 控制台 401 噪音、菜单点透、TabBar 缺 tab</td>
+</tr>
+<tr>
+<td>库/资料详情页</td>
+<td>阅读资料、查看目录、编辑笔记</td>
+<td>🟠 P1 — 三栏布局过窄（电脑）、目录空状态（手机）</td>
+</tr>
+<tr>
+<td><code>/recap</code></td>
+<td>卡片式回顾学习</td>
+<td>🟡 P2 — 无翻页按钮、手机留白多、键盘焦点不可见</td>
+</tr>
+<tr>
+<td><code>/sources</code>、<code>/activity</code></td>
+<td>资料列表、活动记录</td>
+<td>🟡 P2 — 正常网络下误判为离线</td>
+</tr>
+<tr>
+<td><code>CommandPalette</code> / <code>Ctrl+K</code></td>
+<td>全局搜索/命令面板</td>
+<td>🟡 P2 — 行为不一致，有时不是搜索</td>
+</tr>
+<tr>
+<td><code>SettingsDrawer</code></td>
+<td>设置弹窗</td>
+<td>🟡 P2 — 点透、焦点陷阱弱</td>
+</tr>
+<tr>
+<td><code>TabBar</code>（手机底部导航）</td>
+<td>快速切换主要页面</td>
+<td>🟡 P2 — <code>/sync</code> 页缺失、缺少"更多"tab</td>
+</tr>
+<tr>
+<td>全局离线判定逻辑</td>
+<td>检测网络状态</td>
+<td>🟡 P2 — 误判正常网络为离线</td>
+</tr>
+<tr>
+<td><code>lib/cloud-sync.ts</code></td>
+<td>云同步逻辑</td>
+<td>🟠 P1 — 未登录时持续发起失败请求</td>
+</tr>
+<tr>
+<td><code>components/ReviewQueue.tsx</code></td>
+<td>复习队列组件</td>
+<td>🔴 P0 — 可能涉及路由/中间件分支</td>
+</tr>
+<tr>
+<td><code>app/review/page.tsx</code>、<code>middleware.ts</code></td>
+<td>复习页面路由、中间件</td>
+<td>🔴 P0 — 疑似按设备类型分支渲染不同内容</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7">7. 怎么证明已经检查或修好</h2>
+<h3 id="servicesyaml">已执行的验证命令（services.yaml 定义）</h3>
+<table class="styled-table">
+<thead>
+<tr>
+<th>命令</th>
+<th>退出码</th>
+<th>用时</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>npm run lint</code></td>
+<td>0</td>
+<td>15.8s</td>
+<td>零错误、零警告</td>
+</tr>
+<tr>
+<td><code>npm run typecheck</code></td>
+<td>0</td>
+<td>11.0s</td>
+<td>零类型错误</td>
+</tr>
+<tr>
+<td><code>npm run build</code></td>
+<td>0</td>
+<td>106.2s</td>
+<td>生成 45 个静态页，First Load JS 184 kB</td>
+</tr>
+<tr>
+<td><code>curl -fsS https://compund.zeabur.app/</code></td>
+<td>0</td>
+<td>309ms</td>
+<td>HTTP 200，29,323 B</td>
+</tr>
+<tr>
+<td><code>curl -fsS https://compund.zeabur.app/recap</code></td>
+<td>0</td>
+<td>100ms</td>
+<td>HTTP 200，29,151 B</td>
+</tr>
+<tr>
+<td><code>curl -fsS https://compund.zeabur.app/review</code></td>
+<td>0</td>
+<td>94ms</td>
+<td>HTTP 200，35,899 B</td>
+</tr>
+<tr>
+<td><code>curl -fsS https://compund.zeabur.app/sync</code></td>
+<td>0</td>
+<td>132ms</td>
+<td>HTTP 200，31,662 B</td>
+</tr>
+<tr>
+<td><code>npm run test:a11y</code></td>
+<td>0</td>
+<td>1.1m</td>
+<td>4/4 Playwright + Axe 通过</td>
+</tr>
+</tbody>
+</table>
+<h3 id="ui-worker">截图证据（UI worker 浏览器实测）</h3>
+<ul>
+<li>共捕获 <strong>40+ 张截图</strong>，覆盖桌面端和移动端各主要页面。</li>
+<li>关键截图路径：</li>
+<li><code>evidence/review-desktop.png</code> — 电脑端 <code>/review</code> 显示概念复习队列</li>
+<li><code>evidence/review-mobile.png</code> — 手机端 <code>/review</code> 显示审核队列（P0 核心证据）</li>
+<li><code>evidence/sync-desktop.png</code> — 电脑端 <code>/sync</code> 红色认证横幅</li>
+<li><code>evidence/mobile-more-menu-open.png</code> — 手机"更多操作"菜单展开状态</li>
+<li><code>evidence/qa-mobile-v2.png</code> — 手机"问答"页实际显示首页内容</li>
+<li><code>evidence/desktop-sources-list-v3.png</code> — 电脑三栏布局中间栏过窄</li>
+<li><code>evidence/recap-mobile.png</code> — 手机回顾卡片左右留白过多</li>
+</ul>
+<blockquote class="tip">
+<p><strong>对你的意义</strong>：不是凭空说有问题，是真实浏览器访问线上地址后截图留证的。你随时可以自己打开这些网址复现。</p>
+</blockquote>
+<hr />
+<h2 id="8-5">8. 页面健康度评分（5 星制）</h2>
+<blockquote class="tip">
+<p>评分基于"本次审计时、未登录状态"的实测表现。</p>
+</blockquote>
+<table class="styled-table">
+<thead>
+<tr>
+<th>页面</th>
+<th>桌面端</th>
+<th>移动端</th>
+<th>主要扣分项</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>首页 <code>/</code></td>
+<td><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star-empty">☆</span> 4/5</td>
+<td><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star-empty">☆</span><span class="star-empty">☆</span> 3/5</td>
+<td>菜单点透、TabBar 缺 tab、401 噪音</td>
+</tr>
+<tr>
+<td>库 / 资料详情</td>
+<td><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star-empty">☆</span> 4/5</td>
+<td><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star-empty">☆</span> 4/5</td>
+<td>三栏过窄（桌面）、目录空状态（手机）</td>
+</tr>
+<tr>
+<td>复习 <code>/review</code></td>
+<td><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star-empty">☆</span> 4/5</td>
+<td><span class="star">★</span><span class="star-empty">☆</span><span class="star-empty">☆</span><span class="star-empty">☆</span><span class="star-empty">☆</span> 1/5</td>
+<td>🔴 P0：手机端显示完全不同的功能</td>
+</tr>
+<tr>
+<td>回顾 <code>/recap</code></td>
+<td><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star-empty">☆</span> 4/5</td>
+<td><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star-empty">☆</span><span class="star-empty">☆</span> 3/5</td>
+<td>无翻页按钮、手机留白多</td>
+</tr>
+<tr>
+<td>问答 <code>/qa</code></td>
+<td><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star-empty">☆</span> 4/5</td>
+<td><span class="star">★</span><span class="star-empty">☆</span><span class="star-empty">☆</span><span class="star-empty">☆</span><span class="star-empty">☆</span> 1/5</td>
+<td>手机端完全不可用（显示首页）</td>
+</tr>
+<tr>
+<td>同步 <code>/sync</code></td>
+<td><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star-empty">☆</span><span class="star-empty">☆</span> 3/5</td>
+<td><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star-empty">☆</span><span class="star-empty">☆</span> 3/5</td>
+<td>红色认证横幅、手机无 TabBar</td>
+</tr>
+<tr>
+<td>全局交互（搜索/设置/弹窗）</td>
+<td><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star-empty">☆</span> 4/5</td>
+<td><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star-empty">☆</span><span class="star-empty">☆</span> 3/5</td>
+<td>Ctrl+K 不一致、点透、焦点陷阱</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9">9. 修复建议优先级（按严重级别排序）</h2>
+<h3 id="p0">🔴 立即处理（P0 — 阻断）</h3>
+<ul>
+<li>[ ] <strong>P0-001</strong>: 统一 <code>/review</code> 在桌面端和移动端的渲染内容。要么让两端都显示概念复习队列（认证失败时只读），要么把审核队列拆到独立路由 <code>/audit</code>。</li>
+</ul>
+<h3 id="p1">🟠 本周处理（P1 — 高优先）</h3>
+<ul>
+<li>[ ] <strong>P1-001</strong>: 未登录时静默跳过 <code>cloud-sync</code> 拉取，不再在控制台打印 401 错误；或把错误降级为 debug 级别日志。</li>
+<li>[ ] <strong>P1-002</strong>: 优化 1280-1440px 桌面三栏布局，中间资料列表栏至少占 40% 宽度，或改为两栏。</li>
+<li>[ ] <strong>P1-003</strong>: 修复移动端"更多操作"下拉菜单的点击穿透（click-through），使用事件拦截或 Portal 渲染。</li>
+<li>[ ] <strong>P1-004</strong>: 修复手机端 <code>/qa</code> 路由，确保问答组件正确渲染，且 TabBar 高亮状态与当前路径一致。</li>
+<li>[ ] <strong>P1-005</strong>: 把 <code>/sync</code> 和 <code>/review</code> 的未登录红色错误横幅改为温和的蓝/灰色信息提示，文案改为"登录后查看"。</li>
+</ul>
+<h3 id="p2">🟡 本月处理（P2 — 中优先）</h3>
+<ul>
+<li>[ ] <strong>P2-001</strong>: 统一 <code>Ctrl+K</code> 行为——要么全局打开 CommandPalette，要么全局无此快捷键。不要让用户猜。</li>
+<li>[ ] <strong>P2-002</strong>: 排查 <code>/sources</code> 和 <code>/activity</code> 的离线误判问题，检查 ServiceWorker 拦截逻辑和 <code>navigator.onLine</code> 判定。</li>
+<li>[ ] <strong>P2-003</strong>: 修复 <code>SettingsDrawer</code> 的点透问题。</li>
+<li>[ ] <strong>P2-004</strong>: 资料目录弹窗空状态时显示"该资料暂无目录"，或直接隐藏目录按钮。</li>
+<li>[ ] <strong>P2-005</strong>: 在 <code>/recap</code> 分页计数两侧加上上一张/下一张箭头按钮；手机端支持左右滑动手势。</li>
+<li>[ ] <strong>P2-006</strong>: 减少手机端回顾卡片的水平 padding，让阅读宽度接近屏幕宽度的 90%。</li>
+<li>[ ] <strong>P2-007</strong>: 为所有可交互元素添加 <code>focus-visible</code> 样式，让键盘焦点清晰可见。</li>
+<li>[ ] <strong>P2-008</strong>: 补齐底部 TabBar 的"更多"tab，或更新设计文档确认 4 个 tab 就是最终方案。</li>
+<li>[ ] <strong>P2-009</strong>: 给 <code>/sync</code> 页面在手机端加上底部 TabBar。</li>
+<li>[ ] <strong>P2-010 / P2-011</strong>: 本地开发环境问题（better-sqlite3 / import-in-the-middle），不影响线上，抽空升级即可。</li>
+</ul>
+<h3 id="p3">🟢 有空再说（P3 — 低优先）</h3>
+<ul>
+<li>[ ] <strong>P3-001</strong>: 给首页加骨架屏，减少首屏白屏时间。</li>
+<li>[ ] <strong>P3-002</strong>: 补充暗色模式专项审计。</li>
+</ul>
+<hr />
+<h2 id="10">10. 风险和注意事项</h2>
+<h3 id="_1">已升级但未解决的问题</h3>
+<ul>
+<li><strong>reviewer 建议升级到 swarm-reviewer-opus（Opus 4.7 Max）对 P0-001 做深度安全/路由审计</strong>：因为 <code>/review</code> 在桌面端和移动端渲染完全不同的内容，这涉及中间件或路由守卫的分支逻辑， reviewer 担心背后可能有数据泄露或认证绕过的风险。本次未实际升级，需要 commander 决定是否追加专项审计。</li>
+</ul>
+<h3 id="_2">遗漏的审计范围</h3>
+<ul>
+<li><strong>安全审计（高）</strong>：XSS、CSRF、CSP、认证 token 存储方式均未检查。</li>
+<li><strong>PWA / ServiceWorker 生命周期（中）</strong>：误离线行为暗示 ServiceWorker 缓存/更新逻辑可能有问题，但没有深入检查 sw.js 代码。</li>
+<li><strong>API 响应内容正确性（中）</strong>：smoke 测试只验证了 HTTP 200 和页面能打开，没验证返回的 JSON 数据是否正确。</li>
+<li><strong>暗色模式（低）</strong>：未测试。</li>
+<li><strong>Lighthouse 性能量化（低）</strong>：只记录了 First Load JS 大小，没有跑 Lighthouse 性能分数。</li>
+<li><strong>跨浏览器兼容性（低）</strong>：只在 Chromium 内核浏览器测试，未覆盖 Safari（iPhone 默认浏览器）和 Firefox。</li>
+</ul>
+<h3 id="_3">环境依赖</h3>
+<ul>
+<li>本次审计基于<strong>未登录（匿名）状态</strong>。登录后 cloud-sync 401 错误会消失，部分弹窗交互可能有不同表现。</li>
+<li><code>better-sqlite3</code> 模块版本不匹配只在本地开发环境出现，不影响线上 Zeabur 部署。</li>
+<li>Smoke 测试响应时间受网络影响，首页 <code>/</code> 的 309ms 可能是冷启动或 SSR 开销，不是性能问题。</li>
+</ul>
+<hr />
+<h2 id="11">11. 下一步建议</h2>
+<ol>
+<li><strong>立即修复 P0-001</strong>：这是唯一能让用户"以为网站坏了"的阻断 bug，优先级最高。</li>
+<li><strong>追加一次登录态走查</strong>：本次全部基于未登录状态，登录后的云同步、复习队列、设置弹窗可能暴露出另一套问题。</li>
+<li><strong>用真机（iPhone Safari + Android Chrome）复现点透问题</strong>：浏览器 DevTools 模拟移动端和真机触摸行为有差异，建议在真实手机上验证 P1-003 和 P2-003。</li>
+<li><strong>跑一轮 Lighthouse 性能审计</strong>：量化首屏时间、累积布局偏移（CLS）、可交互时间（TTI），把"感觉慢"变成具体数字。</li>
+<li><strong>考虑拆分 <code>/review</code> 和 <code>/audit</code> 两个路由</strong>：即便修复了渲染问题，如果桌面端和移动端确实需要访问两个不同功能，应该给他们各自独立的、语义清晰的网址，而不是藏在同一个地址后面。</li>
+</ol>
+</div>
+</body>
+</html>

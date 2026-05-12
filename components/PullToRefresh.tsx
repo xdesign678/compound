@@ -9,6 +9,9 @@ const TRIGGER_DISTANCE = 72; // px pull to trigger refresh
 const MAX_PULL = 120; // visual clamp
 const RESISTANCE = 0.45; // rubber-band feel
 const REFRESH_TIMEOUT = 15000; // 15s timeout for refresh promise
+const LEFT_EDGE_ZONE = 36; // px — matches SwipeBack edge width, exclude to avoid conflict
+const DIRECTION_LOCK_PX = 10; // minimum total movement before deciding axis
+const DIRECTION_RATIO = 1.25; // |dy| must be >= |dx| * this to confirm vertical
 
 interface PullToRefreshProps {
   /** CSS selector for the scroll container (default: .app-main) */
@@ -29,9 +32,12 @@ export function PullToRefresh({
   const refreshingRef = useRef(false);
   const pullingRef = useRef(false);
   const startYRef = useRef<number | null>(null);
+  const startXRef = useRef<number | null>(null);
   const startScrollRef = useRef(0);
   const containerRef = useRef<HTMLElement | null>(null);
   const canPullRef = useRef(false);
+  const axisLockedRef = useRef(false); // true once we've decided vertical vs horizontal
+  const isVerticalRef = useRef(false); // true = confirmed downward pull
   const hasVibratedRef = useRef(false);
   const indicatorElRef = useRef<HTMLDivElement>(null);
   const indicatorBallRef = useRef<HTMLDivElement>(null);
@@ -79,18 +85,57 @@ export function PullToRefresh({
       if (!el) return;
       const target = e.target as HTMLElement;
       if (!canStartPullToRefresh({ target, root: el })) return;
-      const scrollTop = el.scrollTop ?? 0;
       const touch = e.touches[0];
+      // Exclude left edge zone to avoid conflicting with SwipeBack
+      if (touch.clientX <= LEFT_EDGE_ZONE) return;
+      const scrollTop = el.scrollTop ?? 0;
       startYRef.current = touch.clientY;
+      startXRef.current = touch.clientX;
       startScrollRef.current = scrollTop;
       canPullRef.current = true;
+      axisLockedRef.current = false;
+      isVerticalRef.current = false;
       hasVibratedRef.current = false;
     };
 
+    const cancelPull = () => {
+      canPullRef.current = false;
+      axisLockedRef.current = true;
+      if (pullingRef.current) {
+        pullingRef.current = false;
+        distanceRef.current = 0;
+        updateIndicatorDOM(0, false, refreshingRef.current);
+        forceRender();
+      }
+    };
+
     const onTouchMove = (e: TouchEvent) => {
-      if (!canPullRef.current || startYRef.current == null) return;
+      if (!canPullRef.current || startYRef.current == null || startXRef.current == null) return;
       const touch = e.touches[0];
+      const dx = touch.clientX - startXRef.current;
       const dy = touch.clientY - startYRef.current;
+
+      // Phase 1: direction not yet locked — decide axis
+      if (!axisLockedRef.current) {
+        const totalDrift = Math.abs(dx) + Math.abs(dy);
+        if (totalDrift < DIRECTION_LOCK_PX) return; // not enough movement to decide
+
+        if (Math.abs(dy) >= Math.abs(dx) * DIRECTION_RATIO) {
+          // Confirmed vertical (downward)
+          axisLockedRef.current = true;
+          isVerticalRef.current = true;
+        } else if (Math.abs(dx) >= Math.abs(dy) * DIRECTION_RATIO) {
+          // Confirmed horizontal — cancel pull-to-refresh entirely
+          cancelPull();
+          return;
+        }
+        // Diagonal / undecided — don't hijack yet, keep tracking
+        return;
+      }
+
+      // Phase 2: axis locked to vertical
+      if (!isVerticalRef.current) return;
+
       if (dy < 0) {
         // scrolling up, release pull
         if (pullingRef.current) {
@@ -103,7 +148,7 @@ export function PullToRefresh({
         return;
       }
 
-      // Prevent default scroll when pulling down
+      // Prevent default scroll only after confirming vertical pull
       e.preventDefault();
 
       const resisted = Math.min(dy * RESISTANCE, MAX_PULL);
