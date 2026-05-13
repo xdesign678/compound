@@ -122,6 +122,30 @@ export default function Page() {
   const [libraryOverlayVisible, setLibraryOverlayVisible] = useState(false);
   const libraryOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const desktopContentRef = useRef<HTMLElement>(null);
+  const listScrollRef = useRef(0);
+
+  // Save scroll position when entering detail, restore when leaving
+  useEffect(() => {
+    const main = document.querySelector('.app-main') as HTMLElement | null;
+    if (!main) return;
+    if (detail && tab !== 'ask') {
+      // Entering detail — save current scroll
+      listScrollRef.current = main.scrollTop;
+    }
+  }, [detail, tab]);
+
+  // Restore scroll position after the list view re-mounts
+  useEffect(() => {
+    if (detail || !mounted) return;
+    const main = document.querySelector('.app-main') as HTMLElement | null;
+    if (!main || listScrollRef.current === 0) return;
+    // Use rAF to wait for the list DOM to finish rendering
+    const raf = requestAnimationFrame(() => {
+      main.scrollTop = listScrollRef.current;
+      listScrollRef.current = 0;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [detail, mounted]);
   useEffect(() => {
     setMounted(true);
     hydrateHomeStyle();

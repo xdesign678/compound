@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface UseScrollSpyOptions {
   /** CSS selector for the scroll container. Defaults to '.app-main'. */
@@ -20,6 +20,7 @@ export function useScrollSpy({
   onScroll,
 }: UseScrollSpyOptions = {}) {
   const [scrolled, setScrolled] = useState(false);
+  const mountedRef = useRef(false);
 
   useEffect(() => {
     const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
@@ -27,10 +28,17 @@ export function useScrollSpy({
 
     let raf = 0;
     let pendingY: number | null = null;
+    let firstFrame = true;
 
     const flush = () => {
       raf = 0;
       if (pendingY !== null) {
+        // Skip the first onScroll callback to avoid overwriting a restored scroll position
+        if (firstFrame) {
+          firstFrame = false;
+          pendingY = null;
+          return;
+        }
         onScroll?.(pendingY);
         pendingY = null;
       }
@@ -44,6 +52,7 @@ export function useScrollSpy({
     };
 
     handleScroll();
+    mountedRef.current = true;
     main.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       main.removeEventListener('scroll', handleScroll);
