@@ -65,10 +65,10 @@ export function useKeyboardShortcuts() {
       // If detail is open, skip single-key shortcuts (except Escape)
       if (store.detail) return;
 
-      // / : focus search
+      // / : open command palette (search)
       if (e.key === '/') {
         e.preventDefault();
-        store.triggerSearchFocus();
+        store.openCommandPalette();
         return;
       }
 

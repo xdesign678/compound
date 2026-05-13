@@ -118,8 +118,6 @@ export interface UISlice {
   toast: ToastState;
   toastQueue: ToastState[];
   freshConceptIds: Record<string, true>;
-  searchCollapsed: boolean;
-  searchFocusNonce: number;
   libraryState: LibraryUIState;
   sourcesState: SourcesUIState;
   activitySubTab: ActivitySubTab;
@@ -148,8 +146,6 @@ export interface UISlice {
   clearAskHistory: () => Promise<void>;
   setActivitySubTab: (t: ActivitySubTab) => void;
   setActivityFilter: (f: ActivityFilterType) => void;
-  setSearchCollapsed: (v: boolean) => void;
-  triggerSearchFocus: () => void;
   setLibraryState: (patch: Partial<LibraryUIState>) => void;
   resetLibraryState: () => void;
   setSourcesState: (patch: Partial<SourcesUIState>) => void;
@@ -171,8 +167,6 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => (
   toast: { visible: false, text: '', loading: false, id: 0 },
   toastQueue: [],
   freshConceptIds: {} as Record<string, true>,
-  searchCollapsed: false,
-  searchFocusNonce: 0,
   libraryState: { ...DEFAULT_LIBRARY_STATE },
   sourcesState: { ...DEFAULT_SOURCES_STATE },
   activitySubTab: 'health',
@@ -271,8 +265,6 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => (
   },
   setActivitySubTab: (t) => set({ activitySubTab: t }),
   setActivityFilter: (f) => set({ activityFilter: f }),
-  setSearchCollapsed: (v) => set((s) => (s.searchCollapsed === v ? s : { searchCollapsed: v })),
-  triggerSearchFocus: () => set((s) => ({ searchFocusNonce: s.searchFocusNonce + 1 })),
   setLibraryState: (patch) => set((s) => ({ libraryState: { ...s.libraryState, ...patch } })),
   resetLibraryState: () => set({ libraryState: { ...DEFAULT_LIBRARY_STATE } }),
   setSourcesState: (patch) => set((s) => ({ sourcesState: { ...s.sourcesState, ...patch } })),

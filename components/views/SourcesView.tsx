@@ -16,7 +16,6 @@ const SCROLL_ROOT_SELECTOR = '.app-main';
 export function SourcesView() {
   const openSource = useAppStore((s) => s.openSource);
   const detail = useAppStore((s) => s.detail);
-  const searchFocusNonce = useAppStore((s) => s.searchFocusNonce);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const query = useAppStore((s) => s.sourcesState.query);
@@ -106,12 +105,6 @@ export function SourcesView() {
     }
   }, [sources]);
 
-  useEffect(() => {
-    if (searchFocusNonce === 0) return;
-    const id = window.setTimeout(() => searchInputRef.current?.focus(), 240);
-    return () => window.clearTimeout(id);
-  }, [searchFocusNonce]);
-
   if (!sources)
     return (
       <div className="skeleton-sources" role="status" aria-label="正在加载资料" aria-busy="true">
@@ -124,24 +117,6 @@ export function SourcesView() {
 
   return (
     <>
-      <div className={`search-bar-slot${scrolled ? ' is-collapsed' : ''}`}>
-        <div className={`search-bar ${scrolled ? 'scrolled' : ''}`}>
-          <div className="search-label">按标题或作者搜索资料</div>
-          <div className="search-wrap">
-            <Icon.Search />
-            <input
-              ref={searchInputRef}
-              className="search-input"
-              name="source-search"
-              autoComplete="off"
-              placeholder="搜索标题、作者…"
-              aria-label="搜索资料"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-        </div>
-      </div>
       <div className="view-padding">
         <div className="view-lead">
           <div className="view-lead-kicker">资料档案</div>

@@ -58,7 +58,6 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   const openConcept = useAppStore((s) => s.openConcept);
   const freshIds = useAppStore((s) => s.freshConceptIds);
   const detail = useAppStore((s) => s.detail);
-  const searchFocusNonce = useAppStore((s) => s.searchFocusNonce);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const [query, setQuery] = useState('');
@@ -136,12 +135,6 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   }, [deferredQuery, visibleCount]);
 
   useEffect(() => {
-    if (searchFocusNonce === 0) return;
-    const id = window.setTimeout(() => searchInputRef.current?.focus(), 240);
-    return () => window.clearTimeout(id);
-  }, [searchFocusNonce]);
-
-  useEffect(() => {
     getUnreviewedCountFromDb().then(setUnreviewedCount);
   }, [totalConceptCount]);
 
@@ -168,24 +161,6 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
 
   return (
     <>
-      <div className={`search-bar-slot${scrolled ? ' is-collapsed' : ''}`}>
-        <div className={`search-bar ${scrolled ? 'scrolled' : ''}`}>
-          <div className="search-label">检索概念、摘要与引用</div>
-          <div className="search-wrap">
-            <Icon.Search />
-            <input
-              ref={searchInputRef}
-              className="search-input"
-              name="wiki-search"
-              autoComplete="off"
-              placeholder="搜索概念、资料、引用…"
-              aria-label="搜索概念"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-        </div>
-      </div>
       {unreviewedCount > 0 && (
         <div className="concept-list recap-entry-list">
           <button

@@ -177,19 +177,11 @@ export function Header(props: HeaderProps) {
   const openSettings = useAppStore((s) => s.openSettings);
   const openObsidianImport = useAppStore((s) => s.openObsidianImport);
   const openGithubSync = useAppStore((s) => s.openGithubSync);
-  const searchCollapsed = useAppStore((s) => s.searchCollapsed);
-  const triggerSearchFocus = useAppStore((s) => s.triggerSearchFocus);
   const openCommandPalette = useAppStore((s) => s.openCommandPalette);
 
   const [overflowOpen, setOverflowOpen] = useState(false);
   const closeOverflow = useCallback(() => setOverflowOpen(false), []);
 
-  const showSearchIcon = !detail && (tab === 'wiki' || tab === 'sources') && searchCollapsed;
-  const handleExpandSearch = () => {
-    const main = document.querySelector('.app-main') as HTMLElement | null;
-    if (main) main.scrollTo({ top: 0, behavior: 'smooth' });
-    triggerSearchFocus();
-  };
   const handleOpenSourceToc = () => {
     window.dispatchEvent(new CustomEvent('compound:open-source-toc'));
   };
@@ -234,31 +226,17 @@ export function Header(props: HeaderProps) {
         <div className="header-subtitle">{meta.subtitle}</div>
       </div>
       <div className="header-actions">
-        {showSearchIcon && (
-          <button
-            type="button"
-            className="icon-btn header-search-btn is-visible"
-            onClick={handleExpandSearch}
-            aria-label={t('header.search.expand')}
-          >
-            <span aria-hidden="true">
-              <Icon.Search />
-            </span>
-          </button>
-        )}
-        {/* Mobile: command palette trigger (visible when search icon is not shown) */}
-        {!showSearchIcon && (
-          <button
-            type="button"
-            className="icon-btn header-mobile-search-btn"
-            onClick={openCommandPalette}
-            aria-label={t('header.search')}
-          >
-            <span aria-hidden="true">
-              <Icon.Search />
-            </span>
-          </button>
-        )}
+        {/* Mobile: command palette trigger */}
+        <button
+          type="button"
+          className="icon-btn header-mobile-search-btn"
+          onClick={openCommandPalette}
+          aria-label={t('header.search')}
+        >
+          <span aria-hidden="true">
+            <Icon.Search />
+          </span>
+        </button>
         {/* Desktop: show individual icons */}
         <button
           type="button"
