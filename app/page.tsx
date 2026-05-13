@@ -122,30 +122,6 @@ export default function Page() {
   const [libraryOverlayVisible, setLibraryOverlayVisible] = useState(false);
   const libraryOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const desktopContentRef = useRef<HTMLElement>(null);
-  const listScrollRef = useRef(0);
-
-  // Save scroll position when entering detail, restore when leaving
-  useEffect(() => {
-    const main = document.querySelector('.app-main') as HTMLElement | null;
-    if (!main) return;
-    if (detail && tab !== 'ask') {
-      // Entering detail — save current scroll
-      listScrollRef.current = main.scrollTop;
-    }
-  }, [detail, tab]);
-
-  // Restore scroll position after the list view re-mounts
-  useEffect(() => {
-    if (detail || !mounted) return;
-    const main = document.querySelector('.app-main') as HTMLElement | null;
-    if (!main || listScrollRef.current === 0) return;
-    // Use rAF to wait for the list DOM to finish rendering
-    const raf = requestAnimationFrame(() => {
-      main.scrollTop = listScrollRef.current;
-      listScrollRef.current = 0;
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [detail, mounted]);
   useEffect(() => {
     setMounted(true);
     hydrateHomeStyle();
@@ -484,24 +460,36 @@ export default function Page() {
       <Header conceptCount={conceptCount ?? 0} sourceCount={sourceCount ?? 0} loading={!ready} />
 
       <main className="app-main">
-        {!ready ? (
-          renderPrimaryView('.app-main')
-        ) : detail && tab !== 'ask' ? (
-          <div key={detail.id} className="detail-view">
-            {renderDetail()}
-          </div>
-        ) : (
-          <div
-            key={tab}
-            id={`tabpanel-${tab}`}
-            role="tabpanel"
-            aria-labelledby={`tab-${tab}`}
-            className={`tab-view${tab === 'ask' ? ' ask-tab' : ''}`}
-          >
-            {renderPrimaryView('.app-main')}
-          </div>
-        )}
+        <div
+          key={tab}
+          id={`tabpanel-${tab}`}
+          role="tabpanel"
+          aria-labelledby={`tab-${tab}`}
+          className={`tab-view${tab === 'ask' ? ' ask-tab' : ''}`}
+        >
+          {renderPrimaryView('.app-main')}
+        </div>
       </main>
+
+      {/* Mobile detail overlay — replaces the old in-flow .detail-view */}
+      {detail && tab !== 'ask' && !isDesktop && (
+        <div
+          className="mobile-detail-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={detail.type === 'concept' ? '概念详情' : '资料详情'}
+        >
+          <header className="mobile-detail-header">
+            <button type="button" className="back-btn" onClick={back}>
+              <span aria-hidden="true">
+                <Icon.Back />
+              </span>
+              <span>返回</span>
+            </button>
+          </header>
+          <div className="mobile-detail-scroll">{renderDetail()}</div>
+        </div>
+      )}
 
       {showFab && ready && (
         <button className="fab" onClick={openModal} aria-label="添加资料">

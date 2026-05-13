@@ -411,8 +411,7 @@ button {
   display: flex;
   flex-direction: column;
 }
-.app-main > .tab-view.ask-tab,
-.app-main > .detail-view {
+.app-main > .tab-view.ask-tab {
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -4928,6 +4927,37 @@ button {
 }
 .detail-view {
   animation: slideInRight var(--motion-duration-slow) var(--motion-ease-emphasized) forwards;
+}
+
+/* Mobile detail overlay — full-screen layer on top of the list view.
+   The list stays mounted (display:none) so its scroll position is preserved. */
+.mobile-detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-command-palette);
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight var(--motion-duration-slow) var(--motion-ease-emphasized) forwards;
+}
+.mobile-detail-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  padding: 6px 20px;
+  min-height: auto;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-default);
+}
+.mobile-detail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 
 /* Settings responsive layout */
