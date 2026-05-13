@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useDeferredValue, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
+import { useMemo, useCallback, useRef, useLayoutEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
-import { Icon, SourceTypeIcon } from '../Icons';
+import { SourceTypeIcon } from '../Icons';
 import { OnboardingCard } from '../OnboardingCard';
 import { useScrollSpy } from '@/lib/hooks/useScrollSpy';
 import { SOURCE_TYPE_LABELS } from '@/lib/constants';
@@ -16,13 +16,10 @@ const SCROLL_ROOT_SELECTOR = '.app-main';
 export function SourcesView() {
   const openSource = useAppStore((s) => s.openSource);
   const detail = useAppStore((s) => s.detail);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  const query = useAppStore((s) => s.sourcesState.query);
   const visibleCount = useAppStore((s) => s.sourcesState.visibleCount);
   const setSourcesState = useAppStore((s) => s.setSourcesState);
 
-  const setQuery = useCallback((v: string) => setSourcesState({ query: v }), [setSourcesState]);
   const setVisibleCount = useCallback(
     (updater: number | ((count: number) => number)) => {
       const current = useAppStore.getState().sourcesState.visibleCount;
@@ -32,16 +29,13 @@ export function SourcesView() {
     [setSourcesState],
   );
 
-  const deferredQuery = useDeferredValue(query);
-  // Keep the user's current page size on first mount; only reset after they change the filter.
-  const filterResetSkipRef = useRef(true);
   const scrollRestoredRef = useRef(false);
 
   const handleScrollPersist = useCallback((scrollTop: number) => {
     useAppStore.getState().setSourcesState({ scrollTop });
   }, []);
 
-  const { scrolled } = useScrollSpy({
+  useScrollSpy({
     scrollRootSelector: SCROLL_ROOT_SELECTOR,
     onScroll: handleScrollPersist,
   });
@@ -66,31 +60,12 @@ export function SourcesView() {
     return map;
   }, [sources]);
 
-  const normalizedQuery = deferredQuery.trim().toLowerCase();
-
-  const matchingSources = useMemo(() => {
-    if (!sources) return [];
-    return sources.filter(
-      (source) =>
-        source.title.toLowerCase().includes(normalizedQuery) ||
-        (source.author ?? '').toLowerCase().includes(normalizedQuery),
-    );
-  }, [normalizedQuery, sources]);
-
   const filteredSources = useMemo(
-    () => matchingSources.slice(0, visibleCount),
-    [matchingSources, visibleCount],
+    () => (sources ?? []).slice(0, visibleCount),
+    [sources, visibleCount],
   );
 
-  const totalMatches = matchingSources.length;
-
-  useEffect(() => {
-    if (filterResetSkipRef.current) {
-      filterResetSkipRef.current = false;
-      return;
-    }
-    setVisibleCount(PAGE_SIZE);
-  }, [deferredQuery, setVisibleCount]);
+  const totalMatches = sources?.length ?? 0;
 
   // Restore the list scroll only once after Dexie has finished hydrating the source list.
   useLayoutEffect(() => {
@@ -126,21 +101,6 @@ export function SourcesView() {
         </div>
         {(totalSourceCount ?? 0) === 0 ? (
           <OnboardingCard variant="compact" />
-        ) : filteredSources.length === 0 ? (
-          <div className="empty-state empty-state-compact search-empty-state">
-            <div className="es-icon">
-              <Icon.Search />
-            </div>
-            <h3>没有找到资料</h3>
-            <p>换个关键词试试，或清空搜索回到全部资料。</p>
-            <button
-              className="modal-btn empty-state-action"
-              onClick={() => setQuery('')}
-              type="button"
-            >
-              清空搜索
-            </button>
-          </div>
         ) : (
           <>
             {filteredSources.map((source) => (
