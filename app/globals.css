@@ -11989,6 +11989,7 @@ h3 {
 
 /* Entry list — wraps the recap card so it shares horizontal padding with concept cards */
 .recap-entry-list {
+  margin-top: var(--space-md);
   margin-bottom: var(--space-md);
 }
 .recap-entry-list-library {
