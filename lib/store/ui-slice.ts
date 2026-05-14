@@ -81,6 +81,16 @@ export interface LibraryUIState {
   scrollAnchorId: string | null;
 }
 
+export interface WikiUIState {
+  scrollTop: number;
+  scrollAnchorId: string | null;
+}
+
+export const DEFAULT_WIKI_STATE: WikiUIState = {
+  scrollTop: 0,
+  scrollAnchorId: null,
+};
+
 export const DEFAULT_LIBRARY_STATE: LibraryUIState = {
   query: '',
   selectedPrimary: null,
@@ -118,6 +128,7 @@ export interface UISlice {
   toast: ToastState;
   toastQueue: ToastState[];
   freshConceptIds: Record<string, true>;
+  wikiState: WikiUIState;
   libraryState: LibraryUIState;
   sourcesState: SourcesUIState;
   activitySubTab: ActivitySubTab;
@@ -144,6 +155,8 @@ export interface UISlice {
   markFresh: (ids: string[]) => void;
   clearFresh: () => void;
   clearAskHistory: () => Promise<void>;
+  setWikiState: (patch: Partial<WikiUIState>) => void;
+  resetWikiState: () => void;
   setActivitySubTab: (t: ActivitySubTab) => void;
   setActivityFilter: (f: ActivityFilterType) => void;
   setLibraryState: (patch: Partial<LibraryUIState>) => void;
@@ -167,6 +180,7 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => (
   toast: { visible: false, text: '', loading: false, id: 0 },
   toastQueue: [],
   freshConceptIds: {} as Record<string, true>,
+  wikiState: { ...DEFAULT_WIKI_STATE },
   libraryState: { ...DEFAULT_LIBRARY_STATE },
   sourcesState: { ...DEFAULT_SOURCES_STATE },
   activitySubTab: 'health',
@@ -263,6 +277,8 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => (
     const { getDb } = await import('../db');
     await getDb().askHistory.clear();
   },
+  setWikiState: (patch) => set((s) => ({ wikiState: { ...s.wikiState, ...patch } })),
+  resetWikiState: () => set({ wikiState: { ...DEFAULT_WIKI_STATE } }),
   setActivitySubTab: (t) => set({ activitySubTab: t }),
   setActivityFilter: (f) => set({ activityFilter: f }),
   setLibraryState: (patch) => set((s) => ({ libraryState: { ...s.libraryState, ...patch } })),

@@ -404,6 +404,7 @@ button {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
   position: relative;
   padding-bottom: var(--space-lg);
   scrollbar-width: none;
@@ -460,6 +461,8 @@ button {
   padding: 9px 4px 8px;
   border-radius: var(--radius-md);
   color: var(--text-secondary);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   transition:
     color 0.18s ease,
     transform 0.12s ease,
@@ -471,6 +474,7 @@ button {
   background: rgba(217, 119, 87, 0.08);
 }
 .tab-item:active {
+  background: rgba(217, 119, 87, 0.12);
   transform: scale(0.96);
 }
 .tab-item svg {
@@ -4934,10 +4938,12 @@ button {
 .mobile-detail-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-command-palette);
+  z-index: var(--z-modal);
   background: var(--bg-primary);
   display: flex;
   flex-direction: column;
+  transform: translateZ(0);
+  will-change: transform;
   animation: slideInRight var(--motion-duration-slow) var(--motion-ease-emphasized) forwards;
 }
 .mobile-detail-header {
@@ -4951,6 +4957,10 @@ button {
   background: var(--bg-primary);
   border-bottom: 1px solid var(--border-default);
 }
+.mobile-detail-header .back-btn {
+  position: relative;
+  z-index: 2;
+}
 .mobile-detail-scroll {
   flex: 1;
   min-height: 0;
@@ -4958,6 +4968,7 @@ button {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
+  touch-action: pan-y;
 }
 
 /* Settings responsive layout */

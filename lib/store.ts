@@ -18,6 +18,7 @@ export type {
   FontSize,
   LineHeight,
   ToastState,
+  WikiUIState,
   LibraryUIState,
   SourcesUIState,
 } from './store/ui-slice';

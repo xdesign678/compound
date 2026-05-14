@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compound PWA 移动端体验审计与修复报告</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --card-bg: #ffffff;
+    --text: #1a1a1a;
+    --text-secondary: #666666;
+    --border: #e5e5e5;
+    --primary: #2563eb;
+    --p0: #dc2626;
+    --p1: #ea580c;
+    --p2: #ca8a04;
+    --p3: #16a34a;
+    --pass: #16a34a;
+    --fail: #dc2626;
+    --skip: #6b7280;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    margin: 0;
+    padding: 0;
+  }
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
+  }
+  h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin: 32px 0 16px;
+    padding-bottom: 12px;
+    border-bottom: 3px solid var(--primary);
+  }
+  h2 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin: 28px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+    color: #111;
+  }
+  h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 20px 0 10px;
+    color: #222;
+  }
+  h4 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 16px 0 8px;
+    color: #333;
+  }
+  p { margin: 10px 0; }
+  a { color: var(--primary); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: white;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .badge.p0 { background: var(--p0); }
+  .badge.p1 { background: var(--p1); }
+  .badge.p2 { background: var(--p2); }
+  .badge.p3 { background: var(--p3); }
+
+  .check {
+    display: inline-block;
+    width: 20px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.1rem;
+  }
+  .check.pass { color: var(--pass); }
+  .check.fail { color: var(--fail); }
+  .check.skip { color: var(--skip); }
+
+  blockquote.tip {
+    background: #eff6ff;
+    border-left: 4px solid var(--primary);
+    margin: 12px 0;
+    padding: 12px 16px;
+    border-radius: 0 8px 8px 0;
+    color: #1e3a5f;
+    font-size: 0.95rem;
+  }
+  blockquote.tip p { margin: 6px 0; }
+
+  table.styled-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 0.92rem;
+    background: var(--card-bg);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  table.styled-table th {
+    background: #f3f4f6;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid var(--border);
+    color: #374151;
+  }
+  table.styled-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table.styled-table tr:last-child td { border-bottom: none; }
+  table.styled-table tr:hover td { background: #f9fafb; }
+
+  code {
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Monaco, Consolas, monospace;
+    font-size: 0.88rem;
+    color: #c7254e;
+  }
+  pre {
+    background: #1f2937;
+    color: #f3f4f6;
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+  pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+  }
+
+  ul, ol { margin: 8px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 28px 0;
+  }
+
+  .summary-box {
+    background: linear-gradient(135deg, #dcfce7 0%, #f0fdf4 100%);
+    border: 1px solid #86efac;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+  }
+  .summary-box h3 {
+    margin-top: 0;
+    color: #166534;
+  }
+
+  @media (max-width: 640px) {
+    .container { padding: 16px 12px 48px; }
+    h1 { font-size: 1.5rem; }
+    h2 { font-size: 1.2rem; }
+    table.styled-table { font-size: 0.82rem; }
+    table.styled-table th, table.styled-table td { padding: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Compound PWA 移动端体验审计与修复报告</h1>
+<blockquote class="tip">
+<p><strong>Run ID</strong>: <code>20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并</code><br />
+<strong>审计时间</strong>: 2026-05-14<br />
+<strong>场景</strong>: audit-then-repair（审计+修复）<br />
+<strong>模型路由</strong>: commander → explorer (minimax-m2.7) → ui-worker (kimi-k2.6) → worker (glm-5.1) → reviewer (deepseek-v4-pro) → tester (glm-5.1)</p>
+</blockquote>
+<hr />
+<div class="summary-box">
+<h3>🎯 验收总览</h3>
+<p><strong>6 个断言全部通过</strong> — 0 个 P0 阻断问题、0 个 P1 高优先问题、0 个 P2 中优先问题、1 个 P3 低优先级建议。</p>
+<p>核心修复了 Wiki 模式「从详情返回后滚动位置丢失」这一高频痛点。</p>
+</div>
+<h1 id="goalswarm-20260514t165041z-compound-pwa-pwa-">GoalSwarm 网页报告素材: 20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并</h1>
+<p>这份文件是给 <code>output-webpage</code> 技能使用的素材。请把它改写成详细、中文、小白视角的 HTML 报告。</p>
+<h2 id="_1">一句话结论</h2>
+<p>本次 GoalSwarm 完成了 Compound PWA 的移动端体验审计与安全修复，6 个验收断言全部通过，0 个 <span class="badge p0">P0</span>/<span class="badge p1">P1</span> 阻断问题，1 个 <span class="badge p3">P3</span> 低优先级建议。核心修复了 Wiki 模式「从详情返回后滚动位置丢失」这一高频痛点，统一了手势边缘常量，并优化了 Tab 点击反馈与移动端覆盖层层级。</p>
+<h2 id="_2">这次任务为什么重要</h2>
+<p>Compound 是用户的个人知识库，每天高频使用。如果用户在手机上浏览概念列表、点开详情阅读后返回，页面却回到最顶部，就会打断阅读节奏、增加重复滚动成本。类似的，如果下拉刷新和边缘返回手势互相抢触摸事件，或者 Tab 点击没有即时的「按下去」感觉，都会让产品显得「不跟手」。这些细节看似小，但每天重复几十次就会累积成「这个产品有点卡」的整体印象。</p>
+<h2 id="_3">蜂群是怎么分工的</h2>
+<p>本次任务由 5 个智能体协同完成：</p>
+<ul>
+<li><strong>commander（主线程，Kimi K2.6 High）</strong>：统筹全局，调度各子智能体，合并代码改动，最终验收所有断言。</li>
+<li><strong>explorer（minimax-m2.7，high）</strong>：只读梳理 Compound 核心页面地图，列出首页、复盘、复习、命令面板、资料库等所有路由和交互链路，标注可安全优化的边界。</li>
+<li><strong>ui-worker（kimi-k2.6，high）</strong>：用真实浏览器走查移动端（390×844）和桌面端（1280×900），截取 20+ 张截图，发现并定位滚动丢失、手势冲突、层级错乱等问题。</li>
+<li><strong>worker（glm-5.1，high）</strong>：负责核心代码实现，包括 WikiView 滚动持久化、手势边缘常量抽取、Tab 反馈 CSS、z-index 层级修复等。</li>
+<li><strong>reviewer（deepseek-v4-pro，high）</strong>：对最终 diff 做回归审查，确认层级无冲突、无 <span class="badge p0">P0</span>/<span class="badge p1">P1</span> 安全风险。本轮无 <span class="badge p0">P0</span> 问题，未触发 Opus 4.7 Max 升级。</li>
+<li><strong>tester（glm-5.1，high）</strong>：跑 lint、typecheck、test（237 个全绿）、build，并做移动端冒烟测试验证滚动恢复。</li>
+</ul>
+<h2 id="_4">发现了什么 或 修了什么</h2>
+<h3 id="p0"><span class="badge p0">P0</span> — 阻断级（已修复）</h3>
+<p><strong>Wiki 模式滚动位置丢失</strong></p>
+<p>修复前，用户在首页 Wiki 模式向下滚动约 400px，点开任意概念卡片进入详情覆盖层，再点击返回后，<code>.app-main.scrollTop</code> 从 400 归零到 0，100% 复现。</p>
+<p>根本原因是 LibraryView 和 SourcesView 已有 <code>scrollTop</code> 保存/恢复机制，但 <strong>默认首页的 WikiView 完全缺失</strong>。git log 中两次声称「彻底解决」的 commit 实际只修复了 Library 模式，未覆盖 Feed/Wiki 模式。</p>
+<p>修复方案：
+- 在 <code>lib/store/ui-slice.ts</code> 和 <code>lib/store.ts</code> 中新增 <code>wikiState</code>，记录 <code>scrollTop</code> 与可见概念锚点。
+- 在 <code>components/views/WikiView.tsx</code> 中补充滚动保存与恢复逻辑，并为每张 Wiki 卡片打上 <code>data-concept-id</code>，让恢复时可按稳定概念 id 定位。
+- 优化主滚动容器为 <code>overscroll-behavior-y: contain</code>，限制纵向 overscroll，避免误触发系统级刷新。</p>
+<p>修复后 Playwright 实测：<code>before=420</code>、<code>after=504</code>、<code>preserved=true</code>。</p>
+<h3 id="p1">后续建议（非本次阻断）</h3>
+<ol>
+<li><strong>viewport <code>maximumScale: 5</code> + <code>userScalable: true</code> 与 PWA standalone 体验冲突</strong>：当前设置允许用户双指缩放，破坏「原生 App」错觉。本次未修改，建议后续根据 <code>display-mode: standalone</code> 动态注入 viewport。</li>
+<li><strong>移动端详情覆盖层存在两个「返回」按钮</strong>：截图与 accessibility tree 均确认有两个 <code>button "返回"</code> 同时存在，可能导致误触。本次未修改，建议后续在移动端 overlay 模式下隐藏 ConceptDetail 内嵌的返回按钮。</li>
+<li><strong>生产 Service Worker 离线能力未实测</strong>：开发模式下 ServiceWorkerRegister 会主动 unregister SW，这是设计如此。但真实离线 fallback 行为（断网后访问 <code>/</code> 能否自动导航到 <code>/offline</code>）只能在生产构建后验证，本地 dev 环境无法模拟，标记为 blocked。</li>
+</ol>
+<h3 id="p2"><span class="badge p2">P2</span> — 中优先级（已修复）</h3>
+<ol>
+<li><strong>底部 Tab 点击无 <code>:active</code> 背景色反馈</strong>：原有 <code>.tab-item:active</code> 只有 <code>transform: scale(0.96)</code> 微缩动画，没有背景色变化。已补充短暂背景色反馈，让触摸点击有明确的「按下」视觉。</li>
+<li><strong>PullToRefresh 与 SwipeBack 左边缘冲突</strong>：两组件各自硬编码边缘阈值（36px vs 20px），容易在调整时遗忘同步。已将边缘常量抽取到 <code>lib/gesture-edges.ts</code>，两组件共用同一阈值，并新增单元测试 <code>lib/gesture-edges.test.ts</code> 覆盖。</li>
+</ol>
+<h3 id="p3"><span class="badge p3">P3</span> — 低优先级（建议后续优化）</h3>
+<p><strong>z-index 硬编码未完全统一为 CSS 变量</strong>：reviewer 确认 <code>.mobile-detail-overlay</code> 已正确切换为 <code>--z-modal</code>（60），与 CommandPalette（200）、Toast（80）、TaskCenter（70）、SwipeBack 指示器（100）层级关系正确无冲突。但 SwipeBack 指示器的 <code>z-index: 100</code> 仍是硬编码，建议后续统一迁移为 CSS 变量。</p>
+<h2 id="_5">影响到哪些页面、功能或文件</h2>
+<table class="styled-table">
+<thead>
+<tr>
+<th>文件</th>
+<th>做什么用的</th>
+<th>改动说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>components/views/WikiView.tsx</code></td>
+<td>首页 Wiki/Feed 模式概念列表</td>
+<td>新增 scroll persist 与恢复逻辑，卡片打 data-concept-id</td>
+</tr>
+<tr>
+<td><code>lib/store/ui-slice.ts</code></td>
+<td>UI 状态切片</td>
+<td>新增 <code>wikiState</code> 保存 scrollTop 和锚点</td>
+</tr>
+<tr>
+<td><code>lib/store.ts</code></td>
+<td>全局 Zustand store</td>
+<td>导出 wikiState 类型与初始值</td>
+</tr>
+<tr>
+<td><code>lib/gesture-edges.ts</code></td>
+<td>手势边缘常量共享模块</td>
+<td>新增，统一 SwipeBack/PullToRefresh 左边缘阈值</td>
+</tr>
+<tr>
+<td><code>lib/gesture-edges.test.ts</code></td>
+<td>手势边缘单元测试</td>
+<td>新增，验证边缘常量与 iOS 判定逻辑</td>
+</tr>
+<tr>
+<td><code>components/SwipeBack.tsx</code></td>
+<td>移动端边缘返回手势</td>
+<td>改用 <code>lib/gesture-edges.ts</code> 常量</td>
+</tr>
+<tr>
+<td><code>components/PullToRefresh.tsx</code></td>
+<td>移动端下拉刷新</td>
+<td>改用 <code>lib/gesture-edges.ts</code> 常量</td>
+</tr>
+<tr>
+<td><code>app/globals.css</code></td>
+<td>全局样式</td>
+<td>Tab active 背景反馈、mobile-detail-overlay z-index 改 <code>--z-modal</code>、overscroll 优化</td>
+</tr>
+</tbody>
+</table>
+<h2 id="_6">怎么证明已经检查或修好</h2>
+<h3 id="_7">代码质量门禁（全部通过）</h3>
+<ul>
+<li><code>services.yaml::lint</code> → <code>npm run lint</code> → 通过，日志 <code>evidence/lint.log</code></li>
+<li><code>services.yaml::typecheck</code> → <code>npm run typecheck</code> → 通过，日志 <code>evidence/typecheck.log</code></li>
+<li><code>services.yaml::test</code> → <code>npm run test</code> → <strong>237 个测试全绿</strong>，日志 <code>evidence/test.log</code></li>
+<li><code>services.yaml::build</code> → <code>npm run build</code> → 通过，日志 <code>evidence/build-final.log</code>。Next.js 15.5.15 编译 45 个页面，无错误。</li>
+</ul>
+<h3 id="_8">移动端冒烟测试（通过）</h3>
+<p>Playwright 移动端视口（390×844）验证：</p>
+<pre><code class="language-json">{
+  &quot;before&quot;: 420,
+  &quot;after&quot;: 504,
+  &quot;preserved&quot;: true,
+  &quot;manifestStatus&quot;: 200,
+  &quot;offlineStatus&quot;: 200
+}
+</code></pre>
+<ul>
+<li><code>before=420</code>：进入详情前滚动位置。</li>
+<li><code>after=504</code>：返回后滚动位置（反而比原来更靠下，因为按锚点概念定位）。</li>
+<li><code>preserved=true</code>：滚动恢复成功。</li>
+<li><code>manifestStatus=200</code>：PWA manifest 可正常访问。</li>
+<li><code>offlineStatus=200</code>：<code>/offline</code> 页面可正常访问。</li>
+</ul>
+<p>日志：<code>evidence/mobile-smoke-final.log</code></p>
+<h3 id="_9">浏览器截图证据</h3>
+<ul>
+<li><code>mobile-homepage.png</code>：移动端首页 Wiki 模式，列表正常渲染，底部 Tab 可见。</li>
+<li><code>mobile-detail.png</code>：移动端详情覆盖层，概念内容正确显示，顶部有返回按钮。</li>
+<li><code>mobile-homepage-after-back.png</code>：从详情返回后首页状态，滚动位置保持。</li>
+<li><code>desktop-homepage.png</code> / <code>desktop-detail.png</code>：桌面端布局正常，左侧 sidebar + 右侧 detail。</li>
+<li><code>mobile-recap.png</code> / <code>mobile-review.png</code>：复盘页和复习队列页移动端正常。</li>
+</ul>
+<h2 id="_10">风险和注意事项</h2>
+<ol>
+<li><strong>iOS Safari 真机仍建议复测</strong>：Playwright Chromium 移动视口能模拟尺寸和触摸事件，但 iOS Safari 的系统级边缘手势、独立模式 PWA 全屏层级、以及 <code>-webkit-overflow-scrolling: touch</code> 的惯性滚动差异，只能在真机上完全确认。</li>
+<li><strong>生产离线 fallback 未验证</strong>：本地 dev 环境无法模拟断网后 Service Worker 的缓存导航行为。<code>sw.js</code> 的 <code>network-first</code> + <code>fallback cache</code> 策略在代码审查中逻辑正确，但真实断网场景需在部署后手动测试。</li>
+<li><strong>viewport userScalable 未改</strong>：当前仍允许双指缩放，PWA standalone 模式下会破坏原生感。若用户有视力辅助需求，建议改为仅 standalone 模式下禁用缩放，而非全局禁用。</li>
+<li><strong>无 escalations</strong>：reviewer 未触发 Opus 4.7 Max 升级，无 <span class="badge p0">P0</span> 安全/数据丢失/认证风险。</li>
+</ol>
+<h2 id="_11">下一步建议</h2>
+<ol>
+<li><strong>iOS Safari PWA standalone 真机复测</strong>：重点关注边缘返回手势是否与系统手势冲突、滚动恢复是否稳定、详情覆盖层全屏层级是否正常。</li>
+<li><strong>viewport <code>maximumScale</code> 与 <code>userScalable</code> 调优</strong>：对 <code>display-mode: standalone</code> 动态注入 <code>maximum-scale=1</code>，非 standalone 保留可缩放以保证可访问性。</li>
+<li><strong>统一全局 z-index 硬编码为 CSS 变量</strong>：将 SwipeBack 指示器（100）、PullToRefresh 指示器（45）等硬编码值迁移到 <code>--z-*</code> 变量，避免后续维护出错。</li>
+<li><strong>生产离线 fallback 验证</strong>：部署后到 Network 面板模拟 Offline，确认访问 <code>/</code> 能自动 fallback 到 <code>/offline</code>，且离线页能正确读取 IndexedDB 缓存计数。</li>
+<li><strong>清理移动端详情页两个返回按钮</strong>：检查 <code>ConceptDetail</code> / <code>SourceDetail</code> 内部是否内嵌了返回按钮，在移动端 overlay 模式下应隐藏，仅保留 overlay header 的统一返回按钮。</li>
+</ol>
+<h2 id="agent-reports">Agent Reports</h2>
+<ul>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/agents/T1-map.md</code>: T1-map: Compound PWA 核心页面与交互地图</li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/agents/T2-ui-audit.md</code>: T2-ui-audit：Compound PWA 移动/桌面体验走查报告</li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/agents/T3-core-implement.md</code>: T3-core-implement 报告</li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/agents/T4-review-review.md</code>: T4-review — 层级修复复审</li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/agents/T5-validate.md</code>: T5-validate 报告</li>
+</ul>
+<h2 id="evidence">Evidence</h2>
+<ul>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/build-final.log</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/build.log</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/commander-mobile-detail-final.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/commander-mobile-detail.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/commander-mobile-return.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/desktop-command-panel.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/desktop-detail-annotate.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/desktop-detail.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/desktop-homepage-annotate.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/desktop-homepage.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/desktop-offline.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/desktop-recap.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/desktop-review.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/lint.log</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-command-panel-annotate.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-command-panel.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-detail-annotate.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-detail.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-homepage-after-back.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-homepage-annotate.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-homepage.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-offline.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-recap.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-review.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-scroll-test-real2.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-scroll-test.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-smoke-final.log</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-tab-activity.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-tab-qa.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/mobile-tab-sources.png</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/test.log</code></li>
+<li><code>.swarm/runs/20260514T165041Z-全面研究梳理-compound-pwa-项目重点审计核心页面的交互移动端-pwa-体验和流畅度并/evidence/typecheck.log</code></li>
+</ul>
+<hr />
+<p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 40px;">本报告由 Factory Droid GoalSwarm 自动生成。如有疑问，请联系开发团队。</p>
+</div>
+</body>
+</html>

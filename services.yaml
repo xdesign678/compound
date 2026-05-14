@@ -1,0 +1,42 @@
+# services.yaml — canonical command registry for this project.
+#
+# GoalSwarm workers and testers read this file BEFORE re-discovering commands.
+# Keep it short, accurate, and current. Project-specific keys (migrate, seed,
+# format, etc.) are encouraged.
+#
+# Conventions:
+# - Each key holds a single shell command string.
+# - Prefer the same command developers run locally.
+# - Use `null` (or omit the key) when the project genuinely lacks that capability.
+# - For commands that need a port or env override, document it inline so the
+#   worker doesn't have to guess.
+
+# === Required keys ===
+
+dev: 'npm run dev'
+lint: 'npm run lint'
+typecheck: 'npm run typecheck'
+test: 'npm run test'
+
+# === Recommended keys ===
+
+e2e: 'npm run test:e2e'
+build: 'npm run build'
+smoke: 'curl -fsS http://127.0.0.1:8080/ >/dev/null'
+
+format_check: 'npm run format:check'
+a11y: 'npm run test:a11y'
+ux_audit: 'npm run audit:ux:all'
+
+# === Optional project keys ===
+# Add freely. Examples:
+# migrate: "npx drizzle-kit migrate"
+# seed: "tsx scripts/seed.ts"
+# format: "npm run format"
+# storybook: "npm run storybook -- -p 6006"
+
+# === Notes ===
+notes:
+  - Workers must consult this file before re-discovering commands.
+  - If a command requires a specific port or env var, document it inline above.
+  - Update this file when commands change; subsequent runs reuse it.

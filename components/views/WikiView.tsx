@@ -1,6 +1,15 @@
 'use client';
 
-import { useState, useMemo, useEffect, useDeferredValue, useRef, memo } from 'react';
+import {
+  useState,
+  useMemo,
+  useEffect,
+  useDeferredValue,
+  useRef,
+  useLayoutEffect,
+  useCallback,
+  memo,
+} from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
 import { getDb } from '@/lib/db';
@@ -33,6 +42,7 @@ const WikiCard = memo(function WikiCard({
     <button
       className={`concept-card${isFresh ? ' fresh' : ''}${isActive ? ' active' : ''}`}
       onClick={() => onOpen(concept.id)}
+      data-concept-id={concept.id}
       type="button"
       aria-current={isActive ? 'page' : undefined}
       aria-label={`${concept.title}，${concept.related.length} 个链接，来自 ${concept.sources.length} 份资料`}
@@ -66,8 +76,29 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   const [unreviewedCount, setUnreviewedCount] = useState(0);
   const [serverConcepts, setServerConcepts] = useState<Concept[] | null>(null);
   const [serverSearchLoading, setServerSearchLoading] = useState(false);
+  const scrollRestoredRef = useRef(false);
 
-  const { scrolled } = useScrollSpy({ scrollRootSelector });
+  const handleWikiScroll = useCallback(
+    (scrollTop: number) => {
+      useAppStore.getState().setWikiState({ scrollTop });
+      const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
+      if (!main) return;
+      const rootTop = main.getBoundingClientRect().top;
+      const cards = main.querySelectorAll('[data-concept-id]');
+      for (const card of cards) {
+        const rect = card.getBoundingClientRect();
+        if (rect.top >= rootTop && rect.top < rootTop + main.clientHeight / 2) {
+          useAppStore.getState().setWikiState({
+            scrollAnchorId: (card as HTMLElement).dataset.conceptId ?? null,
+          });
+          break;
+        }
+      }
+    },
+    [scrollRootSelector],
+  );
+
+  const { scrolled } = useScrollSpy({ scrollRootSelector, onScroll: handleWikiScroll });
 
   const localConcepts = useLiveQuery(async () => {
     const q = deferredQuery.trim().toLowerCase();
@@ -144,6 +175,30 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
     () => (concepts ?? []).filter((c) => !freshIds[c.id]),
     [concepts, freshIds],
   );
+
+  useLayoutEffect(() => {
+    if (scrollRestoredRef.current) return;
+    if (!concepts) return;
+    const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
+    if (!main) return;
+    scrollRestoredRef.current = true;
+
+    const restore = () => {
+      const { scrollAnchorId, scrollTop } = useAppStore.getState().wikiState;
+      if (scrollAnchorId) {
+        const card = main.querySelector(
+          `[data-concept-id="${scrollAnchorId}"]`,
+        ) as HTMLElement | null;
+        if (card) {
+          card.scrollIntoView({ block: 'center' });
+          return;
+        }
+      }
+      if (scrollTop > 0) main.scrollTop = scrollTop;
+    };
+
+    requestAnimationFrame(restore);
+  }, [concepts, scrollRootSelector]);
 
   if (!concepts) {
     return (

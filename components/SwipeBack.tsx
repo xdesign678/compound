@@ -3,9 +3,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '@/lib/store';
 import { hapticLight, hapticSuccess } from '@/lib/haptic';
+import { IOS_SAFARI_SWIPE_BACK_EDGE_WIDTH, SWIPE_BACK_EDGE_WIDTH } from '@/lib/gesture-edges';
 
-const DEFAULT_EDGE_WIDTH = 36; // px from left edge to start
-const IOS_EDGE_WIDTH = 20; // Reduced to avoid iOS native back gesture conflict
 const MIN_DISTANCE = 80; // px to trigger back (raised from 60 to avoid iOS conflict)
 const MAX_Y_DRIFT = 100; // px vertical drift tolerance
 const VERTICAL_CANCEL_RATIO = 0.8; // if dy > dx * ratio, it's more vertical than horizontal — cancel
@@ -52,7 +51,7 @@ export function SwipeBack() {
     }
 
     const isIOSSafari = getIsIOSSafariNonStandalone();
-    const edgeWidth = isIOSSafari ? IOS_EDGE_WIDTH : DEFAULT_EDGE_WIDTH;
+    const edgeWidth = isIOSSafari ? IOS_SAFARI_SWIPE_BACK_EDGE_WIDTH : SWIPE_BACK_EDGE_WIDTH;
 
     const onTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];

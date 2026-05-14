@@ -4,12 +4,12 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { hapticLight, hapticSuccess } from '@/lib/haptic';
 import { canStartPullToRefresh } from '@/lib/pull-to-refresh-boundary';
 import { useAppStore } from '@/lib/store';
+import { PULL_TO_REFRESH_EDGE_GUARD_WIDTH } from '@/lib/gesture-edges';
 
 const TRIGGER_DISTANCE = 72; // px pull to trigger refresh
 const MAX_PULL = 120; // visual clamp
 const RESISTANCE = 0.45; // rubber-band feel
 const REFRESH_TIMEOUT = 15000; // 15s timeout for refresh promise
-const LEFT_EDGE_ZONE = 36; // px — matches SwipeBack edge width, exclude to avoid conflict
 const DIRECTION_LOCK_PX = 10; // minimum total movement before deciding axis
 const DIRECTION_RATIO = 1.25; // |dy| must be >= |dx| * this to confirm vertical
 
@@ -87,7 +87,7 @@ export function PullToRefresh({
       if (!canStartPullToRefresh({ target, root: el })) return;
       const touch = e.touches[0];
       // Exclude left edge zone to avoid conflicting with SwipeBack
-      if (touch.clientX <= LEFT_EDGE_ZONE) return;
+      if (touch.clientX <= PULL_TO_REFRESH_EDGE_GUARD_WIDTH) return;
       const scrollTop = el.scrollTop ?? 0;
       startYRef.current = touch.clientY;
       startXRef.current = touch.clientX;
