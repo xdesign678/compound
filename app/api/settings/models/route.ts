@@ -8,9 +8,11 @@ import {
   saveCustomModel,
   saveSelectedModel,
 } from '@/lib/model-history';
+import { isRequestBodyTooLargeError, readJsonWithLimit } from '@/lib/request-guards';
 import { requireAdmin } from '@/lib/server-auth';
 
 export const runtime = 'nodejs';
+const MAX_BODY_BYTES = 16_384;
 
 function modelSettingsResponse() {
   return NextResponse.json({
@@ -40,8 +42,11 @@ export async function POST(req: Request) {
 
   let body: unknown;
   try {
-    body = await req.json();
-  } catch {
+    body = await readJsonWithLimit(req, MAX_BODY_BYTES);
+  } catch (error) {
+    if (isRequestBodyTooLargeError(error)) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     body = {};
   }
 
@@ -68,8 +73,11 @@ export async function PATCH(req: Request) {
 
   let body: unknown;
   try {
-    body = await req.json();
-  } catch {
+    body = await readJsonWithLimit(req, MAX_BODY_BYTES);
+  } catch (error) {
+    if (isRequestBodyTooLargeError(error)) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     body = {};
   }
 
@@ -95,8 +103,11 @@ export async function DELETE(req: Request) {
 
   let body: unknown;
   try {
-    body = await req.json();
-  } catch {
+    body = await readJsonWithLimit(req, MAX_BODY_BYTES);
+  } catch (error) {
+    if (isRequestBodyTooLargeError(error)) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     body = {};
   }
 

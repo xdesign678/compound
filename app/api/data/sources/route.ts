@@ -2,7 +2,11 @@ import { nanoid } from 'nanoid';
 import { NextResponse } from 'next/server';
 import { escapeHTML } from '@/lib/format';
 import { logger } from '@/lib/logging';
-import { enforceContentLength } from '@/lib/request-guards';
+import {
+  enforceContentLength,
+  isRequestBodyTooLargeError,
+  readJsonWithLimit,
+} from '@/lib/request-guards';
 import { getServerDb, repo } from '@/lib/server-db';
 import { requireAdmin } from '@/lib/server-auth';
 import { recompileSourceArtifactsAfterEdit } from '@/lib/wiki-compiler';
@@ -83,7 +87,13 @@ export async function PATCH(req: Request) {
   if (denied) return denied;
 
   try {
-    const body = await req.json().catch(() => ({}));
+    let body: Record<string, unknown>;
+    try {
+      body = await readJsonWithLimit<Record<string, unknown>>(req, MAX_PATCH_BODY_BYTES);
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) throw error;
+      body = {};
+    }
     const id = clampString(body.id, 120);
     const rawContent = clampText(body.rawContent, MAX_RAW_CONTENT_CHARS);
     const title = clampString(body.title, 180);
@@ -159,6 +169,9 @@ export async function PATCH(req: Request) {
       compiler,
     });
   } catch (err) {
+    if (isRequestBodyTooLargeError(err)) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     const message = err instanceof Error ? err.message : String(err);
     logger.error('data.sources_patch_failed', { error: message });
     return NextResponse.json({ error: message }, { status: 500 });

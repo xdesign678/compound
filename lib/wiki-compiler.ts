@@ -167,9 +167,7 @@ export function recompileSourceArtifactsAfterEdit(input: {
   affectedConceptIds: string[];
 } {
   const chunks = wikiRepo.indexSource(input.source);
-  const affectedConcepts = repo
-    .listConcepts({ summariesOnly: false })
-    .filter((concept) => concept.sources.includes(input.source.id));
+  const affectedConcepts = repo.listConceptsBySourceId(input.source.id, { summariesOnly: false });
 
   let evidenceCount = 0;
   for (const concept of affectedConcepts) {

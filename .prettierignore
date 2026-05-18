@@ -28,10 +28,12 @@ output/
 .verdent/
 .local/
 .playwright-cli/
+.playwright-mcp/
 .husky/_
 
 # Local planning docs (not deployed)
 docs/plans/
+docs/superpowers/plans/
 
 # Data files
 *.db

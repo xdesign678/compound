@@ -1,8 +1,8 @@
 /**
  * Duplicate code detection script using Rabin-Karp fingerprinting.
  *
- * Scans source directories for copy-pasted code blocks (minimum 6 tokens,
- * ~5 lines) and reports duplicates with a configurable threshold.
+ * Scans source directories for copy-pasted code blocks (minimum 50 tokens,
+ * 6 lines) and reports duplicates with a configurable threshold.
  * Designed to integrate with the existing quality-metrics CI pipeline.
  */
 
@@ -155,11 +155,18 @@ function deduplicateOverlaps(duplicates) {
     // Skip if either region overlaps with an already-reported region
     let overlaps = false;
     for (const usedKey of used) {
-      const [f, s, e] = usedKey.split(':').map(Number);
-      const usedStr = `${f}`;
+      const usedRegion = parseRegionKey(usedKey);
+      if (!usedRegion) continue;
       if (
-        (usedStr === `${dup.firstFile}` && rangesOverlap(s, e, dup.firstLine, dup.firstLine + dup.lines)) ||
-        (usedStr === `${dup.secondFile}` && rangesOverlap(s, e, dup.secondLine, dup.secondLine + dup.lines))
+        (usedRegion.file === dup.firstFile &&
+          rangesOverlap(usedRegion.start, usedRegion.end, dup.firstLine, dup.firstLine + dup.lines)) ||
+        (usedRegion.file === dup.secondFile &&
+          rangesOverlap(
+            usedRegion.start,
+            usedRegion.end,
+            dup.secondLine,
+            dup.secondLine + dup.lines,
+          ))
       ) {
         overlaps = true;
         break;
@@ -174,6 +181,16 @@ function deduplicateOverlaps(duplicates) {
   }
 
   return result;
+}
+
+function parseRegionKey(key) {
+  const match = key.match(/^(.*):(\d+):(\d+)$/);
+  if (!match) return null;
+  return {
+    file: match[1],
+    start: Number(match[2]),
+    end: Number(match[3]),
+  };
 }
 
 function rangesOverlap(s1, e1, s2, e2) {

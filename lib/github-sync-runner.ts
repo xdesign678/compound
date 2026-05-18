@@ -16,6 +16,8 @@ import {
   getGithubConfig,
   getGithubBranchHeadSha,
   listChangedSinceCommit,
+  githubMarkdownSizeLimit,
+  isGithubMarkdownFileTooLarge,
   type GithubChangedFile,
   type GithubMarkdownFile,
 } from './github-sync';
@@ -61,6 +63,7 @@ interface PlanItem {
   path: string;
   sha: string | null;
   oldSha?: string | null;
+  size?: number | null;
   externalKey: string | null;
   action: SyncChangeType;
   existingSourceId?: string;
@@ -462,6 +465,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
           itemId: `sri-${nanoid(10)}`,
           path: f.path,
           sha: f.sha,
+          size: f.size,
           externalKey: f.externalKey,
           action: 'create',
         });
@@ -471,6 +475,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
           path: f.path,
           sha: f.sha,
           oldSha: local.sha,
+          size: f.size,
           externalKey: f.externalKey,
           action: 'update',
           existingSourceId: local.id,
@@ -485,8 +490,9 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
           itemId: `sri-${nanoid(10)}`,
           path: f.path,
           sha: f.sha,
+          size: f.size,
           externalKey: f.externalKey,
-          action: 'create',
+          action: isGithubMarkdownFileTooLarge(f.size) ? 'skip' : 'create',
         });
       } else if (options.force || local.externalKey !== f.externalKey) {
         plan.push({
@@ -494,8 +500,9 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
           path: f.path,
           sha: f.sha,
           oldSha: local.sha,
+          size: f.size,
           externalKey: f.externalKey,
-          action: 'update',
+          action: isGithubMarkdownFileTooLarge(f.size) ? 'skip' : 'update',
           existingSourceId: local.id,
         });
       } else {
@@ -530,6 +537,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
   const created = plan.filter((item) => item.action === 'create').length;
   const updated = plan.filter((item) => item.action === 'update').length;
   const deleted = plan.filter((item) => item.action === 'delete').length;
+  const skipped = plan.filter((item) => item.action === 'skip').length;
   syncObs.updateRun(runId, {
     stage: 'diff',
     total_files: compareChanged ? compareChanged.length : remote.length,
@@ -537,7 +545,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
     created_files: created,
     updated_files: updated,
     deleted_files: deleted,
-    skipped_files: compareChanged ? 0 : Math.max(0, remote.length - created - updated),
+    skipped_files: compareChanged ? skipped : Math.max(0, remote.length - created - updated),
     current: `待处理 ${plan.length} 个文件`,
   });
   repo.updateSyncJob(jobId, { total: plan.length, current: `待处理 ${plan.length} 个文件` });
@@ -545,13 +553,13 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
     at: Date.now(),
     path: '同步计划',
     status: 'success',
-    message: `新增 ${created} · 更新 ${updated} · 删除 ${deleted}`,
+    message: `新增 ${created} · 更新 ${updated} · 删除 ${deleted} · 跳过 ${skipped}`,
   });
   syncObs.recordEvent({
     runId,
     stage: 'diff',
     level: 'success',
-    message: `计划完成：新增 ${created}，更新 ${updated}，删除 ${deleted}`,
+    message: `计划完成：新增 ${created}，更新 ${updated}，删除 ${deleted}，跳过 ${skipped}`,
   });
 
   if (plan.length === 0) {
@@ -576,7 +584,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
       sourceId: item.existingSourceId ?? null,
       changeType: item.action,
       status: 'queued',
-      stage: item.action === 'delete' ? 'delete' : 'download',
+      stage: item.action === 'delete' ? 'delete' : item.action === 'skip' ? 'complete' : 'download',
     });
   }
 
@@ -599,6 +607,24 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
       stage: item.action === 'delete' ? 'delete' : 'download',
       current: item.path,
     });
+
+    if (item.action === 'skip') {
+      const message = `文件超过同步上限 ${githubMarkdownSizeLimit()} bytes，已跳过`;
+      syncObs.updateRunItem(item.itemId, {
+        status: 'skipped',
+        stage: 'complete',
+        error: message,
+        finished_at: Date.now(),
+      });
+      appendLogByJobId(
+        jobId,
+        { at: Date.now(), path: item.path, status: 'skipped', message },
+        { current: `已跳过：${item.path}` },
+      );
+      bumpLegacy(jobId, 'done', `已跳过：${item.path}`);
+      maybeFinishLegacyJob(jobId);
+      return;
+    }
 
     if (item.action === 'delete') {
       try {

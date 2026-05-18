@@ -82,6 +82,7 @@ test('remote embedding batches unique chunk texts and reuses duplicate vectors',
     'COMPOUND_EMBEDDING_API_KEY',
     'COMPOUND_EMBEDDING_API_URL',
     'COMPOUND_EMBEDDING_BATCH_SIZE',
+    'COMPOUND_SKIP_DNS_GUARD',
   ];
 
   for (const key of envKeys) previousEnv.set(key, process.env[key]);
@@ -90,6 +91,7 @@ test('remote embedding batches unique chunk texts and reuses duplicate vectors',
   process.env.COMPOUND_EMBEDDING_API_KEY = 'embedding-key';
   process.env.COMPOUND_EMBEDDING_API_URL = 'https://example.com/v1/embeddings';
   process.env.COMPOUND_EMBEDDING_BATCH_SIZE = '200';
+  process.env.COMPOUND_SKIP_DNS_GUARD = 'true';
   delete process.env.LLM_API_KEY;
   closeServerDbGlobal();
 
@@ -149,6 +151,60 @@ test('remote embedding batches unique chunk texts and reuses duplicate vectors',
   assert.equal(requestedInputs.length, 1);
   assert.equal(requestedInputs[0].length, 99);
   assert.equal(new Set(requestedInputs[0]).size, 99);
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    closeServerDbGlobal();
+    for (const [key, value] of previousEnv) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+});
+
+test('remote embedding rejects metadata service URLs before sending credentials', async (t) => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'compound-embedding-ssrf-'));
+  const previousEnv = new Map<string, string | undefined>();
+  const envKeys = [
+    'DATA_DIR',
+    'COMPOUND_EMBEDDING_PROVIDER',
+    'COMPOUND_EMBEDDING_API_KEY',
+    'COMPOUND_EMBEDDING_API_URL',
+    'COMPOUND_SKIP_DNS_GUARD',
+  ];
+
+  for (const key of envKeys) previousEnv.set(key, process.env[key]);
+  process.env.DATA_DIR = tempDir;
+  process.env.COMPOUND_EMBEDDING_PROVIDER = 'remote';
+  process.env.COMPOUND_EMBEDDING_API_KEY = 'embedding-key';
+  process.env.COMPOUND_EMBEDDING_API_URL = 'https://169.254.169.254/latest/meta-data';
+  process.env.COMPOUND_SKIP_DNS_GUARD = 'true';
+  closeServerDbGlobal();
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    throw new Error('metadata endpoint must not be called');
+  }) as typeof fetch;
+
+  const { repo } = await import('./server-db');
+  const { wikiRepo } = await import('./wiki-db');
+  const { embedSourceChunks } = await import('./embedding');
+
+  const now = Date.now();
+  repo.insertSource({
+    id: 's-ssrf',
+    title: 'SSRF',
+    type: 'file',
+    rawContent: '# SSRF\n\nRemote embedding URL should be validated.',
+    ingestedAt: now,
+  });
+  wikiRepo.indexSource(repo.getSource('s-ssrf')!);
+
+  await assert.rejects(() => embedSourceChunks('s-ssrf'), /public HTTPS endpoint|blocked network/);
 
   t.after(() => {
     globalThis.fetch = originalFetch;

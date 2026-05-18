@@ -406,6 +406,9 @@ export const wikiRepo = {
     const db = getServerDb();
     db.prepare(`DELETE FROM concept_evidence WHERE source_id = ?`).run(sourceId);
     db.prepare(`DELETE FROM source_chunks WHERE source_id = ?`).run(sourceId);
+    if (tableExists('chunk_embeddings')) {
+      db.prepare(`DELETE FROM chunk_embeddings WHERE source_id = ?`).run(sourceId);
+    }
     if (hasFts()) {
       safeRunFts(() => db.prepare(`DELETE FROM chunk_fts WHERE source_id = ?`).run(sourceId));
     }

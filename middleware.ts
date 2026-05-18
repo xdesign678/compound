@@ -96,6 +96,22 @@ function getAdminToken(): string {
   return clean(process.env.COMPOUND_ADMIN_TOKEN) || clean(process.env.ADMIN_TOKEN);
 }
 
+function isPublicHealthPath(pathname: string): boolean {
+  return pathname === '/api/health';
+}
+
+function isWebhookPath(pathname: string): boolean {
+  return pathname === '/api/sync/github/webhook';
+}
+
+function isCronSecretAuthorized(req: NextRequest): boolean {
+  if (req.nextUrl.pathname !== '/api/sync/cron/rescan') return false;
+  const secret = clean(process.env.CRON_SECRET);
+  if (!secret) return false;
+  const auth = req.headers.get('authorization') ?? '';
+  return auth.startsWith('Bearer ') && safeEqual(auth.slice('Bearer '.length).trim(), secret);
+}
+
 /**
  * Constant-time string comparison safe for Edge Runtime (no node:crypto).
  * When lengths differ, pads the shorter string and still performs a full
@@ -164,6 +180,14 @@ export function middleware(req: NextRequest) {
   }
 
   const token = getAdminToken();
+
+  if (isPublicHealthPath(req.nextUrl.pathname) || isWebhookPath(req.nextUrl.pathname)) {
+    return nextWithTrace(req, trace);
+  }
+
+  if (isCronSecretAuthorized(req)) {
+    return nextWithTrace(req, trace);
+  }
 
   if (!token) {
     if (process.env.NODE_ENV === 'production') {

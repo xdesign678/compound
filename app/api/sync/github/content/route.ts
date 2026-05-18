@@ -3,7 +3,11 @@ import { fetchMarkdownContent, getGithubConfig } from '@/lib/github-sync';
 import { logger } from '@/lib/logging';
 import { requireAdmin } from '@/lib/server-auth';
 import { syncRateLimit } from '@/lib/rate-limit';
-import { enforceContentLength } from '@/lib/request-guards';
+import {
+  enforceContentLength,
+  isRequestBodyTooLargeError,
+  readJsonWithLimit,
+} from '@/lib/request-guards';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -24,7 +28,7 @@ export async function POST(req: Request) {
   if (denied) return denied;
 
   try {
-    const body = (await req.json()) as { path?: string };
+    const body = await readJsonWithLimit<{ path?: string }>(req, MAX_BODY_BYTES);
     const path = body?.path?.trim();
     if (!path) {
       return NextResponse.json({ error: 'path is required' }, { status: 400 });
@@ -39,6 +43,9 @@ export async function POST(req: Request) {
     const file = await fetchMarkdownContent(path, cfg);
     return NextResponse.json(file);
   } catch (err) {
+    if (isRequestBodyTooLargeError(err)) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     const message = err instanceof Error ? err.message : String(err);
     logger.error('sync.github_content_failed', { error: message });
     const status = /not set|Invalid GITHUB_REPO/i.test(message) ? 500 : 502;

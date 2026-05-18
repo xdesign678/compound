@@ -27,6 +27,8 @@ jobs:
             ${{ runner.os }}-nextjs-
 
       - run: npm run validate:agents-md
+      - run: npm run format:check
+      - run: npm run lint -- --max-warnings=0
       - run: npm run typecheck
       - run: npm run test
 
@@ -85,6 +87,12 @@ jobs:
       # without regenerating the docs, this fails with a clear remediation.
       - name: Check generated API reference
         run: npm run docs:api:check
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Accessibility smoke tests
+        run: npm run test:a11y
 
       - name: Build (with performance tracking)
         run: npm run build:measure

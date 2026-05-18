@@ -17,12 +17,7 @@ const testFiles = [
   ...collectTestFiles(libDir).filter((file) => file.endsWith('.test.ts')),
   ...collectTestFiles(componentDir).filter((file) => file.endsWith('.test.tsx')),
 ].sort();
-const sourceFiles = coverageEnabled
-  ? readdirSync(libDir)
-      .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
-      .sort()
-      .map((name) => path.join('lib', name))
-  : [];
+const sourceFiles = coverageEnabled ? collectSourceFiles(libDir).sort() : [];
 
 if (testFiles.length === 0) {
   console.log('No node-side tests found.');
@@ -77,8 +72,9 @@ const nodeArgs = ['--test'];
 if (coverageEnabled) {
   nodeArgs.push(
     '--experimental-test-coverage',
-    `--test-coverage-include=${path.join(outDir, 'lib', '*.js')}`,
-    `--test-coverage-exclude=${path.join(outDir, 'lib', '*.test.js')}`,
+    `--test-coverage-include=${path.join(outDir, 'lib', '**', '*.js')}`,
+    `--test-coverage-exclude=${path.join(outDir, 'lib', 'hooks', '**', '*.js')}`,
+    `--test-coverage-exclude=${path.join(outDir, 'lib', '**', '*.test.js')}`,
   );
 }
 nodeArgs.push(...compiledTests);
@@ -116,6 +112,23 @@ function collectTestFiles(dir) {
     if (entry.name.endsWith('.test.ts') || entry.name.endsWith('.test.tsx')) {
       result.push(path.relative(root, absolute));
     }
+  }
+  return result;
+}
+
+function collectSourceFiles(dir) {
+  if (!existsSync(dir)) return [];
+  const result = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const absolute = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === 'hooks') continue;
+      result.push(...collectSourceFiles(absolute));
+      continue;
+    }
+    if (!entry.name.endsWith('.ts')) continue;
+    if (entry.name.endsWith('.test.ts') || entry.name.endsWith('.d.ts')) continue;
+    result.push(path.relative(root, absolute));
   }
   return result;
 }
@@ -187,7 +200,7 @@ function writeCoverageSummary(sourceFiles) {
 
   const summary = {
     tool: 'node:test + V8 coverage',
-    scope: 'lib/*.ts node-side modules',
+    scope: 'lib/**/*.ts node-side modules',
     thresholds: {
       lines: Number(process.env.COMPOUND_COVERAGE_MIN_LINES ?? 30),
     },

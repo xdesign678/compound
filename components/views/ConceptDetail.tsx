@@ -19,6 +19,7 @@ import {
   type RectLike,
 } from '@/lib/selection-popover-position';
 import { getVisibleViewportBottom } from '@/lib/hooks/useSelectionPopover';
+import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 import type { ConceptVersion } from '@/lib/types';
 import { SourceTypeIcon } from '../Icons';
 import { Prose } from '../Prose';
@@ -185,12 +186,16 @@ export function ConceptDetail({ id }: { id: string }) {
   const retryTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const bodyShellRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const versionDialogRef = useRef<HTMLDivElement>(null);
+  const deleteDialogRef = useRef<HTMLDivElement>(null);
   // 点击 popover 时浏览器会清除外部选区 -> selectionchange 触发 -> popover 被卸载 ->
   // onClick 无法触发。用一个短暂的抑制窗口，让 click 先落地。
   const suppressDismissRef = useRef(false);
   const selectionInProgressRef = useRef(false);
 
   const concept = useLiveQuery(async () => getDb().concepts.get(id), [id]);
+  useFocusTrap(versionDialogRef, versionDialog.open);
+  useFocusTrap(deleteDialogRef, showDeleteConfirm);
   const sources = useLiveQuery(async () => {
     if (!concept) return [];
     const items = await Promise.all(concept.sources.map((sid) => getDb().sources.get(sid)));
@@ -539,6 +544,24 @@ export function ConceptDetail({ id }: { id: string }) {
     void getDb().concepts.update(id, { contentStatus: 'full' });
   }, [concept, id]);
 
+  const closeVersionDialog = useCallback(() => {
+    setVersionDialog((state) => ({ ...state, open: false }));
+  }, []);
+
+  useEffect(() => {
+    if (!versionDialog.open && !showDeleteConfirm) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (showDeleteConfirm) {
+        setShowDeleteConfirm(false);
+      } else {
+        closeVersionDialog();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [closeVersionDialog, showDeleteConfirm, versionDialog.open]);
+
   if (!concept) {
     return (
       <div className="empty-state" role="status">
@@ -580,10 +603,6 @@ export function ConceptDetail({ id }: { id: string }) {
         versions: [],
       });
     }
-  }
-
-  function closeVersionDialog() {
-    setVersionDialog((state) => ({ ...state, open: false }));
   }
 
   return (
@@ -773,10 +792,12 @@ export function ConceptDetail({ id }: { id: string }) {
       {versionDialog.open && (
         <div className="modal-overlay visible" onClick={closeVersionDialog}>
           <div
+            ref={versionDialogRef}
             className="modal concept-version-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="concept-version-title"
+            tabIndex={-1}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-handle" />
@@ -902,11 +923,13 @@ export function ConceptDetail({ id }: { id: string }) {
       {showDeleteConfirm && (
         <div className="modal-overlay visible" onClick={() => setShowDeleteConfirm(false)}>
           <div
+            ref={deleteDialogRef}
             className="modal"
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="delete-confirm-title"
             aria-describedby="delete-confirm-desc"
+            tabIndex={-1}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="modal-handle" />

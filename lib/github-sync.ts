@@ -56,6 +56,7 @@ export interface GithubFileContent {
 
 const GITHUB_API_BASE = 'https://api.github.com';
 const DEFAULT_BRANCH = 'main';
+const DEFAULT_MAX_MARKDOWN_BYTES = 2_000_000;
 
 function readPositiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -67,6 +68,21 @@ const GITHUB_FETCH_TIMEOUT_MS = readPositiveInt(
   30_000,
 );
 let githubRateLimitBackoffUntil = 0;
+
+export function githubMarkdownSizeLimit(): number {
+  return readPositiveInt(process.env.COMPOUND_GITHUB_MAX_FILE_BYTES, DEFAULT_MAX_MARKDOWN_BYTES);
+}
+
+export function isGithubMarkdownFileTooLarge(size: number | null | undefined): boolean {
+  return Number.isFinite(size) && Number(size) > githubMarkdownSizeLimit();
+}
+
+function assertMarkdownFileSize(path: string, size: number | null | undefined): void {
+  if (!isGithubMarkdownFileTooLarge(size)) return;
+  throw new Error(
+    `Markdown file ${path} exceeds GitHub markdown size limit (${size} > ${githubMarkdownSizeLimit()} bytes)`,
+  );
+}
 
 async function waitForGithubRateLimitBackoff(): Promise<void> {
   const delay = githubRateLimitBackoffUntil - Date.now();
@@ -338,7 +354,10 @@ export async function fetchMarkdownContent(
 
   if (knownSha) {
     const rawRes = await githubFetch(url, cfg, 'application/vnd.github.raw');
+    const contentLength = Number(rawRes.headers.get('content-length') || 0);
+    if (contentLength > 0) assertMarkdownFileSize(path, contentLength);
     const content = await rawRes.text();
+    assertMarkdownFileSize(path, Buffer.byteLength(content, 'utf8'));
     return {
       path,
       sha: knownSha,
@@ -356,6 +375,7 @@ export async function fetchMarkdownContent(
     path: string;
     size: number;
   };
+  assertMarkdownFileSize(meta.path, meta.size);
 
   // Some files are small enough to be inlined as base64; use that when available.
   let content: string;

@@ -20,12 +20,44 @@ import {
   extractFrontmatterTags,
   replaceBlockRaw,
 } from '@/lib/markdown-editor/block-split';
+import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 import { SourceBlockEditor } from './SourceBlockEditor';
 
 interface SourceTocItem {
   id: string;
   level: number;
   title: string;
+}
+
+const SOURCE_DRAFT_KEY_PREFIX = 'compound:source-draft:';
+
+function sourceDraftKey(id: string): string {
+  return `${SOURCE_DRAFT_KEY_PREFIX}${id}`;
+}
+
+function readSourceDraft(id: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(sourceDraftKey(id));
+  } catch {
+    return null;
+  }
+}
+
+function writeSourceDraft(id: string, value: string): void {
+  try {
+    window.localStorage.setItem(sourceDraftKey(id), value);
+  } catch {
+    // localStorage can be unavailable in private browsing modes.
+  }
+}
+
+function clearSourceDraft(id: string): void {
+  try {
+    window.localStorage.removeItem(sourceDraftKey(id));
+  } catch {
+    // localStorage can be unavailable in private browsing modes.
+  }
 }
 
 function normalizeText(text: string) {
@@ -45,6 +77,7 @@ export function SourceDetail({ id }: { id: string }) {
   const sourceTitleId = useId();
   const saveStatusId = useId();
   const tocTitleId = useId();
+  const tocDialogRef = useRef<HTMLDivElement>(null);
   const tocCloseTimerRef = useRef<number | null>(null);
   const [blocks, setBlocks] = useState<SourceBlock[]>([]);
   const [isDirty, setIsDirty] = useState(false);
@@ -60,25 +93,25 @@ export function SourceDetail({ id }: { id: string }) {
     [id],
   );
   const hasFullContent = Boolean(source?.rawContent.trim()) || source?.contentStatus === 'full';
+  useFocusTrap(tocDialogRef, tocOpen);
 
-  // TOC derived from blocks (skip leading-title)
   const tocItems = useMemo(() => {
     return blocks
       .filter(
-        (b) =>
-          b.type === 'heading' &&
-          b.kind !== 'leading-title' &&
-          b.depth &&
-          b.depth >= 1 &&
-          b.depth <= 4,
+        (block) =>
+          block.type === 'heading' &&
+          block.kind !== 'leading-title' &&
+          block.depth &&
+          block.depth >= 1 &&
+          block.depth <= 4,
       )
-      .map((b) => {
-        const tokens = marked.lexer(b.raw);
+      .map((block) => {
+        const tokens = marked.lexer(block.raw);
         const first = tokens[0];
         const text = first && 'text' in first && typeof first.text === 'string' ? first.text : '';
         return {
-          id: b.id,
-          level: b.depth ?? 1,
+          id: block.id,
+          level: block.depth ?? 1,
           title: normalizeText(text).trim(),
         };
       })
@@ -135,10 +168,18 @@ export function SourceDetail({ id }: { id: string }) {
   }, [closeToc, id]);
 
   useEffect(() => {
-    if (!source || !hasFullContent || isDirty) return;
-    const nextBlocks = splitMarkdownBlocks(source.rawContent, source.title);
-    setBlocks(nextBlocks);
-  }, [hasFullContent, isDirty, source]);
+    if (!source || !hasFullContent) return;
+    const storedDraft = readSourceDraft(id);
+    if (storedDraft !== null && storedDraft !== source.rawContent) {
+      setBlocks(splitMarkdownBlocks(storedDraft, source.title));
+      setIsDirty(true);
+      return;
+    }
+    if (!isDirty) {
+      setBlocks(splitMarkdownBlocks(source.rawContent, source.title));
+      setIsDirty(false);
+    }
+  }, [hasFullContent, id, isDirty, source]);
 
   useEffect(() => {
     if (saveStatus !== 'saved') return;
@@ -150,10 +191,16 @@ export function SourceDetail({ id }: { id: string }) {
     (nextBlocks: SourceBlock[]) => {
       setBlocks(nextBlocks);
       const joined = joinBlocksToMarkdown(nextBlocks);
-      setIsDirty(joined !== (source?.rawContent ?? ''));
+      const dirty = joined !== (source?.rawContent ?? '');
+      setIsDirty(dirty);
+      if (dirty) {
+        writeSourceDraft(id, joined);
+      } else {
+        clearSourceDraft(id);
+      }
       setSaveStatus((current) => (current === 'idle' ? current : 'idle'));
     },
-    [source?.rawContent],
+    [id, source?.rawContent],
   );
 
   const applyMarkdownCommand = useCallback(
@@ -162,7 +209,7 @@ export function SourceDetail({ id }: { id: string }) {
       if (!activeId) return;
       const textarea = textareaRefs.current.get(activeId);
       if (!textarea) return;
-      const block = blocks.find((b) => b.id === activeId);
+      const block = blocks.find((item) => item.id === activeId);
       if (!block) return;
 
       const result = applyMarkdownSelectionEdit({
@@ -173,10 +220,7 @@ export function SourceDetail({ id }: { id: string }) {
       });
 
       const nextBlocks = replaceBlockRaw(blocks, activeId, result.value);
-      setBlocks(nextBlocks);
-      const joined = joinBlocksToMarkdown(nextBlocks);
-      setIsDirty(joined !== (source?.rawContent ?? ''));
-      setSaveStatus((current) => (current === 'idle' ? current : 'idle'));
+      handleBlocksChange(nextBlocks);
 
       window.requestAnimationFrame(() => {
         const updatedTextarea = textareaRefs.current.get(activeId);
@@ -186,16 +230,17 @@ export function SourceDetail({ id }: { id: string }) {
         }
       });
     },
-    [blocks, source?.rawContent],
+    [blocks, handleBlocksChange],
   );
 
   const handleResetDraft = useCallback(() => {
     if (!source) return;
     const nextBlocks = splitMarkdownBlocks(source.rawContent, source.title);
     setBlocks(nextBlocks);
+    clearSourceDraft(id);
     setIsDirty(false);
     setSaveStatus('idle');
-  }, [source]);
+  }, [id, source]);
 
   const canEdit = hasFullContent;
   const canSave = canEdit && isDirty && saveStatus !== 'saving';
@@ -210,13 +255,24 @@ export function SourceDetail({ id }: { id: string }) {
         title: source?.title,
         rawContent: joined,
       });
+      clearSourceDraft(id);
       setIsDirty(false);
       setSaveStatus('saved');
     } catch (err) {
       console.warn('[source-detail] save failed:', err);
       setSaveStatus('error');
     }
-  }, [canEdit, id, saveStatus, source?.rawContent, source?.title, blocks]);
+  }, [blocks, canEdit, id, saveStatus, source?.rawContent, source?.title]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
 
   const handleCommit = useCallback(() => {
     if (!source) return;
@@ -226,9 +282,12 @@ export function SourceDetail({ id }: { id: string }) {
     const stillDirty = joined !== source.rawContent;
     setIsDirty(stillDirty);
     if (stillDirty) {
+      writeSourceDraft(id, joined);
       void handleSave();
+    } else {
+      clearSourceDraft(id);
     }
-  }, [blocks, source, handleSave]);
+  }, [blocks, handleSave, id, source]);
 
   useEffect(() => {
     if (!canEdit || !isDirty || saveStatus === 'saving') return;
@@ -310,6 +369,7 @@ export function SourceDetail({ id }: { id: string }) {
   }, []);
 
   const tags = useMemo(() => extractFrontmatterTags(blocks), [blocks]);
+  const currentMarkdown = useMemo(() => joinBlocksToMarkdown(blocks), [blocks]);
 
   if (!source) {
     return (
@@ -321,7 +381,6 @@ export function SourceDetail({ id }: { id: string }) {
 
   const generatedCount = generated?.length ?? 0;
   const generatedItems = generated ?? [];
-  const currentMarkdown = joinBlocksToMarkdown(blocks);
   const wordCount = currentMarkdown.length;
   const readingMinutes = wordCount > 0 ? Math.max(1, Math.round(wordCount / 400)) : 0;
   const sourceHost = source.url ? formatSourceHost(source.url) : null;
@@ -435,12 +494,17 @@ export function SourceDetail({ id }: { id: string }) {
         createPortal(
           <div
             className={`modal-overlay source-toc-overlay${tocVisible ? ' visible' : ''}`}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={tocTitleId}
             onClick={closeToc}
           >
-            <div className="modal source-toc-dialog" onClick={(event) => event.stopPropagation()}>
+            <div
+              ref={tocDialogRef}
+              className="modal source-toc-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={tocTitleId}
+              tabIndex={-1}
+              onClick={(event) => event.stopPropagation()}
+            >
               <div className="modal-handle" />
               <div className="settings-hero source-toc-head">
                 <div>

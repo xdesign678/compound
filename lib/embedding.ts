@@ -8,6 +8,7 @@
 import { getServerDb } from './server-db';
 import { wikiRepo, type QueryContext, type SourceChunk } from './wiki-db';
 import { CircuitBreakerOpenError, getCircuitBreaker } from './circuit-breaker';
+import { validatePublicHttpsApiUrl } from './gateway';
 import { logger } from './logging';
 import { LRUMap } from './lru-cache';
 import {
@@ -119,15 +120,6 @@ function circuitNameForEmbedding(url: string): string {
   }
 }
 
-function assertPublicHttps(url: string): void {
-  const parsed = new URL(url);
-  if (parsed.protocol !== 'https:') throw new Error('Embedding API URL must be HTTPS');
-  const host = parsed.hostname.toLowerCase();
-  if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local')) {
-    throw new Error('Embedding API URL must not target localhost');
-  }
-}
-
 function hashToken(token: string): number {
   let h = 2166136261;
   for (let i = 0; i < token.length; i += 1) {
@@ -174,7 +166,7 @@ async function remoteEmbeddings(texts: string[], signal?: AbortSignal): Promise<
   if (!key) return null;
 
   const url = embeddingApiUrl();
-  assertPublicHttps(url);
+  await validatePublicHttpsApiUrl(url);
 
   const breaker = getCircuitBreaker({
     name: circuitNameForEmbedding(url),

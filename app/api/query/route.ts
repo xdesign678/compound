@@ -3,7 +3,12 @@ import { chat, parseJSON, isReasoningModel } from '@/lib/gateway';
 import { QUERY_SYSTEM_PROMPT, QUERY_SYSTEM_PROMPT_VERSION } from '@/lib/prompts';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
-import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
+import {
+  enforceContentLength,
+  isRequestBodyTooLargeError,
+  readJsonWithLimit,
+  readLlmConfigOverride,
+} from '@/lib/request-guards';
 import {
   formatQueryContextForPrompt,
   wikiRepo,
@@ -401,7 +406,7 @@ export const POST = withRequestTracing(async (req: Request) => {
   });
 
   try {
-    const body = (await req.json()) as QueryRequest;
+    const body = await readJsonWithLimit<QueryRequest>(req, MAX_BODY_BYTES);
     const question = body?.question?.trim();
     if (!question) {
       return NextResponse.json({ error: 'question is required' }, { status: 400 });
@@ -721,6 +726,9 @@ export const POST = withRequestTracing(async (req: Request) => {
 
     return NextResponse.json(parsed);
   } catch (err) {
+    if (isRequestBodyTooLargeError(err)) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     const error = publicQueryErrorMessage(err);
     logger.error('query.failed', { error, stageDurations: stageTelemetry.snapshot() });
     return NextResponse.json(

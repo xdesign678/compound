@@ -402,20 +402,14 @@ export async function askWikiStream(
 ): Promise<QueryResponse> {
   const conceptsToSend = await findClientConceptCandidates(question, QUERY_CANDIDATE_LIMIT);
 
-  const hydrated = await ensureConceptsHydrated(conceptsToSend.map((concept) => concept.id));
-  const hydratedMap = new Map(hydrated.map((concept) => [concept.id, concept]));
-
   const req: QueryRequest = {
     question,
-    concepts: conceptsToSend.map((c) => {
-      const full = hydratedMap.get(c.id) ?? c;
-      return {
-        id: c.id,
-        title: c.title,
-        summary: c.summary,
-        body: full.body,
-      };
-    }),
+    concepts: conceptsToSend.map((c) => ({
+      id: c.id,
+      title: c.title,
+      summary: c.summary,
+      body: '',
+    })),
     conversationHistory: history,
   };
 

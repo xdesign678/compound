@@ -217,7 +217,7 @@ export function useAskState() {
     if (nearBottom) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [history?.length, loading]);
+  }, [history?.length, liveStages.length, loading, streamingText]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {

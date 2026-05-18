@@ -5,7 +5,7 @@
  * conflict candidates are written here instead of being blindly applied.
  */
 import { nanoid } from 'nanoid';
-import { getServerDb } from './server-db';
+import { getServerDb, repo } from './server-db';
 import { wikiRepo, type ConceptRelationKind } from './wiki-db';
 
 export type ReviewStatus = 'open' | 'approved' | 'rejected' | 'resolved';
@@ -16,6 +16,19 @@ export type ReviewKind =
   | 'relation_suggestion'
   | 'conflict'
   | 'manual';
+
+export const REVIEW_KINDS: readonly ReviewKind[] = [
+  'low_confidence_summary',
+  'large_ingest_change',
+  'concept_merge_candidate',
+  'relation_suggestion',
+  'conflict',
+  'manual',
+] as const;
+
+export function isReviewKind(value: unknown): value is ReviewKind {
+  return typeof value === 'string' && (REVIEW_KINDS as readonly string[]).includes(value);
+}
 
 export interface ReviewItem {
   id: string;
@@ -72,6 +85,9 @@ function applyApprovedReviewItem(item: ReviewItem): Record<string, unknown> | nu
   const targetConceptId = payload?.targetConceptId?.trim() || '';
   if (!sourceConceptId || !targetConceptId || sourceConceptId === targetConceptId) {
     return { applied: false, reason: 'invalid relation payload' };
+  }
+  if (!repo.getConcept(sourceConceptId) || !repo.getConcept(targetConceptId)) {
+    return { applied: false, reason: 'relation concept not found' };
   }
   const relation = wikiRepo.upsertConceptRelation({
     sourceConceptId,

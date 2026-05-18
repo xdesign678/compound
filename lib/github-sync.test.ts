@@ -48,6 +48,46 @@ test('fetches markdown content with a known sha in a single network request', as
   }
 });
 
+test('fetchMarkdownContent rejects files above configured markdown size limit', async () => {
+  const originalFetch = globalThis.fetch;
+  const previousLimit = process.env.COMPOUND_GITHUB_MAX_FILE_BYTES;
+  process.env.COMPOUND_GITHUB_MAX_FILE_BYTES = '8';
+
+  globalThis.fetch = (async () =>
+    new Response('# too large', {
+      status: 200,
+      headers: {
+        'content-type': 'text/plain; charset=utf-8',
+        'content-length': '11',
+      },
+    })) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      () =>
+        (
+          fetchMarkdownContent as unknown as (
+            path: string,
+            cfg: { owner: string; repo: string; branch: string; token: string },
+            sha: string,
+          ) => Promise<unknown>
+        )(
+          'notes/large.md',
+          { owner: 'demo', repo: 'vault', branch: 'main', token: 'secret' },
+          'sha-large',
+        ),
+      /exceeds GitHub markdown size limit/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousLimit === undefined) {
+      delete process.env.COMPOUND_GITHUB_MAX_FILE_BYTES;
+    } else {
+      process.env.COMPOUND_GITHUB_MAX_FILE_BYTES = previousLimit;
+    }
+  }
+});
+
 test('escapes markdown paths with reserved characters for GitHub contents API', async () => {
   const calls: Array<{ url: string; accept: string | null }> = [];
   const originalFetch = globalThis.fetch;

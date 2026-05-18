@@ -626,6 +626,13 @@ function getGithubIngestRawContent(payload: GithubIngestPayload): string | null 
   return row.content;
 }
 
+function deleteGithubIngestPayloadBlob(payload: GithubIngestPayload): void {
+  if (!payload.rawContentRef) return;
+  getServerDb()
+    .prepare(`DELETE FROM analysis_payload_blobs WHERE ref = ?`)
+    .run(payload.rawContentRef);
+}
+
 async function resolveGithubIngestRawContent(payload: GithubIngestPayload): Promise<string | null> {
   const cached = getGithubIngestRawContent(payload);
   if (cached != null) return cached;
@@ -982,6 +989,7 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
     return;
   }
   if (rawContent.trim().length === 0) {
+    deleteGithubIngestPayloadBlob(payload);
     finishJob(job, 'skipped', 'empty markdown file');
     if (payload.itemId) {
       syncObs.updateRunItem(payload.itemId, {
@@ -1090,6 +1098,7 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
     sourceSha: payload.sha,
     sourcePath: payload.path,
   });
+  deleteGithubIngestPayloadBlob(payload);
   finishJob({ ...job, source_id: result.sourceId }, 'succeeded');
 }
 
@@ -1215,10 +1224,10 @@ async function processRelations(job: AnalysisJobRow): Promise<void> {
     return;
   }
 
-  const sourceConcepts = repo
-    .listConcepts({ summariesOnly: false })
-    .filter((concept) => concept.sources.includes(source.id))
-    .slice(0, MAX_RELATION_CONCEPTS);
+  const sourceConcepts = repo.listConceptsBySourceId(source.id, {
+    summariesOnly: false,
+    limit: MAX_RELATION_CONCEPTS,
+  });
 
   const synced = wikiRepo.syncRelatedConceptRelations(sourceConcepts, {
     reason: `资料「${source.title}」关系抽取前同步。`,

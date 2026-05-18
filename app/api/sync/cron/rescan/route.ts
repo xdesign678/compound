@@ -12,8 +12,11 @@ function isCronAuthorized(req: Request): boolean {
   return auth === `Bearer ${secret}`;
 }
 
-async function run(req: Request) {
-  const denied = isCronAuthorized(req) ? null : requireAdmin(req);
+async function run(req: Request, options: { allowAdmin: boolean }) {
+  const denied = isCronAuthorized(req) ? null : options.allowAdmin ? requireAdmin(req) : null;
+  if (!options.allowAdmin && !isCronAuthorized(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   if (denied) return denied;
   try {
     const { jobId, existing } = startGithubSync({ triggerType: 'schedule', force: true });
@@ -28,8 +31,8 @@ async function run(req: Request) {
  * Force a full GitHub re-scan. Designed to be invoked from a scheduler
  * (Vercel Cron, GitHub Actions, external uptime ping). Authenticates with
  * either `Authorization: Bearer ${CRON_SECRET}` or the standard admin
- * token. Both `GET` and `POST` are accepted to fit different schedulers.
+ * token. `GET` is reserved for cron-secret callers; admin-triggered runs use POST.
  */
-export const GET = run;
+export const GET = (req: Request) => run(req, { allowAdmin: false });
 /** See {@link GET}. POST variant for schedulers that prefer non-idempotent verbs. */
-export const POST = run;
+export const POST = (req: Request) => run(req, { allowAdmin: true });

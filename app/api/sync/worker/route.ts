@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/server-auth';
-import { runAnalysisWorkerOnce, startAnalysisWorker } from '@/lib/analysis-worker';
+import { startAnalysisWorker } from '@/lib/analysis-worker';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -10,6 +10,10 @@ const REASON_MESSAGES: Record<string, string> = {
   max_workers: '已经达到 worker 并发上限，新任务会自动排队。',
 };
 
+/**
+ * Start the background analysis worker for queued ingest / embedding /
+ * summarize / relation jobs. Requires the standard admin token.
+ */
 export async function POST(req: Request) {
   const denied = requireAdmin(req);
   if (denied) return denied;
@@ -26,13 +30,12 @@ export async function POST(req: Request) {
   }
 }
 
+/**
+ * Deprecated read path. Worker execution mutates queue state, so callers must
+ * use POST instead of accidentally triggering work through a link prefetch.
+ */
 export async function GET(req: Request) {
   const denied = requireAdmin(req);
   if (denied) return denied;
-  try {
-    return NextResponse.json(await runAnalysisWorkerOnce());
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  return NextResponse.json({ error: 'Use POST to run the analysis worker.' }, { status: 405 });
 }

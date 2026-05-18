@@ -554,7 +554,7 @@ Source: [`app/api/sync/cron/rescan/route.ts`](../app/api/sync/cron/rescan/route.
 Force a full GitHub re-scan. Designed to be invoked from a scheduler
 (Vercel Cron, GitHub Actions, external uptime ping). Authenticates with
 either `Authorization: Bearer ${CRON_SECRET}` or the standard admin
-token. Both `GET` and `POST` are accepted to fit different schedulers.
+token. `GET` is reserved for cron-secret callers; admin-triggered runs use POST.
 
 #### POST
 
@@ -747,11 +747,13 @@ Source: [`app/api/sync/worker/route.ts`](../app/api/sync/worker/route.ts)
 
 #### GET
 
-_No JSDoc comment found above the `GET` handler. Add a leading `/** ... */` block in `app/api/sync/worker/route.ts` to document this endpoint._
+Deprecated read path. Worker execution mutates queue state, so callers must
+use POST instead of accidentally triggering work through a link prefetch.
 
 #### POST
 
-_No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` block in `app/api/sync/worker/route.ts` to document this endpoint._
+Start the background analysis worker for queued ingest / embedding /
+summarize / relation jobs. Requires the standard admin token.
 
 ## wiki
 

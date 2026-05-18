@@ -611,6 +611,14 @@ export const repo = {
     return rows.map((row) => rowToSource(row, options.summariesOnly ? 'partial' : 'full'));
   },
 
+  countSources(options: TimeWindowOptions = {}): number {
+    const { clause, params } = buildTimeWindowClause('ingested_at', options);
+    const row = cachedPrepare(`SELECT COUNT(*) AS count FROM sources ${clause}`).get(...params) as
+      | { count: number }
+      | undefined;
+    return Number(row?.count ?? 0);
+  },
+
   getSourcesByIds(ids: string[], options: { summariesOnly?: boolean } = {}): Source[] {
     const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
     if (uniqueIds.length === 0) return [];
@@ -686,6 +694,40 @@ export const repo = {
       )
       .all(...params, ...limitParams) as ConceptRow[];
     return rows.map((row) => rowToConcept(row, options.summariesOnly ? 'partial' : 'full'));
+  },
+
+  countConcepts(options: TimeWindowOptions = {}): number {
+    const { clause, params } = buildTimeWindowClause('updated_at', options);
+    const row = cachedPrepare(`SELECT COUNT(*) AS count FROM concepts ${clause}`).get(...params) as
+      | { count: number }
+      | undefined;
+    return Number(row?.count ?? 0);
+  },
+
+  listConceptsBySourceId(sourceId: string, options: RecordQueryOptions = {}): Concept[] {
+    if (!sourceId) return [];
+    const clauses = [`sources LIKE ? ESCAPE '\\'`];
+    const params: Array<string | number> = [jsonArrayValueLikePattern(sourceId)];
+    if (typeof options.after === 'number' && Number.isFinite(options.after)) {
+      clauses.push('updated_at > ?');
+      params.push(Math.trunc(options.after));
+    }
+    if (typeof options.before === 'number' && Number.isFinite(options.before)) {
+      clauses.push('updated_at <= ?');
+      params.push(Math.trunc(options.before));
+    }
+    const { clause: limitClause, params: limitParams } = buildLimitClause(options);
+    const rows = getServerDb()
+      .prepare(
+        `SELECT ${selectConceptColumns(options.summariesOnly)}
+           FROM concepts
+          WHERE ${clauses.join(' AND ')}
+          ORDER BY updated_at DESC${limitClause}`,
+      )
+      .all(...params, ...limitParams) as ConceptRow[];
+    return rows
+      .map((row) => rowToConcept(row, options.summariesOnly ? 'partial' : 'full'))
+      .filter((concept) => concept.sources.includes(sourceId));
   },
 
   getConceptsByIds(ids: string[], options: { summariesOnly?: boolean } = {}): Concept[] {

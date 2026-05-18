@@ -39,15 +39,23 @@ export async function GET(req: Request) {
     const since = parseSinceParam(url.searchParams.get('since'));
     const limit = parseIntParam(url.searchParams.get('limit'), DEFAULT_LIMIT, MAX_LIMIT);
     const offset = parseIntParam(url.searchParams.get('offset'), 0, Number.MAX_SAFE_INTEGER);
-    const fetchedAt = Date.now();
+    const requestedBefore = parseSinceParam(url.searchParams.get('before'));
+    const fetchedAt = requestedBefore ?? Date.now();
     const range = { after: since ?? undefined, before: fetchedAt };
 
-    let sources = since
-      ? repo.listSources({ ...range, summariesOnly: true })
-      : repo.listSources({ before: fetchedAt, summariesOnly: true });
-    let concepts = since
-      ? repo.listConcepts({ ...range, summariesOnly: true })
-      : repo.listConcepts({ before: fetchedAt, summariesOnly: true });
+    const recordRange = since ? range : { before: fetchedAt };
+    const sources = repo.listSources({
+      ...recordRange,
+      summariesOnly: true,
+      limit,
+      offset,
+    });
+    const concepts = repo.listConcepts({
+      ...recordRange,
+      summariesOnly: true,
+      limit,
+      offset,
+    });
     const activity = since
       ? repo.listActivity(range)
       : repo.listActivity({ before: fetchedAt, limit: 1000 });
@@ -55,11 +63,8 @@ export async function GET(req: Request) {
       ? repo.listAskHistory(range)
       : repo.listAskHistory({ before: fetchedAt, limit: 500 });
 
-    // Apply pagination to sources and concepts in full mode
-    const totalSources = sources.length;
-    const totalConcepts = concepts.length;
-    sources = sources.slice(offset, offset + limit);
-    concepts = concepts.slice(offset, offset + limit);
+    const totalSources = repo.countSources(recordRange);
+    const totalConcepts = repo.countConcepts(recordRange);
 
     return NextResponse.json({
       fetchedAt,

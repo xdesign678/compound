@@ -92,7 +92,7 @@ function isBlockedIP(ip: string): boolean {
   return true; // unknown format — reject
 }
 
-async function validateApiUrl(url: string): Promise<void> {
+export async function validatePublicHttpsApiUrl(url: string): Promise<void> {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -574,7 +574,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
     body.response_format = { type: 'json_object' };
   }
 
-  await validateApiUrl(gatewayUrl);
+  await validatePublicHttpsApiUrl(gatewayUrl);
 
   const startedAt = Date.now();
   const task = opts.task ?? 'chat';

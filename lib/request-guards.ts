@@ -1,6 +1,19 @@
 import { NextResponse } from 'next/server';
 import type { LlmConfig } from './types';
 
+export class RequestBodyTooLargeError extends Error {
+  readonly status = 413;
+
+  constructor(maxBytes: number) {
+    super(`Request body is too large. Max ${maxBytes} bytes.`);
+    this.name = 'RequestBodyTooLargeError';
+  }
+}
+
+export function isRequestBodyTooLargeError(error: unknown): error is RequestBodyTooLargeError {
+  return error instanceof RequestBodyTooLargeError;
+}
+
 export function enforceContentLength(req: Request, maxBytes: number): NextResponse | null {
   const raw = req.headers.get('content-length');
   if (!raw) return null;
@@ -12,6 +25,47 @@ export function enforceContentLength(req: Request, maxBytes: number): NextRespon
     { error: `Request body is too large. Max ${maxBytes} bytes.` },
     { status: 413 },
   );
+}
+
+function assertContentLength(req: Request, maxBytes: number): void {
+  const raw = req.headers.get('content-length');
+  if (!raw) return;
+  const size = Number(raw);
+  if (Number.isFinite(size) && size > maxBytes) throw new RequestBodyTooLargeError(maxBytes);
+}
+
+export async function readTextWithLimit(req: Request, maxBytes: number): Promise<string> {
+  assertContentLength(req, maxBytes);
+
+  if (!req.body) return '';
+
+  const reader = req.body.getReader();
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new RequestBodyTooLargeError(maxBytes);
+      }
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+    chunks.push(decoder.decode());
+  } finally {
+    reader.releaseLock();
+  }
+
+  return chunks.join('');
+}
+
+export async function readJsonWithLimit<T = unknown>(req: Request, maxBytes: number): Promise<T> {
+  const text = await readTextWithLimit(req, maxBytes);
+  return JSON.parse(text || '{}') as T;
 }
 
 function clean(value: string | null | undefined): string | undefined {

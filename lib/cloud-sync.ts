@@ -22,6 +22,12 @@ import type { Source, Concept, ActivityLog, AskMessage } from './types';
 interface SnapshotResponse {
   fetchedAt: number;
   mode?: 'full' | 'delta';
+  pagination?: {
+    limit: number;
+    offset: number;
+    totalSources: number;
+    totalConcepts: number;
+  };
   counts: { sources: number; concepts: number; activity: number; ask: number };
   sources: Source[];
   concepts: Concept[];
@@ -30,6 +36,7 @@ interface SnapshotResponse {
 }
 
 const LAST_PULL_KEY = 'compound:lastSnapshotPull';
+const SNAPSHOT_PAGE_SIZE = 1000;
 export const OFFLINE_WRITE_MAX_BYTES = 256 * 1024;
 
 export function getOfflineWritePayloadBytes(payload: unknown): number {
@@ -76,9 +83,19 @@ function normalizeSnapshotTimestamp(value: number | string | null | undefined): 
   return Math.trunc(parsed);
 }
 
-function buildSnapshotRequestPath(since: number | null): string {
-  if (!since) return '/api/data/snapshot';
-  const search = new URLSearchParams({ since: String(since) });
+function buildSnapshotRequestPath(input: {
+  since: number | null;
+  before?: number | null;
+  limit?: number;
+  offset?: number;
+}): string {
+  const search = new URLSearchParams();
+  if (input.since) search.set('since', String(input.since));
+  if (input.before) search.set('before', String(input.before));
+  if (typeof input.limit === 'number') search.set('limit', String(input.limit));
+  if (typeof input.offset === 'number') search.set('offset', String(input.offset));
+  const query = search.toString();
+  if (!query) return '/api/data/snapshot';
   return `/api/data/snapshot?${search.toString()}`;
 }
 
@@ -130,103 +147,127 @@ export async function pullSnapshotFromCloud(): Promise<PullResult> {
 
 async function pullSnapshotFromCloudInner(): Promise<PullResult> {
   const since = getLastPullAt();
-  const res = await fetch(buildSameOriginRequestUrl(buildSnapshotRequestPath(since)), {
-    cache: 'no-store',
-    headers: withRequestId(getAdminAuthHeaders()),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`snapshot failed (${res.status}): ${text.slice(0, 200)}`);
-  }
-  const snap = (await res.json()) as SnapshotResponse;
-
   const db = getDb();
   const applied = { sources: 0, concepts: 0, activity: 0, ask: 0 };
   const skipped = { sources: 0, concepts: 0, activity: 0, ask: 0 };
+  let pulledAt = 0;
+  let before: number | null = null;
+  let offset = 0;
 
-  // --- sources: overwrite only if server's ingestedAt is strictly newer.
-  if (snap.sources.length > 0) {
-    const existing = await db.sources.bulkGet(snap.sources.map((s) => s.id));
-    const toPut: Source[] = [];
-    for (let i = 0; i < snap.sources.length; i++) {
-      const remote = snap.sources[i];
-      const local = existing[i];
-      if (!local || remote.ingestedAt > local.ingestedAt) {
-        toPut.push(mergeRemoteSource(local, remote));
-      } else {
-        skipped.sources++;
+  while (true) {
+    const res = await fetch(
+      buildSameOriginRequestUrl(
+        buildSnapshotRequestPath({
+          since,
+          before,
+          limit: SNAPSHOT_PAGE_SIZE,
+          offset,
+        }),
+      ),
+      {
+        cache: 'no-store',
+        headers: withRequestId(getAdminAuthHeaders()),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`snapshot failed (${res.status}): ${text.slice(0, 200)}`);
+    }
+    const snap = (await res.json()) as SnapshotResponse;
+    if (!before) before = snap.fetchedAt;
+    pulledAt = snap.fetchedAt;
+
+    // --- sources: overwrite only if server's ingestedAt is strictly newer.
+    if (snap.sources.length > 0) {
+      const existing = await db.sources.bulkGet(snap.sources.map((s) => s.id));
+      const toPut: Source[] = [];
+      for (let i = 0; i < snap.sources.length; i++) {
+        const remote = snap.sources[i];
+        const local = existing[i];
+        if (!local || remote.ingestedAt > local.ingestedAt) {
+          toPut.push(mergeRemoteSource(local, remote));
+        } else {
+          skipped.sources++;
+        }
+      }
+      if (toPut.length > 0) {
+        await db.sources.bulkPut(toPut);
+        applied.sources += toPut.length;
       }
     }
-    if (toPut.length > 0) {
-      await db.sources.bulkPut(toPut);
-      applied.sources = toPut.length;
-    }
-  }
 
-  // --- concepts: overwrite only if server's updatedAt is strictly newer.
-  if (snap.concepts.length > 0) {
-    const existing = await db.concepts.bulkGet(snap.concepts.map((c) => c.id));
-    const toPut: Concept[] = [];
-    for (let i = 0; i < snap.concepts.length; i++) {
-      const remote = snap.concepts[i];
-      const local = existing[i];
-      if (!local || remote.updatedAt > local.updatedAt) {
-        toPut.push(mergeRemoteConcept(local, remote));
-      } else {
-        skipped.concepts++;
+    // --- concepts: overwrite only if server's updatedAt is strictly newer.
+    if (snap.concepts.length > 0) {
+      const existing = await db.concepts.bulkGet(snap.concepts.map((c) => c.id));
+      const toPut: Concept[] = [];
+      for (let i = 0; i < snap.concepts.length; i++) {
+        const remote = snap.concepts[i];
+        const local = existing[i];
+        if (!local || remote.updatedAt > local.updatedAt) {
+          toPut.push(mergeRemoteConcept(local, remote));
+        } else {
+          skipped.concepts++;
+        }
+      }
+      if (toPut.length > 0) {
+        await db.concepts.bulkPut(toPut);
+        applied.concepts += toPut.length;
       }
     }
-    if (toPut.length > 0) {
-      await db.concepts.bulkPut(toPut);
-      applied.concepts = toPut.length;
-    }
-  }
 
-  // --- activity: merge by id (last-write wins on at).
-  if (snap.activity.length > 0) {
-    const existing = await db.activity.bulkGet(snap.activity.map((a) => a.id));
-    const toPut: ActivityLog[] = [];
-    for (let i = 0; i < snap.activity.length; i++) {
-      const remote = snap.activity[i];
-      const local = existing[i];
-      if (!local || remote.at > local.at) {
-        toPut.push(remote);
-      } else {
-        skipped.activity++;
+    // --- activity: merge by id (last-write wins on at).
+    if (offset === 0 && snap.activity.length > 0) {
+      const existing = await db.activity.bulkGet(snap.activity.map((a) => a.id));
+      const toPut: ActivityLog[] = [];
+      for (let i = 0; i < snap.activity.length; i++) {
+        const remote = snap.activity[i];
+        const local = existing[i];
+        if (!local || remote.at > local.at) {
+          toPut.push(remote);
+        } else {
+          skipped.activity++;
+        }
+      }
+      if (toPut.length > 0) {
+        await db.activity.bulkPut(toPut);
+        applied.activity += toPut.length;
       }
     }
-    if (toPut.length > 0) {
-      await db.activity.bulkPut(toPut);
-      applied.activity = toPut.length;
-    }
-  }
 
-  // --- ask history: similar.
-  if (snap.ask.length > 0) {
-    const existing = await db.askHistory.bulkGet(snap.ask.map((a) => a.id));
-    const toPut: AskMessage[] = [];
-    for (let i = 0; i < snap.ask.length; i++) {
-      const remote = snap.ask[i];
-      const local = existing[i];
-      if (!local || remote.at > local.at) {
-        toPut.push(remote);
-      } else {
-        skipped.ask++;
+    // --- ask history: similar.
+    if (offset === 0 && snap.ask.length > 0) {
+      const existing = await db.askHistory.bulkGet(snap.ask.map((a) => a.id));
+      const toPut: AskMessage[] = [];
+      for (let i = 0; i < snap.ask.length; i++) {
+        const remote = snap.ask[i];
+        const local = existing[i];
+        if (!local || remote.at > local.at) {
+          toPut.push(remote);
+        } else {
+          skipped.ask++;
+        }
+      }
+      if (toPut.length > 0) {
+        await db.askHistory.bulkPut(toPut);
+        applied.ask += toPut.length;
       }
     }
-    if (toPut.length > 0) {
-      await db.askHistory.bulkPut(toPut);
-      applied.ask = toPut.length;
-    }
+
+    const pagination = snap.pagination;
+    if (!pagination) break;
+    const nextOffset = pagination.offset + pagination.limit;
+    const totalRecords = Math.max(pagination.totalSources, pagination.totalConcepts);
+    if (nextOffset >= totalRecords) break;
+    offset = nextOffset;
   }
 
   try {
-    localStorage.setItem(LAST_PULL_KEY, String(snap.fetchedAt));
+    if (pulledAt > 0) localStorage.setItem(LAST_PULL_KEY, String(pulledAt));
   } catch {
     // ignore (private mode etc.)
   }
 
-  return { pulledAt: snap.fetchedAt, applied, skipped };
+  return { pulledAt, applied, skipped };
 }
 
 export function getLastPullAt(): number | null {

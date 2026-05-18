@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { enforceContentLength, readLlmConfigOverride } from './request-guards';
+import { enforceContentLength, readJsonWithLimit, readLlmConfigOverride } from './request-guards';
 
 test('rejects oversized request bodies', () => {
   const req = new Request('http://example.com/api/query', {
@@ -10,6 +10,19 @@ test('rejects oversized request bodies', () => {
 
   const res = enforceContentLength(req, 1024);
   assert.equal(res?.status, 413);
+});
+
+test('readJsonWithLimit rejects oversized streamed bodies without content-length', async () => {
+  const payload = JSON.stringify({ value: 'x'.repeat(2048) });
+  const req = new Request('http://example.com/api/query', {
+    method: 'POST',
+    body: payload,
+  });
+
+  await assert.rejects(
+    () => readJsonWithLimit(req, 1024),
+    /Request body is too large\. Max 1024 bytes\./,
+  );
 });
 
 test('prefers header llm config overrides over request body', () => {
