@@ -23,6 +23,7 @@ import {
 import { now, parseJson } from './utils';
 import { wikiRepo, type ConceptRelationKind } from './wiki-db';
 import { getLlmBudgetStats, runWithLlmBudget, type LlmBudgetName } from './llm-budgets';
+import { getModelForTask } from './model-history';
 
 export type AdvancedAnalysisStage =
   | 'github_ingest'
@@ -951,7 +952,7 @@ function queuePostIngestJobs(input: {
     sourceSha: input.sourceSha,
     sourcePath: input.sourcePath,
     stage: 'summarize',
-    model: process.env.LLM_MODEL || null,
+    model: getModelForTask('source_summarize'),
     promptVersion: SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
     priority: 20,
     maxAttempts: 2,
@@ -963,7 +964,7 @@ function queuePostIngestJobs(input: {
     sourceSha: input.sourceSha,
     sourcePath: input.sourcePath,
     stage: 'relations',
-    model: process.env.LLM_MODEL || null,
+    model: getModelForTask('relation_extract'),
     promptVersion: RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
     priority: 15,
     maxAttempts: 2,
@@ -1160,7 +1161,7 @@ async function processSummarize(job: AnalysisJobRow): Promise<void> {
       JSON.stringify(Array.isArray(parsed.topics) ? parsed.topics.slice(0, 12) : []),
       JSON.stringify(Array.isArray(parsed.entities) ? parsed.entities.slice(0, 24) : []),
       confidence,
-      process.env.LLM_MODEL || null,
+      getModelForTask('source_summarize'),
       job.prompt_version ?? SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
       now(),
     );

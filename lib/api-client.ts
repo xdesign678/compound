@@ -2,7 +2,8 @@ import { nanoid } from 'nanoid';
 import { getDb } from './db';
 import { ensureConceptsHydrated } from './cloud-sync';
 import { normalizeCategoryKeys, normalizeCategoryState } from './category-normalization';
-import { getLlmConfig } from './llm-config';
+import { getLlmConfigForPurpose } from './llm-config';
+import type { ModelPurpose } from './model-defaults';
 import { getAdminAuthHeaders } from './admin-auth-client';
 import { generateClientRequestId } from './trace-client';
 import type {
@@ -191,14 +192,19 @@ function askAbortMessage(externalSignal?: AbortSignal): string {
 async function postJSON<T>(
   path: string,
   body: unknown,
-  options?: { signal?: AbortSignal; retries?: number; write?: boolean },
+  options?: {
+    signal?: AbortSignal;
+    retries?: number;
+    write?: boolean;
+    modelPurpose?: ModelPurpose;
+  },
 ): Promise<T> {
   if (options?.write) assertOnlineForWrite();
 
   const signal = buildTimeoutSignal(options?.signal);
   const maxRetries = Math.min(options?.retries ?? 0, 3);
 
-  const llmConfig = getLlmConfig();
+  const llmConfig = getLlmConfigForPurpose(options?.modelPurpose ?? 'wiki');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Request-ID': generateClientRequestId(),
@@ -413,7 +419,7 @@ export async function askWikiStream(
     conversationHistory: history,
   };
 
-  const llmConfig = getLlmConfig();
+  const llmConfig = getLlmConfigForPurpose('ask');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'text/event-stream',
@@ -564,6 +570,7 @@ export async function startWikiFromSelection(input: {
   };
   return postJSON<SelectionWikiRunStartResponse>('/api/concepts/from-selection', req, {
     write: true,
+    modelPurpose: 'wiki',
   });
 }
 

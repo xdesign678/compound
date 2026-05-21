@@ -99,6 +99,8 @@ export interface LlmConfig {
   apiKey?: string;
   apiUrl?: string;
   model?: string;
+  askModel?: string;
+  wikiModel?: string;
 }
 
 export interface IngestRequest {

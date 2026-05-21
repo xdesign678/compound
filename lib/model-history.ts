@@ -1,9 +1,12 @@
 import { PRESET_MODELS } from './llm-config';
+import { DEFAULT_LLM_MODEL, modelPurposeForTask } from './model-defaults';
 import { getServerDb } from './server-db';
 
 const CUSTOM_MODELS_META_KEY = 'custom_model_history';
 const HIDDEN_PRESETS_META_KEY = 'hidden_preset_models';
 const SELECTED_MODEL_META_KEY = 'selected_llm_model';
+const SELECTED_WIKI_MODEL_META_KEY = 'selected_wiki_model';
+const SELECTED_ASK_MODEL_META_KEY = 'selected_ask_model';
 const MAX_CUSTOM_MODELS = 20;
 const MAX_MODEL_LENGTH = 160;
 
@@ -119,4 +122,42 @@ export function saveSelectedModel(model: string): string {
   const next = normalized.length <= MAX_MODEL_LENGTH ? normalized : '';
   writeMetaValue(SELECTED_MODEL_META_KEY, next);
   return next;
+}
+
+export function getSelectedWikiModel(): string {
+  const model = normalizeModel(
+    readMetaValue(SELECTED_WIKI_MODEL_META_KEY) || readMetaValue(SELECTED_MODEL_META_KEY) || '',
+  );
+  return model.length <= MAX_MODEL_LENGTH ? model : '';
+}
+
+export function saveSelectedWikiModel(model: string): string {
+  const normalized = normalizeModel(model);
+  const next = normalized.length <= MAX_MODEL_LENGTH ? normalized : '';
+  writeMetaValue(SELECTED_WIKI_MODEL_META_KEY, next);
+  return next;
+}
+
+export function getSelectedAskModel(): string {
+  const model = normalizeModel(
+    readMetaValue(SELECTED_ASK_MODEL_META_KEY) || readMetaValue(SELECTED_MODEL_META_KEY) || '',
+  );
+  return model.length <= MAX_MODEL_LENGTH ? model : '';
+}
+
+export function saveSelectedAskModel(model: string): string {
+  const normalized = normalizeModel(model);
+  const next = normalized.length <= MAX_MODEL_LENGTH ? normalized : '';
+  writeMetaValue(SELECTED_ASK_MODEL_META_KEY, next);
+  return next;
+}
+
+function cleanEnv(value: string | undefined): string {
+  return value?.replace(/^["'\s]+|["'\s]+$/g, '') || '';
+}
+
+export function getModelForTask(task?: string): string {
+  const selected =
+    modelPurposeForTask(task) === 'ask' ? getSelectedAskModel() : getSelectedWikiModel();
+  return selected || cleanEnv(process.env.LLM_MODEL) || DEFAULT_LLM_MODEL;
 }

@@ -4551,6 +4551,15 @@ button {
   border-color: var(--brand-clay);
   box-shadow: 0 0 0 3px rgba(201, 100, 66, 0.12);
 }
+.settings-model-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.56);
+}
 .settings-preset-row {
   display: flex;
   gap: 7px;

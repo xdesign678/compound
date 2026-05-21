@@ -202,7 +202,13 @@ export function useAskState() {
       .then((settings) => {
         setCustomModels(settings.models);
         setHiddenPresetModels(settings.hiddenPresetModels);
-        setLlmConfig({ ...localConfig, model: settings.selectedModel });
+        const selectedAskModel = settings.selectedAskModel || settings.selectedModel;
+        setLlmConfig({
+          ...localConfig,
+          model: selectedAskModel,
+          askModel: selectedAskModel,
+          wikiModel: settings.selectedWikiModel,
+        });
       })
       .catch(() => {
         setCustomModels([]);
@@ -551,7 +557,11 @@ export function useAskState() {
 
   const selectModel = useCallback(
     (model: string) => {
-      const nextConfig = { ...llmConfig, model: model || undefined };
+      const nextConfig = {
+        ...llmConfig,
+        model: model || undefined,
+        askModel: model || undefined,
+      };
       saveLlmConfig(nextConfig);
       setLlmConfig(nextConfig);
       void saveSelectedModelOnServer(model).then((settings) => {

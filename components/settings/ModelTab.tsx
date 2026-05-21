@@ -12,9 +12,10 @@ import {
   rememberCustomModelOnServer,
   removeCustomModelOnServer,
   saveLlmConfig,
-  saveSelectedModelOnServer,
+  saveSelectedModelsOnServer,
   setLlmRemember as persistLlmRemember,
 } from '@/lib/llm-config';
+import { DEFAULT_LLM_MODEL } from '@/lib/model-defaults';
 import { clearAdminToken, getAdminToken, saveAdminToken } from '@/lib/admin-auth-client';
 import type { LlmConfig } from '@/lib/types';
 import { Icon } from '../Icons';
@@ -82,6 +83,8 @@ function StatusNotice({ message }: { message: StatusMessage | null }) {
 
 export function ModelTab() {
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
+  const [wikiModel, setWikiModel] = useState(DEFAULT_LLM_MODEL);
+  const [askModel, setAskModel] = useState(DEFAULT_LLM_MODEL);
   const [customModels, setCustomModels] = useState<string[]>([]);
   const [hiddenPresetModels, setHiddenPresetModels] = useState<string[]>([]);
   const [llmAdvancedExpanded, setLlmAdvancedExpanded] = useState(false);
@@ -111,11 +114,23 @@ export function ModelTab() {
       .then((settings) => {
         setCustomModels(settings.models);
         setHiddenPresetModels(settings.hiddenPresetModels);
-        setLlmConfig({ ...localConfig, model: settings.selectedModel });
+        const selectedWikiModel = settings.selectedWikiModel || DEFAULT_LLM_MODEL;
+        const selectedAskModel =
+          settings.selectedAskModel || settings.selectedModel || DEFAULT_LLM_MODEL;
+        setWikiModel(selectedWikiModel);
+        setAskModel(selectedAskModel);
+        setLlmConfig({
+          ...localConfig,
+          model: selectedAskModel,
+          askModel: selectedAskModel,
+          wikiModel: selectedWikiModel,
+        });
       })
       .catch(() => {
         setCustomModels([]);
         setHiddenPresetModels([]);
+        setWikiModel(localConfig.wikiModel || DEFAULT_LLM_MODEL);
+        setAskModel(localConfig.askModel || localConfig.model || DEFAULT_LLM_MODEL);
       });
     return () => {
       timers.forEach(clearTimeout);
@@ -145,8 +160,12 @@ export function ModelTab() {
   }, [loadUsage]);
 
   async function saveLlm() {
+    const selectedWikiModel = wikiModel.trim() || DEFAULT_LLM_MODEL;
+    const selectedAskModel = askModel.trim() || DEFAULT_LLM_MODEL;
     const nextConfig: LlmConfig = {
-      model: llmConfig.model?.trim() || undefined,
+      model: selectedAskModel,
+      askModel: selectedAskModel,
+      wikiModel: selectedWikiModel,
       apiKey: llmConfig.apiKey?.trim() || undefined,
       apiUrl: llmConfig.apiUrl?.trim() || undefined,
     };
@@ -162,13 +181,19 @@ export function ModelTab() {
     persistLlmRemember(llmRemember);
     saveLlmConfig(nextConfig);
     setLlmConfig(nextConfig);
+    setWikiModel(selectedWikiModel);
+    setAskModel(selectedAskModel);
 
     try {
-      if (nextConfig.model) {
-        const models = await rememberCustomModelOnServer(nextConfig.model);
+      const modelsToRemember = Array.from(new Set([selectedWikiModel, selectedAskModel]));
+      for (const model of modelsToRemember) {
+        const models = await rememberCustomModelOnServer(model);
         setCustomModels(models);
       }
-      const settings = await saveSelectedModelOnServer(nextConfig.model || '');
+      const settings = await saveSelectedModelsOnServer({
+        wikiModel: selectedWikiModel,
+        askModel: selectedAskModel,
+      });
       setCustomModels(settings.models);
       setHiddenPresetModels(settings.hiddenPresetModels);
       setLlmStatus({
@@ -193,11 +218,20 @@ export function ModelTab() {
     );
     setCustomModels(models);
     setLlmConfig((config) => {
-      if (config.model !== model) return config;
-      const next = { ...config, model: '' };
+      if (config.model !== model && config.askModel !== model && config.wikiModel !== model) {
+        return config;
+      }
+      const next = {
+        ...config,
+        model: config.model === model ? DEFAULT_LLM_MODEL : config.model,
+        askModel: config.askModel === model ? DEFAULT_LLM_MODEL : config.askModel,
+        wikiModel: config.wikiModel === model ? DEFAULT_LLM_MODEL : config.wikiModel,
+      };
       saveLlmConfig(next);
       return next;
     });
+    if (wikiModel === model) setWikiModel(DEFAULT_LLM_MODEL);
+    if (askModel === model) setAskModel(DEFAULT_LLM_MODEL);
     setLlmStatus({ tone: 'info', text: '已从当前浏览器移除这个自定义模型。' });
   }
 
@@ -211,12 +245,106 @@ export function ModelTab() {
     }
     const nextConfig = (() => {
       const config = llmConfig;
-      if (config.model !== model) return config;
-      return { ...config, model: '' };
+      if (config.model !== model && config.askModel !== model && config.wikiModel !== model) {
+        return config;
+      }
+      return {
+        ...config,
+        model: config.model === model ? DEFAULT_LLM_MODEL : config.model,
+        askModel: config.askModel === model ? DEFAULT_LLM_MODEL : config.askModel,
+        wikiModel: config.wikiModel === model ? DEFAULT_LLM_MODEL : config.wikiModel,
+      };
     })();
     setLlmConfig(nextConfig);
     saveLlmConfig(nextConfig);
+    if (wikiModel === model) setWikiModel(DEFAULT_LLM_MODEL);
+    if (askModel === model) setAskModel(DEFAULT_LLM_MODEL);
     setLlmStatus({ tone: 'info', text: '已隐藏该预设模型。可重新输入模型名再保存。' });
+  }
+
+  function renderModelSelector(input: {
+    title: string;
+    desc: string;
+    value: string;
+    onChange: (value: string) => void;
+    inputId: string;
+  }) {
+    return (
+      <div className="settings-model-group">
+        <label className="settings-field" htmlFor={input.inputId}>
+          <span>{input.title}</span>
+          <input
+            id={input.inputId}
+            type="text"
+            placeholder={DEFAULT_LLM_MODEL}
+            value={input.value}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(e) => input.onChange(e.target.value)}
+          />
+          <span className="settings-field-hint">{input.desc}</span>
+        </label>
+
+        <div className="settings-preset-row" role="list" aria-label={`${input.title}可选模型`}>
+          {PRESET_MODELS.map((item) => item.value)
+            .filter((model) => !hiddenPresetModels.includes(model))
+            .map((model) => (
+              <span
+                key={model}
+                role="listitem"
+                className={`settings-preset settings-model-chip${input.value === model ? ' active' : ''}`}
+                title={model}
+              >
+                <button
+                  type="button"
+                  aria-pressed={input.value === model}
+                  aria-label={`选择模型 ${modelLabel(model)}`}
+                  onClick={() => input.onChange(model)}
+                >
+                  {modelLabel(model)}
+                </button>
+                {model !== DEFAULT_LLM_MODEL && (
+                  <button
+                    type="button"
+                    className="settings-model-chip-delete"
+                    aria-label={`删除模型 ${modelLabel(model)}`}
+                    title="删除"
+                    onClick={() => void removePresetModel(model)}
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+            ))}
+          {customModels.map((model) => (
+            <span
+              key={model}
+              role="listitem"
+              className={`settings-preset settings-model-chip${input.value === model ? ' active' : ''}`}
+              title={model}
+            >
+              <button
+                type="button"
+                aria-pressed={input.value === model}
+                aria-label={`选择模型 ${modelLabel(model)}`}
+                onClick={() => input.onChange(model)}
+              >
+                {modelLabel(model)}
+              </button>
+              <button
+                type="button"
+                className="settings-model-chip-delete"
+                aria-label={`删除模型 ${modelLabel(model)}`}
+                title="删除"
+                onClick={() => void removeCustomModel(model)}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   function saveAdmin() {
@@ -249,80 +377,27 @@ export function ModelTab() {
         <div>
           <div className="settings-card-title">LLM 配置</div>
           <div className="settings-card-desc">
-            默认使用 Zeabur 服务端配置；可临时覆盖当前浏览器的模型。
+            Wiki 生成和搜索问答可以分别设置模型；默认使用 DeepSeek V4 Flash。
           </div>
         </div>
       </div>
 
       <div className="settings-fields" aria-describedby="settings-model-credential-note">
-        <label className="settings-field">
-          <span>模型</span>
-          <input
-            type="text"
-            placeholder="anthropic/claude-sonnet-4.6"
-            value={llmConfig.model || ''}
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(e) => setLlmConfig((c) => ({ ...c, model: e.target.value }))}
-          />
-        </label>
+        {renderModelSelector({
+          title: 'Wiki 生成模型',
+          desc: '用于 GitHub 文档同步、概念抽取、摘要和关系整理。',
+          value: wikiModel,
+          onChange: setWikiModel,
+          inputId: 'settings-wiki-model',
+        })}
 
-        <div className="settings-preset-row" role="list" aria-label="可选模型">
-          {PRESET_MODELS.map((item) => item.value)
-            .filter((model) => !hiddenPresetModels.includes(model))
-            .map((model) => (
-              <span
-                key={model}
-                role="listitem"
-                className={`settings-preset settings-model-chip${llmConfig.model === model ? ' active' : ''}`}
-                title={model}
-              >
-                <button
-                  type="button"
-                  aria-pressed={llmConfig.model === model}
-                  aria-label={`选择模型 ${modelLabel(model)}`}
-                  onClick={() => setLlmConfig((c) => ({ ...c, model }))}
-                >
-                  {modelLabel(model)}
-                </button>
-                <button
-                  type="button"
-                  className="settings-model-chip-delete"
-                  aria-label={`删除模型 ${modelLabel(model)}`}
-                  title="删除"
-                  onClick={() => void removePresetModel(model)}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          {customModels.map((model) => (
-            <span
-              key={model}
-              role="listitem"
-              className={`settings-preset settings-model-chip${llmConfig.model === model ? ' active' : ''}`}
-              title={model}
-            >
-              <button
-                type="button"
-                aria-pressed={llmConfig.model === model}
-                aria-label={`选择模型 ${modelLabel(model)}`}
-                onClick={() => setLlmConfig((c) => ({ ...c, model }))}
-              >
-                {modelLabel(model)}
-              </button>
-              <button
-                type="button"
-                className="settings-model-chip-delete"
-                aria-label={`删除模型 ${modelLabel(model)}`}
-                title="删除"
-                onClick={() => void removeCustomModel(model)}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
+        {renderModelSelector({
+          title: '搜索问答模型',
+          desc: '用于 Ask 页搜索问答、检索改写和答案生成。',
+          value: askModel,
+          onChange: setAskModel,
+          inputId: 'settings-ask-model',
+        })}
 
         <div className="settings-advanced-block">
           <button
@@ -386,18 +461,29 @@ export function ModelTab() {
           type="button"
           onClick={async () => {
             clearLlmConfig();
-            setLlmConfig({ apiKey: undefined, apiUrl: undefined, model: undefined });
-            const settings = await saveSelectedModelOnServer('').catch(() => null);
+            setWikiModel(DEFAULT_LLM_MODEL);
+            setAskModel(DEFAULT_LLM_MODEL);
+            setLlmConfig({
+              apiKey: undefined,
+              apiUrl: undefined,
+              model: DEFAULT_LLM_MODEL,
+              askModel: DEFAULT_LLM_MODEL,
+              wikiModel: DEFAULT_LLM_MODEL,
+            });
+            const settings = await saveSelectedModelsOnServer({
+              wikiModel: DEFAULT_LLM_MODEL,
+              askModel: DEFAULT_LLM_MODEL,
+            }).catch(() => null);
             if (settings) {
               setCustomModels(settings.models);
               setHiddenPresetModels(settings.hiddenPresetModels);
             }
             setLlmSaved(true);
-            setLlmStatus({ tone: 'success', text: '已清除当前浏览器中的 LLM 覆盖配置。' });
+            setLlmStatus({ tone: 'success', text: '已恢复默认模型，并清除当前浏览器凭据。' });
             safeTimeout(() => setLlmSaved(false), 2000);
           }}
         >
-          清除本地 LLM 凭据
+          恢复默认模型并清除凭据
         </button>
         <label className="settings-field-row settings-field-row-help">
           <input

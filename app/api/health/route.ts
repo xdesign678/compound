@@ -6,6 +6,7 @@ import {
 } from '@/lib/server-auth';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
 import { getEmbeddingMode } from '@/lib/embedding';
+import { getModelForTask } from '@/lib/model-history';
 
 export const runtime = 'nodejs';
 
@@ -59,7 +60,7 @@ export const GET = withRequestTracing(async (req: Request) => {
       configured: Boolean(envSource(['LLM_API_KEY', 'AI_GATEWAY_API_KEY'])),
       keySource: envSource(['LLM_API_KEY', 'AI_GATEWAY_API_KEY']),
       urlSource: envSource(['LLM_API_URL', 'AI_GATEWAY_URL']) ?? 'default',
-      model: cleanEnv(process.env.LLM_MODEL) || 'anthropic/claude-sonnet-4.6',
+      model: getModelForTask('ingest'),
     },
     embedding: {
       mode: embeddingMode,

@@ -1,6 +1,7 @@
 import type { LlmConfig } from './types';
 import { getAdminAuthHeaders } from './admin-auth-client';
 import { withRequestId } from './trace-client';
+import { DEFAULT_LLM_MODEL, type ModelPurpose } from './model-defaults';
 
 const STORAGE_KEY = 'compound_llm_config';
 const REMEMBER_KEY = 'compound_llm_remember';
@@ -11,6 +12,7 @@ const LEGACY_STORAGE_KEYS = [
 ] as const;
 
 export const PRESET_MODELS = [
+  { label: 'DeepSeek V4 Flash', value: DEFAULT_LLM_MODEL },
   { label: 'Claude Sonnet 4.6', value: 'anthropic/claude-sonnet-4.6' },
   { label: 'Claude Haiku 4.5', value: 'anthropic/claude-haiku-4-5' },
   { label: 'GPT-4o', value: 'openai/gpt-4o' },
@@ -21,13 +23,23 @@ export type ModelSettings = {
   models: string[];
   hiddenPresetModels: string[];
   selectedModel: string;
+  selectedWikiModel: string;
+  selectedAskModel: string;
 };
 
 function parseModelSettings(data: {
   models?: unknown;
   hiddenPresetModels?: unknown;
   selectedModel?: unknown;
+  selectedWikiModel?: unknown;
+  selectedAskModel?: unknown;
 }) {
+  const selectedModel = typeof data.selectedModel === 'string' ? data.selectedModel : '';
+  const selectedWikiModel =
+    typeof data.selectedWikiModel === 'string' ? data.selectedWikiModel : selectedModel;
+  const selectedAskModel =
+    typeof data.selectedAskModel === 'string' ? data.selectedAskModel : selectedModel;
+
   return {
     models: Array.isArray(data.models)
       ? data.models.filter((item): item is string => typeof item === 'string')
@@ -35,7 +47,9 @@ function parseModelSettings(data: {
     hiddenPresetModels: Array.isArray(data.hiddenPresetModels)
       ? data.hiddenPresetModels.filter((item): item is string => typeof item === 'string')
       : [],
-    selectedModel: typeof data.selectedModel === 'string' ? data.selectedModel : '',
+    selectedModel: selectedAskModel || selectedModel || DEFAULT_LLM_MODEL,
+    selectedWikiModel: selectedWikiModel || DEFAULT_LLM_MODEL,
+    selectedAskModel: selectedAskModel || DEFAULT_LLM_MODEL,
   };
 }
 
@@ -49,6 +63,16 @@ export function getLlmConfig(): LlmConfig {
   } catch {
     return {};
   }
+}
+
+export function getLlmConfigForPurpose(purpose: ModelPurpose): LlmConfig {
+  const config = getLlmConfig();
+  const purposeModel = purpose === 'ask' ? config.askModel : config.wikiModel;
+  return {
+    apiKey: config.apiKey,
+    apiUrl: config.apiUrl,
+    model: purposeModel || config.model,
+  };
 }
 
 export function saveLlmConfig(config: LlmConfig): void {
@@ -101,7 +125,15 @@ export async function fetchModelSettings(): Promise<ModelSettings> {
   const res = await fetch('/api/settings/models', {
     headers: withRequestId(getAdminAuthHeaders()),
   });
-  if (!res.ok) return { models: [], hiddenPresetModels: [], selectedModel: '' };
+  if (!res.ok) {
+    return {
+      models: [],
+      hiddenPresetModels: [],
+      selectedModel: DEFAULT_LLM_MODEL,
+      selectedWikiModel: DEFAULT_LLM_MODEL,
+      selectedAskModel: DEFAULT_LLM_MODEL,
+    };
+  }
   return parseModelSettings(await res.json());
 }
 
@@ -148,9 +180,28 @@ export async function saveSelectedModelOnServer(model: string): Promise<ModelSet
       'Content-Type': 'application/json',
       ...getAdminAuthHeaders(),
     }),
-    body: JSON.stringify({ selectedModel: model.trim() }),
+    body: JSON.stringify({ selectedAskModel: model.trim() }),
   });
-  if (!res.ok) return { models: [], hiddenPresetModels: [], selectedModel: '' };
+  if (!res.ok) return fetchModelSettings();
+  return parseModelSettings(await res.json());
+}
+
+export async function saveSelectedModelsOnServer(input: {
+  wikiModel: string;
+  askModel: string;
+}): Promise<ModelSettings> {
+  const res = await fetch('/api/settings/models', {
+    method: 'PATCH',
+    headers: withRequestId({
+      'Content-Type': 'application/json',
+      ...getAdminAuthHeaders(),
+    }),
+    body: JSON.stringify({
+      selectedWikiModel: input.wikiModel.trim(),
+      selectedAskModel: input.askModel.trim(),
+    }),
+  });
+  if (!res.ok) return fetchModelSettings();
   return parseModelSettings(await res.json());
 }
 

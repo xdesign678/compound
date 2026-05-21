@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server';
 import {
   getSelectedModel,
+  getModelForTask,
+  getSelectedAskModel,
+  getSelectedWikiModel,
   hidePresetModel,
   listCustomModels,
   listHiddenPresetModels,
   removeCustomModel,
   saveCustomModel,
+  saveSelectedAskModel,
   saveSelectedModel,
+  saveSelectedWikiModel,
 } from '@/lib/model-history';
 import { isRequestBodyTooLargeError, readJsonWithLimit } from '@/lib/request-guards';
 import { requireAdmin } from '@/lib/server-auth';
@@ -15,10 +20,14 @@ export const runtime = 'nodejs';
 const MAX_BODY_BYTES = 16_384;
 
 function modelSettingsResponse() {
+  const selectedWikiModel = getSelectedWikiModel() || getModelForTask('ingest');
+  const selectedAskModel = getSelectedAskModel() || getModelForTask('query');
   return NextResponse.json({
     models: listCustomModels(),
     hiddenPresetModels: listHiddenPresetModels(),
-    selectedModel: getSelectedModel(),
+    selectedModel: getSelectedModel() || selectedAskModel,
+    selectedWikiModel,
+    selectedAskModel,
   });
 }
 
@@ -84,6 +93,18 @@ export async function PATCH(req: Request) {
   const selectedModel = (body as { selectedModel?: unknown }).selectedModel;
   if (typeof selectedModel === 'string') {
     saveSelectedModel(selectedModel);
+    saveSelectedWikiModel(selectedModel);
+    saveSelectedAskModel(selectedModel);
+  }
+
+  const selectedWikiModel = (body as { selectedWikiModel?: unknown }).selectedWikiModel;
+  if (typeof selectedWikiModel === 'string') {
+    saveSelectedWikiModel(selectedWikiModel);
+  }
+
+  const selectedAskModel = (body as { selectedAskModel?: unknown }).selectedAskModel;
+  if (typeof selectedAskModel === 'string') {
+    saveSelectedAskModel(selectedAskModel);
   }
 
   const hiddenPresetModel = (body as { hiddenPresetModel?: unknown }).hiddenPresetModel;

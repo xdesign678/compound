@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { clearLlmConfig, getLlmConfig, saveLlmConfig, setLlmRemember } from './llm-config';
+import {
+  clearLlmConfig,
+  getLlmConfig,
+  getLlmConfigForPurpose,
+  saveLlmConfig,
+  setLlmRemember,
+} from './llm-config';
 
 class MemoryStorage implements Storage {
   private data = new Map<string, string>();
@@ -86,4 +92,26 @@ test('clearLlmConfig removes remembered and legacy config keys', () => {
   assert.equal(sessionStorage.getItem('compound_llm_api_key'), null);
   assert.equal(sessionStorage.getItem('compound_llm_api_url'), null);
   assert.equal(sessionStorage.getItem('compound_llm_model'), null);
+});
+
+test('getLlmConfigForPurpose returns the model selected for that workflow', () => {
+  installBrowserStorage();
+  saveLlmConfig({
+    apiKey: 'user-key',
+    apiUrl: 'https://example.com/v1/chat/completions',
+    model: 'legacy-model',
+    askModel: 'ask-model',
+    wikiModel: 'wiki-model',
+  });
+
+  assert.deepEqual(getLlmConfigForPurpose('ask'), {
+    apiKey: 'user-key',
+    apiUrl: 'https://example.com/v1/chat/completions',
+    model: 'ask-model',
+  });
+  assert.deepEqual(getLlmConfigForPurpose('wiki'), {
+    apiKey: 'user-key',
+    apiUrl: 'https://example.com/v1/chat/completions',
+    model: 'wiki-model',
+  });
 });

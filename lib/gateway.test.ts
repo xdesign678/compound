@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { CircuitBreakerOpenError, resetCircuitBreakersForTests } from './circuit-breaker';
-import { chat } from './gateway';
+import { chat, isReasoningModel } from './gateway';
 import {
   renderPrometheusMetrics,
   resetPrometheusMetricsForTests,
@@ -44,6 +44,11 @@ async function withMockFetch<T>(mockFetch: typeof fetch, fn: () => Promise<T> | 
     global.fetch = previous;
   }
 }
+
+test('does not treat DeepSeek V4 Flash as a reasoning-only model', () => {
+  assert.equal(isReasoningModel('deepseek/deepseek-v4-flash'), false);
+  assert.equal(isReasoningModel('deepseek/deepseek-r1'), true);
+});
 
 test('rejects custom api url without a user-provided api key', { concurrency: false }, async () => {
   await withEnv(

@@ -5,7 +5,7 @@
  * Env vars:
  *   LLM_API_URL   – chat completions endpoint (default: OpenRouter)
  *   LLM_API_KEY   – API key for the endpoint
- *   LLM_MODEL     – model identifier (default: anthropic/claude-sonnet-4.6)
+ *   LLM_MODEL     – fallback model identifier (default: deepseek/deepseek-v4-flash)
  *
  * Legacy fallback: AI_GATEWAY_API_KEY / AI_GATEWAY_URL are also accepted.
  */
@@ -20,6 +20,7 @@ import { addBreadcrumb, reportError } from './observability/sentry';
 import { buildOutboundTraceHeaders } from './request-context';
 import { parseRateLimitBackoffMs } from './llm-rate-headers';
 import { pauseLlmBudget, type LlmBudgetName } from './llm-budgets';
+import { getModelForTask } from './model-history';
 
 const METADATA_HOSTS = new Set(['metadata.google.internal', 'metadata', 'metadata.goog']);
 
@@ -173,8 +174,8 @@ function getGatewayUrl(): string {
   return OPENROUTER_URL;
 }
 
-function getDefaultModel(): string {
-  return cleanEnv(process.env.LLM_MODEL) || 'anthropic/claude-sonnet-4.6';
+function getDefaultModel(task?: string): string {
+  return getModelForTask(task);
 }
 
 function readPositiveInt(value: string | undefined, fallback: number): number {
@@ -285,6 +286,7 @@ function buildFallbackRotation(): string[] {
 export function isReasoningModel(model: string | null | undefined): boolean {
   if (!model) return false;
   const normalized = model.toLowerCase();
+  if (/deepseek[\/\-]deepseek-v4-flash|deepseek-v4-flash/.test(normalized)) return false;
   return (
     /(?:^|[\/\-])o[1-9](?:[\.\-]|$)/.test(normalized) || // o1, o3-mini, o4
     /(?:^|[\/\-])r[1-9](?:[\.\-]|$)/.test(normalized) || // r1, r1-lite, r2
@@ -530,7 +532,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
     throw new Error('LLM_API_KEY (or AI_GATEWAY_API_KEY) not set');
   }
 
-  const requestedModel = opts.llmConfig?.model || opts.model || getDefaultModel();
+  const requestedModel = opts.llmConfig?.model || opts.model || getDefaultModel(opts.task);
 
   // Auto-fallback: if recent calls to this model have all timed out, rotate
   // to the next model in the configured list so the batch can keep moving.

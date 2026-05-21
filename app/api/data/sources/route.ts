@@ -14,6 +14,7 @@ import {
   RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
   SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
 } from '@/lib/prompts';
+import { getModelForTask } from '@/lib/model-history';
 import type { ActivityLog } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -142,7 +143,11 @@ export async function PATCH(req: Request) {
           sourcePath: nextSource.title,
           stage,
           model:
-            stage === 'summarize' || stage === 'relations' ? process.env.LLM_MODEL || null : null,
+            stage === 'summarize'
+              ? getModelForTask('source_summarize')
+              : stage === 'relations'
+                ? getModelForTask('relation_extract')
+                : null,
           promptVersion:
             stage === 'summarize'
               ? SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION

@@ -24,6 +24,7 @@ import { rewriteQuery } from '@/lib/retrieval/query-rewrite';
 import { reciprocalRankFusion } from '@/lib/retrieval/rrf';
 import { graphExpand } from '@/lib/retrieval/graph-expand';
 import { llmRerank, type RerankCandidate } from '@/lib/retrieval/llm-rerank';
+import { getModelForTask } from '@/lib/model-history';
 import {
   decideRerank,
   getRerankCandidateLimit,
@@ -461,7 +462,7 @@ export const POST = withRequestTracing(async (req: Request) => {
 
     // ---- Streaming path ----
     if (wantStream) {
-      const model = llmConfig?.model || process.env.LLM_MODEL || 'anthropic/claude-sonnet-4.6';
+      const model = llmConfig?.model || getModelForTask('query');
       const reasoning = isReasoningModel(model);
 
       const encoder = new TextEncoder();
