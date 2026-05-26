@@ -6,8 +6,8 @@
 
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
-- Routes: **39**
-- Handlers (HTTP methods): **46**
+- Routes: **41**
+- Handlers (HTTP methods): **49**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
@@ -59,6 +59,8 @@ This document is generated automatically from the Next.js Route Handlers under `
   - [`/api/sync/status`](#api-sync-status)
   - [`/api/sync/worker`](#api-sync-worker)
 - **wiki**
+  - [`/api/wiki/category`](#api-wiki-category)
+  - [`/api/wiki/category/runs/{id}`](#api-wiki-category-runs--id)
   - [`/api/wiki/export`](#api-wiki-export)
   - [`/api/wiki/health`](#api-wiki-health)
   - [`/api/wiki/import`](#api-wiki-import)
@@ -756,6 +758,43 @@ Start the background analysis worker for queued ingest / embedding /
 summarize / relation jobs. Requires the standard admin token.
 
 ## wiki
+
+### `/api/wiki/category`
+
+Source: [`app/api/wiki/category/route.ts`](../app/api/wiki/category/route.ts)
+
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`, `POST` |
+| Runtime     | `nodejs`      |
+| maxDuration | 60            |
+| Guards      | `admin-token` |
+
+#### GET
+
+GET /api/wiki/category?primary=X&secondary=Y
+Returns cached category wiki if available.
+
+#### POST
+
+POST /api/wiki/category
+Creates a category wiki generation run and returns the run info.
+
+### `/api/wiki/category/runs/{id}`
+
+Source: [`app/api/wiki/category/runs/[id]/route.ts`](../app/api/wiki/category/runs/[id]/route.ts)
+
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | _unset_       |
+| Guards      | `admin-token` |
+
+#### GET
+
+GET /api/wiki/category/runs/:id
+Returns the status of a category wiki generation run.
 
 ### `/api/wiki/export`
 
