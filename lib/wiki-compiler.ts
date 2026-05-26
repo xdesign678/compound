@@ -1,5 +1,6 @@
 import { repo } from './server-db';
 import { wikiRepo, type ConceptEvidence } from './wiki-db';
+import { markCategoryWikisStaleByConceptIds } from './category-wiki-worker';
 import type { Concept, Source } from './types';
 
 function termsFromConcept(concept: Concept): string[] {
@@ -107,6 +108,12 @@ export function compileWikiArtifactsAfterIngest(input: {
     },
   );
 
+  try {
+    markCategoryWikisStaleByConceptIds(affected.map((item) => item.next.id));
+  } catch {
+    /* non-critical */
+  }
+
   return {
     chunks: chunks.length,
     evidence: evidenceCount,
@@ -149,6 +156,12 @@ export function compileConceptArtifactsAfterManualChange(input: {
     },
   );
 
+  try {
+    markCategoryWikisStaleByConceptIds(affected.map((item) => item.next.id));
+  } catch {
+    /* non-critical */
+  }
+
   return {
     conceptsIndexed: affected.length,
     versions: versionCount,
@@ -181,6 +194,12 @@ export function recompileSourceArtifactsAfterEdit(input: {
     reason: input.changeSummary || `资料「${input.source.title}」编辑后同步。`,
     confidence: 0.66,
   });
+
+  try {
+    markCategoryWikisStaleByConceptIds(affectedConcepts.map((concept) => concept.id));
+  } catch {
+    /* non-critical */
+  }
 
   return {
     chunks: chunks.length,

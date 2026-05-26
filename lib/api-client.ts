@@ -353,6 +353,10 @@ export async function ingestSource(input: {
     await db.activity.put(resp.activity);
   });
 
+  // 5. Best-effort background auto-categorize. Debounced + inflight-guarded
+  // so batch imports (e.g. Obsidian) only fire a single tail-end run.
+  scheduleAutoCategorize();
+
   return {
     sourceId: resp.sourceId,
     newConceptIds: resp.newConceptIds,

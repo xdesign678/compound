@@ -84,6 +84,13 @@ const SourceDetail = dynamic(
   () => import('@/components/views/SourceDetail').then((m) => ({ default: m.SourceDetail })),
   { ssr: false, loading: ViewSkeleton },
 );
+const CategoryWikiDetail = dynamic(
+  () =>
+    import('@/components/views/CategoryWikiDetail').then((m) => ({
+      default: m.CategoryWikiDetail,
+    })),
+  { ssr: false, loading: ViewSkeleton },
+);
 
 const DESKTOP_MEDIA_QUERY = `(min-width: ${DESKTOP_LAYOUT_MIN_WIDTH}px)`;
 const LIBRARY_DETAIL_TRANSITION_MS = 320;
@@ -270,11 +277,13 @@ export default function Page() {
 
   function renderDetail(target = detail) {
     if (!target) return null;
-    return target.type === 'concept' ? (
-      <ConceptDetail id={target.id} />
-    ) : (
-      <SourceDetail id={target.id} />
-    );
+    if (target.type === 'concept') {
+      return <ConceptDetail id={target.id} />;
+    }
+    if (target.type === 'category-wiki' && target.primary && target.secondary) {
+      return <CategoryWikiDetail primary={target.primary} secondary={target.secondary} />;
+    }
+    return <SourceDetail id={target.id} />;
   }
 
   function renderPrimaryView(scrollRootSelector?: string) {

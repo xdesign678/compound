@@ -25,6 +25,7 @@ import type {
   ContentStatus,
   SourceType,
   ActivityType,
+  CategoryWiki,
 } from './types';
 
 const DEFAULT_DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -200,6 +201,38 @@ function runMigrations(db: DB): void {
       key    TEXT PRIMARY KEY,
       value  TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS category_wikis (
+      id                  TEXT PRIMARY KEY,
+      primary_category    TEXT NOT NULL,
+      secondary_category  TEXT NOT NULL,
+      body_md             TEXT NOT NULL DEFAULT '',
+      toc_json            TEXT NOT NULL DEFAULT '[]',
+      concept_ids         TEXT NOT NULL DEFAULT '[]',
+      concept_ids_hash    TEXT NOT NULL DEFAULT '',
+      model               TEXT,
+      prompt_version      TEXT,
+      generated_at        INTEGER NOT NULL,
+      stale               INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_category_wikis_pair
+      ON category_wikis(primary_category, secondary_category);
+
+    CREATE TABLE IF NOT EXISTS category_wiki_runs (
+      id                  TEXT PRIMARY KEY,
+      primary_category    TEXT NOT NULL,
+      secondary_category  TEXT NOT NULL,
+      status              TEXT NOT NULL,
+      phase               TEXT NOT NULL DEFAULT 'queued',
+      request_json        TEXT NOT NULL,
+      result_json         TEXT,
+      error               TEXT,
+      started_at          INTEGER NOT NULL,
+      finished_at         INTEGER,
+      updated_at          INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_category_wiki_runs_status
+      ON category_wiki_runs(status, started_at DESC);
   `);
 
   const conceptColumns = new Set(
@@ -1047,7 +1080,102 @@ export const repo = {
     ).run({ ...next, prev_heartbeat: prevHeartbeat });
     return result.changes > 0;
   },
+
+  // ---- category wiki -------------------------------------------
+  listConceptsByCategory(primary: string, secondary: string, limit = 80): Concept[] {
+    const rows = getServerDb()
+      .prepare(
+        `SELECT ${selectConceptColumns(true)}
+         FROM concepts
+         WHERE category_keys LIKE ? ESCAPE '\\'
+         ORDER BY updated_at DESC
+         LIMIT ?`,
+      )
+      .all(jsonArrayValueLikePattern(`${primary}/${secondary}`), limit) as ConceptRow[];
+    return rows.map((row) => rowToConcept(row, 'partial'));
+  },
+
+  getCategoryWiki(primary: string, secondary: string): CategoryWikiRow | null {
+    const row = cachedPrepare(
+      `SELECT * FROM category_wikis WHERE primary_category = ? AND secondary_category = ?`,
+    ).get(primary, secondary) as CategoryWikiRow | undefined;
+    return row ?? null;
+  },
+
+  upsertCategoryWiki(w: {
+    id: string;
+    primaryCategory: string;
+    secondaryCategory: string;
+    bodyMd: string;
+    tocJson: string;
+    conceptIds: string[];
+    conceptIdsHash: string;
+    model?: string;
+    promptVersion?: string;
+    generatedAt: number;
+  }): void {
+    cachedPrepare(
+      `INSERT OR REPLACE INTO category_wikis
+        (id, primary_category, secondary_category, body_md, toc_json, concept_ids, concept_ids_hash, model, prompt_version, generated_at, stale)
+       VALUES (@id, @primary_category, @secondary_category, @body_md, @toc_json, @concept_ids, @concept_ids_hash, @model, @prompt_version, @generated_at, 0)`,
+    ).run({
+      id: w.id,
+      primary_category: w.primaryCategory,
+      secondary_category: w.secondaryCategory,
+      body_md: w.bodyMd,
+      toc_json: w.tocJson,
+      concept_ids: JSON.stringify(w.conceptIds),
+      concept_ids_hash: w.conceptIdsHash,
+      model: w.model ?? null,
+      prompt_version: w.promptVersion ?? null,
+      generated_at: w.generatedAt,
+    });
+  },
+
+  markCategoryWikisStale(pairs: Array<{ primary: string; secondary: string }>): number {
+    if (pairs.length === 0) return 0;
+    const conditions: string[] = [];
+    const params: string[] = [];
+    for (const pair of pairs) {
+      conditions.push('(primary_category = ? AND secondary_category = ?)');
+      params.push(pair.primary, pair.secondary);
+    }
+    const result = getServerDb()
+      .prepare(`UPDATE category_wikis SET stale = 1 WHERE ${conditions.join(' OR ')}`)
+      .run(...params);
+    return result.changes;
+  },
 };
+
+export interface CategoryWikiRow {
+  id: string;
+  primary_category: string;
+  secondary_category: string;
+  body_md: string;
+  toc_json: string;
+  concept_ids: string;
+  concept_ids_hash: string;
+  model: string | null;
+  prompt_version: string | null;
+  generated_at: number;
+  stale: number;
+}
+
+export function rowToCategoryWiki(r: CategoryWikiRow): CategoryWiki {
+  return {
+    id: r.id,
+    primaryCategory: r.primary_category,
+    secondaryCategory: r.secondary_category,
+    bodyMd: r.body_md,
+    tocJson: r.toc_json,
+    conceptIds: parseJsonArray<string>(r.concept_ids),
+    conceptIdsHash: r.concept_ids_hash,
+    model: r.model ?? undefined,
+    promptVersion: r.prompt_version ?? undefined,
+    generatedAt: r.generated_at,
+    stale: Boolean(r.stale),
+  };
+}
 
 export interface SyncJobRow {
   id: string;

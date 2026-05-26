@@ -26,8 +26,10 @@ export const LINE_HEIGHT_MAP: Record<LineHeight, { label: string; value: number 
 };
 
 interface DetailState {
-  type: 'concept' | 'source';
+  type: 'concept' | 'source' | 'category-wiki';
   id: string;
+  primary?: string;
+  secondary?: string;
 }
 
 export interface ToastState {
@@ -137,6 +139,7 @@ export interface UISlice {
   setTab: (t: TabId) => void;
   openConcept: (id: string) => void;
   openSource: (id: string) => void;
+  openCategoryWiki: (primary: string, secondary: string) => void;
   back: () => void;
   openModal: () => void;
   closeModal: () => void;
@@ -196,6 +199,18 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => (
   },
   openSource: (id) => {
     const newDetail: DetailState = { type: 'source', id };
+    set({ detail: newDetail });
+    if (typeof window !== 'undefined') {
+      history.pushState({ detail: newDetail }, '');
+    }
+  },
+  openCategoryWiki: (primary, secondary) => {
+    const newDetail: DetailState = {
+      type: 'category-wiki',
+      id: `category-wiki:${primary}/${secondary}`,
+      primary,
+      secondary,
+    };
     set({ detail: newDetail });
     if (typeof window !== 'undefined') {
       history.pushState({ detail: newDetail }, '');

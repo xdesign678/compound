@@ -35,6 +35,7 @@ import { getUnreviewedCountFromDb } from '@/lib/review-picks';
 import { useScrollSpy } from '@/lib/hooks/useScrollSpy';
 import { Icon } from '../Icons';
 import { OnboardingCard } from '../OnboardingCard';
+import { CategoryWikiCard } from './CategoryWikiCard';
 import type { Concept } from '@/lib/types';
 
 interface LibraryViewProps {
@@ -636,6 +637,19 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
           ) : (
             <>
               <div className="library-grid">
+                {selectedSecondary && selectedPrimary && (
+                  <CategoryWikiCard
+                    key={`wiki-${selectedPrimary}-${selectedSecondary}`}
+                    primary={selectedPrimary}
+                    secondary={selectedSecondary}
+                    conceptCount={filtered.length}
+                    isActive={
+                      detail?.type === 'category-wiki' &&
+                      detail?.primary === selectedPrimary &&
+                      detail?.secondary === selectedSecondary
+                    }
+                  />
+                )}
                 {visibleConcepts.map((c) => (
                   <ConceptCard
                     key={c.id}

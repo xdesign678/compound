@@ -257,3 +257,49 @@ export interface CategorizeResponse {
     categories: CategoryTag[];
   }>;
 }
+
+// ---- Category Wiki (二级标签综合 Wiki) ----
+
+export interface CategoryWiki {
+  id: string;
+  primaryCategory: string;
+  secondaryCategory: string;
+  bodyMd: string;
+  tocJson: string;
+  conceptIds: string[];
+  conceptIdsHash: string;
+  model?: string;
+  promptVersion?: string;
+  generatedAt: number;
+  stale: boolean;
+}
+
+export type CategoryWikiRunStatus = 'running' | 'done' | 'failed';
+export type CategoryWikiRunPhase =
+  | 'queued'
+  | 'loading_context'
+  | 'generating'
+  | 'persisting'
+  | 'done';
+
+export interface CategoryWikiRunStartResponse {
+  runId: string;
+  status: Extract<CategoryWikiRunStatus, 'running'>;
+  phase: CategoryWikiRunPhase;
+  startedAt: number;
+}
+
+export interface CategoryWikiRunStatusResponse {
+  runId: string;
+  status: CategoryWikiRunStatus;
+  phase: CategoryWikiRunPhase;
+  startedAt: number;
+  finishedAt: number | null;
+  error: string | null;
+}
+
+export interface CategoryWikiRequest {
+  primary: string;
+  secondary: string;
+  llmConfig?: LlmConfig;
+}
