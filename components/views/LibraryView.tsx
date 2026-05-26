@@ -12,21 +12,11 @@ import {
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
-import type { LucideIcon } from 'lucide-react';
-import {
-  Binary,
-  Bot,
-  Brain,
-  ChevronLeft,
-  ChevronRight,
-  Compass,
-  FolderKanban,
-  Grid2x2,
-  History,
-  Network,
-  Wrench,
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getDb } from '@/lib/db';
+import { DEFAULT_PRIMARY_CATEGORY_ICON, getPrimaryCategoryIcon } from '@/lib/category-icons';
+
+const AllCategoriesIcon = DEFAULT_PRIMARY_CATEGORY_ICON;
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { categorizeConcepts } from '@/lib/api-client';
@@ -48,22 +38,6 @@ interface CategoryTree {
   primary: string;
   count: number;
   secondaries: Array<{ name: string; count: number }>;
-}
-
-const PRIMARY_CATEGORY_ICON_RULES: Array<{ match: RegExp; icon: LucideIcon }> = [
-  { match: /脑|神经|认知|意识|心理/, icon: Brain },
-  { match: /方法|哲学|理论/, icon: Compass },
-  { match: /进化|社会|人类/, icon: Network },
-  { match: /人工智能|AI|机器学习|大模型/, icon: Bot },
-  { match: /知识|笔记|管理|学习/, icon: FolderKanban },
-  { match: /软件|编程|开发|工程/, icon: Binary },
-  { match: /工具|效率|工作流/, icon: Wrench },
-  { match: /历史|传记|文明/, icon: History },
-];
-
-function getPrimaryCategoryIcon(primary: string | null): LucideIcon {
-  if (!primary) return Grid2x2;
-  return PRIMARY_CATEGORY_ICON_RULES.find((rule) => rule.match.test(primary))?.icon ?? Grid2x2;
 }
 
 const ConceptCard = memo(function ConceptCard({
@@ -483,7 +457,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                     }}
                   >
                     <span className="library-primary-card-icon" aria-hidden="true">
-                      <Grid2x2 size={28} strokeWidth={1.85} />
+                      <AllCategoriesIcon size={28} strokeWidth={1.85} />
                     </span>
                     <span className="library-primary-card-title">全部</span>
                     <span className="library-primary-card-count">
