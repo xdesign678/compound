@@ -23,6 +23,9 @@ import type {
   SelectionWikiRunStartResponse,
   SelectionWikiRunStatusResponse,
   SourceType,
+  CategoryWiki,
+  CategoryWikiRunStartResponse,
+  CategoryWikiRunStatusResponse,
 } from './types';
 
 const CLIENT_CANDIDATE_LIMIT = 320;
@@ -848,12 +851,30 @@ export async function getLintStatus(runId: string): Promise<LintRunStatusRespons
   return (await res.json()) as LintRunStatusResponse;
 }
 
+let categorizeInflight: Promise<{ total: number; failed: number; errors: string[] }> | null = null;
+
 /**
  * Batch-categorize uncategorized concepts via /api/categorize.
  * Processes in batches of 10. Calls onProgress after each batch.
  * Returns the total number of concepts processed.
+ *
+ * Concurrent invocations share the same in-flight promise so the manual button
+ * and the auto-categorize trigger never double-process the same backlog.
  */
 export async function categorizeConcepts(
+  onProgress?: (done: number, total: number, failed: number, errors: string[]) => void,
+): Promise<{ total: number; failed: number; errors: string[] }> {
+  if (categorizeInflight) return categorizeInflight;
+  const run = categorizeConceptsImpl(onProgress);
+  categorizeInflight = run;
+  try {
+    return await run;
+  } finally {
+    if (categorizeInflight === run) categorizeInflight = null;
+  }
+}
+
+async function categorizeConceptsImpl(
   onProgress?: (done: number, total: number, failed: number, errors: string[]) => void,
 ): Promise<{ total: number; failed: number; errors: string[] }> {
   const db = getDb();
@@ -918,4 +939,114 @@ export async function categorizeConcepts(
   }
 
   return { total: uncategorized.length, failed, errors };
+}
+
+let autoCategorizeTimer: ReturnType<typeof setTimeout> | null = null;
+const AUTO_CATEGORIZE_DEBOUNCE_MS = 1500;
+
+async function notifyAutoCategorizeToast(
+  text: string,
+  loading: boolean,
+  isError = false,
+): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    const { useAppStore } = await import('./store');
+    useAppStore.getState().showToast(text, loading, isError);
+  } catch {
+    // Toast is best-effort; never let UI feedback break the categorize run.
+  }
+}
+
+async function runAutoCategorizeNow(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+
+  const db = getDb();
+  const all = await db.concepts.toArray();
+  const pending = all.filter((c) => !c.categories || c.categories.length === 0).length;
+  if (pending === 0) return;
+
+  void notifyAutoCategorizeToast(`正在自动归类 ${pending} 条...`, true);
+  try {
+    const result = await categorizeConcepts((done, total) => {
+      void notifyAutoCategorizeToast(`正在自动归类... (${done}/${total})`, true);
+    });
+    if (result.total === 0) return;
+    const succeeded = Math.max(0, result.total - result.failed);
+    if (result.failed === 0) {
+      void notifyAutoCategorizeToast(`已自动归类 ${succeeded} 条`, false);
+    } else if (succeeded === 0) {
+      void notifyAutoCategorizeToast(`自动归类失败 ${result.failed} 条，可手动重试`, false, true);
+    } else {
+      void notifyAutoCategorizeToast(`已自动归类 ${succeeded} 条，${result.failed} 条失败`, false);
+    }
+  } catch {
+    // Swallow; manual button remains the recovery path.
+  }
+}
+
+/**
+ * Debounced fire-and-forget auto-categorize.
+ *
+ * Called after every successful ingest so newly created concepts that arrived
+ * without categories get tagged automatically. Multiple back-to-back ingests
+ * (e.g. Obsidian batch import) coalesce into a single tail-end run.
+ */
+export function scheduleAutoCategorize(): void {
+  if (typeof window === 'undefined') return;
+  if (autoCategorizeTimer) clearTimeout(autoCategorizeTimer);
+  autoCategorizeTimer = setTimeout(() => {
+    autoCategorizeTimer = null;
+    void runAutoCategorizeNow();
+  }, AUTO_CATEGORIZE_DEBOUNCE_MS);
+}
+
+// ---- Category Wiki ----
+
+export async function getCategoryWiki(
+  primary: string,
+  secondary: string,
+): Promise<CategoryWiki | null> {
+  const params = new URLSearchParams({ primary, secondary });
+  const res = await fetch(`/api/wiki/category?${params}`, {
+    headers: {
+      'X-Request-ID': generateClientRequestId(),
+      ...getAdminAuthHeaders(),
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 200) || `获取主题 Wiki 失败 (${res.status})`);
+  }
+  const data = await res.json();
+  return data ?? null;
+}
+
+export async function createCategoryWikiRun(
+  primary: string,
+  secondary: string,
+): Promise<CategoryWikiRunStartResponse> {
+  const res = await postJSON<CategoryWikiRunStartResponse>(
+    '/api/wiki/category',
+    { primary, secondary },
+    { write: true },
+  );
+  return res;
+}
+
+export async function getCategoryWikiRunStatus(
+  runId: string,
+): Promise<CategoryWikiRunStatusResponse> {
+  const res = await fetch(`/api/wiki/category/runs/${encodeURIComponent(runId)}`, {
+    headers: {
+      'X-Request-ID': generateClientRequestId(),
+      ...getAdminAuthHeaders(),
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 200) || `状态查询失败 (${res.status})`);
+  }
+  return (await res.json()) as CategoryWikiRunStatusResponse;
 }
