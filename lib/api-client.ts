@@ -943,6 +943,8 @@ async function categorizeConceptsImpl(
 
 let autoCategorizeTimer: ReturnType<typeof setTimeout> | null = null;
 const AUTO_CATEGORIZE_DEBOUNCE_MS = 1500;
+let autoCategorizeRunning = false;
+let autoCategorizeQueued = false;
 
 async function notifyAutoCategorizeToast(
   text: string,
@@ -958,31 +960,71 @@ async function notifyAutoCategorizeToast(
   }
 }
 
+async function hideAutoCategorizeToast(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    const { useAppStore } = await import('./store');
+    useAppStore.getState().hideToast();
+  } catch {
+    // Toast is best-effort; never let UI feedback break the categorize run.
+  }
+}
+
+async function countUncategorizedConcepts(): Promise<number> {
+  const db = getDb();
+  const all = await db.concepts.toArray();
+  return all.filter((c) => !c.categories || c.categories.length === 0).length;
+}
+
 async function runAutoCategorizeNow(): Promise<void> {
   if (typeof window === 'undefined') return;
   if (typeof navigator !== 'undefined' && !navigator.onLine) return;
 
-  const db = getDb();
-  const all = await db.concepts.toArray();
-  const pending = all.filter((c) => !c.categories || c.categories.length === 0).length;
+  const pending = await countUncategorizedConcepts();
   if (pending === 0) return;
 
+  let toastSettled = false;
   void notifyAutoCategorizeToast(`正在自动归类 ${pending} 条...`, true);
   try {
     const result = await categorizeConcepts((done, total) => {
       void notifyAutoCategorizeToast(`正在自动归类... (${done}/${total})`, true);
     });
-    if (result.total === 0) return;
+    if (result.total === 0) {
+      toastSettled = true;
+      void hideAutoCategorizeToast();
+      return;
+    }
     const succeeded = Math.max(0, result.total - result.failed);
     if (result.failed === 0) {
+      toastSettled = true;
       void notifyAutoCategorizeToast(`已自动归类 ${succeeded} 条`, false);
     } else if (succeeded === 0) {
+      toastSettled = true;
       void notifyAutoCategorizeToast(`自动归类失败 ${result.failed} 条，可手动重试`, false, true);
     } else {
+      toastSettled = true;
       void notifyAutoCategorizeToast(`已自动归类 ${succeeded} 条，${result.failed} 条失败`, false);
     }
   } catch {
-    // Swallow; manual button remains the recovery path.
+    toastSettled = true;
+    void notifyAutoCategorizeToast('自动归类中断，可稍后重试', false, true);
+  } finally {
+    if (!toastSettled) {
+      void hideAutoCategorizeToast();
+    }
+  }
+}
+
+async function drainAutoCategorizeQueue(): Promise<void> {
+  if (autoCategorizeRunning) return;
+  autoCategorizeRunning = true;
+  try {
+    while (autoCategorizeQueued) {
+      autoCategorizeQueued = false;
+      await runAutoCategorizeNow();
+    }
+  } finally {
+    autoCategorizeRunning = false;
   }
 }
 
@@ -995,10 +1037,11 @@ async function runAutoCategorizeNow(): Promise<void> {
  */
 export function scheduleAutoCategorize(): void {
   if (typeof window === 'undefined') return;
+  autoCategorizeQueued = true;
   if (autoCategorizeTimer) clearTimeout(autoCategorizeTimer);
   autoCategorizeTimer = setTimeout(() => {
     autoCategorizeTimer = null;
-    void runAutoCategorizeNow();
+    void drainAutoCategorizeQueue();
   }, AUTO_CATEGORIZE_DEBOUNCE_MS);
 }
 
