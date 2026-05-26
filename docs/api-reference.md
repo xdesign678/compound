@@ -6,8 +6,8 @@
 
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
-- Routes: **41**
-- Handlers (HTTP methods): **49**
+- Routes: **42**
+- Handlers (HTTP methods): **50**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
@@ -61,6 +61,7 @@ This document is generated automatically from the Next.js Route Handlers under `
 - **wiki**
   - [`/api/wiki/category`](#api-wiki-category)
   - [`/api/wiki/category/runs/{id}`](#api-wiki-category-runs--id)
+  - [`/api/wiki/category/runs`](#api-wiki-category-runs)
   - [`/api/wiki/export`](#api-wiki-export)
   - [`/api/wiki/health`](#api-wiki-health)
   - [`/api/wiki/import`](#api-wiki-import)
@@ -795,6 +796,23 @@ Source: [`app/api/wiki/category/runs/[id]/route.ts`](../app/api/wiki/category/ru
 
 GET /api/wiki/category/runs/:id
 Returns the status of a category wiki generation run.
+
+### `/api/wiki/category/runs`
+
+Source: [`app/api/wiki/category/runs/route.ts`](../app/api/wiki/category/runs/route.ts)
+
+| Field       | Value         |
+| ----------- | ------------- |
+| Methods     | `GET`         |
+| Runtime     | `nodejs`      |
+| maxDuration | _unset_       |
+| Guards      | `admin-token` |
+
+#### GET
+
+GET /api/wiki/category/runs?primary=X&secondary=Y&limit=20
+Returns the most recent generation runs for a category wiki, used to render
+the update-history list at the bottom of the wiki detail page.
 
 ### `/api/wiki/export`
 

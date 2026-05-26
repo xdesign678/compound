@@ -26,6 +26,7 @@ import type {
   CategoryWiki,
   CategoryWikiRunStartResponse,
   CategoryWikiRunStatusResponse,
+  CategoryWikiRunSummary,
 } from './types';
 
 const CLIENT_CANDIDATE_LIMIT = 320;
@@ -1092,4 +1093,24 @@ export async function getCategoryWikiRunStatus(
     throw new Error(text.slice(0, 200) || `状态查询失败 (${res.status})`);
   }
   return (await res.json()) as CategoryWikiRunStatusResponse;
+}
+
+export async function listCategoryWikiRuns(
+  primary: string,
+  secondary: string,
+  limit = 20,
+): Promise<CategoryWikiRunSummary[]> {
+  const params = new URLSearchParams({ primary, secondary, limit: String(limit) });
+  const res = await fetch(`/api/wiki/category/runs?${params}`, {
+    headers: {
+      'X-Request-ID': generateClientRequestId(),
+      ...getAdminAuthHeaders(),
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 200) || `加载更新记录失败 (${res.status})`);
+  }
+  const data = (await res.json()) as { runs: CategoryWikiRunSummary[] };
+  return data.runs ?? [];
 }

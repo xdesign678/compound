@@ -298,6 +298,17 @@ export interface CategoryWikiRunStatusResponse {
   error: string | null;
 }
 
+export interface CategoryWikiRunSummary {
+  runId: string;
+  primary: string;
+  secondary: string;
+  status: CategoryWikiRunStatus;
+  phase: CategoryWikiRunPhase;
+  startedAt: number;
+  finishedAt: number | null;
+  error: string | null;
+}
+
 export interface CategoryWikiRequest {
   primary: string;
   secondary: string;

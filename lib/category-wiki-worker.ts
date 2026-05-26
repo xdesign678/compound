@@ -12,6 +12,7 @@ import type {
   CategoryWikiRunStartResponse,
   CategoryWikiRunStatus,
   CategoryWikiRunStatusResponse,
+  CategoryWikiRunSummary,
   Concept,
   LlmConfig,
 } from './types';
@@ -99,6 +100,43 @@ export function getCategoryWikiRunStart(runId: string): CategoryWikiRunStartResp
     phase: row.phase,
     startedAt: row.started_at,
   };
+}
+
+export function listCategoryWikiRuns(
+  primary: string,
+  secondary: string,
+  limit = 20,
+): CategoryWikiRunSummary[] {
+  ensureCategoryWikiSchema();
+  const safeLimit = Math.max(1, Math.min(50, Math.floor(limit)));
+  const rows = getServerDb()
+    .prepare(
+      `SELECT id, primary_category, secondary_category, status, phase, started_at, finished_at, error
+       FROM category_wiki_runs
+       WHERE primary_category = ? AND secondary_category = ?
+       ORDER BY started_at DESC
+       LIMIT ?`,
+    )
+    .all(primary, secondary, safeLimit) as Array<{
+    id: string;
+    primary_category: string;
+    secondary_category: string;
+    status: CategoryWikiRunStatus;
+    phase: CategoryWikiRunPhase;
+    started_at: number;
+    finished_at: number | null;
+    error: string | null;
+  }>;
+  return rows.map((r) => ({
+    runId: r.id,
+    primary: r.primary_category,
+    secondary: r.secondary_category,
+    status: r.status,
+    phase: r.phase,
+    startedAt: r.started_at,
+    finishedAt: r.finished_at,
+    error: r.error,
+  }));
 }
 
 export function getCategoryWikiRunStatus(runId: string): CategoryWikiRunStatusResponse | null {

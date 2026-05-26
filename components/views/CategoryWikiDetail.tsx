@@ -4,13 +4,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { useAppStore } from '@/lib/store';
-import { getCategoryWiki, createCategoryWikiRun, getCategoryWikiRunStatus } from '@/lib/api-client';
+import {
+  getCategoryWiki,
+  createCategoryWikiRun,
+  getCategoryWikiRunStatus,
+  listCategoryWikiRuns,
+} from '@/lib/api-client';
 import { formatRelativeTime } from '@/lib/format';
 import { Icon } from '../Icons';
 import type {
   CategoryWiki,
   CategoryWikiRunPhase,
+  CategoryWikiRunStatus,
   CategoryWikiRunStatusResponse,
+  CategoryWikiRunSummary,
   Concept,
 } from '@/lib/types';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -25,6 +32,14 @@ const PHASE_LABEL: Record<CategoryWikiRunPhase, string> = {
   persisting: '写入 Wiki',
   done: '已完成',
 };
+
+const RUN_STATUS_LABEL: Record<CategoryWikiRunStatus, string> = {
+  running: '进行中',
+  done: '已完成',
+  failed: '失败',
+};
+
+const HISTORY_LIMIT = 10;
 
 interface TocItem {
   level: number;
@@ -142,8 +157,11 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
   const [runStatus, setRunStatus] = useState<CategoryWikiRunStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTocId, setActiveTocId] = useState<string | null>(null);
+  const [runs, setRuns] = useState<CategoryWikiRunSummary[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const mermaidRenderedRef = useRef(false);
+  const autoTriggeredRef = useRef(false);
 
   const concepts = useLiveQuery(
     async () => getDb().concepts.orderBy('updatedAt').reverse().toArray(),
@@ -187,9 +205,47 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
     }
   }, [primary, secondary]);
 
+  const fetchRuns = useCallback(async () => {
+    try {
+      const list = await listCategoryWikiRuns(primary, secondary, HISTORY_LIMIT);
+      setRuns(list);
+    } catch {
+      // 更新记录是辅助信息，加载失败不打断主流程
+    }
+  }, [primary, secondary]);
+
   useEffect(() => {
+    autoTriggeredRef.current = false;
+    mermaidRenderedRef.current = false;
+    setRunId(null);
+    setRunStatus(null);
+    setError(null);
+    setHistoryOpen(false);
     fetchWiki();
-  }, [fetchWiki]);
+    fetchRuns();
+  }, [fetchWiki, fetchRuns]);
+
+  const startGenerateRun = useCallback(async () => {
+    try {
+      const start = await createCategoryWikiRun(primary, secondary);
+      setRunId(start.runId);
+      setRunStatus(null);
+      fetchRuns();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建生成任务失败');
+    }
+  }, [primary, secondary, fetchRuns]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (runId) return;
+    if (autoTriggeredRef.current) return;
+    const needsGenerate = !wiki || wiki.stale;
+    if (!needsGenerate) return;
+    autoTriggeredRef.current = true;
+    setError(null);
+    void startGenerateRun();
+  }, [loading, runId, wiki, startGenerateRun]);
 
   useEffect(() => {
     if (!runId) return;
@@ -204,16 +260,19 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
         if (status.status === 'done') {
           setRunId(null);
           setRunStatus(null);
+          mermaidRenderedRef.current = false;
           await fetchWiki();
+          fetchRuns();
           return;
         }
         if (status.status === 'failed') {
           setError(status.error || '生成失败');
           setRunId(null);
           setRunStatus(null);
+          fetchRuns();
           return;
         }
-      } catch (err) {
+      } catch {
         if (cancelled) return;
       }
       timer = setTimeout(poll, POLL_INTERVAL_MS);
@@ -223,7 +282,7 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [runId, fetchWiki]);
+  }, [runId, fetchWiki, fetchRuns]);
 
   useEffect(() => {
     if (!htmlContent || !contentRef.current || mermaidRenderedRef.current) return;
@@ -275,16 +334,13 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
     setError(null);
     setRunId(null);
     setRunStatus(null);
-    try {
-      const start = await createCategoryWikiRun(primary, secondary);
-      setRunId(start.runId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '创建生成任务失败');
-    }
-  }, [primary, secondary]);
+    autoTriggeredRef.current = true;
+    await startGenerateRun();
+  }, [startGenerateRun]);
 
-  const isGenerating = runId !== null && runStatus?.status === 'running';
-  const showContent = wiki?.bodyMd && !isGenerating;
+  const isGenerating = runId !== null;
+  const showContent = Boolean(wiki?.bodyMd);
+  const waitingForFirstRun = !wiki && isGenerating;
 
   if (loading && !wiki && !runId) {
     return (
@@ -334,27 +390,27 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
         </div>
       )}
 
+      {!showContent && waitingForFirstRun && !error && (
+        <div className="category-wiki-detail-empty">
+          <p>
+            <Icon.Sparkle /> AI 正在为这个主题首次生成 Wiki...
+          </p>
+          <p>第一次生成约需 15–30 秒，请稍候。</p>
+        </div>
+      )}
+
       {!showContent && !isGenerating && !error && (
         <div className="category-wiki-detail-empty">
-          <p>这个主题的 Wiki 还没有生成。</p>
-          <p>AI 会综合该主题下所有概念，生成一份完整的主题百科。</p>
+          <p>暂无 Wiki 内容。</p>
           <button className="modal-btn primary" type="button" onClick={handleGenerate}>
-            <Icon.Sparkle /> 生成 Wiki
+            <Icon.Sparkle /> 立即生成
           </button>
         </div>
       )}
 
-      {wiki?.stale && showContent && (
+      {wiki?.stale && showContent && isGenerating && (
         <div className="category-wiki-detail-stale-banner">
-          <span>相关概念有更新，Wiki 内容可能过时</span>
-          <button
-            className="modal-btn"
-            type="button"
-            onClick={handleGenerate}
-            disabled={isGenerating}
-          >
-            ✨ 重新生成
-          </button>
+          <span>相关概念有更新，AI 正在自动重新生成...</span>
         </div>
       )}
 
@@ -386,17 +442,59 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
         </div>
       )}
 
-      {showContent && (
-        <div className="category-wiki-detail-actions">
+      {(showContent || runs.length > 0) && (
+        <footer className="category-wiki-detail-footer">
           <button
-            className="modal-btn"
             type="button"
-            onClick={handleGenerate}
-            disabled={isGenerating}
+            className="category-wiki-detail-history-toggle"
+            onClick={() => setHistoryOpen((v) => !v)}
+            aria-expanded={historyOpen}
           >
-            ✨ 重新生成
+            <span>更新记录{runs.length > 0 ? `（${runs.length}）` : ''}</span>
+            <span aria-hidden="true">{historyOpen ? '−' : '+'}</span>
           </button>
-        </div>
+          {historyOpen && (
+            <div className="category-wiki-detail-history">
+              {runs.length === 0 ? (
+                <p className="category-wiki-detail-history-empty">暂无生成记录。</p>
+              ) : (
+                <ul className="category-wiki-detail-history-list">
+                  {runs.map((run) => (
+                    <li
+                      key={run.runId}
+                      className={`category-wiki-detail-history-item category-wiki-detail-history-item--${run.status}`}
+                    >
+                      <span className="category-wiki-detail-history-status">
+                        {RUN_STATUS_LABEL[run.status]}
+                        {run.status === 'running' && `（${PHASE_LABEL[run.phase]}）`}
+                      </span>
+                      <span className="category-wiki-detail-history-time">
+                        {formatRelativeTime(run.startedAt)}
+                      </span>
+                      {run.status === 'failed' && run.error && (
+                        <span className="category-wiki-detail-history-error" title={run.error}>
+                          {run.error.slice(0, 80)}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {showContent && (
+                <div className="category-wiki-detail-history-actions">
+                  <button
+                    className="modal-btn"
+                    type="button"
+                    onClick={handleGenerate}
+                    disabled={isGenerating}
+                  >
+                    {isGenerating ? '生成中...' : '✨ 手动重新生成'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </footer>
       )}
     </div>
   );
