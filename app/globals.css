@@ -7932,16 +7932,248 @@ h3 {
   padding: 48px 24px;
   text-align: center;
   color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
 }
 
 .category-wiki-detail-empty p {
-  margin: 0 0 12px;
+  margin: 0;
+}
+
+.category-wiki-detail-empty-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+}
+
+.category-wiki-detail-empty-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- 首次生成 Loader ------------------------------------------------- */
+
+.category-wiki-loader {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 40px 24px 24px;
+}
+
+.category-wiki-loader-card {
+  width: 100%;
+  max-width: 460px;
+  padding: 32px 28px 28px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-brand, var(--brand-clay)) 6%, var(--bg-primary)) 0%,
+    var(--bg-primary) 100%
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--color-brand, var(--brand-clay)) 18%, var(--border-light));
+  border-radius: 14px;
+  text-align: center;
+  box-shadow: 0 4px 24px -8px
+    color-mix(in srgb, var(--color-brand, var(--brand-clay)) 18%, transparent);
+}
+
+.category-wiki-loader-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-brand, var(--brand-clay)) 14%, var(--bg-primary));
+  color: var(--color-brand, var(--brand-clay));
+  display: grid;
+  place-items: center;
+  animation: category-wiki-loader-pulse 2.2s ease-in-out infinite;
+}
+
+.category-wiki-loader-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+@keyframes category-wiki-loader-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-brand, var(--brand-clay)) 35%, transparent);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--color-brand, var(--brand-clay)) 0%, transparent);
+  }
+}
+
+.category-wiki-loader-title {
+  font-size: var(--text-lg, 16px);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 6px;
+  line-height: 1.4;
+}
+
+.category-wiki-loader-subtitle {
+  font-size: var(--text-sm, 13px);
+  color: var(--text-secondary);
+  margin: 0 0 24px;
+  min-height: 1.5em;
+}
+
+.category-wiki-loader-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0 auto;
+  max-width: 360px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+}
+
+.category-wiki-loader-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  padding: 0 4px;
+}
+
+.category-wiki-loader-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: calc(50% + 8px);
+  right: calc(-50% + 8px);
+  height: 2px;
+  background: var(--border-light);
+  transition: background 200ms ease;
+}
+
+.category-wiki-loader-step--done:not(:last-child)::after,
+.category-wiki-loader-step--active:not(:last-child)::after {
+  background: linear-gradient(
+    90deg,
+    var(--color-brand, var(--brand-clay)) 0%,
+    color-mix(in srgb, var(--color-brand, var(--brand-clay)) 30%, var(--border-light)) 100%
+  );
+}
+
+.category-wiki-loader-step-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  border: 2px solid var(--border-default, var(--border-light));
+  position: relative;
+  z-index: 1;
+  transition:
+    background 200ms ease,
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.category-wiki-loader-step--done .category-wiki-loader-step-dot {
+  background: var(--color-brand, var(--brand-clay));
+  border-color: var(--color-brand, var(--brand-clay));
+}
+
+.category-wiki-loader-step--active .category-wiki-loader-step-dot {
+  background: var(--color-brand, var(--brand-clay));
+  border-color: var(--color-brand, var(--brand-clay));
+  animation: category-wiki-loader-step 1.2s ease-in-out infinite;
+}
+
+@keyframes category-wiki-loader-step {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-brand, var(--brand-clay)) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-brand, var(--brand-clay)) 0%, transparent);
+  }
+}
+
+.category-wiki-loader-step-label {
+  font-size: var(--text-xs, 11px);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.category-wiki-loader-step--active .category-wiki-loader-step-label {
+  color: var(--color-brand, var(--brand-clay));
+  font-weight: 500;
+}
+
+.category-wiki-loader-step--done .category-wiki-loader-step-label {
+  color: var(--text-secondary);
+}
+
+.category-wiki-loader-hint {
+  margin: 22px 0 0;
+  font-size: var(--text-xs, 11px);
+  color: var(--text-tertiary);
+}
+
+/* stale banner spinner */
+.category-wiki-detail-stale-banner-spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
+  border-top-color: var(--color-warning);
+  animation: category-wiki-spinner 0.9s linear infinite;
+  display: inline-block;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+@keyframes category-wiki-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .category-wiki-loader-icon,
+  .category-wiki-loader-step--active .category-wiki-loader-step-dot,
+  .category-wiki-detail-stale-banner-spinner {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .category-wiki-loader {
+    padding: 24px 12px;
+  }
+  .category-wiki-loader-card {
+    padding: 24px 18px 22px;
+  }
+  .category-wiki-loader-icon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 14px;
+  }
+  .category-wiki-loader-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+  .category-wiki-loader-title {
+    font-size: var(--text-base, 14px);
+  }
+  .category-wiki-loader-step-label {
+    font-size: 10px;
+  }
 }
 
 .category-wiki-detail-stale-banner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 4px;
   padding: 10px 16px;
   margin-bottom: 16px;
   background: color-mix(in srgb, var(--color-warning) 8%, var(--bg-primary));

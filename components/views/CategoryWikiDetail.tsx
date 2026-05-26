@@ -33,6 +33,21 @@ const PHASE_LABEL: Record<CategoryWikiRunPhase, string> = {
   done: '已完成',
 };
 
+const PROGRESS_PHASES: CategoryWikiRunPhase[] = [
+  'queued',
+  'loading_context',
+  'generating',
+  'persisting',
+];
+
+const PHASE_DESCRIPTION: Record<CategoryWikiRunPhase, string> = {
+  queued: '正在排队等待 AI...',
+  loading_context: '正在汇总该主题下的所有概念...',
+  generating: 'AI 正在综合写作中，请稍候...',
+  persisting: '即将完成，正在保存...',
+  done: '已完成',
+};
+
 const RUN_STATUS_LABEL: Record<CategoryWikiRunStatus, string> = {
   running: '进行中',
   done: '已完成',
@@ -374,13 +389,6 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
         </div>
       </header>
 
-      {isGenerating && (
-        <div className="category-wiki-detail-progress" role="status">
-          <span className="status-dot" />
-          <span>{PHASE_LABEL[runStatus?.phase ?? 'queued']}</span>
-        </div>
-      )}
-
       {error && (
         <div className="category-wiki-detail-error" role="alert">
           <span>{error}</span>
@@ -390,27 +398,39 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
         </div>
       )}
 
-      {!showContent && waitingForFirstRun && !error && (
-        <div className="category-wiki-detail-empty">
-          <p>
-            <Icon.Sparkle /> AI 正在为这个主题首次生成 Wiki...
-          </p>
-          <p>第一次生成约需 15–30 秒，请稍候。</p>
-        </div>
+      {waitingForFirstRun && !error && (
+        <CategoryWikiLoader
+          variant="first-run"
+          secondary={secondary}
+          phase={runStatus?.phase ?? 'queued'}
+        />
       )}
 
       {!showContent && !isGenerating && !error && (
         <div className="category-wiki-detail-empty">
           <p>暂无 Wiki 内容。</p>
           <button className="modal-btn primary" type="button" onClick={handleGenerate}>
-            <Icon.Sparkle /> 立即生成
+            <span className="category-wiki-detail-empty-icon">
+              <Icon.Sparkle />
+            </span>
+            立即生成
           </button>
         </div>
       )}
 
       {wiki?.stale && showContent && isGenerating && (
-        <div className="category-wiki-detail-stale-banner">
-          <span>相关概念有更新，AI 正在自动重新生成...</span>
+        <div className="category-wiki-detail-stale-banner" role="status">
+          <span className="category-wiki-detail-stale-banner-spinner" aria-hidden="true" />
+          <span>
+            相关概念有更新，AI 正在自动重新生成... ({PHASE_LABEL[runStatus?.phase ?? 'queued']})
+          </span>
+        </div>
+      )}
+
+      {showContent && isGenerating && !wiki?.stale && (
+        <div className="category-wiki-detail-stale-banner" role="status">
+          <span className="category-wiki-detail-stale-banner-spinner" aria-hidden="true" />
+          <span>AI 正在重新生成... ({PHASE_LABEL[runStatus?.phase ?? 'queued']})</span>
         </div>
       )}
 
@@ -496,6 +516,42 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
           )}
         </footer>
       )}
+    </div>
+  );
+}
+
+interface CategoryWikiLoaderProps {
+  variant: 'first-run';
+  secondary: string;
+  phase: CategoryWikiRunPhase;
+}
+
+function CategoryWikiLoader({ secondary, phase }: CategoryWikiLoaderProps) {
+  const currentIdx = Math.max(0, PROGRESS_PHASES.indexOf(phase));
+  return (
+    <div className="category-wiki-loader" role="status" aria-live="polite">
+      <div className="category-wiki-loader-card">
+        <div className="category-wiki-loader-icon" aria-hidden="true">
+          <Icon.Sparkle />
+        </div>
+        <h2 className="category-wiki-loader-title">AI 正在为「{secondary}」生成 Wiki</h2>
+        <p className="category-wiki-loader-subtitle">{PHASE_DESCRIPTION[phase]}</p>
+        <ol className="category-wiki-loader-steps">
+          {PROGRESS_PHASES.map((p, idx) => {
+            const status = idx < currentIdx ? 'done' : idx === currentIdx ? 'active' : 'pending';
+            return (
+              <li
+                key={p}
+                className={`category-wiki-loader-step category-wiki-loader-step--${status}`}
+              >
+                <span className="category-wiki-loader-step-dot" aria-hidden="true" />
+                <span className="category-wiki-loader-step-label">{PHASE_LABEL[p]}</span>
+              </li>
+            );
+          })}
+        </ol>
+        <p className="category-wiki-loader-hint">首次生成约需 15–30 秒</p>
+      </div>
     </div>
   );
 }
