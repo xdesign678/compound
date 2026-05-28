@@ -5,7 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
-import { SourceTypeIcon } from '../Icons';
+import { Icon, SourceTypeIcon } from '../Icons';
 import { OnboardingCard } from '../OnboardingCard';
 import { useScrollSpy } from '@/lib/hooks/useScrollSpy';
 import { SOURCE_TYPE_LABELS } from '@/lib/constants';
@@ -18,7 +18,13 @@ export function SourcesView() {
   const detail = useAppStore((s) => s.detail);
 
   const visibleCount = useAppStore((s) => s.sourcesState.visibleCount);
+  const query = useAppStore((s) => s.sourcesState.query);
   const setSourcesState = useAppStore((s) => s.setSourcesState);
+
+  const setQuery = useCallback(
+    (value: string) => setSourcesState({ query: value, visibleCount: PAGE_SIZE }),
+    [setSourcesState],
+  );
 
   const setVisibleCount = useCallback(
     (updater: number | ((count: number) => number)) => {
@@ -60,12 +66,30 @@ export function SourcesView() {
     return map;
   }, [sources]);
 
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const matchedSources = useMemo(() => {
+    if (!sources) return [];
+    if (!normalizedQuery) return sources;
+    return sources.filter((source) => {
+      const searchable = [
+        source.title,
+        source.author ?? '',
+        source.url ?? '',
+        SOURCE_TYPE_LABELS[source.type],
+      ]
+        .join(' ')
+        .toLowerCase();
+      return searchable.includes(normalizedQuery);
+    });
+  }, [normalizedQuery, sources]);
+
   const filteredSources = useMemo(
-    () => (sources ?? []).slice(0, visibleCount),
-    [sources, visibleCount],
+    () => matchedSources.slice(0, visibleCount),
+    [matchedSources, visibleCount],
   );
 
-  const totalMatches = sources?.length ?? 0;
+  const totalMatches = matchedSources.length;
 
   // Restore the list scroll only once after Dexie has finished hydrating the source list.
   useLayoutEffect(() => {
@@ -93,6 +117,27 @@ export function SourcesView() {
   return (
     <>
       <div className="view-padding">
+        {(totalSourceCount ?? 0) > 0 && (
+          <div className="source-search-panel">
+            <label className="search-label" htmlFor="source-search-input">
+              搜索资料
+            </label>
+            <div className="search-wrap">
+              <Icon.Search />
+              <input
+                id="source-search-input"
+                className="search-input"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="搜索标题、作者或来源..."
+                aria-label="搜索资料"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+        )}
+
         <div className="view-lead">
           <div className="view-lead-kicker">资料档案</div>
           <p className="view-lead-copy">
@@ -103,6 +148,11 @@ export function SourcesView() {
           <OnboardingCard variant="compact" />
         ) : (
           <>
+            {totalMatches === 0 && (
+              <div className="empty-state empty-state-compact" role="status" aria-live="polite">
+                没有匹配的资料
+              </div>
+            )}
             {filteredSources.map((source) => (
               <button
                 key={source.id}

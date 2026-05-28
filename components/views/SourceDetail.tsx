@@ -168,17 +168,15 @@ export function SourceDetail({ id }: { id: string }) {
   }, [closeToc, id]);
 
   useEffect(() => {
-    if (!source || !hasFullContent) return;
+    if (!source || !hasFullContent || isDirty) return;
     const storedDraft = readSourceDraft(id);
     if (storedDraft !== null && storedDraft !== source.rawContent) {
       setBlocks(splitMarkdownBlocks(storedDraft, source.title));
       setIsDirty(true);
       return;
     }
-    if (!isDirty) {
-      setBlocks(splitMarkdownBlocks(source.rawContent, source.title));
-      setIsDirty(false);
-    }
+    setBlocks(splitMarkdownBlocks(source.rawContent, source.title));
+    setIsDirty(false);
   }, [hasFullContent, id, isDirty, source]);
 
   useEffect(() => {
@@ -245,24 +243,27 @@ export function SourceDetail({ id }: { id: string }) {
   const canEdit = hasFullContent;
   const canSave = canEdit && isDirty && saveStatus !== 'saving';
 
-  const handleSave = useCallback(async () => {
-    const joined = joinBlocksToMarkdown(blocks);
-    if (!canEdit || joined === (source?.rawContent ?? '') || saveStatus === 'saving') return;
-    setSaveStatus('saving');
-    try {
-      await updateSourceContent({
-        id,
-        title: source?.title,
-        rawContent: joined,
-      });
-      clearSourceDraft(id);
-      setIsDirty(false);
-      setSaveStatus('saved');
-    } catch (err) {
-      console.warn('[source-detail] save failed:', err);
-      setSaveStatus('error');
-    }
-  }, [blocks, canEdit, id, saveStatus, source?.rawContent, source?.title]);
+  const handleSave = useCallback(
+    async (rawContent?: string) => {
+      const joined = rawContent ?? joinBlocksToMarkdown(blocks);
+      if (!canEdit || joined === (source?.rawContent ?? '') || saveStatus === 'saving') return;
+      setSaveStatus('saving');
+      try {
+        await updateSourceContent({
+          id,
+          title: source?.title,
+          rawContent: joined,
+        });
+        clearSourceDraft(id);
+        setIsDirty(false);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.warn('[source-detail] save failed:', err);
+        setSaveStatus('error');
+      }
+    },
+    [blocks, canEdit, id, saveStatus, source?.rawContent, source?.title],
+  );
 
   useEffect(() => {
     if (!isDirty) return;
@@ -274,20 +275,24 @@ export function SourceDetail({ id }: { id: string }) {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isDirty]);
 
-  const handleCommit = useCallback(() => {
-    if (!source) return;
-    const joined = joinBlocksToMarkdown(blocks);
-    const nextBlocks = splitMarkdownBlocks(joined, source.title);
-    setBlocks(nextBlocks);
-    const stillDirty = joined !== source.rawContent;
-    setIsDirty(stillDirty);
-    if (stillDirty) {
-      writeSourceDraft(id, joined);
-      void handleSave();
-    } else {
-      clearSourceDraft(id);
-    }
-  }, [blocks, handleSave, id, source]);
+  const handleCommit = useCallback(
+    (blockId: string, raw: string) => {
+      if (!source) return;
+      const updatedBlocks = replaceBlockRaw(blocks, blockId, raw);
+      const joined = joinBlocksToMarkdown(updatedBlocks);
+      const nextBlocks = splitMarkdownBlocks(joined, source.title);
+      setBlocks(nextBlocks);
+      const stillDirty = joined !== source.rawContent;
+      setIsDirty(stillDirty);
+      if (stillDirty) {
+        writeSourceDraft(id, joined);
+        void handleSave(joined);
+      } else {
+        clearSourceDraft(id);
+      }
+    },
+    [blocks, handleSave, id, source],
+  );
 
   useEffect(() => {
     if (!canEdit || !isDirty || saveStatus === 'saving') return;
@@ -567,7 +572,7 @@ export function SourceDetail({ id }: { id: string }) {
               </button>
               <button
                 className="source-save-indicator-action primary"
-                onClick={handleSave}
+                onClick={() => void handleSave()}
                 disabled={!canSave}
                 type="button"
                 aria-label="保存资料正文草稿"
@@ -594,7 +599,7 @@ export function SourceDetail({ id }: { id: string }) {
               保存失败
               <button
                 className="source-save-indicator-action"
-                onClick={handleSave}
+                onClick={() => void handleSave()}
                 type="button"
                 aria-label="重试保存资料正文草稿"
               >

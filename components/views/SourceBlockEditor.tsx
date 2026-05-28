@@ -6,7 +6,7 @@ import type { SourceBlock } from '@/lib/markdown-editor/block-split';
 interface SourceBlockEditorProps {
   blocks: SourceBlock[];
   onBlocksChange: (next: SourceBlock[]) => void;
-  onCommit: () => void;
+  onCommit: (id: string, raw: string) => void;
   registerTextareaRef: (id: string, el: HTMLTextAreaElement | null) => void;
   renderBlockHtml: (block: SourceBlock) => string;
   editable: boolean;
@@ -28,7 +28,7 @@ function BlockItem({
   editable: boolean;
   html: string;
   onEnterEdit: (block: SourceBlock) => void;
-  onCommitBlock: () => void;
+  onCommitBlock: (id: string, raw: string) => void;
   onChangeRaw: (id: string, raw: string) => void;
   registerRef: (id: string, el: HTMLTextAreaElement | null) => void;
 }) {
@@ -79,18 +79,20 @@ function BlockItem({
     [block.id, onChangeRaw],
   );
 
-  const handleBlur = useCallback(() => {
-    onCommitBlock();
-  }, [onCommitBlock]);
+  const commitCurrentValue = useCallback(() => {
+    onCommitBlock(block.id, textareaRef.current?.value ?? localValue);
+  }, [block.id, localValue, onCommitBlock]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onCommitBlock();
+        e.stopPropagation();
+        e.nativeEvent.stopImmediatePropagation();
+        commitCurrentValue();
       }
     },
-    [onCommitBlock],
+    [commitCurrentValue],
   );
 
   const setTextareaRef = useCallback(
@@ -125,7 +127,7 @@ function BlockItem({
           className="source-block-textarea"
           value={localValue}
           onChange={handleChange}
-          onBlur={handleBlur}
+          onBlur={commitCurrentValue}
           onKeyDown={handleKeyDown}
           autoFocus
           spellCheck={false}
@@ -158,11 +160,14 @@ export function SourceBlockEditor({
     [onActiveBlockChange],
   );
 
-  const commit = useCallback(() => {
-    setActiveBlockId(null);
-    onActiveBlockChange?.(null);
-    onCommit();
-  }, [onActiveBlockChange, onCommit]);
+  const commit = useCallback(
+    (id: string, raw: string) => {
+      setActiveBlockId(null);
+      onActiveBlockChange?.(null);
+      onCommit(id, raw);
+    },
+    [onActiveBlockChange, onCommit],
+  );
 
   const handleChangeRaw = useCallback(
     (id: string, raw: string) => {

@@ -727,6 +727,7 @@ button {
   pointer-events: auto;
 }
 .search-label {
+  display: block;
   font-family: var(--font-sans);
   font-size: 11px;
   letter-spacing: 0.08em;
@@ -7187,6 +7188,14 @@ h3 {
   padding: 6px 14px;
   font-size: var(--text-xs);
   white-space: nowrap;
+}
+
+.library-search-panel {
+  margin: 0 16px 10px;
+}
+
+.source-search-panel {
+  margin-bottom: 18px;
 }
 
 .library-filter-stack {

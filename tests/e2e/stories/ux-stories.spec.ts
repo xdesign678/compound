@@ -94,6 +94,15 @@ async function seedManyConcepts(page: Page, count: number) {
   }, count);
 }
 
+async function openFirstSourceBlockForEditing(page: Page) {
+  const firstBlock = page.getByRole('group', { name: '内容块' }).first();
+  await expect(firstBlock).toBeVisible();
+  await firstBlock.click();
+  const editor = page.getByLabel('编辑内容块');
+  await expect(editor).toBeVisible();
+  return editor;
+}
+
 test('story: first visit reaches a usable seeded wiki', async ({ page }, testInfo) => {
   await stubEmptySnapshot(page);
   await withStoryTrace(page, testInfo, 'first-visit', async () => {
@@ -140,14 +149,14 @@ test('story: offline source edit survives until reconnect and save', async ({ pa
     await page.getByRole('tab', { name: '资料' }).click();
     await page.locator('.source-card').first().click();
 
-    const editor = page.getByLabel('资料正文 Markdown 编辑器');
-    await expect(editor).toBeVisible();
+    const editor = await openFirstSourceBlockForEditing(page);
     await page.context().setOffline(true);
     await editor.fill('## 离线编辑\n\n这段内容先在断网状态下编辑。');
-    await expect(page.locator('.source-editor-preview h2')).toContainText('离线编辑');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('heading', { name: '离线编辑' })).toBeVisible();
 
     await page.context().setOffline(false);
-    await page.getByRole('button', { name: '保存' }).click();
+    await page.getByRole('button', { name: '保存资料正文草稿' }).click();
     await expect(page.getByText('已保存')).toBeVisible();
   });
 });

@@ -35,16 +35,18 @@ test('source editor saves markdown and renders live preview', async ({ page }) =
   await expect(page.locator('.source-card').first()).toBeVisible();
   await page.locator('.source-card').first().click();
 
-  const editor = page.getByLabel('资料正文 Markdown 编辑器');
+  const firstBlock = page.getByRole('group', { name: '内容块' }).first();
+  await expect(firstBlock).toBeVisible();
+  await firstBlock.click();
+  const editor = page.getByLabel('编辑内容块');
   await expect(editor).toBeVisible();
-  const original = await editor.inputValue();
-  const next = `${original.trim()}\n\n## E2E Markdown Preview\n\n- saved item`;
+  const next = '## E2E Markdown Preview\n\n- saved item';
 
   await editor.fill(next);
-  await expect(page.locator('.source-editor-preview h2')).toContainText('E2E Markdown Preview');
-  await expect(page.locator('.source-editor-preview').getByText('saved item')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('heading', { name: 'E2E Markdown Preview' })).toBeVisible();
+  await expect(page.getByText('saved item')).toBeVisible();
 
-  await page.getByRole('button', { name: '保存' }).click();
   await expect(page.getByText('已保存')).toBeVisible();
-  expect(savedMarkdown).toContain('E2E Markdown Preview');
+  await expect.poll(() => savedMarkdown).toContain('E2E Markdown Preview');
 });

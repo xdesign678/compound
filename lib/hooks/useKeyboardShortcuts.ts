@@ -5,16 +5,26 @@ import { useAppStore, type TabId } from '@/lib/store';
 
 const G_KEY_TIMEOUT_MS = 600;
 
+function isEditableElement(element: HTMLElement): boolean {
+  const tag = element.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || element.isContentEditable;
+}
+
 export function useKeyboardShortcuts() {
   const gKeyRef = useRef<{ key: string; at: number } | null>(null);
 
   useEffect(() => {
     function handler(e: KeyboardEvent) {
+      if (e.defaultPrevented) return;
+
       const store = useAppStore.getState();
-      const target = e.target as HTMLElement;
-      const tag = target.tagName;
+      const path = e.composedPath();
+      const target =
+        path.find((node): node is HTMLElement => node instanceof HTMLElement) ??
+        (e.target as HTMLElement | null);
       const isInput =
-        tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
+        path.some((node) => node instanceof HTMLElement && isEditableElement(node)) ||
+        (target ? isEditableElement(target) : false);
 
       // Cmd/Ctrl+K should work even when focus is inside search or another text field.
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -23,8 +33,8 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Don't intercept when typing in inputs (except Escape)
-      if (isInput && e.key !== 'Escape') return;
+      // Don't intercept typing or field-local Escape behavior in editable controls.
+      if (isInput) return;
 
       // Escape: layered close (command palette > modals > detail > no-op)
       if (e.key === 'Escape') {

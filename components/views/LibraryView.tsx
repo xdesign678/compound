@@ -369,9 +369,32 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
       ? `${selectedPrimary} > ${selectedSecondary} · ${filtered.length} 条`
       : `${selectedPrimary} · ${filtered.length} 条`
     : `共 ${filtered.length} 条`;
+  const hasConcepts = concepts.length > 0;
 
   return (
     <>
+      {hasConcepts && (
+        <div className="library-search-panel">
+          <label className="search-label" htmlFor="library-search-input">
+            搜索概念
+          </label>
+          <div className="search-wrap">
+            <Icon.Search />
+            <input
+              id="library-search-input"
+              ref={searchInputRef}
+              className="search-input"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜索概念标题或摘要..."
+              aria-label="搜索概念"
+              autoComplete="off"
+            />
+          </div>
+        </div>
+      )}
+
       {unreviewedCount > 0 && (
         <div className="recap-entry-list recap-entry-list-library">
           <button
@@ -408,7 +431,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
         </div>
       )}
 
-      {concepts.length === 0 ? (
+      {!hasConcepts ? (
         <OnboardingCard />
       ) : (
         <>
