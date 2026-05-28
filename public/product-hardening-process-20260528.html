@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>Compound 产品成熟度提升过程报告</title>
+  <meta name="description" content="记录 2026-05-28 Compound 全面检查、问题定位、修复、验证和上线确认的过程。">
+  <style>
+    :root {
+      --bg-primary: #faf9f5;
+      --bg-secondary: #f0eee6;
+      --bg-card: #fefdfb;
+      --bg-muted: #f5f4f0;
+      --bg-ink: #141413;
+      --text-primary: #141413;
+      --text-body: rgba(20, 20, 19, 0.86);
+      --text-secondary: #5e5d59;
+      --text-tertiary: #77746c;
+      --brand-clay: #c86645;
+      --brand-soft: #f4dfd4;
+      --success: #2f7d57;
+      --warning: #9a5b16;
+      --info: #466c8c;
+      --border-light: rgba(20, 20, 19, 0.08);
+      --border-default: rgba(20, 20, 19, 0.14);
+      --shadow-sm: 0 1px 3px rgba(20, 20, 19, 0.08);
+      --shadow-md: 0 8px 28px rgba(20, 20, 19, 0.08);
+      --radius-sm: 8px;
+      --radius-md: 8px;
+      --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+      --font-reading: Lora, Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif;
+      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--bg-primary);
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg-primary);
+      color: var(--text-body);
+      font-family: var(--font-reading);
+      font-size: 17px;
+      line-height: 1.72;
+      letter-spacing: 0;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: inherit;
+      text-decoration-color: rgba(200, 102, 69, 0.5);
+      text-underline-offset: 3px;
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+
+    .page {
+      width: min(100%, 1080px);
+      margin: 0 auto;
+      padding: max(22px, env(safe-area-inset-top)) 16px max(56px, env(safe-area-inset-bottom));
+    }
+
+    .hero {
+      padding: 36px 0 22px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 14px;
+      color: var(--brand-clay);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      width: 8px;
+      height: 8px;
+      border-radius: var(--radius-sm);
+      background: var(--brand-clay);
+      content: "";
+    }
+
+    h1,
+    h2,
+    h3 {
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      max-width: 850px;
+      margin: 0;
+      font-size: clamp(2.15rem, 8vw, 4rem);
+      font-weight: 760;
+    }
+
+    h2 {
+      margin: 48px 0 16px;
+      font-size: clamp(1.55rem, 5vw, 2.35rem);
+      font-weight: 720;
+    }
+
+    h3 {
+      margin: 0 0 10px;
+      font-size: 1.2rem;
+      font-weight: 700;
+    }
+
+    p {
+      margin: 0 0 16px;
+    }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 6px;
+      background: var(--bg-muted);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 0.88em;
+      overflow-wrap: anywhere;
+    }
+
+    .lead {
+      max-width: 780px;
+      margin: 18px 0 0;
+      color: var(--text-secondary);
+      font-size: clamp(1.05rem, 3.8vw, 1.24rem);
+      line-height: 1.68;
+    }
+
+    .sticky-nav {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      margin: 0 0 26px;
+      padding: 10px 0;
+      border-block: 1px solid var(--border-light);
+      background: rgba(250, 249, 245, 0.94);
+      backdrop-filter: blur(16px);
+      font-family: var(--font-sans);
+      scrollbar-width: none;
+    }
+
+    .sticky-nav::-webkit-scrollbar {
+      display: none;
+    }
+
+    .sticky-nav a {
+      flex: 0 0 auto;
+      min-height: 38px;
+      padding: 8px 12px;
+      border: 1px solid var(--border-light);
+      border-radius: 999px;
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      font-size: 13px;
+      text-decoration: none;
+      box-shadow: var(--shadow-sm);
+      white-space: nowrap;
+    }
+
+    .section {
+      scroll-margin-top: 74px;
+      margin: 22px 0;
+    }
+
+    .summary {
+      padding: 18px;
+      border: 1px solid rgba(200, 102, 69, 0.18);
+      border-radius: var(--radius-md);
+      background: var(--bg-card);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .cards {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .card {
+      min-width: 0;
+      padding: 16px;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-md);
+      background: var(--bg-card);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .card.accent {
+      border-color: rgba(200, 102, 69, 0.22);
+      background: #fff9f5;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0 0;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 5px 10px;
+      border: 1px solid var(--border-light);
+      border-radius: 7.5px;
+      background: var(--bg-muted);
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .pill.success {
+      border-color: rgba(47, 125, 87, 0.24);
+      background: rgba(47, 125, 87, 0.09);
+      color: var(--success);
+    }
+
+    .pill.warning {
+      border-color: rgba(154, 91, 22, 0.24);
+      background: rgba(154, 91, 22, 0.08);
+      color: var(--warning);
+    }
+
+    .process {
+      counter-reset: step;
+      display: grid;
+      gap: 12px;
+    }
+
+    .step {
+      position: relative;
+      padding: 16px 16px 16px 58px;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-md);
+      background: var(--bg-card);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .step::before {
+      position: absolute;
+      top: 17px;
+      left: 16px;
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--brand-soft);
+      color: var(--brand-clay);
+      counter-increment: step;
+      content: counter(step);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 760;
+    }
+
+    .figure-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-top: 16px;
+    }
+
+    figure {
+      margin: 0;
+      overflow: hidden;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-md);
+      background: var(--bg-card);
+      box-shadow: var(--shadow-md);
+    }
+
+    figure img {
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      object-position: top left;
+      border-bottom: 1px solid var(--border-light);
+      background: var(--bg-secondary);
+    }
+
+    figcaption {
+      padding: 10px 12px;
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .evidence-list {
+      display: grid;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .evidence {
+      padding: 14px;
+      border-left: 4px solid var(--brand-clay);
+      border-radius: var(--radius-sm);
+      background: var(--bg-card);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .evidence strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin: 14px 0 0;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-md);
+      background: var(--bg-card);
+    }
+
+    table {
+      width: 100%;
+      min-width: 680px;
+      border-collapse: collapse;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    th,
+    td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-light);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--text-primary);
+      background: var(--bg-muted);
+      font-weight: 720;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .footer {
+      margin-top: 54px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border-light);
+      color: var(--text-tertiary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    @media (max-width: 760px) {
+      body {
+        font-size: 16.5px;
+      }
+
+      .page {
+        padding-inline: 14px;
+      }
+
+      .cards,
+      .figure-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .step {
+        padding-left: 16px;
+      }
+
+      .step::before {
+        position: static;
+        margin-bottom: 10px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <p class="eyebrow">2026-05-28 Product Hardening</p>
+      <h1>Compound 产品成熟度提升过程报告</h1>
+      <p class="lead">这页记录一次从全面检查、真实复现、定位根因、修复边角流程，到自动化验证和线上确认的完整过程。重点不是列代码，而是说明这轮工作怎样把产品从“可用”再往“顺手、完整、可靠”推进了一步。</p>
+    </header>
+
+    <nav class="sticky-nav" aria-label="页面导航">
+      <a href="#summary">一句话结论</a>
+      <a href="#why">为什么重要</a>
+      <a href="#process">检查过程</a>
+      <a href="#done">修复内容</a>
+      <a href="#proof">验证证据</a>
+      <a href="#risks">注意事项</a>
+      <a href="#next">下一步</a>
+    </nav>
+
+    <section id="summary" class="section">
+      <h2>一句话结论</h2>
+      <div class="summary">
+        <p>本轮已经完成：在 <code>main</code> 分支上检查了 Compound 的核心页面、搜索入口、资料列表、资料编辑器、键盘快捷键和视觉回归链路，修复了几个会让产品显得“不完整”或“不顺手”的问题，并已提交、推送、通过主检查和线上页面验证。</p>
+        <div class="pill-row">
+          <span class="pill success">状态：已完成</span>
+          <span class="pill success">提交：0d1e0a9</span>
+          <span class="pill success">分支：main</span>
+          <span class="pill success">线上已验证</span>
+          <span class="pill">Goal 用量：1,282,998 tokens</span>
+          <span class="pill">耗时：约 56 分 29 秒</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="why" class="section">
+      <h2>为什么重要</h2>
+      <div class="grid cards">
+        <article class="card accent">
+          <h3>完整度</h3>
+          <p>资料库里本来有搜索状态，但用户看不到稳定的搜索入口；资料列表也保存了查询状态，却没有真正接入筛选。这类半完成体验会让产品像“功能藏起来了”。</p>
+        </article>
+        <article class="card accent">
+          <h3>顺畅度</h3>
+          <p>资料编辑器里按 <code>Escape</code> 本应结束当前块编辑，却可能返回上一页。这个问题不是样式瑕疵，而是会直接打断用户写作和整理资料的流程。</p>
+        </article>
+        <article class="card">
+          <h3>成熟度</h3>
+          <p>成熟产品的关键不只是大功能能跑，还包括空状态、焦点、快捷键、重渲染、自动保存、视觉基线这些边角能够彼此配合。</p>
+        </article>
+        <article class="card">
+          <h3>可验证</h3>
+          <p>这轮没有只靠代码推断。对交互问题使用了真实浏览器复现，对影响面跑了 Playwright、UX audit、构建和线上检查。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="process" class="section">
+      <h2>检查过程</h2>
+      <div class="process">
+        <article class="step">
+          <h3>先确认工作边界</h3>
+          <p>根据仓库约定，先确认当前分支是 <code>main</code>，并保护本地工作树。最终所有改动都直接提交并推送到 <code>origin/main</code>，不走额外分支或 PR。</p>
+        </article>
+        <article class="step">
+          <h3>浏览核心页面和已有测试</h3>
+          <p>重点检查资料库、资料列表、资料详情编辑器、全局键盘快捷键和 UX 审计配置。检查时同时看页面表现和状态代码，避免只从组件名字判断功能是否完整。</p>
+        </article>
+        <article class="step">
+          <h3>用真实浏览器复现交互问题</h3>
+          <p>资料编辑器的 <code>Escape</code> 问题先用 Playwright 复现：编辑块时 textarea 会被卸载，焦点掉到 <code>body</code>，随后全局快捷键把它当成“返回详情页外层”的行为处理。</p>
+        </article>
+        <article class="step">
+          <h3>定位根因而不是只补样式</h3>
+          <p>根因是资料详情页的本地草稿加载 effect 在 <code>isDirty</code> 变化时重新切分 Markdown，生成新的 block id，导致正在编辑的 textarea 被替换。修复时把编辑期 hydration 和提交时机一起收住。</p>
+        </article>
+        <article class="step">
+          <h3>补齐用户真正会用到的入口</h3>
+          <p>资料库增加 <code>搜索概念</code>，资料页增加 <code>搜索资料</code>，并让资料页支持按标题、作者、URL、类型筛选。空结果也有明确提示，不再像页面坏掉。</p>
+        </article>
+        <article class="step">
+          <h3>用自动化和线上结果收尾</h3>
+          <p>修复后更新 E2E、UX story 和视觉基线，跑影响面测试、UX audit、构建、GitHub Actions，并在生产站点确认新入口真实可见。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="done" class="section">
+      <h2>修复内容</h2>
+      <div class="grid cards">
+        <article class="card">
+          <h3>资料库搜索变成可见功能</h3>
+          <p><code>components/views/LibraryView.tsx</code> 增加了 <code>搜索概念</code> 面板，使用原有 <code>query</code> 状态和 <code>searchInputRef</code>，让资料库搜索不再只是代码里存在。</p>
+        </article>
+        <article class="card">
+          <h3>资料列表搜索真正接通</h3>
+          <p><code>components/views/SourcesView.tsx</code> 激活 <code>sourcesState.query</code>，新增搜索输入、筛选逻辑、可见数量重置和 <code>没有匹配的资料</code> 空状态。</p>
+        </article>
+        <article class="card">
+          <h3>编辑器 Escape 不再误返回</h3>
+          <p><code>SourceDetail</code> 在编辑脏状态时不再重置 block；<code>SourceBlockEditor</code> 提交当前 textarea 实值，并阻止 Escape 继续冒泡给全局快捷键。</p>
+        </article>
+        <article class="card">
+          <h3>全局快捷键更尊重输入框</h3>
+          <p><code>useKeyboardShortcuts</code> 现在尊重 <code>defaultPrevented</code>，并用 <code>composedPath()</code> 判断输入控件，减少弹层、编辑器和快捷键之间互相抢行为。</p>
+        </article>
+      </div>
+
+      <div class="grid figure-grid">
+        <figure>
+          <img src="/reports/product-hardening-library-desktop.png" alt="资料库桌面端视觉基线截图，显示搜索概念入口">
+          <figcaption>资料库关键界面：搜索入口成为首屏可见能力。</figcaption>
+        </figure>
+        <figure>
+          <img src="/reports/product-hardening-source-detail-desktop.png" alt="资料详情桌面端视觉基线截图，显示资料详情和编辑界面">
+          <figcaption>资料详情关键界面：编辑行为和视觉基线一起纳入回归检查。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="proof" class="section">
+      <h2>验证证据</h2>
+      <p>这轮验证覆盖了局部交互、影响面页面、视觉回归、构建、CI 和线上生产环境。下面是关键证据。</p>
+      <div class="evidence-list">
+        <div class="evidence">
+          <strong>目标完成</strong>
+          <p><code>/paseo-goal</code> 已标记 complete；本轮目标用量 1,282,998 tokens，耗时 3389 秒。</p>
+        </div>
+        <div class="evidence">
+          <strong>影响面 E2E</strong>
+          <p><code>npx playwright test tests/e2e/library.spec.ts tests/e2e/sources.spec.ts tests/e2e/source-editor.spec.ts tests/e2e/a11y.spec.ts tests/e2e/stories/ux-stories.spec.ts</code>，结果：12 passed。</p>
+        </div>
+        <div class="evidence">
+          <strong>UX 审计</strong>
+          <p><code>npm run audit:ux:all -- --surfaces=library,sourceDetail</code> 通过；两个页面 Lighthouse PWA/A11y/Best Practices 均为 100/100/100，axe 0 问题，视觉 diff 0%。</p>
+        </div>
+        <div class="evidence">
+          <strong>构建和主检查</strong>
+          <p>format、lint、typecheck、253 个 node 测试、质量检查、API 文档检查均通过；独立补跑 <code>npm run build</code> 通过。</p>
+        </div>
+        <div class="evidence">
+          <strong>GitHub 与线上</strong>
+          <p>已提交 <code>0d1e0a9 Polish search and source editing flows</code> 并推送到 <code>origin/main</code>。GitHub Actions 主 <code>check</code> workflow 已全绿。生产站 <code>https://compund.zeabur.app</code> 已用真实浏览器确认 <code>搜索概念</code> 和 <code>搜索资料</code> 可见。</p>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>检查点</th>
+              <th>结果</th>
+              <th>说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>资料库搜索</td>
+              <td>通过</td>
+              <td>首屏有 <code>搜索概念</code>，并被视觉基线覆盖。</td>
+            </tr>
+            <tr>
+              <td>资料页搜索</td>
+              <td>通过</td>
+              <td>按标题、作者、URL、类型筛选，空结果状态可见。</td>
+            </tr>
+            <tr>
+              <td>资料编辑器 Escape</td>
+              <td>通过</td>
+              <td>按 Escape 后提交当前块内容，不再被全局返回快捷键误处理。</td>
+            </tr>
+            <tr>
+              <td>视觉回归</td>
+              <td>通过</td>
+              <td>library 与 sourceDetail 新基线稳定，审计 diff 为 0%。</td>
+            </tr>
+            <tr>
+              <td>线上验证</td>
+              <td>通过</td>
+              <td>生产站点可访问，并能看到本轮新增入口。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="risks" class="section">
+      <h2>风险和注意事项</h2>
+      <div class="summary">
+        <p>本轮代码相关主检查已通过。唯一残留的失败项是 <code>Droid Wiki Refresh</code> workflow，它失败于外部配置：<code>FACTORY_API_KEY</code> 为空或无效。这不是这次产品代码改动引入的问题，也不影响主 <code>check</code> workflow。</p>
+        <div class="pill-row">
+          <span class="pill warning">外部 secret 需单独处理</span>
+          <span class="pill success">主检查已通过</span>
+          <span class="pill success">生产页面已验证</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="next" class="section">
+      <h2>下一步</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>事项</th>
+              <th>建议</th>
+              <th>优先级</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>修复 Droid Wiki Refresh secret</td>
+              <td>在 GitHub/Factory 配置里补齐有效 <code>FACTORY_API_KEY</code>，让辅助刷新流程也恢复绿色。</td>
+              <td>中</td>
+            </tr>
+            <tr>
+              <td>扩大 UX audit 覆盖面</td>
+              <td>这轮重点覆盖 library 和 sourceDetail；后续可以把 recap、review、settings、sync 等页面纳入同样的视觉和交互基线。</td>
+              <td>中</td>
+            </tr>
+            <tr>
+              <td>持续观察生产搜索路径</td>
+              <td>上线后观察用户是否能自然找到搜索入口，以及资料类型筛选是否还需要更细的快捷筛选控件。</td>
+              <td>低</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>报告页面：<code>public/product-hardening-process-20260528.html</code>。来源：2026-05-28 Compound 产品成熟度提升目标执行记录、提交 <code>0d1e0a9</code>、本地验证与线上检查结果。</p>
+    </footer>
+  </main>
+</body>
+</html>
