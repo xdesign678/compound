@@ -6,12 +6,14 @@
 
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
-- Routes: **42**
-- Handlers (HTTP methods): **50**
+- Routes: **43**
+- Handlers (HTTP methods): **52**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
 
+- **auth**
+  - [`/api/auth/session`](#api-auth-session)
 - **categorize**
   - [`/api/categorize`](#api-categorize)
 - **concepts**
@@ -68,6 +70,35 @@ This document is generated automatically from the Next.js Route Handlers under `
   - [`/api/wiki/rebuild-index`](#api-wiki-rebuild-index)
   - [`/api/wiki/search`](#api-wiki-search)
   - [`/api/wiki/topics`](#api-wiki-topics)
+
+## auth
+
+### `/api/auth/session`
+
+Source: [`app/api/auth/session/route.ts`](../app/api/auth/session/route.ts)
+
+| Field       | Value             |
+| ----------- | ----------------- |
+| Methods     | `POST`, `DELETE`  |
+| Runtime     | `nodejs`          |
+| maxDuration | _unset_           |
+| Guards      | _(none detected)_ |
+
+#### POST
+
+POST /api/auth/session
+Validates an Admin Token and sets the httpOnly access-protection cookie.
+
+Body: `{ "token": "..." }`.
+
+@returns 200 JSON `{ authenticated: true }` and a Set-Cookie header on success.
+
+#### DELETE
+
+DELETE /api/auth/session
+Clears the httpOnly access-protection cookie.
+
+@returns 200 JSON `{ authenticated: false }`.
 
 ## categorize
 

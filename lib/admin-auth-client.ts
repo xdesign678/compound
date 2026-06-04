@@ -1,11 +1,4 @@
-/**
- * Admin authentication is managed via httpOnly cookies set by the middleware.
- * The browser automatically includes the cookie on every same-origin request,
- * so client-side code never needs to read, store, or attach the token manually.
- *
- * The exported functions are kept as no-ops / stubs to preserve API
- * compatibility with existing call-sites.
- */
+const AUTH_SESSION_PATH = '/api/auth/session';
 
 /**
  * Always returns an empty string.
@@ -16,21 +9,41 @@ export function getAdminToken(): string {
 }
 
 /**
- * No-op. Token persistence is managed server-side via httpOnly cookie.
+ * Validates the Admin Token with the server and lets the server set the
+ * httpOnly session cookie. The token is never persisted in browser storage.
  */
-export function saveAdminToken(_token: string): void {
-  // Intentionally empty — cookie is set by middleware on successful auth.
+export async function saveAdminToken(token: string): Promise<void> {
+  const trimmed = token.trim();
+  if (!trimmed) throw new Error('请先填写访问保护密钥。');
+
+  const res = await fetch(AUTH_SESSION_PATH, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: trimmed }),
+  });
+
+  if (res.ok) return;
+  if (res.status === 401) throw new Error('访问保护密钥无效，请重新输入。');
+  if (res.status === 503) throw new Error('服务端访问保护未配置，请检查环境变量。');
+
+  const text = await res.text().catch(() => '');
+  throw new Error(text.slice(0, 200) || `访问保护登录失败 (${res.status})`);
 }
 
 /**
- * No-op. The httpOnly cookie is managed by the server / middleware.
+ * Clears the httpOnly session cookie on the server and removes legacy local
+ * storage credentials left by older builds.
  */
-export function clearAdminToken(): void {
-  // Intentionally empty.
-  // Clean up any legacy localStorage data left from previous versions.
-  if (typeof window !== 'undefined') {
+export async function clearAdminToken(): Promise<void> {
+  try {
+    await fetch(AUTH_SESSION_PATH, {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    });
+  } finally {
     try {
-      localStorage.removeItem('compound_admin_token');
+      window.localStorage.removeItem('compound_admin_token');
     } catch {
       // Ignore — storage may be unavailable.
     }

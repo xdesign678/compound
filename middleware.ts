@@ -104,6 +104,10 @@ function isWebhookPath(pathname: string): boolean {
   return pathname === '/api/sync/github/webhook';
 }
 
+function isAuthSessionPath(pathname: string): boolean {
+  return pathname === '/api/auth/session';
+}
+
 function isCronSecretAuthorized(req: NextRequest): boolean {
   if (req.nextUrl.pathname !== '/api/sync/cron/rescan') return false;
   const secret = clean(process.env.CRON_SECRET);
@@ -181,7 +185,11 @@ export function middleware(req: NextRequest) {
 
   const token = getAdminToken();
 
-  if (isPublicHealthPath(req.nextUrl.pathname) || isWebhookPath(req.nextUrl.pathname)) {
+  if (
+    isPublicHealthPath(req.nextUrl.pathname) ||
+    isWebhookPath(req.nextUrl.pathname) ||
+    isAuthSessionPath(req.nextUrl.pathname)
+  ) {
     return nextWithTrace(req, trace);
   }
 

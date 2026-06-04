@@ -241,7 +241,12 @@ export function ConceptDetail({ id }: { id: string }) {
       }
     } catch (err) {
       console.warn('[concept-detail] hydrate failed:', err);
-      setHydrateError('正文拉取失败，请重试。');
+      const message = err instanceof Error ? err.message : String(err);
+      setHydrateError(
+        /\b401\b|unauthorized/i.test(message)
+          ? '访问保护已过期，请在设置里重新保存 Admin Token。'
+          : '正文拉取失败，请重试。',
+      );
     } finally {
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       setHydrating(false);

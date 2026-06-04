@@ -347,23 +347,28 @@ export function ModelTab() {
     );
   }
 
-  function saveAdmin() {
-    saveAdminToken(adminToken);
-    setAdminSaved(true);
-    setAdminStatus({
-      tone: adminToken.trim() ? 'info' : 'warning',
-      text: adminToken.trim()
-        ? '访问保护密钥不会存入本地存储；同源请求会使用服务端 httpOnly Cookie。'
-        : '未填写访问密钥。若站点开启保护，请先通过站点入口完成登录。',
-    });
-    safeTimeout(() => setAdminSaved(false), 2000);
+  async function saveAdmin() {
+    try {
+      await saveAdminToken(adminToken);
+      setAdminToken('');
+      setAdminSaved(true);
+      setAdminStatus({
+        tone: 'success',
+        text: '访问保护已登录；同源请求会自动使用服务端 httpOnly Cookie。',
+      });
+      safeTimeout(() => setAdminSaved(false), 2000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '访问保护登录失败';
+      setAdminSaved(false);
+      setAdminStatus({ tone: 'danger', text: message });
+    }
   }
 
-  function clearAdmin() {
-    clearAdminToken();
+  async function clearAdmin() {
+    await clearAdminToken();
     setAdminToken('');
     setAdminSaved(true);
-    setAdminStatus({ tone: 'success', text: '已清理旧版本地访问密钥。' });
+    setAdminStatus({ tone: 'success', text: '已退出访问保护，并清理旧版本地访问密钥。' });
     safeTimeout(() => setAdminSaved(false), 2000);
   }
 
@@ -595,13 +600,13 @@ export function ModelTab() {
         </label>
 
         <div className="settings-action-row">
-          <button className="modal-btn primary" type="button" onClick={saveAdmin}>
+          <button className="modal-btn primary" type="button" onClick={() => void saveAdmin()}>
             {adminSaved ? '已保存 ✓' : '保存访问密钥'}
           </button>
           <button
             className="modal-btn settings-secondary-action"
             type="button"
-            onClick={clearAdmin}
+            onClick={() => void clearAdmin()}
           >
             清除
           </button>
