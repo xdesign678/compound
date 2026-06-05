@@ -19,6 +19,8 @@ import type {
 
 const MAX_CONCEPTS_PER_WIKI = 80;
 const MAX_CANDIDATE_BODY_CHARS = 600;
+const DEFAULT_AUTO_QUEUE_LIMIT = 500;
+const DEFAULT_CATEGORY_WIKI_WORKER_CONCURRENCY = 2;
 
 interface CategoryWikiLLMResponse {
   bodyMd: string;
@@ -37,6 +39,22 @@ interface CategoryWikiRunRow {
   started_at: number;
   finished_at: number | null;
   updated_at: number;
+}
+
+interface CategoryWikiTarget {
+  primary: string;
+  secondary: string;
+  conceptCount: number;
+  updatedAt: number;
+}
+
+export interface CategoryWikiAutoQueueResult {
+  discovered: number;
+  queued: number;
+  skippedFresh: number;
+  skippedActive: number;
+  skippedEmpty: number;
+  failed: number;
 }
 
 export function ensureCategoryWikiSchema(): void {
@@ -71,6 +89,74 @@ export function getCategoryWiki(primary: string, secondary: string): CategoryWik
   ensureCategoryWikiSchema();
   const row = repo.getCategoryWiki(primary, secondary);
   return row ? rowToCategoryWiki(row) : null;
+}
+
+export function autoQueueCategoryWikis(
+  options: {
+    conceptIds?: string[];
+    limit?: number;
+    startWorkers?: boolean;
+  } = {},
+): CategoryWikiAutoQueueResult {
+  ensureCategoryWikiSchema();
+  const shouldStartWorkers =
+    options.startWorkers !== false &&
+    process.env.COMPOUND_DISABLE_CATEGORY_WIKI_AUTO_WORKERS !== 'true';
+  const targets = options.conceptIds?.length
+    ? listCategoryWikiTargetsForConceptIds(options.conceptIds, options.limit)
+    : listCategoryWikiTargets(options.limit);
+  const result: CategoryWikiAutoQueueResult = {
+    discovered: targets.length,
+    queued: 0,
+    skippedFresh: 0,
+    skippedActive: 0,
+    skippedEmpty: 0,
+    failed: 0,
+  };
+
+  for (const target of targets) {
+    try {
+      const concepts = repo.listConceptsByCategory(
+        target.primary,
+        target.secondary,
+        MAX_CONCEPTS_PER_WIKI,
+      );
+      if (concepts.length === 0) {
+        result.skippedEmpty += 1;
+        continue;
+      }
+
+      const active = getActiveRunForCategory(target.primary, target.secondary);
+      if (active) {
+        result.skippedActive += 1;
+        if (shouldStartWorkers) startCategoryWikiWorker(active.id);
+        continue;
+      }
+
+      const current = getCategoryWiki(target.primary, target.secondary);
+      const conceptIdsHash = computeConceptIdsHash(concepts);
+      if (current && !current.stale && current.conceptIdsHash === conceptIdsHash) {
+        result.skippedFresh += 1;
+        continue;
+      }
+
+      const runId = createCategoryWikiRun({
+        primary: target.primary,
+        secondary: target.secondary,
+      });
+      result.queued += 1;
+      if (shouldStartWorkers) startCategoryWikiWorker(runId);
+    } catch (err) {
+      result.failed += 1;
+      logger.warn('category_wiki.auto_queue_target_failed', {
+        primary: target.primary,
+        secondary: target.secondary,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return result;
 }
 
 export function createCategoryWikiRun(input: CategoryWikiRequest): string {
@@ -154,15 +240,16 @@ export function getCategoryWikiRunStatus(runId: string): CategoryWikiRunStatusRe
 
 export function startCategoryWikiWorker(runId: string, llmConfig?: LlmConfig): void {
   ensureCategoryWikiSchema();
-  const g = globalThis as unknown as {
-    __compoundCategoryWikiWorkers?: Map<string, Promise<void>>;
-  };
-  if (!g.__compoundCategoryWikiWorkers) {
-    g.__compoundCategoryWikiWorkers = new Map();
-  }
-  if (g.__compoundCategoryWikiWorkers.has(runId)) return;
+  const state = getCategoryWikiWorkerState();
+  if (llmConfig) state.configs.set(runId, llmConfig);
+  startPendingCategoryWikiWorkers();
+}
 
-  const task = runCategoryWikiWorker(runId, llmConfig)
+function startCategoryWikiWorkerNow(runId: string, llmConfig?: LlmConfig): void {
+  const state = getCategoryWikiWorkerState();
+  if (state.workers.has(runId)) return;
+
+  const task = runCategoryWikiWorker(runId, llmConfig ?? state.configs.get(runId))
     .catch((err) => {
       logger.error('category_wiki.worker_crashed', {
         runId,
@@ -170,19 +257,16 @@ export function startCategoryWikiWorker(runId: string, llmConfig?: LlmConfig): v
       });
     })
     .finally(() => {
-      g.__compoundCategoryWikiWorkers?.delete(runId);
+      state.workers.delete(runId);
+      state.configs.delete(runId);
+      startPendingCategoryWikiWorkers();
     });
-  g.__compoundCategoryWikiWorkers.set(runId, task);
+  state.workers.set(runId, task);
 }
 
 export function resumePendingCategoryWikiRuns(): void {
   ensureCategoryWikiSchema();
-  const rows = getServerDb()
-    .prepare(`SELECT id FROM category_wiki_runs WHERE status = 'running'`)
-    .all() as Array<{ id: string }>;
-  for (const row of rows) {
-    startCategoryWikiWorker(row.id);
-  }
+  startPendingCategoryWikiWorkers();
 }
 
 export function markCategoryWikisStaleByConceptIds(conceptIds: string[]): number {
@@ -205,6 +289,139 @@ export function markCategoryWikisStaleByConceptIds(conceptIds: string[]): number
     }
   }
   return repo.markCategoryWikisStale(pairs);
+}
+
+function normalizeAutoQueueLimit(limit: number | undefined): number {
+  if (!Number.isFinite(limit)) return DEFAULT_AUTO_QUEUE_LIMIT;
+  return Math.max(1, Math.min(2_000, Math.trunc(limit as number)));
+}
+
+function listCategoryWikiTargets(limit?: number): CategoryWikiTarget[] {
+  const safeLimit = normalizeAutoQueueLimit(limit);
+  const rows = getServerDb()
+    .prepare(
+      `SELECT id, updated_at, category_keys
+       FROM concepts
+       WHERE category_keys LIKE '%/%'
+       ORDER BY updated_at DESC
+       LIMIT 10000`,
+    )
+    .all() as Array<{ id: string; updated_at: number; category_keys: string }>;
+  return buildCategoryWikiTargets(rows, safeLimit);
+}
+
+function listCategoryWikiTargetsForConceptIds(
+  conceptIds: string[],
+  limit?: number,
+): CategoryWikiTarget[] {
+  const uniqueIds = Array.from(new Set(conceptIds.filter(Boolean)));
+  if (uniqueIds.length === 0) return [];
+  const placeholders = uniqueIds.map(() => '?').join(',');
+  const rows = getServerDb()
+    .prepare(
+      `SELECT id, updated_at, category_keys
+       FROM concepts
+       WHERE id IN (${placeholders})`,
+    )
+    .all(...uniqueIds) as Array<{ id: string; updated_at: number; category_keys: string }>;
+  return buildCategoryWikiTargets(rows, normalizeAutoQueueLimit(limit));
+}
+
+function buildCategoryWikiTargets(
+  rows: Array<{ id: string; updated_at: number; category_keys: string }>,
+  limit: number,
+): CategoryWikiTarget[] {
+  const groups = new Map<
+    string,
+    {
+      primary: string;
+      secondary: string;
+      conceptIds: Set<string>;
+      updatedAt: number;
+    }
+  >();
+
+  for (const row of rows) {
+    const keys = new Set(parseJson<string[]>(row.category_keys, []));
+    for (const key of keys) {
+      if (!key.includes('/')) continue;
+      const [primary, ...secondaryParts] = key.split('/');
+      const secondary = secondaryParts.join('/').trim();
+      if (!primary.trim() || !secondary) continue;
+      const targetKey = `${primary}/${secondary}`;
+      const group = groups.get(targetKey) ?? {
+        primary: primary.trim(),
+        secondary,
+        conceptIds: new Set<string>(),
+        updatedAt: 0,
+      };
+      group.conceptIds.add(row.id);
+      group.updatedAt = Math.max(group.updatedAt, row.updated_at);
+      groups.set(targetKey, group);
+    }
+  }
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      primary: group.primary,
+      secondary: group.secondary,
+      conceptCount: group.conceptIds.size,
+      updatedAt: group.updatedAt,
+    }))
+    .sort((a, b) => b.updatedAt - a.updatedAt || b.conceptCount - a.conceptCount)
+    .slice(0, limit);
+}
+
+interface CategoryWikiWorkerState {
+  workers: Map<string, Promise<void>>;
+  configs: Map<string, LlmConfig>;
+}
+
+function getCategoryWikiWorkerState(): CategoryWikiWorkerState {
+  const g = globalThis as unknown as {
+    __compoundCategoryWikiWorkers?: Map<string, Promise<void>>;
+    __compoundCategoryWikiRunConfigs?: Map<string, LlmConfig>;
+  };
+  if (!g.__compoundCategoryWikiWorkers) {
+    g.__compoundCategoryWikiWorkers = new Map();
+  }
+  if (!g.__compoundCategoryWikiRunConfigs) {
+    g.__compoundCategoryWikiRunConfigs = new Map();
+  }
+  return {
+    workers: g.__compoundCategoryWikiWorkers,
+    configs: g.__compoundCategoryWikiRunConfigs,
+  };
+}
+
+function getCategoryWikiWorkerConcurrency(): number {
+  const parsed = Number(process.env.COMPOUND_CATEGORY_WIKI_WORKER_CONCURRENCY);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_CATEGORY_WIKI_WORKER_CONCURRENCY;
+  return Math.max(1, Math.min(8, Math.trunc(parsed)));
+}
+
+function startPendingCategoryWikiWorkers(): void {
+  ensureCategoryWikiSchema();
+  const state = getCategoryWikiWorkerState();
+  const slots = getCategoryWikiWorkerConcurrency() - state.workers.size;
+  if (slots <= 0) return;
+
+  const rows = getServerDb()
+    .prepare(
+      `SELECT id FROM category_wiki_runs
+       WHERE status = 'running'
+       ORDER BY started_at ASC
+       LIMIT ?`,
+    )
+    .all(slots + state.workers.size + 20) as Array<{ id: string }>;
+
+  let started = 0;
+  for (const row of rows) {
+    if (started >= slots) break;
+    if (state.workers.has(row.id)) continue;
+    startCategoryWikiWorkerNow(row.id);
+    started += 1;
+  }
 }
 
 function getActiveRunForCategory(primary: string, secondary: string): CategoryWikiRunRow | null {

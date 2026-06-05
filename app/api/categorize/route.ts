@@ -3,6 +3,8 @@ import { normalizeCategoryKeys, normalizeCategoryState } from '@/lib/category-no
 import { chat, parseJSON } from '@/lib/gateway';
 import { CATEGORIZE_SYSTEM_PROMPT, CATEGORIZE_SYSTEM_PROMPT_VERSION } from '@/lib/prompts';
 import { requireAdmin } from '@/lib/server-auth';
+import { repo } from '@/lib/server-db';
+import { autoQueueCategoryWikis } from '@/lib/category-wiki-worker';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
@@ -14,6 +16,33 @@ export const maxDuration = 90;
 
 const MAX_BODY_BYTES = 256_000;
 const MAX_BATCH_SIZE = 20;
+
+function persistCategoryResults(results: CategorizeResponse['results']): string[] {
+  const changedConceptIds: string[] = [];
+  const ts = Date.now();
+
+  for (const result of results) {
+    const concept = repo.getConcept(result.id);
+    if (!concept) continue;
+    const normalized = normalizeCategoryState({ categories: result.categories || [] });
+    if (
+      JSON.stringify(concept.categories || []) === JSON.stringify(normalized.categories) &&
+      JSON.stringify(concept.categoryKeys || []) === JSON.stringify(normalized.categoryKeys)
+    ) {
+      continue;
+    }
+    repo.upsertConcept({
+      ...concept,
+      categories: normalized.categories,
+      categoryKeys: normalized.categoryKeys,
+      updatedAt: ts,
+      version: concept.version + 1,
+    });
+    changedConceptIds.push(concept.id);
+  }
+
+  return changedConceptIds;
+}
 
 export const POST = withRequestTracing(async (req: Request) => {
   const denied =
@@ -81,6 +110,18 @@ ${categoryList}
     // Only return results for IDs that were actually requested
     const requestedIds = new Set(body.concepts.map((c) => c.id));
     parsed.results = parsed.results.filter((r) => requestedIds.has(r.id));
+
+    const changedConceptIds = persistCategoryResults(parsed.results);
+    if (changedConceptIds.length > 0) {
+      try {
+        autoQueueCategoryWikis({ conceptIds: changedConceptIds });
+      } catch (error) {
+        logger.warn('categorize.category_wiki_auto_queue_failed', {
+          changedConceptIds,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     return NextResponse.json(parsed);
   } catch (err) {

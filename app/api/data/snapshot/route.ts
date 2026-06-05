@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logging';
 import { repo } from '@/lib/server-db';
 import { requireAdmin } from '@/lib/server-auth';
+import { autoQueueCategoryWikis } from '@/lib/category-wiki-worker';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -65,6 +66,17 @@ export async function GET(req: Request) {
 
     const totalSources = repo.countSources(recordRange);
     const totalConcepts = repo.countConcepts(recordRange);
+
+    try {
+      const categoryWikiQueue = autoQueueCategoryWikis();
+      if (categoryWikiQueue.queued > 0) {
+        logger.info('data.snapshot_category_wiki_auto_queued', { ...categoryWikiQueue });
+      }
+    } catch (error) {
+      logger.warn('data.snapshot_category_wiki_auto_queue_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     return NextResponse.json({
       fetchedAt,

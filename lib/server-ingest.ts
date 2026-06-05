@@ -16,6 +16,7 @@ import { wikiRepo } from './wiki-db';
 import { escapeHTML } from './format';
 import { contextualizeChunk, contextualizeChunkBatch } from './contextual-chunk';
 import { logger } from './server-logger';
+import { autoQueueCategoryWikis } from './category-wiki-worker';
 import type { Source, Concept, ActivityLog, SourceType, LlmConfig } from './types';
 
 export interface ServerIngestInput {
@@ -220,6 +221,15 @@ export async function ingestSourceToServerDb(
   const affectedConceptIds = Array.from(
     new Set([...newConceptIds, ...updatedConceptIds, ...biDirUpdates.map((update) => update.id)]),
   );
+
+  try {
+    autoQueueCategoryWikis({ conceptIds: affectedConceptIds });
+  } catch (error) {
+    logger.warn('ingest.category_wiki_auto_queue_failed', {
+      sourceId: source.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   // Anthropic-style Contextual Retrieval: enrich each freshly-indexed chunk
   // with a 50–100 字 situating prefix that is also indexed into chunk_fts.

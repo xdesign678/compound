@@ -28,7 +28,14 @@ test(
   async (t) => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), 'compound-server-ingest-'));
     const previousEnv = new Map<string, string | undefined>();
-    for (const key of ['DATA_DIR', 'LLM_API_KEY', 'LLM_API_URL', 'COMPOUND_SKIP_DNS_GUARD']) {
+    for (const key of [
+      'DATA_DIR',
+      'LLM_API_KEY',
+      'LLM_API_URL',
+      'COMPOUND_SKIP_DNS_GUARD',
+      'COMPOUND_CONTEXTUAL_RETRIEVAL',
+      'COMPOUND_DISABLE_CATEGORY_WIKI_AUTO_WORKERS',
+    ]) {
       previousEnv.set(key, process.env[key]);
     }
 
@@ -36,6 +43,8 @@ test(
     process.env.LLM_API_KEY = 'server-key';
     process.env.LLM_API_URL = 'https://api.example.com/v1/chat/completions';
     process.env.COMPOUND_SKIP_DNS_GUARD = 'true';
+    process.env.COMPOUND_CONTEXTUAL_RETRIEVAL = 'off';
+    process.env.COMPOUND_DISABLE_CATEGORY_WIKI_AUTO_WORKERS = 'true';
     closeServerDbGlobal();
 
     t.after(() => {
@@ -50,8 +59,8 @@ test(
       rmSync(tempDir, { recursive: true, force: true });
     });
 
-    const mockFetch: typeof fetch = async () =>
-      new Response(
+    const mockFetch: typeof fetch = async () => {
+      return new Response(
         JSON.stringify({
           choices: [
             {
@@ -63,6 +72,7 @@ test(
                       summary: 'Alpha summary',
                       body: 'Alpha body',
                       relatedConceptIds: [],
+                      categories: [{ primary: '认知心理学', secondary: '社会认知' }],
                     },
                   ],
                   updatedConcepts: [],
@@ -75,6 +85,7 @@ test(
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
+    };
 
     await withMockFetch(mockFetch, async () => {
       const { ingestSourceToServerDb } = await import('./server-ingest');
@@ -95,6 +106,9 @@ test(
       assert.equal(syncResult.concepts?.[0]?.id, result.newConceptIds[0]);
       assert.equal(syncResult.concepts?.[0]?.body, 'Alpha body');
       assert.equal(syncResult.activity?.id, result.activityId);
+
+      const { listCategoryWikiRuns } = await import('./category-wiki-worker');
+      assert.equal(listCategoryWikiRuns('认知心理学', '社会认知', 5).length, 1);
     });
   },
 );
