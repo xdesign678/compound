@@ -88,6 +88,7 @@ Source: [`app/api/auth/session/route.ts`](../app/api/auth/session/route.ts)
 
 POST /api/auth/session
 Validates an Admin Token and sets the httpOnly access-protection cookie.
+Failed attempts are rate-limited per client IP (auth scope) with Retry-After.
 
 Body: `{ "token": "..." }`.
 
@@ -706,7 +707,8 @@ against `GITHUB_WEBHOOK_SECRET`, ignores unrelated events, replies to
 triggered sync via `startGithubSync`. Returns the resulting `jobId` and
 an `existing` flag indicating whether a job was already running.
 
-Guards: HMAC SHA-256 signature (no admin token; webhooks are anonymous).
+Guards: IP rate limit (before HMAC), HMAC SHA-256 signature (no admin
+token; webhooks are anonymous), body size limit.
 
 ### `/api/sync/retry`
 
