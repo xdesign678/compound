@@ -23,6 +23,7 @@ import { categorizeConcepts } from '@/lib/api-client';
 import { formatCategorizeCompletionMessage } from '@/lib/categorize-status';
 import { getUnreviewedCountFromDb } from '@/lib/review-picks';
 import { useScrollSpy } from '@/lib/hooks/useScrollSpy';
+import { useIntersectionAnchor } from '@/lib/hooks/useIntersectionAnchor';
 import { Icon } from '../Icons';
 import { OnboardingCard } from '../OnboardingCard';
 import { CategoryWikiCard } from './CategoryWikiCard';
@@ -172,30 +173,31 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   const filterResetSkipRef = useRef(true);
   const scrollRestoredRef = useRef(false);
 
-  const handleLibraryScroll = useCallback(
-    (scrollTop: number) => {
-      useAppStore.getState().setLibraryState({ scrollTop });
-      // Find the first visible concept card for anchor-based restore
-      const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
-      if (!main) return;
-      const cards = main.querySelectorAll('[data-concept-id]');
-      for (const card of cards) {
-        const rect = card.getBoundingClientRect();
-        if (rect.top >= 0 && rect.top < main.clientHeight / 2) {
-          useAppStore.getState().setLibraryState({
-            scrollAnchorId: (card as HTMLElement).dataset.conceptId ?? null,
-          });
-          break;
-        }
-      }
-    },
-    [scrollRootSelector],
-  );
+  const handleLibraryScroll = useCallback((scrollTop: number) => {
+    useAppStore.getState().setLibraryState({ scrollTop });
+  }, []);
 
   const { scrolled } = useScrollSpy({
     scrollRootSelector,
     onScroll: handleLibraryScroll,
   });
+
+  // IntersectionObserver-based scroll anchor — replaces per-frame
+  // querySelectorAll + getBoundingClientRect forced reflows.
+  const handleAnchorChange = useCallback((anchorId: string | null) => {
+    useAppStore.getState().setLibraryState({ scrollAnchorId: anchorId });
+  }, []);
+
+  const { observeCards } = useIntersectionAnchor({
+    scrollRootSelector,
+    itemSelector: '[data-concept-id]',
+    onAnchorChange: handleAnchorChange,
+  });
+
+  // Re-observe cards when the concept list changes (filtering, pagination, etc.)
+  useEffect(() => {
+    observeCards();
+  }, [concepts, observeCards]);
 
   useLayoutEffect(() => {
     if (scrollRestoredRef.current) return;

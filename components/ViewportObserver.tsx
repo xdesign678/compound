@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { computeAskInputHeightValue } from '@/lib/scroll-anchor';
 
 /**
  * Tracks the mobile soft-keyboard height via window.visualViewport and
@@ -12,6 +13,19 @@ import { useEffect } from 'react';
  *   --ask-input-height   current height of .ask-input-bar (used by messages)
  *
  * Also toggles `ask-kb-open` class on <html> when the keyboard is visible.
+ *
+ * ## Observer strategy (post M4 refactor)
+ *
+ * The previous implementation used a **global** `MutationObserver` with
+ * `subtree: true` on the entire `.app-main` / `<body>`, firing on every
+ * DOM mutation just to detect when `.ask-input-bar` appears or disappears.
+ * That was a major source of per-frame overhead.
+ *
+ * Now, `AskComposer` dispatches lightweight custom events
+ * (`ask-input-bar:mount` / `ask-input-bar:unmount`) when it mounts and
+ * unmounts. This component listens for those events and attaches a
+ * `ResizeObserver` to the bar element only when it exists — no global
+ * MutationObserver required.
  */
 export function ViewportObserver() {
   useEffect(() => {
@@ -40,21 +54,38 @@ export function ViewportObserver() {
         root.style.setProperty('--ask-input-height', '0px');
         return;
       }
-      const h = el.offsetHeight;
-      root.style.setProperty('--ask-input-height', `${h}px`);
+      root.style.setProperty('--ask-input-height', computeAskInputHeightValue(el.offsetHeight));
     };
 
-    const attachBar = () => {
-      const el = document.querySelector<HTMLElement>('.ask-input-bar');
+    const attachBar = (el: HTMLElement) => {
       if (el === currentBar) return;
       currentBar = el;
       barObserver?.disconnect();
-      if (el && 'ResizeObserver' in window) {
+      if ('ResizeObserver' in window) {
         barObserver = new ResizeObserver(() => measureBar(el));
         barObserver.observe(el);
       }
       measureBar(el);
     };
+
+    const detachBar = () => {
+      currentBar = null;
+      barObserver?.disconnect();
+      measureBar(null);
+    };
+
+    // Listen for custom events dispatched by AskComposer on mount/unmount.
+    // This replaces the former global subtree MutationObserver.
+    const handleBarMount = () => {
+      const el = document.querySelector<HTMLElement>('.ask-input-bar');
+      if (el) attachBar(el);
+    };
+    const handleBarUnmount = () => {
+      detachBar();
+    };
+
+    document.addEventListener('ask-input-bar:mount', handleBarMount);
+    document.addEventListener('ask-input-bar:unmount', handleBarUnmount);
 
     // On iOS, when a textarea/input gets focus, scroll it into view
     const handleFocusIn = (e: FocusEvent) => {
@@ -67,15 +98,16 @@ export function ViewportObserver() {
     };
     document.addEventListener('focusin', handleFocusIn, { passive: true });
 
-    attachBar();
-    const mutationObserver = new MutationObserver(() => attachBar());
-    const mutationTarget = document.querySelector('.app-main') || document.body;
-    mutationObserver.observe(mutationTarget, { childList: true, subtree: true });
+    // Try attaching immediately in case the bar is already in the DOM
+    // (e.g. if the Ask tab was active before this effect ran).
+    const existingBar = document.querySelector<HTMLElement>('.ask-input-bar');
+    if (existingBar) attachBar(existingBar);
 
     return () => {
       vv?.removeEventListener('resize', updateKb);
       vv?.removeEventListener('scroll', updateKb);
-      mutationObserver.disconnect();
+      document.removeEventListener('ask-input-bar:mount', handleBarMount);
+      document.removeEventListener('ask-input-bar:unmount', handleBarUnmount);
       barObserver?.disconnect();
       document.removeEventListener('focusin', handleFocusIn as EventListener);
       root.style.removeProperty('--ask-kb-offset');

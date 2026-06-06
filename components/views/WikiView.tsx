@@ -18,6 +18,7 @@ import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { getUnreviewedCountFromDb } from '@/lib/review-picks';
 import { useScrollSpy } from '@/lib/hooks/useScrollSpy';
+import { useIntersectionAnchor } from '@/lib/hooks/useIntersectionAnchor';
 import { Icon } from '../Icons';
 import type { Concept } from '@/lib/types';
 
@@ -78,27 +79,23 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   const [serverSearchLoading, setServerSearchLoading] = useState(false);
   const scrollRestoredRef = useRef(false);
 
-  const handleWikiScroll = useCallback(
-    (scrollTop: number) => {
-      useAppStore.getState().setWikiState({ scrollTop });
-      const main = document.querySelector(scrollRootSelector) as HTMLElement | null;
-      if (!main) return;
-      const rootTop = main.getBoundingClientRect().top;
-      const cards = main.querySelectorAll('[data-concept-id]');
-      for (const card of cards) {
-        const rect = card.getBoundingClientRect();
-        if (rect.top >= rootTop && rect.top < rootTop + main.clientHeight / 2) {
-          useAppStore.getState().setWikiState({
-            scrollAnchorId: (card as HTMLElement).dataset.conceptId ?? null,
-          });
-          break;
-        }
-      }
-    },
-    [scrollRootSelector],
-  );
+  const handleWikiScroll = useCallback((scrollTop: number) => {
+    useAppStore.getState().setWikiState({ scrollTop });
+  }, []);
 
   const { scrolled } = useScrollSpy({ scrollRootSelector, onScroll: handleWikiScroll });
+
+  // IntersectionObserver-based scroll anchor — replaces per-frame
+  // querySelectorAll + getBoundingClientRect forced reflows.
+  const handleAnchorChange = useCallback((anchorId: string | null) => {
+    useAppStore.getState().setWikiState({ scrollAnchorId: anchorId });
+  }, []);
+
+  const { observeCards } = useIntersectionAnchor({
+    scrollRootSelector,
+    itemSelector: '[data-concept-id]',
+    onAnchorChange: handleAnchorChange,
+  });
 
   const localConcepts = useLiveQuery(async () => {
     const q = deferredQuery.trim().toLowerCase();
@@ -170,6 +167,12 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   }, [totalConceptCount]);
 
   const concepts = serverConcepts ?? localConcepts;
+
+  // Re-observe cards when the concept list changes (new data, pagination, etc.)
+  useEffect(() => {
+    observeCards();
+  }, [concepts, observeCards]);
+
   const fresh = useMemo(() => (concepts ?? []).filter((c) => freshIds[c.id]), [concepts, freshIds]);
   const others = useMemo(
     () => (concepts ?? []).filter((c) => !freshIds[c.id]),

@@ -1,6 +1,7 @@
 'use client';
 
 import { createPortal } from 'react-dom';
+import { useEffect } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { LlmConfig } from '../../lib/types';
 import { Icon, SourceTypeIcon } from '../Icons';
@@ -69,6 +70,16 @@ export function AskComposer({
   onSelectModel: (model: string) => void;
   onSend: (overrideText?: string) => void | Promise<void>;
 }) {
+  // Notify ViewportObserver when the ask-input-bar mounts/unmounts.
+  // This replaces the former global subtree MutationObserver that fired
+  // on every DOM change just to detect this element.
+  useEffect(() => {
+    document.dispatchEvent(new CustomEvent('ask-input-bar:mount'));
+    return () => {
+      document.dispatchEvent(new CustomEvent('ask-input-bar:unmount'));
+    };
+  }, []);
+
   return (
     <div className="ask-input-bar">
       <div className="ask-input-inner">
