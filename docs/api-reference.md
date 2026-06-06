@@ -77,12 +77,12 @@ This document is generated automatically from the Next.js Route Handlers under `
 
 Source: [`app/api/auth/session/route.ts`](../app/api/auth/session/route.ts)
 
-| Field       | Value             |
-| ----------- | ----------------- |
-| Methods     | `POST`, `DELETE`  |
-| Runtime     | `nodejs`          |
-| maxDuration | _unset_           |
-| Guards      | _(none detected)_ |
+| Field       | Value                    |
+| ----------- | ------------------------ |
+| Methods     | `POST`, `DELETE`         |
+| Runtime     | `nodejs`                 |
+| maxDuration | _unset_                  |
+| Guards      | `content-length-guarded` |
 
 #### POST
 
@@ -795,12 +795,12 @@ summarize / relation jobs. Requires the standard admin token.
 
 Source: [`app/api/wiki/category/route.ts`](../app/api/wiki/category/route.ts)
 
-| Field       | Value         |
-| ----------- | ------------- |
-| Methods     | `GET`, `POST` |
-| Runtime     | `nodejs`      |
-| maxDuration | 60            |
-| Guards      | `admin-token` |
+| Field       | Value                                   |
+| ----------- | --------------------------------------- |
+| Methods     | `GET`, `POST`                           |
+| Runtime     | `nodejs`                                |
+| maxDuration | 60                                      |
+| Guards      | `admin-token`, `content-length-guarded` |
 
 #### GET
 
@@ -911,12 +911,12 @@ _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` blo
 
 Source: [`app/api/wiki/search/route.ts`](../app/api/wiki/search/route.ts)
 
-| Field       | Value         |
-| ----------- | ------------- |
-| Methods     | `POST`        |
-| Runtime     | `nodejs`      |
-| maxDuration | _unset_       |
-| Guards      | `admin-token` |
+| Field       | Value                                   |
+| ----------- | --------------------------------------- |
+| Methods     | `POST`                                  |
+| Runtime     | `nodejs`                                |
+| maxDuration | _unset_                                 |
+| Guards      | `admin-token`, `content-length-guarded` |
 
 #### POST
 

@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server';
 import { analyzeLintConcepts } from '@/lib/lint-worker';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
-import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
+import {
+  enforceContentLength,
+  isRequestBodyTooLargeError,
+  readJsonWithLimit,
+  readLlmConfigOverride,
+} from '@/lib/request-guards';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
 import { logger } from '@/lib/server-logger';
 import type { LintRequest, LintResponse } from '@/lib/types';
@@ -30,7 +35,7 @@ export const POST = withRequestTracing(async (req: Request) => {
   if (denied) return denied;
 
   try {
-    const body = (await req.json()) as LintRequest;
+    const body = await readJsonWithLimit<LintRequest>(req, MAX_BODY_BYTES);
     if (!Array.isArray(body?.concepts)) {
       return NextResponse.json({ error: 'concepts must be an array' }, { status: 400 });
     }
@@ -52,6 +57,9 @@ export const POST = withRequestTracing(async (req: Request) => {
 
     return NextResponse.json(parsed);
   } catch (err) {
+    if (isRequestBodyTooLargeError(err)) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     logger.error('lint.failed', { error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json(
       {

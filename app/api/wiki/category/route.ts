@@ -7,10 +7,17 @@ import {
   getCategoryWikiRunStart,
 } from '@/lib/category-wiki-worker';
 import { logger } from '@/lib/logging';
+import {
+  enforceContentLength,
+  isRequestBodyTooLargeError,
+  readJsonWithLimit,
+} from '@/lib/request-guards';
 import type { CategoryWikiRequest } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+
+const MAX_BODY_BYTES = 256_000;
 
 /**
  * GET /api/wiki/category?primary=X&secondary=Y
@@ -47,11 +54,11 @@ export async function GET(req: Request) {
  * Creates a category wiki generation run and returns the run info.
  */
 export async function POST(req: Request) {
-  const denied = requireAdmin(req);
+  const denied = requireAdmin(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
   try {
-    const body = (await req.json()) as CategoryWikiRequest;
+    const body = await readJsonWithLimit<CategoryWikiRequest>(req, MAX_BODY_BYTES);
     const primary = body.primary?.trim();
     const secondary = body.secondary?.trim();
 
@@ -66,6 +73,9 @@ export async function POST(req: Request) {
     const start = getCategoryWikiRunStart(runId);
     return NextResponse.json(start, { status: 202 });
   } catch (error) {
+    if (isRequestBodyTooLargeError(error)) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     logger.error('wiki.category_post_failed', {
       error: error instanceof Error ? error.message : String(error),
     });

@@ -2,19 +2,27 @@ import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logging';
 import { requireAdmin } from '@/lib/server-auth';
 import { wikiRepo } from '@/lib/wiki-db';
+import {
+  enforceContentLength,
+  isRequestBodyTooLargeError,
+  readJsonWithLimit,
+} from '@/lib/request-guards';
+import { getRequestContext, withRequestTracing } from '@/lib/request-context';
 
 export const runtime = 'nodejs';
 
-export async function POST(req: Request) {
-  const denied = requireAdmin(req);
+const MAX_BODY_BYTES = 512_000;
+
+export const POST = withRequestTracing(async (req: Request) => {
+  const denied = requireAdmin(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
   try {
-    const body = (await req.json()) as {
+    const body = await readJsonWithLimit<{
       query?: string;
       conceptLimit?: number;
       chunkLimit?: number;
-    };
+    }>(req, MAX_BODY_BYTES);
     const query = body.query?.trim();
     if (!query) {
       return NextResponse.json({ error: 'query is required' }, { status: 400 });
@@ -30,9 +38,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json(context);
   } catch (error) {
+    if (isRequestBodyTooLargeError(error)) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     logger.error('wiki.search_failed', {
       error: error instanceof Error ? error.message : String(error),
     });
     return NextResponse.json({ error: 'Wiki search failed' }, { status: 500 });
   }
-}
+});

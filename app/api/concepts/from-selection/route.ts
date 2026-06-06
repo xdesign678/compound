@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
-import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
+import {
+  enforceContentLength,
+  isRequestBodyTooLargeError,
+  readJsonWithLimit,
+  readLlmConfigOverride,
+} from '@/lib/request-guards';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
 import { logger } from '@/lib/server-logger';
 import {
@@ -36,7 +41,7 @@ export const POST = withRequestTracing(async (req: Request) => {
   if (denied) return denied;
 
   try {
-    const body = (await req.json()) as SelectionWikiRequest;
+    const body = await readJsonWithLimit<SelectionWikiRequest>(req, MAX_BODY_BYTES);
     const llmConfig = readLlmConfigOverride(req, body);
     const runId = createSelectionWikiRun(body);
     startSelectionWikiWorker(runId, llmConfig);
@@ -44,6 +49,9 @@ export const POST = withRequestTracing(async (req: Request) => {
     if (!run) throw new Error('selection wiki run was not created');
     return NextResponse.json<SelectionWikiRunStartResponse>(run);
   } catch (err) {
+    if (isRequestBodyTooLargeError(err)) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     if (err instanceof SelectionWikiValidationError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }

@@ -6,7 +6,12 @@ import { requireAdmin } from '@/lib/server-auth';
 import { repo } from '@/lib/server-db';
 import { autoQueueCategoryWikis } from '@/lib/category-wiki-worker';
 import { llmRateLimit } from '@/lib/rate-limit';
-import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
+import {
+  enforceContentLength,
+  isRequestBodyTooLargeError,
+  readJsonWithLimit,
+  readLlmConfigOverride,
+} from '@/lib/request-guards';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
 import { logger } from '@/lib/server-logger';
 import type { CategorizeRequest, CategorizeResponse } from '@/lib/types';
@@ -50,7 +55,7 @@ export const POST = withRequestTracing(async (req: Request) => {
   if (denied) return denied;
 
   try {
-    const body = (await req.json()) as CategorizeRequest;
+    const body = await readJsonWithLimit<CategorizeRequest>(req, MAX_BODY_BYTES);
     if (!Array.isArray(body.concepts) || body.concepts.length === 0) {
       return NextResponse.json({ error: 'concepts array is required' }, { status: 400 });
     }
@@ -125,6 +130,9 @@ ${categoryList}
 
     return NextResponse.json(parsed);
   } catch (err) {
+    if (isRequestBodyTooLargeError(err)) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     logger.error('categorize.failed', { error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json(
       { error: 'Categorize failed. Check API config.', requestId: getRequestContext()?.requestId },

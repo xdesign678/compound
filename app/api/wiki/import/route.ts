@@ -1,6 +1,10 @@
 import { nanoid } from 'nanoid';
 import { NextResponse } from 'next/server';
-import { enforceContentLength } from '@/lib/request-guards';
+import {
+  enforceContentLength,
+  isRequestBodyTooLargeError,
+  readJsonWithLimit,
+} from '@/lib/request-guards';
 import { requireAdmin } from '@/lib/server-auth';
 import { getServerDb, repo } from '@/lib/server-db';
 import { compileConceptArtifactsAfterManualChange } from '@/lib/wiki-compiler';
@@ -97,75 +101,85 @@ export async function POST(req: Request) {
   const denied = requireAdmin(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
-  const payload = await req.json().catch(() => ({}));
-  const files = Array.isArray(payload.files)
-    ? (payload.files as ImportFile[]).slice(0, MAX_FILES)
-    : [];
-  const dryRun = payload.dryRun === true;
+  try {
+    const payload = await readJsonWithLimit<{ files?: ImportFile[]; dryRun?: boolean }>(
+      req,
+      MAX_BODY_BYTES,
+    );
+    const files = Array.isArray(payload.files)
+      ? (payload.files as ImportFile[]).slice(0, MAX_FILES)
+      : [];
+    const dryRun = payload.dryRun === true;
 
-  const parsed = files
-    .map((file) =>
-      typeof file.content === 'string' && file.path?.endsWith('.md')
-        ? parseWikiMarkdown(file.content)
-        : null,
-    )
-    .filter((item): item is ParsedWikiFile => Boolean(item));
+    const parsed = files
+      .map((file) =>
+        typeof file.content === 'string' && file.path?.endsWith('.md')
+          ? parseWikiMarkdown(file.content)
+          : null,
+      )
+      .filter((item): item is ParsedWikiFile => Boolean(item));
 
-  const changed: Array<{ previous: Concept; next: Concept }> = [];
-  const skipped: string[] = [];
-  const ts = Date.now();
-  for (const item of parsed) {
-    const previous = repo.getConcept(item.id);
-    if (!previous) {
-      skipped.push(item.id);
-      continue;
+    const changed: Array<{ previous: Concept; next: Concept }> = [];
+    const skipped: string[] = [];
+    const ts = Date.now();
+    for (const item of parsed) {
+      const previous = repo.getConcept(item.id);
+      if (!previous) {
+        skipped.push(item.id);
+        continue;
+      }
+      const next: Concept = {
+        ...previous,
+        title: item.title || previous.title,
+        summary: item.summary || previous.summary,
+        body: item.body || previous.body,
+        related:
+          item.related.length > 0
+            ? item.related.filter((id) => id !== previous.id)
+            : previous.related,
+        updatedAt: ts,
+        version: previous.version + 1,
+      };
+      const unchanged =
+        next.title === previous.title &&
+        next.summary === previous.summary &&
+        next.body === previous.body &&
+        next.related.length === previous.related.length &&
+        next.related.every((id, index) => id === previous.related[index]);
+      if (!unchanged) changed.push({ previous, next });
     }
-    const next: Concept = {
-      ...previous,
-      title: item.title || previous.title,
-      summary: item.summary || previous.summary,
-      body: item.body || previous.body,
-      related:
-        item.related.length > 0
-          ? item.related.filter((id) => id !== previous.id)
-          : previous.related,
-      updatedAt: ts,
-      version: previous.version + 1,
-    };
-    const unchanged =
-      next.title === previous.title &&
-      next.summary === previous.summary &&
-      next.body === previous.body &&
-      next.related.length === previous.related.length &&
-      next.related.every((id, index) => id === previous.related[index]);
-    if (!unchanged) changed.push({ previous, next });
-  }
 
-  if (!dryRun && changed.length > 0) {
-    const activity: ActivityLog = {
-      id: `a-${nanoid(8)}`,
-      type: 'ingest',
-      title: `导入 Markdown Wiki 修改`,
-      details: `从 Markdown 回写 ${changed.length} 个概念页，并重建索引。`,
-      relatedConceptIds: changed.map((item) => item.next.id),
-      at: ts,
-    };
-    const trx = getServerDb().transaction(() => {
-      for (const item of changed) repo.upsertConcept(item.next);
-      compileConceptArtifactsAfterManualChange({
-        updatedConcepts: changed,
-        changeSummary: '从 Markdown Wiki 导入修改。',
+    if (!dryRun && changed.length > 0) {
+      const activity: ActivityLog = {
+        id: `a-${nanoid(8)}`,
+        type: 'ingest',
+        title: `导入 Markdown Wiki 修改`,
+        details: `从 Markdown 回写 ${changed.length} 个概念页，并重建索引。`,
+        relatedConceptIds: changed.map((item) => item.next.id),
+        at: ts,
+      };
+      const trx = getServerDb().transaction(() => {
+        for (const item of changed) repo.upsertConcept(item.next);
+        compileConceptArtifactsAfterManualChange({
+          updatedConcepts: changed,
+          changeSummary: '从 Markdown Wiki 导入修改。',
+        });
+        repo.insertActivity(activity);
       });
-      repo.insertActivity(activity);
-    });
-    trx();
-  }
+      trx();
+    }
 
-  return NextResponse.json({
-    ok: true,
-    dryRun,
-    parsed: parsed.length,
-    changed: changed.map((item) => item.next.id),
-    skipped,
-  });
+    return NextResponse.json({
+      ok: true,
+      dryRun,
+      parsed: parsed.length,
+      changed: changed.map((item) => item.next.id),
+      skipped,
+    });
+  } catch (err) {
+    if (isRequestBodyTooLargeError(err)) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: 'Import failed' }, { status: 500 });
+  }
 }

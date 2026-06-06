@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getAdminToken, isAdminAuthConfigured, safeEqual } from '@/lib/server-auth';
+import {
+  enforceContentLength,
+  isRequestBodyTooLargeError,
+  readJsonWithLimit,
+} from '@/lib/request-guards';
 
 export const runtime = 'nodejs';
+
+const MAX_BODY_BYTES = 64_000;
 
 const AUTH_COOKIE_NAME = 'compound_admin_token';
 const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
@@ -52,15 +59,26 @@ export async function POST(req: Request) {
     );
   }
 
-  const body = (await req.json().catch(() => ({}))) as { token?: unknown };
-  const provided = typeof body.token === 'string' ? body.token.trim() : '';
-  const expected = getAdminToken();
+  const sizeDenied = enforceContentLength(req, MAX_BODY_BYTES);
+  if (sizeDenied) return sizeDenied;
 
-  if (!safeEqual(provided, expected)) {
+  try {
+    const body = await readJsonWithLimit<{ token?: unknown }>(req, MAX_BODY_BYTES);
+    const provided = typeof body.token === 'string' ? body.token.trim() : '';
+    const expected = getAdminToken();
+
+    if (!safeEqual(provided, expected)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    return setAuthCookie(req, NextResponse.json({ authenticated: true }), expected);
+  } catch (err) {
+    if (isRequestBodyTooLargeError(err)) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    // Malformed JSON body → treat as empty
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
-  return setAuthCookie(req, NextResponse.json({ authenticated: true }), expected);
 }
 
 /**
