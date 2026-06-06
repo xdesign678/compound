@@ -819,6 +819,12 @@ export function failJob(job: AnalysisJobRow, err: unknown): void {
     );
   if (Number(res.changes) === 0) return;
 
+  if (terminal && job.stage === 'github_ingest') {
+    deleteGithubIngestPayloadBlob(
+      parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload),
+    );
+  }
+
   syncObs.recordEvent({
     runId: job.run_id,
     itemId: job.item_id,
@@ -866,6 +872,12 @@ export function failJobPermanently(job: AnalysisJobRow, message: string): boolea
     )
     .run(attempts, message.slice(0, 500), ts, ts, durationMs, ts, job.id);
   if (Number(res.changes) === 0) return false;
+
+  if (job.stage === 'github_ingest') {
+    deleteGithubIngestPayloadBlob(
+      parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload),
+    );
+  }
 
   syncObs.recordEvent({
     runId: job.run_id,
@@ -953,6 +965,7 @@ export function maybeFinishRun(runId: string | null): void {
   if (stats.totalCount > 0 && done + failed >= stats.totalCount) {
     syncObs.finishRun(runId, failed > 0 ? 'failed' : 'done', failed > 0 ? '部分文件失败' : null);
     finalizeLegacyIfPossible(runId);
+    maybeRunRetentionOpportunistically();
   }
 }
 
@@ -1431,6 +1444,20 @@ async function processJob(job: AnalysisJobRow): Promise<void> {
   }
 }
 
+/**
+ * Opportunistic, throttled data-retention/GC. Piggybacks on the existing worker
+ * tick / sync wrap-up instead of a resident timer, so it can never leak a
+ * background loop. Best-effort: never lets a GC error escape into the caller.
+ */
+function maybeRunRetentionOpportunistically(): void {
+  try {
+    const { maybeRunRetention } = require('./retention') as typeof import('./retention');
+    maybeRunRetention();
+  } catch {
+    // Retention is best-effort; a failure here must not break the worker tick.
+  }
+}
+
 export async function runAnalysisWorkerOnce(
   options: {
     stages?: AdvancedAnalysisStage[];
@@ -1445,6 +1472,7 @@ export async function runAnalysisWorkerOnce(
   const jobs = claimJobs(WORKER_BATCH, options.stages);
   await Promise.all(jobs.map((job) => processJob(job)));
   const remaining = queuedJobCount(options.stages);
+  maybeRunRetentionOpportunistically();
   return { claimed: jobs.length, remaining, recovered: recovery.jobs + recovery.items };
 }
 
