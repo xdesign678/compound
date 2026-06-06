@@ -392,19 +392,25 @@ async function readBodyTextWithAbort(response: Response, signal: AbortSignal): P
   if (signal.aborted) {
     throw signal.reason ?? new DOMException('Aborted', 'AbortError');
   }
-  const onAbort = () => {
+  // Race response.text() against the abort signal so the function can reject
+  // promptly even when the body stream never completes (e.g. hanging upstream).
+  // Using Promise.race ensures our returned promise settles on abort, while
+  // the internal response.text() promise — which may still be pending because
+  // the stream is locked by its own reader and cannot be cancelled via
+  // body.cancel() — is simply orphaned and GC'd.
+  const abortPromise = new Promise<never>((_, reject) => {
+    const onAbort = () => reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+  const textPromise = response.text();
+  try {
+    return await Promise.race([textPromise, abortPromise]);
+  } finally {
     // Best-effort: cancel the underlying body stream so it stops reading
     // and doesn't continue consuming memory/CPU in the background.
+    // This may silently fail when the stream is already locked by textPromise's
+    // reader — that's fine; the orphaned textPromise will be GC'd.
     response.body?.cancel(signal.reason).catch(() => {});
-  };
-  signal.addEventListener('abort', onAbort, { once: true });
-  try {
-    const text = await response.text();
-    return text;
-  } finally {
-    // Always clean up the listener so the Promise from the race doesn't
-    // leak after response.text() resolves naturally.
-    signal.removeEventListener('abort', onAbort);
   }
 }
 
