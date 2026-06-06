@@ -64,6 +64,8 @@ export async function register() {
     await import('./sentry.server.config');
     const { registerGlobalCrashGuards } = await import('./lib/process-crash-guards');
     registerGlobalCrashGuards();
+    const { runBootRecovery } = await import('./lib/boot-recovery');
+    runBootRecovery();
   }
   if (process.env.NEXT_RUNTIME === 'edge') {
     await import('./sentry.edge.config');

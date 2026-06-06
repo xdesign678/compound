@@ -56,6 +56,8 @@ export interface RepairJobRow {
   status: RepairJobStatus;
   error: string | null;
   locked_by: string | null;
+  locked_at: number | null;
+  lease_expires_at: number | null;
   attempts: number;
   updated_at: number;
 }
@@ -83,6 +85,10 @@ export interface RepairRunStatusResponse {
 
 const WORKER_ID = `repair-${nanoid(6)}`;
 const JOB_CAP = Math.max(1, Number(process.env.COMPOUND_REPAIR_JOB_CAP || 50));
+const REPAIR_LEASE_MS = Math.max(
+  60_000,
+  Number(process.env.COMPOUND_REPAIR_LEASE_MS || 5 * 60_000),
+);
 const ORPHAN_CANDIDATE_LIMIT = 40;
 const MAX_BODY_CHARS = 8000;
 
@@ -126,6 +132,16 @@ export function ensureRepairSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_repair_jobs_status ON repair_jobs(status, run_id, updated_at);
     CREATE INDEX IF NOT EXISTS idx_repair_jobs_run ON repair_jobs(run_id, status);
   `);
+  const db = getServerDb();
+  const cols = new Set(
+    (db.prepare(`PRAGMA table_info(repair_jobs)`).all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    ),
+  );
+  if (!cols.has('locked_at')) db.exec(`ALTER TABLE repair_jobs ADD COLUMN locked_at INTEGER;`);
+  if (!cols.has('lease_expires_at')) {
+    db.exec(`ALTER TABLE repair_jobs ADD COLUMN lease_expires_at INTEGER;`);
+  }
 }
 
 function normalizeFindings(findings: RepairFindingInput[]): RepairFindingInput[] {
@@ -246,7 +262,8 @@ function bumpCounter(runId: string, field: 'done' | 'failed'): void {
 function markJob(id: string, status: RepairJobStatus, patch: { error?: string | null } = {}): void {
   getServerDb()
     .prepare(
-      `UPDATE repair_jobs SET status = ?, error = ?, locked_by = NULL, updated_at = ?
+      `UPDATE repair_jobs
+         SET status = ?, error = ?, locked_by = NULL, locked_at = NULL, lease_expires_at = NULL, updated_at = ?
        WHERE id = ?`,
     )
     .run(status, patch.error ?? null, now(), id);
@@ -265,16 +282,24 @@ function claimOneJob(runId: string, usedIds: Set<string>): RepairJobRow | null {
     const payload = parseJson<{ conceptIds: string[] }>(row.payload_json, { conceptIds: [] });
     if (payload.conceptIds.some((id) => usedIds.has(id))) continue;
 
+    const ts = now();
+    const leaseExpiresAt = ts + REPAIR_LEASE_MS;
     const res = db
       .prepare(
         `UPDATE repair_jobs
-         SET status = 'running', attempts = attempts + 1, locked_by = ?, updated_at = ?
+         SET status = 'running', attempts = attempts + 1, locked_by = ?, locked_at = ?, lease_expires_at = ?, updated_at = ?
          WHERE id = ? AND status = 'queued'`,
       )
-      .run(WORKER_ID, now(), row.id);
+      .run(WORKER_ID, ts, leaseExpiresAt, ts, row.id);
     if (res.changes > 0) {
       payload.conceptIds.forEach((id) => usedIds.add(id));
-      return { ...row, status: 'running', locked_by: WORKER_ID };
+      return {
+        ...row,
+        status: 'running',
+        locked_by: WORKER_ID,
+        locked_at: ts,
+        lease_expires_at: leaseExpiresAt,
+      };
     }
   }
   return null;
@@ -710,9 +735,31 @@ export function startRepairWorker(runId: string): void {
   g.__compoundRepairWorkers.set(runId, task);
 }
 
+/**
+ * Reset repair jobs locked in `running` past their lease window — orphaned by
+ * a crashed worker / process restart. Without this, `claimOneJob` (which only
+ * selects `status='queued'`) would never reclaim them and they'd be dropped
+ * forever. Aligns with `recoverStaleAnalysisJobs`. Returns the number requeued.
+ */
+export function recoverStaleRepairJobs(): number {
+  ensureRepairSchema();
+  const ts = now();
+  const res = getServerDb()
+    .prepare(
+      `UPDATE repair_jobs
+         SET status = 'queued', locked_by = NULL, locked_at = NULL, lease_expires_at = NULL, updated_at = ?
+       WHERE status = 'running' AND COALESCE(lease_expires_at, updated_at) < ?`,
+    )
+    .run(ts, ts);
+  const changes = Number(res.changes ?? 0);
+  if (changes > 0) logger.warn('repair.lease_recovered', { jobs: changes });
+  return changes;
+}
+
 /** Drain any still-running repair runs after a server restart. */
 export function resumePendingRepairRuns(): void {
   ensureRepairSchema();
+  recoverStaleRepairJobs();
   const rows = getServerDb()
     .prepare(`SELECT id FROM repair_runs WHERE status = 'running'`)
     .all() as Array<{ id: string }>;

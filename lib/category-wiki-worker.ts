@@ -395,6 +395,12 @@ function getCategoryWikiWorkerConcurrency(): number {
   return Math.max(1, Math.min(8, Math.trunc(parsed)));
 }
 
+/** Resume any still-running category wiki runs after a server restart. */
+export function resumePendingCategoryWikiRuns(): void {
+  ensureCategoryWikiSchema();
+  startPendingCategoryWikiWorkers();
+}
+
 function startPendingCategoryWikiWorkers(): void {
   ensureCategoryWikiSchema();
   const state = getCategoryWikiWorkerState();
