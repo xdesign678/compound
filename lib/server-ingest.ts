@@ -98,28 +98,30 @@ export async function ingestSourceToServerDb(
     signal: input.signal,
   });
 
-  // 4. Compose new concepts
+  // 4. Compose new concepts (with typeof guards for LLM-returned fields)
   const newConceptIds: string[] = [];
-  const newConcepts: Concept[] = resp.newConcepts.map((nc) => {
-    const id = 'c-' + nanoid(8);
-    const { categories, categoryKeys } = normalizeCategoryState({
-      categories: nc.categories || [],
+  const newConcepts: Concept[] = resp.newConcepts
+    .filter((nc) => typeof nc.title === 'string' && typeof nc.summary === 'string')
+    .map((nc) => {
+      const id = 'c-' + nanoid(8);
+      const { categories, categoryKeys } = normalizeCategoryState({
+        categories: nc.categories || [],
+      });
+      newConceptIds.push(id);
+      return {
+        id,
+        title: nc.title.trim(),
+        summary: nc.summary.trim(),
+        body: typeof nc.body === 'string' ? nc.body : (nc.body ?? ''),
+        sources: [source.id],
+        related: nc.relatedConceptIds || [],
+        categories,
+        categoryKeys,
+        createdAt: now,
+        updatedAt: now,
+        version: 1,
+      };
     });
-    newConceptIds.push(id);
-    return {
-      id,
-      title: nc.title.trim(),
-      summary: nc.summary.trim(),
-      body: nc.body,
-      sources: [source.id],
-      related: nc.relatedConceptIds || [],
-      categories,
-      categoryKeys,
-      createdAt: now,
-      updatedAt: now,
-      version: 1,
-    };
-  });
 
   // 5. Compute updates to existing concepts
   const referencedConceptIds = Array.from(

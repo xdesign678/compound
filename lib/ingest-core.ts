@@ -8,6 +8,7 @@
 
 import { chat, parseJSON } from './gateway';
 import { normalizeCategoryKeys, normalizeCategoryState } from './category-normalization';
+import { logger } from './logging';
 import { INGEST_SYSTEM_PROMPT, INGEST_SYSTEM_PROMPT_VERSION } from './prompts';
 import type { IngestResponse, SourceType } from './types';
 
@@ -134,15 +135,56 @@ ${categoryList}
     parsed.activitySummary ||
     `新建 ${parsed.newConcepts.length} 个概念,更新 ${parsed.updatedConcepts.length} 个`;
 
-  // Filter updatedConcepts to only reference existing IDs
+  // Filter updatedConcepts to only reference existing IDs;
+  // also guard non-string newBody/newSummary from LLM (skip malformed).
   const existingIds = new Set(input.existingConcepts.map((c) => c.id));
-  parsed.updatedConcepts = parsed.updatedConcepts.filter((u) => existingIds.has(u.id));
+  parsed.updatedConcepts = parsed.updatedConcepts.filter((u) => {
+    if (!existingIds.has(u.id)) return false;
+    if (u.newBody !== undefined && u.newBody !== null && typeof u.newBody !== 'string') {
+      logger.warn('ingest.llm_malformed_update_skipped', {
+        reason: 'newBody is not a string',
+        conceptId: u.id,
+        newBodyType: typeof u.newBody,
+      });
+      return false;
+    }
+    if (u.newSummary !== undefined && u.newSummary !== null && typeof u.newSummary !== 'string') {
+      logger.warn('ingest.llm_malformed_update_skipped', {
+        reason: 'newSummary is not a string',
+        conceptId: u.id,
+        newSummaryType: typeof u.newSummary,
+      });
+      return false;
+    }
+    return true;
+  });
 
   // Filter relatedConceptIds in new concepts
   for (const c of parsed.newConcepts) {
     c.relatedConceptIds = (c.relatedConceptIds || []).filter((id) => existingIds.has(id));
     c.categories = normalizeCategoryState({ categories: c.categories || [] }).categories;
   }
+
+  // Guard against malformed LLM fields — skip concepts with non-string title/summary/body
+  // rather than crashing on .trim() (typeof guard + structured log per malformed concept).
+  parsed.newConcepts = parsed.newConcepts.filter((c) => {
+    if (typeof c.title !== 'string' || typeof c.summary !== 'string') {
+      logger.warn('ingest.llm_malformed_concept_skipped', {
+        reason: 'title or summary is not a string',
+        titleType: typeof c.title,
+        summaryType: typeof c.summary,
+      });
+      return false;
+    }
+    if (c.body !== undefined && c.body !== null && typeof c.body !== 'string') {
+      logger.warn('ingest.llm_malformed_concept_skipped', {
+        reason: 'body is not a string',
+        bodyType: typeof c.body,
+      });
+      return false;
+    }
+    return true;
+  });
 
   return parsed;
 }
