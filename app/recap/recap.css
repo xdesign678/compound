@@ -1,72 +1,7 @@
 /* === Recap styles (extracted from globals.css) === */
 
 /* ─── Recap (Today's Review) ─────────────────────────────────── */
-
-/* Entry list — wraps the recap card so it shares horizontal padding with concept cards */
-.recap-entry-list {
-  margin-top: var(--space-md);
-  margin-bottom: var(--space-md);
-}
-.recap-entry-list-library {
-  padding: 0 16px;
-  margin-bottom: var(--space-md);
-}
-
-/* Entry card — reuses .concept-card visual; this only adds icon + arrow tweaks */
-.recap-entry-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  min-height: 46px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-default);
-}
-.recap-entry-main {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.recap-entry-title {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  min-width: 0;
-  font-family: var(--font-sans);
-  font-size: 14.5px;
-  font-weight: 650;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-.recap-entry-title svg {
-  width: 14px;
-  height: 14px;
-  color: var(--brand-clay);
-  flex-shrink: 0;
-}
-.recap-entry-count {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-.recap-entry-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  color: var(--text-tertiary);
-}
-.recap-entry-action svg {
-  width: 15px;
-  height: 15px;
-}
+/* Entry card styles (.recap-entry-*) are in globals.css (used on home page Wiki/Library) */
 
 /* Recap page root — exact viewport fit, no body scroll */
 .recap-root {
