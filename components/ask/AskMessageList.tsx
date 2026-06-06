@@ -254,8 +254,7 @@ export function AskMessageList({
 
 function CitedList({ ids, onClick }: { ids: string[]; onClick: (id: string) => void }) {
   const concepts = useLiveQuery(async () => {
-    const db = getDb();
-    const items = await Promise.all(ids.map((id) => db.concepts.get(id)));
+    const items = await getDb().concepts.bulkGet(ids);
     return items.filter(Boolean);
   }, [ids.join(',')]);
 

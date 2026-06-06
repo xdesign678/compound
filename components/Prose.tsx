@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useEffect, useRef, useMemo } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { renderMarkdown } from '@/lib/format';
 import { useAppStore } from '@/lib/store';
 import { getDb } from '@/lib/db';
@@ -33,6 +33,10 @@ function isSpecialScheme(href: string): boolean {
 /**
  * Renders markdown and wires up inline concept links / citation pills
  * to the app store navigation.
+ *
+ * renderMarkdown is async (marked/dompurify are lazy-loaded), so we use
+ * useState + useEffect. After the first load the modules are cached and
+ * subsequent renders resolve near-instantly.
  */
 function ProseComponent({
   markdown,
@@ -48,11 +52,22 @@ function ProseComponent({
   const openSource = useAppStore((s) => s.openSource);
   const showToast = useAppStore((s) => s.showToast);
 
-  const html = useMemo(() => {
-    if (!markdown) return '';
+  const [html, setHtml] = useState('');
+
+  useEffect(() => {
+    if (!markdown) {
+      setHtml('');
+      return;
+    }
     // renderMarkdown already applies DOMPurify.sanitize with a strict
     // allowlist in browser context — no double-sanitize needed.
-    return renderMarkdown(markdown);
+    let cancelled = false;
+    void renderMarkdown(markdown).then((result) => {
+      if (!cancelled) setHtml(result);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [markdown]);
 
   useEffect(() => {
@@ -158,7 +173,7 @@ function ProseComponent({
       el.removeEventListener('click', clickHandler);
       el.removeEventListener('keydown', keydownHandler);
     };
-  }, [openConcept, openSource, showToast, citedConceptIds, markdown]);
+  }, [openConcept, openSource, showToast, citedConceptIds, html]);
 
   return (
     <div

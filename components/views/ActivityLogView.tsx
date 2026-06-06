@@ -2,10 +2,9 @@
 
 import { useId, useState } from 'react';
 import Dexie from 'dexie';
-import DOMPurify from 'dompurify';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
-import { formatRelativeTime, groupActivityByDate } from '@/lib/format';
+import { formatRelativeTime, groupActivityByDate, escapeHTML } from '@/lib/format';
 import { useAppStore, type ActivityFilterType } from '@/lib/store';
 import type { ActivityLog } from '@/lib/types';
 import { Icon } from '../Icons';
@@ -121,11 +120,9 @@ export function ActivityLogView() {
                           id={itemTitleId}
                           className="a-title"
                           dangerouslySetInnerHTML={{
-                            __html: DOMPurify.sanitize(
-                              it.title
-                                .replace(/<em>/g, '<span class="emphasis">')
-                                .replace(/<\/em>/g, '</span>'),
-                            ),
+                            __html: escapeHTML(it.title)
+                              .replace(/&lt;em&gt;/g, '<span class="emphasis">')
+                              .replace(/&lt;\/em&gt;/g, '</span>'),
                           }}
                         />
                         <div className="a-details">{it.details}</div>

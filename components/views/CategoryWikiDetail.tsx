@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
+import { loadMarked, loadDOMPurify } from '@/lib/format';
 import { useAppStore } from '@/lib/store';
 import {
   getCategoryWiki,
@@ -197,14 +196,28 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
     return extractTocFromMd(wiki.bodyMd);
   }, [wiki?.bodyMd]);
 
-  const htmlContent = useMemo(() => {
-    if (!wiki?.bodyMd) return '';
+  const [htmlContent, setHtmlContent] = useState('');
+  useEffect(() => {
+    if (!wiki?.bodyMd) {
+      setHtmlContent('');
+      return;
+    }
+    let cancelled = false;
     const processed = renderMarkdownWithWikilinks(wiki.bodyMd, conceptTitleMap);
-    const raw = marked(processed) as string;
-    return DOMPurify.sanitize(raw, {
-      ADD_TAGS: ['span'],
-      ADD_ATTR: ['data-wikilink', 'id'],
+    void Promise.all([loadMarked(), loadDOMPurify()]).then(([markedMod, dpMod]) => {
+      if (cancelled) return;
+      const raw = markedMod ? (markedMod.marked.parse(processed, { async: false }) as string) : '';
+      const sanitized = dpMod
+        ? dpMod.sanitize(raw, {
+            ADD_TAGS: ['span'],
+            ADD_ATTR: ['data-wikilink', 'id'],
+          })
+        : raw;
+      if (!cancelled) setHtmlContent(sanitized);
     });
+    return () => {
+      cancelled = true;
+    };
   }, [wiki?.bodyMd, conceptTitleMap]);
 
   const fetchWiki = useCallback(async () => {

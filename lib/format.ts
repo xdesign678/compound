@@ -1,5 +1,7 @@
-import { marked } from 'marked';
-import DOMPurify from 'dompurify';
+// marked and dompurify are lazy-loaded to keep them out of the first-screen
+// shared bundle. They are loaded on first call to renderMarkdown / loadMarked /
+// loadDOMPurify, then cached at module level for instant subsequent access.
+// Pattern follows the mermaid lazy-load in CategoryWikiDetail.tsx.
 
 const DEFAULT_BREAKS = false;
 
@@ -9,29 +11,93 @@ function readBreaksPref(): boolean {
   return raw === '1';
 }
 
-marked.setOptions({
-  gfm: true,
-  breaks: readBreaksPref(),
-});
+// ---------------------------------------------------------------------------
+// Lazy loaders for marked & dompurify
+// ---------------------------------------------------------------------------
+
+type MarkedModule = typeof import('marked');
+let _markedModule: MarkedModule | null = null;
+let _markedLoadPromise: Promise<MarkedModule | null> | null = null;
+
+/** Lazy-load the `marked` module (code-split into its own chunk). */
+export async function loadMarked(): Promise<MarkedModule | null> {
+  if (_markedModule) return _markedModule;
+  if (_markedLoadPromise) return _markedLoadPromise;
+  _markedLoadPromise = import('marked')
+    .then((mod) => {
+      _markedModule = mod;
+      mod.marked.setOptions({ gfm: true, breaks: readBreaksPref() });
+      return mod;
+    })
+    .catch(() => null);
+  return _markedLoadPromise;
+}
+
+// dompurify's module shape varies by bundler/runtime (default export as callable
+// vs namespace object). We use a structural type to avoid esModuleInterop quirks.
+interface DOMPurifyModuleShape {
+  sanitize: (source: string, config?: Record<string, unknown>) => string;
+}
+
+let _dompurifyModule: DOMPurifyModuleShape | null = null;
+let _dompurifyLoadPromise: Promise<DOMPurifyModuleShape | null> | null = null;
+
+/** Lazy-load the `dompurify` module (code-split into its own chunk). */
+export async function loadDOMPurify(): Promise<DOMPurifyModuleShape | null> {
+  if (_dompurifyModule) return _dompurifyModule;
+  if (_dompurifyLoadPromise) return _dompurifyLoadPromise;
+  _dompurifyLoadPromise = import('dompurify')
+    .then((mod) => {
+      // mod.default is the DOMPurify sanitizer (callable with .sanitize etc.)
+      const sanitizer = (mod as Record<string, unknown>).default;
+      if (
+        sanitizer &&
+        typeof sanitizer === 'object' &&
+        typeof (sanitizer as Record<string, unknown>).sanitize === 'function'
+      ) {
+        _dompurifyModule = sanitizer as DOMPurifyModuleShape;
+      }
+      return _dompurifyModule;
+    })
+    .catch(() => null);
+  return _dompurifyLoadPromise;
+}
+
+// ---------------------------------------------------------------------------
+// Markdown break preference
+// ---------------------------------------------------------------------------
 
 /** Toggle markdown line-break mode and update the marked renderer */
 export function setMarkdownBreaks(enabled: boolean) {
   if (typeof window !== 'undefined') {
     localStorage.setItem('compound_markdown_breaks', enabled ? '1' : '0');
   }
-  marked.setOptions({ breaks: enabled });
+  if (_markedModule) {
+    _markedModule.marked.setOptions({ breaks: enabled });
+  }
 }
 
 export function getMarkdownBreaks(): boolean {
   return readBreaksPref();
 }
 
+// ---------------------------------------------------------------------------
+// renderMarkdown (async — lazily loads marked + dompurify on first call)
+// ---------------------------------------------------------------------------
+
 /**
  * Render markdown → HTML, and transform [text](concept:id) into clickable spans
  * that our UI wires to navigation. Also handles [CX] citation footnotes,
  * Obsidian-style [[wiki-links]] and `tags: [a, b, c]` frontmatter chips.
+ *
+ * Async because marked and dompurify are lazy-loaded on first call; subsequent
+ * calls resolve near-instantly from the module-level cache.
  */
-export function renderMarkdown(md: string): string {
+export async function renderMarkdown(md: string): Promise<string> {
+  const mod = await loadMarked();
+  if (!mod) return escapeHTML(md || '');
+
+  const { marked } = mod;
   let source = md || '';
 
   // 1) Pre-extract Obsidian wiki-links so marked won't mangle them.
@@ -92,37 +158,40 @@ export function renderMarkdown(md: string): string {
   );
 
   if (typeof window !== 'undefined') {
-    html = DOMPurify.sanitize(html, {
-      ALLOWED_TAGS: [
-        'p',
-        'strong',
-        'em',
-        'ul',
-        'ol',
-        'li',
-        'code',
-        'pre',
-        'blockquote',
-        'h1',
-        'h2',
-        'h3',
-        'h4',
-        'span',
-        'a',
-        'br',
-        'hr',
-      ],
-      ALLOWED_ATTR: [
-        'class',
-        'data-concept-id',
-        'data-citation-index',
-        'data-wikilink',
-        'href',
-        'target',
-        'role',
-        'tabindex',
-      ],
-    });
+    const dpMod = await loadDOMPurify();
+    if (dpMod) {
+      html = dpMod.sanitize(html, {
+        ALLOWED_TAGS: [
+          'p',
+          'strong',
+          'em',
+          'ul',
+          'ol',
+          'li',
+          'code',
+          'pre',
+          'blockquote',
+          'h1',
+          'h2',
+          'h3',
+          'h4',
+          'span',
+          'a',
+          'br',
+          'hr',
+        ],
+        ALLOWED_ATTR: [
+          'class',
+          'data-concept-id',
+          'data-citation-index',
+          'data-wikilink',
+          'href',
+          'target',
+          'role',
+          'tabindex',
+        ],
+      });
+    }
   }
 
   return html;

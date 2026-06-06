@@ -8,7 +8,7 @@ interface SourceBlockEditorProps {
   onBlocksChange: (next: SourceBlock[]) => void;
   onCommit: (id: string, raw: string) => void;
   registerTextareaRef: (id: string, el: HTMLTextAreaElement | null) => void;
-  renderBlockHtml: (block: SourceBlock) => string;
+  renderBlockHtml: (block: SourceBlock) => Promise<string>;
   editable: boolean;
   onActiveBlockChange?: (id: string | null) => void;
 }
@@ -17,7 +17,7 @@ function BlockItem({
   block,
   isActive,
   editable,
-  html,
+  renderBlockHtml,
   onEnterEdit,
   onCommitBlock,
   onChangeRaw,
@@ -26,7 +26,7 @@ function BlockItem({
   block: SourceBlock;
   isActive: boolean;
   editable: boolean;
-  html: string;
+  renderBlockHtml: (block: SourceBlock) => Promise<string>;
   onEnterEdit: (block: SourceBlock) => void;
   onCommitBlock: (id: string, raw: string) => void;
   onChangeRaw: (id: string, raw: string) => void;
@@ -34,11 +34,27 @@ function BlockItem({
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [localValue, setLocalValue] = useState(block.raw);
+  const [html, setHtml] = useState('');
 
   // Keep local value in sync when block.raw changes externally
   useEffect(() => {
     setLocalValue(block.raw);
   }, [block.raw]);
+
+  // Render markdown HTML asynchronously (marked/dompurify are lazy-loaded)
+  useEffect(() => {
+    if (block.kind === 'frontmatter-tags' || block.kind === 'leading-title') {
+      setHtml('');
+      return;
+    }
+    let cancelled = false;
+    void renderBlockHtml(block).then((result) => {
+      if (!cancelled) setHtml(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [block, renderBlockHtml]);
 
   // Auto-resize when entering edit mode or when value changes
   useEffect(() => {
@@ -185,7 +201,7 @@ export function SourceBlockEditor({
           block={block}
           isActive={activeBlockId === block.id}
           editable={editable}
-          html={renderBlockHtml(block)}
+          renderBlockHtml={renderBlockHtml}
           onEnterEdit={enterEdit}
           onCommitBlock={commit}
           onChangeRaw={handleChangeRaw}

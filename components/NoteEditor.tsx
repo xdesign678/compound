@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { renderMarkdown } from '@/lib/format';
 import { useAppStore } from '@/lib/store';
 import {
   applyMarkdownSelectionEdit,
   type MarkdownEditCommand,
 } from '@/lib/markdown-editor/selection';
-import DOMPurify from 'dompurify';
 
 const DRAFT_KEY_PREFIX = 'compound_note_draft_';
 const DEFAULT_DRAFT_ID = 'default';
@@ -137,10 +136,20 @@ export function NoteEditor({ onDone, onCancel, disabled = false, draftId }: Note
   }
 
   const fullMarkdown = title.trim() ? `# ${title.trim()}\n\n${body}` : body;
-  const rendered = useMemo(
-    () => (mode === 'preview' ? DOMPurify.sanitize(renderMarkdown(fullMarkdown || '')) : ''),
-    [fullMarkdown, mode],
-  );
+  const [rendered, setRendered] = useState('');
+  useEffect(() => {
+    if (mode !== 'preview') {
+      setRendered('');
+      return;
+    }
+    let cancelled = false;
+    void renderMarkdown(fullMarkdown || '').then((result) => {
+      if (!cancelled) setRendered(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fullMarkdown, mode]);
   const hasContent = title.trim().length > 0 || body.trim().length > 0;
 
   return (

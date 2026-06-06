@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { marked } from 'marked';
 import { getDb } from '@/lib/db';
 import { ensureSourceHydrated } from '@/lib/cloud-sync';
 import { updateSourceContent } from '@/lib/api-client';
 import { useAppStore } from '@/lib/store';
-import { formatRelativeTime, renderMarkdown } from '@/lib/format';
+import { formatRelativeTime, renderMarkdown, loadMarked } from '@/lib/format';
 import {
   applyMarkdownSelectionEdit,
   type MarkdownEditCommand,
@@ -95,27 +94,36 @@ export function SourceDetail({ id }: { id: string }) {
   const hasFullContent = Boolean(source?.rawContent.trim()) || source?.contentStatus === 'full';
   useFocusTrap(tocDialogRef, tocOpen);
 
-  const tocItems = useMemo(() => {
-    return blocks
-      .filter(
-        (block) =>
-          block.type === 'heading' &&
-          block.kind !== 'leading-title' &&
-          block.depth &&
-          block.depth >= 1 &&
-          block.depth <= 4,
-      )
-      .map((block) => {
-        const tokens = marked.lexer(block.raw);
-        const first = tokens[0];
-        const text = first && 'text' in first && typeof first.text === 'string' ? first.text : '';
-        return {
-          id: block.id,
-          level: block.depth ?? 1,
-          title: normalizeText(text).trim(),
-        };
-      })
-      .filter((item): item is SourceTocItem => Boolean(item.title));
+  const [tocItems, setTocItems] = useState<SourceTocItem[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void loadMarked().then((mod) => {
+      if (cancelled || !mod) return;
+      const items = blocks
+        .filter(
+          (block) =>
+            block.type === 'heading' &&
+            block.kind !== 'leading-title' &&
+            block.depth &&
+            block.depth >= 1 &&
+            block.depth <= 4,
+        )
+        .map((block) => {
+          const tokens = mod.marked.lexer(block.raw);
+          const first = tokens[0];
+          const text = first && 'text' in first && typeof first.text === 'string' ? first.text : '';
+          return {
+            id: block.id,
+            level: block.depth ?? 1,
+            title: normalizeText(text).trim(),
+          };
+        })
+        .filter((item): item is SourceTocItem => Boolean(item.title));
+      if (!cancelled) setTocItems(items);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [blocks]);
 
   useEffect(() => {
@@ -366,7 +374,7 @@ export function SourceDetail({ id }: { id: string }) {
     activeBlockIdRef.current = activeId;
   }, []);
 
-  const renderBlockHtml = useCallback((block: SourceBlock) => {
+  const renderBlockHtml = useCallback(async (block: SourceBlock) => {
     if (block.kind === 'leading-title' || block.kind === 'frontmatter-tags') {
       return '';
     }

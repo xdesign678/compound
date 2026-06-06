@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { marked } from 'marked';
+import { loadMarked } from '@/lib/format';
 import { getDb } from '@/lib/db';
 import { ensureConceptHydrated } from '@/lib/cloud-sync';
 import { hasConceptBodyContent } from '@/lib/content-status';
@@ -198,37 +198,50 @@ export function ConceptDetail({ id }: { id: string }) {
   useFocusTrap(deleteDialogRef, showDeleteConfirm);
   const sources = useLiveQuery(async () => {
     if (!concept) return [];
-    const items = await Promise.all(concept.sources.map((sid) => getDb().sources.get(sid)));
+    const items = await getDb().sources.bulkGet(concept.sources);
     return items.filter(Boolean);
   }, [concept?.sources.join(',')]);
   const related = useLiveQuery(async () => {
     if (!concept) return [];
-    const items = await Promise.all(concept.related.map((cid) => getDb().concepts.get(cid)));
+    const items = await getDb().concepts.bulkGet(concept.related);
     return items.filter(Boolean);
   }, [concept?.related.join(',')]);
   const hasFullBody = hasConceptBodyContent(concept);
 
   // TOC derived from concept.body markdown headings
-  const tocItems = useMemo<ConceptTocItem[]>(() => {
-    if (!concept?.body) return [];
-    const tokens = marked.lexer(concept.body);
-    return tokens
-      .filter(
-        (token) =>
-          token.type === 'heading' &&
-          'depth' in token &&
-          typeof token.depth === 'number' &&
-          token.depth >= 1 &&
-          token.depth <= 4,
-      )
-      .map((token) => {
-        const text = 'text' in token && typeof token.text === 'string' ? token.text : '';
-        return {
-          level: (token as { depth: number }).depth,
-          title: text.trim(),
-        };
-      })
-      .filter((item) => Boolean(item.title));
+  // marked is lazy-loaded, so TOC is computed asynchronously.
+  const [tocItems, setTocItems] = useState<ConceptTocItem[]>([]);
+  useEffect(() => {
+    if (!concept?.body) {
+      setTocItems([]);
+      return;
+    }
+    let cancelled = false;
+    void loadMarked().then((mod) => {
+      if (cancelled || !mod) return;
+      const tokens = mod.marked.lexer(concept.body);
+      const items = tokens
+        .filter(
+          (token) =>
+            token.type === 'heading' &&
+            'depth' in token &&
+            typeof token.depth === 'number' &&
+            token.depth >= 1 &&
+            token.depth <= 4,
+        )
+        .map((token) => {
+          const text = 'text' in token && typeof token.text === 'string' ? token.text : '';
+          return {
+            level: (token as { depth: number }).depth,
+            title: text.trim(),
+          };
+        })
+        .filter((item) => Boolean(item.title));
+      if (!cancelled) setTocItems(items);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [concept?.body]);
 
   const hydrateBody = useCallback(async () => {
