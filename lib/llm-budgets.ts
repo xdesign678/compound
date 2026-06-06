@@ -159,7 +159,3 @@ export function pauseLlmBudget(bucket: LlmBudgetName, ms: number): void {
 export function getLlmBudgetStats(bucket: LlmBudgetName): QueueStats {
   return llmBudgets[bucket].stats();
 }
-
-export function resetLlmBudgetsForTests(): void {
-  for (const queue of Object.values(llmBudgets)) queue.clear();
-}

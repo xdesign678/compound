@@ -61,11 +61,6 @@ export function pickReviewConcepts(concepts: Concept[]): Concept[] {
   return [...shuffle(recent), ...shuffle(older)].slice(0, TARGET_COUNT);
 }
 
-export function getUnreviewedCount(concepts: Concept[]): number {
-  const reviewedIds = getReviewedIds();
-  return concepts.filter((c) => !reviewedIds.has(c.id)).length;
-}
-
 /** Lightweight unreviewed count using only concept IDs (avoids loading full objects) */
 export async function getUnreviewedCountFromDb(): Promise<number> {
   const { getDb } = await import('./db');

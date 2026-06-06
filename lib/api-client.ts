@@ -618,33 +618,6 @@ export async function mirrorWikiFromSelectionResult(resp: SelectionWikiResponse)
   }
 }
 
-/**
- * Compatibility helper for callers that still want a promise for the final
- * concept. The server work is still backgrounded; this only polls from the
- * client until the run reaches a terminal state.
- */
-export async function createWikiFromSelection(input: {
-  selection: string;
-  sourceConceptId?: string;
-  contextTitle?: string;
-}): Promise<SelectionWikiResponse> {
-  const started = await startWikiFromSelection(input);
-  const deadline = Date.now() + 120_000;
-  while (Date.now() < deadline) {
-    const status = await getWikiFromSelectionRun(started.runId);
-    if (status.status === 'done' && status.result) {
-      await mirrorWikiFromSelectionResult(status.result);
-      return status.result;
-    }
-    if (status.status === 'failed') {
-      throw new Error(status.error || '选段建页失败');
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-  }
-
-  throw new Error('选段建页仍在后台进行，请稍后查看进度浮窗。');
-}
-
 export async function archiveAnswerAsConcept(
   title: string,
   summary: string,

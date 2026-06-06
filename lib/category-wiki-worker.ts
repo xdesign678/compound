@@ -264,11 +264,6 @@ function startCategoryWikiWorkerNow(runId: string, llmConfig?: LlmConfig): void 
   state.workers.set(runId, task);
 }
 
-export function resumePendingCategoryWikiRuns(): void {
-  ensureCategoryWikiSchema();
-  startPendingCategoryWikiWorkers();
-}
-
 export function markCategoryWikisStaleByConceptIds(conceptIds: string[]): number {
   if (conceptIds.length === 0) return 0;
   const placeholders = conceptIds.map(() => '?').join(',');
