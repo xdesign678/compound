@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, JetBrains_Mono, Lora, Noto_Serif_SC } from 'next/font/google';
+import { Inter, JetBrains_Mono, Lora } from 'next/font/google';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import './globals.css';
@@ -28,13 +28,10 @@ const lora = Lora({
   preload: false,
 });
 
-const notoSerifSC = Noto_Serif_SC({
-  subsets: ['latin'],
-  weight: ['400', '600'],
-  variable: '--font-noto-serif-sc',
-  display: 'swap',
-  preload: true,
-});
+// Noto Serif SC removed: was generating ~120 woff2 subsets (6.5 MB) + 208 KB @font-face CSS
+// while `subsets: ['latin']` was ineffective for CJK. Now relying on system CJK serif
+// fallbacks ('Songti SC', 'STSong', 'SimSun', 'Noto Serif SC' if locally installed)
+// in the --font-reading stack — zero woff2 downloads for CJK serif.
 
 const criticalCss = readFileSync(path.join(process.cwd(), 'app/globals-critical.css'), 'utf8');
 
@@ -146,7 +143,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="zh-CN"
       suppressHydrationWarning
-      className={`${inter.variable} ${geistMono.variable} ${lora.variable} ${notoSerifSC.variable}`}
+      className={`${inter.variable} ${geistMono.variable} ${lora.variable}`}
     >
       <head>
         <style data-compound-critical-css="" dangerouslySetInnerHTML={{ __html: criticalCss }} />

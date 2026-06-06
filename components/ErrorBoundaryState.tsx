@@ -60,7 +60,7 @@ const ERROR_BOUNDARY_STYLES = `
     max-width: 440px;
     margin: 16px 0 0;
     color: rgba(20, 20, 19, 0.85);
-    font-family: Lora, "Noto Serif SC", Georgia, "Times New Roman", serif;
+    font-family: Lora, "Noto Serif SC", "Songti SC", "STSong", "SimSun", Georgia, "Times New Roman", serif;
     font-size: 17px;
     line-height: 1.72;
   }

@@ -26,7 +26,8 @@
 
   --font-sans: var(--font-inter), Inter, system-ui, -apple-system, sans-serif;
   --font-reading:
-    var(--font-lora), var(--font-noto-serif-sc), 'Noto Serif SC', Georgia, 'Times New Roman', serif;
+    var(--font-lora), 'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', Georgia, 'Times New Roman',
+    serif;
   --font-mono: var(--font-geist-mono), 'JetBrains Mono', 'SF Mono', monospace;
 
   --border-light: rgba(0, 0, 0, 0.08);
