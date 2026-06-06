@@ -642,13 +642,23 @@ export const POST = withRequestTracing(async (req: Request) => {
               error: err instanceof Error ? err.message : String(err),
               stageDurations: stageTelemetry.snapshot(),
             });
-            sendSSE('error', {
-              error: publicQueryErrorMessage(err),
-              errorType: classifyQueryError(err),
-              stageDurations: stageTelemetry.snapshot(),
-              requestId: getRequestContext()?.requestId,
-            });
-            controller.close();
+            // When cancel() fires first, the ReadableStream controller is
+            // already closed/errored — enqueue/close will throw TypeError.
+            try {
+              sendSSE('error', {
+                error: publicQueryErrorMessage(err),
+                errorType: classifyQueryError(err),
+                stageDurations: stageTelemetry.snapshot(),
+                requestId: getRequestContext()?.requestId,
+              });
+            } catch {
+              /* stream already cancelled by client disconnect */
+            }
+            try {
+              controller.close();
+            } catch {
+              /* already closed */
+            }
           }
         },
         cancel() {

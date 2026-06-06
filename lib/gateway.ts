@@ -392,15 +392,20 @@ async function readBodyTextWithAbort(response: Response, signal: AbortSignal): P
   if (signal.aborted) {
     throw signal.reason ?? new DOMException('Aborted', 'AbortError');
   }
-  return Promise.race([
-    response.text(),
-    new Promise<never>((_, reject) => {
-      const onAbort = () => {
-        reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
-      };
-      signal.addEventListener('abort', onAbort, { once: true });
-    }),
-  ]);
+  const onAbort = () => {
+    // Best-effort: cancel the underlying body stream so it stops reading
+    // and doesn't continue consuming memory/CPU in the background.
+    response.body?.cancel(signal.reason).catch(() => {});
+  };
+  signal.addEventListener('abort', onAbort, { once: true });
+  try {
+    const text = await response.text();
+    return text;
+  } finally {
+    // Always clean up the listener so the Promise from the race doesn't
+    // leak after response.text() resolves naturally.
+    signal.removeEventListener('abort', onAbort);
+  }
 }
 
 function isTransientGatewayFailure(error: unknown): boolean {
@@ -627,9 +632,12 @@ export async function chat(opts: ChatOptions): Promise<string> {
   // Compute effective wall-clock budget. Reasoning models get extra time;
   // streaming mode also relies on per-chunk idle reset, so the total ceiling
   // is mostly a safety net.
-  const wallClockTimeout = reasoning
-    ? getLlmTimeoutMs() + getLlmReasoningExtraMs()
-    : getLlmTimeoutMs();
+  // Snapshot the lazy getters once per call so values are consistent within
+  // this chat() invocation even if env vars change mid-request.
+  const llmTimeoutMs = getLlmTimeoutMs();
+  const llmReasoningExtraMs = getLlmReasoningExtraMs();
+  const llmStreamIdleMs = getLlmStreamIdleMs();
+  const wallClockTimeout = reasoning ? llmTimeoutMs + llmReasoningExtraMs : llmTimeoutMs;
 
   let streamedContent: string | null = null;
   let streamedFinishReason: string | null = null;
@@ -671,11 +679,11 @@ export async function chat(opts: ChatOptions): Promise<string> {
         idleTimer = setTimeout(() => {
           controller.abort(
             new DOMException(
-              `LLM stream stalled (no chunk for ${getLlmStreamIdleMs()}ms, model=${model})`,
+              `LLM stream stalled (no chunk for ${llmStreamIdleMs}ms, model=${model})`,
               'TimeoutError',
             ),
           );
-        }, getLlmStreamIdleMs());
+        }, llmStreamIdleMs);
       };
       armIdle();
 
@@ -762,7 +770,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
         requestedModel,
         consecutiveTimeouts: consecutive,
         wallClockTimeoutMs: wallClockTimeout,
-        streamIdleMs: wantStream ? getLlmStreamIdleMs() : null,
+        streamIdleMs: wantStream ? llmStreamIdleMs : null,
         streamMode: wantStream,
         reasoning,
       });
