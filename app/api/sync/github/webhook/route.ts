@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { isRequestBodyTooLargeError, readTextWithLimit } from '@/lib/request-guards';
 import { startGithubSyncFromWebhook } from '@/lib/github-sync-runner';
 import { safeEqual } from '@/lib/server-auth';
+import { webhookRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -23,9 +24,14 @@ async function verify(req: Request, rawBody: string): Promise<boolean> {
  * triggered sync via `startGithubSync`. Returns the resulting `jobId` and
  * an `existing` flag indicating whether a job was already running.
  *
- * Guards: HMAC SHA-256 signature (no admin token; webhooks are anonymous).
+ * Guards: IP rate limit (before HMAC), HMAC SHA-256 signature (no admin
+ * token; webhooks are anonymous), body size limit.
  */
 export async function POST(req: Request) {
+  // IP rate limit before expensive HMAC computation
+  const blocked = webhookRateLimit(req);
+  if (blocked) return blocked;
+
   let rawBody = '';
   try {
     rawBody = await readTextWithLimit(req, MAX_WEBHOOK_BODY_BYTES);

@@ -118,3 +118,96 @@ export function syncRateLimit(req: Request): NextResponse | null {
   const limit = Number(process.env.COMPOUND_SYNC_RATE_LIMIT_PER_MINUTE ?? 10);
   return rateLimit(req, 'sync', { limit, windowMs: 60_000 });
 }
+
+// ─── Split check / increment / reset for failure-only scopes (auth) ─────
+
+/** Read-only check: is the client currently over the rate limit?
+ *  Does NOT increment the counter — safe to call before expensive work. */
+export function rateLimitCheck(
+  req: Request,
+  scope: string,
+  options: { limit: number; windowMs: number },
+): NextResponse | null {
+  if (options.limit <= 0) return null;
+
+  const now = Date.now();
+  const store = getStore();
+  const key = `${scope}:${getClientKey(req)}`;
+  const current = store.get(key);
+
+  if (!current || current.resetAt <= now) return null;
+  if (current.count <= options.limit) return null;
+
+  const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+  return NextResponse.json(
+    { error: 'Too many requests', retryAfter },
+    { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+  );
+}
+
+/** Increment the counter for the given scope/client.
+ *  Returns 429 if the count now exceeds the limit.
+ *  Use after confirming a failure (e.g., wrong token) so only failures are counted. */
+export function rateLimitIncrement(
+  req: Request,
+  scope: string,
+  options: { limit: number; windowMs: number },
+): NextResponse | null {
+  if (options.limit <= 0) return null;
+
+  const now = Date.now();
+  const store = getStore();
+  maybeGc(store, now);
+  const key = `${scope}:${getClientKey(req)}`;
+  const current = store.get(key);
+
+  if (!current || current.resetAt <= now) {
+    store.set(key, { count: 1, resetAt: now + options.windowMs });
+    return null;
+  }
+
+  current.count += 1;
+  if (current.count <= options.limit) return null;
+
+  const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+  return NextResponse.json(
+    { error: 'Too many requests', retryAfter },
+    { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+  );
+}
+
+/** Delete the rate-limit bucket for the given scope/client.
+ *  Use after a successful action (e.g., correct login) to clear failure history. */
+export function rateLimitReset(req: Request, scope: string): void {
+  const store = getStore();
+  const key = `${scope}:${getClientKey(req)}`;
+  store.delete(key);
+}
+
+// ─── Auth brute-force protection (counts only failed attempts) ──────────
+
+const AUTH_RATE_LIMIT_PER_MINUTE = Number(process.env.COMPOUND_AUTH_RATE_LIMIT ?? 20);
+
+/** Pre-check: is this client currently auth-rate-limited? Does NOT increment. */
+export function authRateLimitCheck(req: Request): NextResponse | null {
+  return rateLimitCheck(req, 'auth', { limit: AUTH_RATE_LIMIT_PER_MINUTE, windowMs: 60_000 });
+}
+
+/** Record a failed auth attempt. Returns 429 if now over limit. */
+export function authRateLimitFail(req: Request): NextResponse | null {
+  return rateLimitIncrement(req, 'auth', { limit: AUTH_RATE_LIMIT_PER_MINUTE, windowMs: 60_000 });
+}
+
+/** Reset auth failure counter after successful authentication. */
+export function authRateLimitReset(req: Request): void {
+  rateLimitReset(req, 'auth');
+}
+
+// ─── Webhook IP rate limiting (counts all requests, before HMAC) ────────
+
+const WEBHOOK_RATE_LIMIT_PER_MINUTE = Number(process.env.COMPOUND_WEBHOOK_RATE_LIMIT ?? 60);
+
+/** Webhook rate limit — counts every request (not just failures). Apply before HMAC. */
+export function webhookRateLimit(req: Request): NextResponse | null {
+  return rateLimit(req, 'webhook', { limit: WEBHOOK_RATE_LIMIT_PER_MINUTE, windowMs: 60_000 });
+}
