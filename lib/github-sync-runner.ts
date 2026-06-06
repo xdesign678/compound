@@ -635,8 +635,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
           runId,
         });
         if (HARD_DELETE_MODE && item.existingSourceId) {
-          wikiRepo.deleteSourceArtifacts(item.existingSourceId);
-          repo.deleteSource(item.existingSourceId);
+          wikiRepo.hardDeleteSource(item.existingSourceId);
         }
         syncObs.updateRunItem(item.itemId, {
           status: 'succeeded',

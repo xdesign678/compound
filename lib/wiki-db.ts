@@ -404,14 +404,30 @@ export const wikiRepo = {
   deleteSourceArtifacts(sourceId: string): void {
     ensureWikiCompilerSchema();
     const db = getServerDb();
-    db.prepare(`DELETE FROM concept_evidence WHERE source_id = ?`).run(sourceId);
-    db.prepare(`DELETE FROM source_chunks WHERE source_id = ?`).run(sourceId);
-    if (tableExists('chunk_embeddings')) {
-      db.prepare(`DELETE FROM chunk_embeddings WHERE source_id = ?`).run(sourceId);
-    }
-    if (hasFts()) {
-      safeRunFts(() => db.prepare(`DELETE FROM chunk_fts WHERE source_id = ?`).run(sourceId));
-    }
+    const trx = db.transaction((id: string) => {
+      db.prepare(`DELETE FROM concept_evidence WHERE source_id = ?`).run(id);
+      db.prepare(`DELETE FROM source_chunks WHERE source_id = ?`).run(id);
+      if (tableExists('chunk_embeddings')) {
+        db.prepare(`DELETE FROM chunk_embeddings WHERE source_id = ?`).run(id);
+      }
+      if (hasFts()) {
+        safeRunFts(() => db.prepare(`DELETE FROM chunk_fts WHERE source_id = ?`).run(id));
+      }
+    });
+    trx(sourceId);
+  },
+
+  // Hard-delete a source together with all of its derived artifacts in a single
+  // transaction so an interrupted GitHub hard delete never leaves a removed
+  // source's chunks/evidence behind as orphans (and vice versa).
+  hardDeleteSource(sourceId: string): void {
+    ensureWikiCompilerSchema();
+    const db = getServerDb();
+    const trx = db.transaction((id: string) => {
+      this.deleteSourceArtifacts(id);
+      repo.deleteSource(id);
+    });
+    trx(sourceId);
   },
 
   upsertSourceChunks(
@@ -420,7 +436,6 @@ export const wikiRepo = {
     now = Date.now(),
   ): SourceChunk[] {
     ensureWikiCompilerSchema();
-    this.deleteSourceArtifacts(sourceId);
     const db = getServerDb();
     const rows: SourceChunk[] = drafts.map((draft) => ({
       ...draft,
@@ -443,6 +458,7 @@ export const wikiRepo = {
       : null;
 
     const runBatch = db.transaction((batch: SourceChunk[]) => {
+      this.deleteSourceArtifacts(sourceId);
       for (const row of batch) {
         insert.run({
           id: row.id,
@@ -549,20 +565,11 @@ export const wikiRepo = {
     fts: boolean;
   } {
     ensureWikiCompilerSchema();
-    const db = getServerDb();
 
-    const wipe = db.transaction(() => {
-      db.prepare(`DELETE FROM source_chunks`).run();
-      db.prepare(`DELETE FROM concept_evidence`).run();
-      if (hasFts()) {
-        safeRunFts(() => {
-          db.prepare(`DELETE FROM concept_fts`).run();
-          db.prepare(`DELETE FROM chunk_fts`).run();
-        });
-      }
-    });
-    wipe();
-
+    // Rebuild per source/concept so each entity transitions old→new inside its
+    // own transaction (indexSource→upsertSourceChunks and indexConcept both
+    // delete-then-insert atomically). Avoiding an upfront global wipe means an
+    // interrupted rebuild never leaves the whole index empty (no blind spot).
     const concepts = repo.listConcepts({ summariesOnly: false });
     const sources = repo.listSources({ summariesOnly: false });
     const sourceMap = new Map(sources.map((source) => [source.id, source]));
