@@ -18,6 +18,8 @@ export interface QueryRewriteInput {
   llmConfig?: LlmConfig;
   /** Override the model for the rewrite call; default is the cheap fallback. */
   rewriteModel?: string;
+  /** Optional caller cancellation signal. Propagated to the underlying LLM call. */
+  signal?: AbortSignal;
 }
 
 const MAX_HISTORY = 6;
@@ -90,6 +92,7 @@ export async function rewriteQuery(input: QueryRewriteInput): Promise<{
       model: input.rewriteModel || process.env.COMPOUND_QUERY_REWRITE_MODEL,
       task: 'query-rewrite',
       promptVersion: QUERY_REWRITE_PROMPT_VERSION,
+      signal: input.signal,
     });
     const cleaned = raw
       .trim()

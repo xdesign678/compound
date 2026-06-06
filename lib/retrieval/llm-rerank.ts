@@ -30,6 +30,8 @@ export interface RerankInput {
   topK?: number;
   llmConfig?: LlmConfig;
   rerankModel?: string;
+  /** Optional caller cancellation signal. Propagated to the underlying LLM call. */
+  signal?: AbortSignal;
 }
 
 const MAX_CANDIDATES = 30;
@@ -156,6 +158,7 @@ export async function llmRerank(input: RerankInput): Promise<{
       model: input.rerankModel || process.env.COMPOUND_RERANK_MODEL,
       task: 'rerank',
       promptVersion: RERANK_SYSTEM_PROMPT_VERSION,
+      signal: input.signal,
     });
     const parsed = parseJSON<{ scores: RerankScore[] }>(raw);
     if (!Array.isArray(parsed?.scores)) {

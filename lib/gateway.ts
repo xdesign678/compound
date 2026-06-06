@@ -196,16 +196,25 @@ function readBool(value: string | undefined, fallback: boolean): boolean {
  * Default raised from 120s → 180s (2026-04 incident: OpenRouter free-tier
  * reasoning models routinely take 60–120s on heavy ingest prompts; the old
  * 120s ceiling produced uniform timeouts on long batches).
+ *
+ * Read lazily so that tests can override via env vars without restarting the
+ * process.
  */
-const LLM_TIMEOUT_MS = readPositiveInt(process.env.COMPOUND_LLM_TIMEOUT_MS, 180_000);
-const LLM_REASONING_EXTRA_MS = readPositiveInt(process.env.COMPOUND_LLM_REASONING_EXTRA_MS, 60_000);
+function getLlmTimeoutMs(): number {
+  return readPositiveInt(process.env.COMPOUND_LLM_TIMEOUT_MS, 180_000);
+}
+function getLlmReasoningExtraMs(): number {
+  return readPositiveInt(process.env.COMPOUND_LLM_REASONING_EXTRA_MS, 60_000);
+}
 
 /**
  * Streaming idle timeout: abort the request if no SSE chunk arrives for this
  * long. Far smaller than the wall-clock cap because once tokens start flowing
  * a healthy model emits at least one chunk every few seconds.
  */
-const LLM_STREAM_IDLE_MS = readPositiveInt(process.env.COMPOUND_LLM_STREAM_IDLE_MS, 45_000);
+function getLlmStreamIdleMs(): number {
+  return readPositiveInt(process.env.COMPOUND_LLM_STREAM_IDLE_MS, 45_000);
+}
 
 /**
  * Force-on / force-off streaming for reasoning models. Default = on, because
@@ -368,6 +377,30 @@ class GatewayResponseError extends Error {
     this.name = 'GatewayResponseError';
     this.status = status;
   }
+}
+
+/**
+ * Read a Response body as text, racing against an AbortSignal.
+ *
+ * Node.js `fetch()` propagates the signal to the body stream, so in production
+ * `response.text()` will naturally reject when the signal fires. However, when
+ * the Response is constructed manually (e.g. in tests or edge-runtime shims),
+ * the signal is NOT wired up. This helper explicitly races the body read against
+ * the signal so that both real and mock fetches behave correctly.
+ */
+async function readBodyTextWithAbort(response: Response, signal: AbortSignal): Promise<string> {
+  if (signal.aborted) {
+    throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+  }
+  return Promise.race([
+    response.text(),
+    new Promise<never>((_, reject) => {
+      const onAbort = () => {
+        reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+    }),
+  ]);
 }
 
 function isTransientGatewayFailure(error: unknown): boolean {
@@ -594,11 +627,18 @@ export async function chat(opts: ChatOptions): Promise<string> {
   // Compute effective wall-clock budget. Reasoning models get extra time;
   // streaming mode also relies on per-chunk idle reset, so the total ceiling
   // is mostly a safety net.
-  const wallClockTimeout = reasoning ? LLM_TIMEOUT_MS + LLM_REASONING_EXTRA_MS : LLM_TIMEOUT_MS;
+  const wallClockTimeout = reasoning
+    ? getLlmTimeoutMs() + getLlmReasoningExtraMs()
+    : getLlmTimeoutMs();
 
   let streamedContent: string | null = null;
   let streamedFinishReason: string | null = null;
   let streamedUsage: Record<string, unknown> = {};
+  // Non-streaming body is parsed inside breaker.execute() so the wall-clock
+  // AbortController still covers the body-read phase. Previously the timer
+  // was cleared in the `finally` block before res.json() ran outside, which
+  // meant a hanging body would never time out.
+  let nonStreamParsedData: unknown = null;
 
   let res: Response;
   try {
@@ -631,11 +671,11 @@ export async function chat(opts: ChatOptions): Promise<string> {
         idleTimer = setTimeout(() => {
           controller.abort(
             new DOMException(
-              `LLM stream stalled (no chunk for ${LLM_STREAM_IDLE_MS}ms, model=${model})`,
+              `LLM stream stalled (no chunk for ${getLlmStreamIdleMs()}ms, model=${model})`,
               'TimeoutError',
             ),
           );
-        }, LLM_STREAM_IDLE_MS);
+        }, getLlmStreamIdleMs());
       };
       armIdle();
 
@@ -670,6 +710,23 @@ export async function chat(opts: ChatOptions): Promise<string> {
           streamedContent = drained.content;
           streamedFinishReason = drained.finishReason;
           streamedUsage = drained.usage;
+        } else {
+          // Read body inside breaker.execute() while the wall-clock timer is
+          // still armed, so a hanging body read gets aborted by the timer.
+          // Read as text first, then parse — this gives us the raw body for
+          // diagnostics when the upstream returns non-JSON on a 200 status.
+          // readBodyTextWithAbort races the body read against the signal so
+          // that both real fetch() and manually-constructed Responses respect
+          // the abort.
+          const textBody = await readBodyTextWithAbort(response, controller.signal);
+          try {
+            nonStreamParsedData = JSON.parse(textBody);
+          } catch {
+            throw new GatewayResponseError(
+              response.status,
+              `Non-JSON body (first 200 chars): ${textBody.slice(0, 200)}`,
+            );
+          }
         }
         return response;
       } finally {
@@ -705,7 +762,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
         requestedModel,
         consecutiveTimeouts: consecutive,
         wallClockTimeoutMs: wallClockTimeout,
-        streamIdleMs: wantStream ? LLM_STREAM_IDLE_MS : null,
+        streamIdleMs: wantStream ? getLlmStreamIdleMs() : null,
         streamMode: wantStream,
         reasoning,
       });
@@ -716,22 +773,21 @@ export async function chat(opts: ChatOptions): Promise<string> {
   let content: string | null;
   let finishReason: string | null;
   let usage: Record<string, unknown>;
-  let nonStreamData: unknown = null;
 
   if (wantStream) {
     content = streamedContent;
     finishReason = streamedFinishReason;
     usage = streamedUsage;
   } else {
-    nonStreamData = await res.json();
+    // Body was already parsed inside breaker.execute(); use the stored data.
     const choice = (
-      nonStreamData as {
+      nonStreamParsedData as {
         choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
       }
     )?.choices?.[0];
     content = choice?.message?.content ?? null;
     finishReason = choice?.finish_reason ?? null;
-    usage = ((nonStreamData as { usage?: Record<string, unknown> })?.usage ?? {}) as Record<
+    usage = ((nonStreamParsedData as { usage?: Record<string, unknown> })?.usage ?? {}) as Record<
       string,
       unknown
     >;
@@ -775,7 +831,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
   });
   const preview = wantStream
     ? `[stream] finish_reason=${finishReason ?? 'null'} content_length=${(streamedContent ?? '').length}`
-    : JSON.stringify(nonStreamData ?? {}).slice(0, 600);
+    : JSON.stringify(nonStreamParsedData ?? {}).slice(0, 600);
   throw new Error(`Unexpected gateway response shape. Body preview: ${preview}`);
 }
 

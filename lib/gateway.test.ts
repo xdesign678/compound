@@ -227,6 +227,146 @@ test('blocks private or loopback custom api urls', { concurrency: false }, async
 });
 
 test(
+  'non-streaming chat converts non-JSON 200 body into typed GatewayResponseError',
+  { concurrency: false },
+  async () => {
+    await withEnv(
+      {
+        LLM_API_KEY: 'server-key',
+        LLM_API_URL: 'https://example.com/v1/chat/completions',
+        AI_GATEWAY_API_KEY: undefined,
+        COMPOUND_SKIP_DNS_GUARD: 'true',
+      },
+      async () => {
+        const mockFetch: typeof fetch = async () =>
+          new Response('This is not JSON at all', {
+            status: 200,
+            headers: { 'content-type': 'text/plain' },
+          });
+
+        await withMockFetch(mockFetch, async () => {
+          await assert.rejects(
+            chat({ messages: [{ role: 'user', content: 'hi' }], maxTokens: 10 }),
+            (err: unknown) => {
+              assert.ok(err instanceof Error);
+              assert.equal(err.name, 'GatewayResponseError');
+              assert.match(err.message, /non-JSON body/i);
+              return true;
+            },
+          );
+        });
+      },
+    );
+  },
+);
+
+test(
+  'non-streaming chat aborts when body read hangs beyond wall-clock timeout',
+  { concurrency: false },
+  async () => {
+    await withEnv(
+      {
+        LLM_API_KEY: 'server-key',
+        LLM_API_URL: 'https://example.com/v1/chat/completions',
+        AI_GATEWAY_API_KEY: undefined,
+        COMPOUND_SKIP_DNS_GUARD: 'true',
+        // Use a very short wall-clock timeout so the test finishes quickly
+        COMPOUND_LLM_TIMEOUT_MS: '500',
+        COMPOUND_LLM_REASONING_EXTRA_MS: '0',
+      },
+      async () => {
+        // Mock fetch that returns 200 but whose body stream never completes
+        const mockFetch: typeof fetch = async () => {
+          // Create a ReadableStream that never resolves
+          const body = new ReadableStream({
+            start() {
+              // Intentionally never call controller.close() or controller.enqueue()
+              // This simulates a hanging body read
+            },
+          });
+          return new Response(body, {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        };
+
+        await withMockFetch(mockFetch, async () => {
+          const start = Date.now();
+          await assert.rejects(
+            chat({
+              messages: [{ role: 'user', content: 'hi' }],
+              maxTokens: 10,
+              // Use a non-reasoning model so wallClockTimeout = LLM_TIMEOUT_MS = 500ms
+              model: 'gpt-4o-mini',
+            }),
+            (err: unknown) => {
+              assert.ok(err instanceof Error);
+              // Should be a timeout error, not a hang
+              const text = `${err.name}|${err.message}`.toLowerCase();
+              assert.ok(
+                text.includes('timeout') || text.includes('aborted') || text.includes('exceeded'),
+                `Expected timeout/abort error, got: ${err.name}: ${err.message}`,
+              );
+              return true;
+            },
+          );
+          const elapsed = Date.now() - start;
+          // Should have timed out within a reasonable window (not hang forever)
+          assert.ok(elapsed < 5_000, `Took too long (${elapsed}ms), may be hanging`);
+        });
+      },
+    );
+  },
+);
+
+test('non-streaming chat aborts body read on caller signal', { concurrency: false }, async () => {
+  await withEnv(
+    {
+      LLM_API_KEY: 'server-key',
+      LLM_API_URL: 'https://example.com/v1/chat/completions',
+      AI_GATEWAY_API_KEY: undefined,
+      COMPOUND_SKIP_DNS_GUARD: 'true',
+      // Set a long wall-clock timeout so the caller abort fires first
+      COMPOUND_LLM_TIMEOUT_MS: '30000',
+      COMPOUND_LLM_REASONING_EXTRA_MS: '0',
+    },
+    async () => {
+      const controller = new AbortController();
+      const mockFetch: typeof fetch = async () => {
+        const body = new ReadableStream({
+          start() {
+            // Never resolves — simulates a hanging body read
+          },
+        });
+        return new Response(body, {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      };
+
+      await withMockFetch(mockFetch, async () => {
+        const promise = chat({
+          messages: [{ role: 'user', content: 'hi' }],
+          maxTokens: 10,
+          model: 'gpt-4o-mini',
+          signal: controller.signal,
+        });
+        // Abort after a short delay (before wall-clock timeout)
+        setTimeout(
+          () => controller.abort(new DOMException('client disconnected', 'AbortError')),
+          200,
+        );
+        const start = Date.now();
+        await assert.rejects(promise, /client disconnected|AbortError|aborted/);
+        const elapsed = Date.now() - start;
+        // Should abort quickly (< 2s), not wait for the 30s wall-clock timeout
+        assert.ok(elapsed < 2_000, `Abort took too long (${elapsed}ms)`);
+      });
+    },
+  );
+});
+
+test(
   'opens a circuit after repeated transient gateway failures and exposes recovery metrics',
   { concurrency: false },
   async () => {

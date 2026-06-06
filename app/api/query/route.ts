@@ -241,6 +241,8 @@ async function runRetrievalPipeline(opts: {
   requestConcepts: Concept[];
   onStage?: StageEmitter;
   stageTelemetry?: ReturnType<typeof createStageTelemetry>;
+  /** Optional caller cancellation signal (e.g. req.signal). Propagated to LLM sub-calls. */
+  signal?: AbortSignal;
 }): Promise<RetrievalResult> {
   const emit: StageEmitter = opts.onStage ?? (() => {});
   const stageTelemetry = opts.stageTelemetry ?? createStageTelemetry(() => {});
@@ -252,6 +254,7 @@ async function runRetrievalPipeline(opts: {
     question: opts.question,
     history: opts.history,
     llmConfig: opts.llmConfig,
+    signal: opts.signal,
   });
   const effectiveQuery = rewritten || opts.question;
   emit({
@@ -331,6 +334,7 @@ async function runRetrievalPipeline(opts: {
         candidates: limitedCandidates,
         topK: FINAL_TOP_K,
         llmConfig: opts.llmConfig,
+        signal: opts.signal,
       })
     : {
         ranked: limitedCandidates.slice(0, FINAL_TOP_K),
@@ -465,7 +469,23 @@ export const POST = withRequestTracing(async (req: Request) => {
       const model = llmConfig?.model || getModelForTask('query');
       const reasoning = isReasoningModel(model);
 
+      // Shared AbortController linked to the client's request signal.
+      // When the client disconnects (req.signal aborts), the controller
+      // aborts in-flight LLM/retrieval work and clears the keepalive interval.
+      const abortController = new AbortController();
+      const onClientAbort = () => {
+        const reason =
+          req.signal.reason instanceof Error
+            ? req.signal.reason
+            : new DOMException('Client disconnected', 'AbortError');
+        abortController.abort(reason);
+      };
+      if (req.signal.aborted) onClientAbort();
+      else req.signal.addEventListener('abort', onClientAbort, { once: true });
+
       const encoder = new TextEncoder();
+      let keepaliveInterval: ReturnType<typeof setInterval> | null = null;
+
       const stream = new ReadableStream({
         async start(controller) {
           function sendSSE(event: string, data: unknown) {
@@ -475,7 +495,7 @@ export const POST = withRequestTracing(async (req: Request) => {
           }
 
           // Send keepalive comments every 30s to prevent reverse proxy timeouts
-          const keepaliveInterval = setInterval(() => {
+          keepaliveInterval = setInterval(() => {
             try {
               controller.enqueue(encoder.encode(`:keepalive\n\n`));
             } catch {
@@ -492,6 +512,7 @@ export const POST = withRequestTracing(async (req: Request) => {
               llmConfig,
               requestConcepts,
               stageTelemetry,
+              signal: abortController.signal,
               onStage: (event) => {
                 sendSSE('stage', event);
               },
@@ -515,6 +536,7 @@ export const POST = withRequestTracing(async (req: Request) => {
               task: 'query',
               promptVersion: QUERY_SYSTEM_PROMPT_VERSION,
               stream: true,
+              signal: abortController.signal,
             });
 
             // chat() with stream:true returns the full concatenated content.
@@ -614,7 +636,8 @@ export const POST = withRequestTracing(async (req: Request) => {
             clearInterval(keepaliveInterval);
             controller.close();
           } catch (err) {
-            clearInterval(keepaliveInterval);
+            if (keepaliveInterval) clearInterval(keepaliveInterval);
+            req.signal.removeEventListener('abort', onClientAbort);
             logger.error('query.failed', {
               error: err instanceof Error ? err.message : String(err),
               stageDurations: stageTelemetry.snapshot(),
@@ -627,6 +650,13 @@ export const POST = withRequestTracing(async (req: Request) => {
             });
             controller.close();
           }
+        },
+        cancel() {
+          // Client disconnected — abort in-flight LLM/retrieval work and
+          // clean up the keepalive interval so resources are released promptly.
+          abortController.abort(new DOMException('Client disconnected', 'AbortError'));
+          if (keepaliveInterval) clearInterval(keepaliveInterval);
+          req.signal.removeEventListener('abort', onClientAbort);
         },
       });
 
@@ -646,6 +676,7 @@ export const POST = withRequestTracing(async (req: Request) => {
       llmConfig,
       requestConcepts,
       stageTelemetry,
+      signal: req.signal,
     });
     const { concepts, userPrompt } = buildPromptInputs(retrieval);
 
@@ -661,6 +692,7 @@ export const POST = withRequestTracing(async (req: Request) => {
       llmConfig,
       task: 'query',
       promptVersion: QUERY_SYSTEM_PROMPT_VERSION,
+      signal: req.signal,
     });
 
     const parsed = parseJSON<
