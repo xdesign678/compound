@@ -844,11 +844,11 @@ export function failJob(job: AnalysisJobRow, err: unknown): void {
   }
 }
 
-function failJobPermanently(job: AnalysisJobRow, message: string): void {
+export function failJobPermanently(job: AnalysisJobRow, message: string): boolean {
   const ts = now();
   const attempts = job.max_attempts || 1;
   const durationMs = job.started_at ? Math.max(0, ts - job.started_at) : null;
-  getServerDb()
+  const res = getServerDb()
     .prepare(
       `UPDATE analysis_jobs
        SET status = 'failed',
@@ -862,9 +862,10 @@ function failJobPermanently(job: AnalysisJobRow, message: string): void {
            dead_letter_at = ?,
            locked_at = NULL,
            locked_by = NULL
-       WHERE id = ?`,
+       WHERE id = ? AND status = 'running'`,
     )
     .run(attempts, message.slice(0, 500), ts, ts, durationMs, ts, job.id);
+  if (Number(res.changes) === 0) return false;
 
   syncObs.recordEvent({
     runId: job.run_id,
@@ -875,6 +876,7 @@ function failJobPermanently(job: AnalysisJobRow, message: string): void {
     message: message.slice(0, 180),
   });
   maybeFinalizeItemAfterStage(job);
+  return true;
 }
 
 function incrementLegacy(job: AnalysisJobRow, outcome: 'done' | 'failed'): void {
@@ -1002,7 +1004,7 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
   const rawContent = await resolveGithubIngestRawContent(payload);
   if (typeof rawContent !== 'string' || !payload.path || !payload.externalKey) {
     const message = 'GitHub 分析任务缺少文件内容，请重新同步该文件。';
-    failJobPermanently(job, message);
+    if (!failJobPermanently(job, message)) return;
     if (job.item_id) {
       syncObs.updateRunItem(job.item_id, {
         status: 'failed',

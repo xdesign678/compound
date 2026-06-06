@@ -113,6 +113,88 @@ test('failJob does not requeue a job cancelled while in-flight', async (t) => {
   assert.equal(after.dead_letter_at, null);
 });
 
+test('failJobPermanently does not dead-letter a job cancelled while in-flight', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { getServerDb, repo } = await import('./server-db');
+  const { queueAdvancedAnalysisJob, cancelAnalysisJobs, failJobPermanently } =
+    await import('./analysis-worker');
+
+  repo.insertSource({
+    id: 's-cancel-permanent',
+    title: 'Cancel/Permanent',
+    type: 'file',
+    rawContent: '# Body',
+    ingestedAt: Date.now(),
+  });
+  const jobId = queueAdvancedAnalysisJob({
+    runId: 'run-cancel-permanent',
+    itemId: 'item-cancel-permanent',
+    sourceId: 's-cancel-permanent',
+    stage: 'github_ingest',
+  });
+
+  const db = getServerDb();
+  const ts = Date.now();
+  db.prepare(
+    `UPDATE analysis_jobs SET status = 'running', started_at = ?, locked_at = ?, locked_by = 'w-test' WHERE id = ?`,
+  ).run(ts, ts, jobId);
+  const job = db.prepare(`SELECT * FROM analysis_jobs WHERE id = ?`).get(jobId) as Parameters<
+    typeof failJobPermanently
+  >[0];
+
+  cancelAnalysisJobs({ runId: 'run-cancel-permanent' });
+
+  failJobPermanently(job, 'GitHub 分析任务缺少文件内容，请重新同步该文件。');
+
+  const after = db
+    .prepare(`SELECT status, dead_letter_at, error_category FROM analysis_jobs WHERE id = ?`)
+    .get(jobId) as { status: string; dead_letter_at: number | null; error_category: string | null };
+  assert.equal(after.status, 'cancelled');
+  assert.equal(after.dead_letter_at, null);
+});
+
+test('failJobPermanently dead-letters a genuinely running job', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { getServerDb, repo } = await import('./server-db');
+  const { queueAdvancedAnalysisJob, failJobPermanently } = await import('./analysis-worker');
+
+  repo.insertSource({
+    id: 's-running-permanent',
+    title: 'Running/Permanent',
+    type: 'file',
+    rawContent: '# Body',
+    ingestedAt: Date.now(),
+  });
+  const jobId = queueAdvancedAnalysisJob({
+    runId: 'run-running-permanent',
+    itemId: 'item-running-permanent',
+    sourceId: 's-running-permanent',
+    stage: 'github_ingest',
+  });
+
+  const db = getServerDb();
+  const ts = Date.now();
+  db.prepare(
+    `UPDATE analysis_jobs SET status = 'running', started_at = ?, locked_at = ?, locked_by = 'w-test' WHERE id = ?`,
+  ).run(ts, ts, jobId);
+  const job = db.prepare(`SELECT * FROM analysis_jobs WHERE id = ?`).get(jobId) as Parameters<
+    typeof failJobPermanently
+  >[0];
+
+  failJobPermanently(job, 'GitHub 分析任务缺少文件内容，请重新同步该文件。');
+
+  const after = db
+    .prepare(`SELECT status, dead_letter_at, error_category FROM analysis_jobs WHERE id = ?`)
+    .get(jobId) as { status: string; dead_letter_at: number | null; error_category: string | null };
+  assert.equal(after.status, 'failed');
+  assert.ok(after.dead_letter_at, 'dead_letter_at should be set');
+  assert.equal(after.error_category, 'permanent');
+});
+
 test('recoverStaleAnalysisJobs dead-letters a stale running job at the attempt ceiling', async (t) => {
   const env = setupTempDb();
   t.after(env.cleanup);
