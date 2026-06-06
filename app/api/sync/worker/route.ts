@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import { requireAdmin } from '@/lib/server-auth';
 import { startAnalysisWorker } from '@/lib/analysis-worker';
 
@@ -25,8 +26,8 @@ export async function POST(req: Request) {
         (info.recovered > 0 ? `已回收孤儿任务 ${info.recovered} 个。` : '');
     return NextResponse.json({ ...info, message });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const requestId = req.headers.get('x-request-id') ?? undefined;
+    return NextResponse.json(apiError(err, requestId, 'sync.worker.failed'), { status: 500 });
   }
 }
 

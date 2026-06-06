@@ -173,7 +173,7 @@ test('withRequestTracing wraps successful handlers with trace headers', async ()
   assert.equal(body.requestId, 'caller-req-id');
 });
 
-test('withRequestTracing converts thrown errors into 500 with trace metadata', async () => {
+test('withRequestTracing converts thrown errors into 500 with generic message + trace metadata', async () => {
   const handler = withRequestTracing(async () => {
     throw new Error('boom');
   });
@@ -183,6 +183,7 @@ test('withRequestTracing converts thrown errors into 500 with trace metadata', a
   const requestId = res.headers.get(REQUEST_ID_HEADER);
   assert.ok(requestId);
   const body = (await res.json()) as { error: string; requestId: string };
-  assert.equal(body.error, 'boom');
+  // Error message must be generic — never leak internal details
+  assert.equal(body.error, 'Internal server error');
   assert.equal(body.requestId, requestId);
 });

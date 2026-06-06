@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import {
   enforceContentLength,
   isRequestBodyTooLargeError,
@@ -180,6 +181,7 @@ export async function POST(req: Request) {
     if (isRequestBodyTooLargeError(err)) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
-    return NextResponse.json({ error: 'Import failed' }, { status: 500 });
+    const requestId = req.headers.get('x-request-id') ?? undefined;
+    return NextResponse.json(apiError(err, requestId, 'wiki.import_failed'), { status: 500 });
   }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength } from '@/lib/request-guards';
@@ -31,9 +32,7 @@ export async function POST(req: Request) {
     startRepairWorker(runId);
     return NextResponse.json({ runId, total, dropped, ok: true });
   } catch (err) {
-    logger.error('repair.run_start_failed', {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return NextResponse.json({ error: 'Failed to start repair run' }, { status: 500 });
+    const requestId = req.headers.get('x-request-id') ?? undefined;
+    return NextResponse.json(apiError(err, requestId, 'repair.run_start_failed'), { status: 500 });
   }
 }

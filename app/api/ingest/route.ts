@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import { ingestSourceToServerDb } from '@/lib/server-ingest';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
@@ -110,13 +111,8 @@ export const POST = withRequestTracing(async (req: Request) => {
     if (isRequestBodyTooLargeError(err)) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
-    logger.error('ingest.failed', { error: err instanceof Error ? err.message : String(err) });
-    return NextResponse.json(
-      {
-        error: 'Ingest processing failed. Please check your API configuration.',
-        requestId: getRequestContext()?.requestId,
-      },
-      { status: 500 },
-    );
+    return NextResponse.json(apiError(err, getRequestContext()?.requestId, 'ingest.failed'), {
+      status: 500,
+    });
   }
 });

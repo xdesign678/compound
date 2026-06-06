@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import { logger } from '@/lib/logging';
 import { requireAdmin } from '@/lib/server-auth';
 import { wikiRepo } from '@/lib/wiki-db';
@@ -24,8 +25,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       versions: wikiRepo.getConceptVersions(id),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error('data.concept_versions_failed', { error: message });
-    return NextResponse.json({ error: message }, { status: 500 });
+    const requestId = req.headers.get('x-request-id') ?? undefined;
+    return NextResponse.json(apiError(error, requestId, 'data.concept_versions_failed'), {
+      status: 500,
+    });
   }
 }

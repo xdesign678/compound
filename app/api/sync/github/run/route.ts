@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { startGithubSync } from '@/lib/github-sync-runner';
+import { apiError } from '@/lib/api-error';
 import { requireAdmin } from '@/lib/server-auth';
 import { syncRateLimit } from '@/lib/rate-limit';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
@@ -37,10 +38,8 @@ export const POST = withRequestTracing(async (req: Request) => {
         : '已启动新的同步任务。',
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('sync.github.run.failed', { error: message });
     return NextResponse.json(
-      { error: message, requestId: getRequestContext()?.requestId },
+      apiError(err, getRequestContext()?.requestId, 'sync.github.run.failed'),
       { status: 500 },
     );
   }

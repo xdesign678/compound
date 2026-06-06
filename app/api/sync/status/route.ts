@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSyncJobStatus } from '@/lib/github-sync-runner';
+import { apiError } from '@/lib/api-error';
 import { requireAdmin } from '@/lib/server-auth';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
-import { logger } from '@/lib/server-logger';
 
 export const runtime = 'nodejs';
 export const maxDuration = 10;
@@ -27,11 +27,8 @@ export const GET = withRequestTracing(async (req: Request) => {
     }
     return NextResponse.json(status);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('sync.status.failed', { error: message });
-    return NextResponse.json(
-      { error: message, requestId: getRequestContext()?.requestId },
-      { status: 500 },
-    );
+    return NextResponse.json(apiError(err, getRequestContext()?.requestId, 'sync.status.failed'), {
+      status: 500,
+    });
   }
 });

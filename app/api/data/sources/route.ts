@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import { escapeHTML } from '@/lib/format';
 import { logger } from '@/lib/logging';
 import {
@@ -61,9 +62,8 @@ export async function GET(req: Request) {
       sources: repo.getSourcesByIds(ids),
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('data.sources_failed', { error: message });
-    return NextResponse.json({ error: message }, { status: 500 });
+    const requestId = req.headers.get('x-request-id') ?? undefined;
+    return NextResponse.json(apiError(err, requestId, 'data.sources_failed'), { status: 500 });
   }
 }
 
@@ -177,8 +177,9 @@ export async function PATCH(req: Request) {
     if (isRequestBodyTooLargeError(err)) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('data.sources_patch_failed', { error: message });
-    return NextResponse.json({ error: message }, { status: 500 });
+    const requestId = req.headers.get('x-request-id') ?? undefined;
+    return NextResponse.json(apiError(err, requestId, 'data.sources_patch_failed'), {
+      status: 500,
+    });
   }
 }

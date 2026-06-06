@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import { normalizeCategoryKeys, normalizeCategoryState } from '@/lib/category-normalization';
 import { chat, parseJSON } from '@/lib/gateway';
 import { CATEGORIZE_SYSTEM_PROMPT, CATEGORIZE_SYSTEM_PROMPT_VERSION } from '@/lib/prompts';
@@ -133,10 +134,8 @@ ${categoryList}
     if (isRequestBodyTooLargeError(err)) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
-    logger.error('categorize.failed', { error: err instanceof Error ? err.message : String(err) });
-    return NextResponse.json(
-      { error: 'Categorize failed. Check API config.', requestId: getRequestContext()?.requestId },
-      { status: 500 },
-    );
+    return NextResponse.json(apiError(err, getRequestContext()?.requestId, 'categorize.failed'), {
+      status: 500,
+    });
   }
 });

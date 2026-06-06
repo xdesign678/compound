@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { listMarkdownFiles, getGithubConfig } from '@/lib/github-sync';
+import { apiError } from '@/lib/api-error';
 import { logger } from '@/lib/logging';
 import { requireAdmin } from '@/lib/server-auth';
 import { syncRateLimit } from '@/lib/rate-limit';
@@ -26,9 +27,7 @@ export async function GET(req: Request) {
       files,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('sync.github_list_failed', { error: message });
-    const status = /not set|Invalid GITHUB_REPO/i.test(message) ? 500 : 502;
-    return NextResponse.json({ error: message }, { status });
+    const requestId = req.headers.get('x-request-id') ?? undefined;
+    return NextResponse.json(apiError(err, requestId, 'sync.github_list_failed'), { status: 500 });
   }
 }

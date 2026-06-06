@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import { isRequestBodyTooLargeError, readTextWithLimit } from '@/lib/request-guards';
 import { startGithubSyncFromWebhook } from '@/lib/github-sync-runner';
 import { safeEqual } from '@/lib/server-auth';
@@ -67,7 +68,9 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ jobId, existing: !!existing });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const requestId = req.headers.get('x-request-id') ?? undefined;
+    return NextResponse.json(apiError(err, requestId, 'sync.github.webhook.failed'), {
+      status: 500,
+    });
   }
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { logger } from '@/lib/logging';
+import { apiError } from '@/lib/api-error';
 import { requireAdmin } from '@/lib/server-auth';
 import { wikiRepo } from '@/lib/wiki-db';
 import {
@@ -41,9 +41,9 @@ export const POST = withRequestTracing(async (req: Request) => {
     if (isRequestBodyTooLargeError(error)) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    logger.error('wiki.search_failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return NextResponse.json({ error: 'Wiki search failed' }, { status: 500 });
+    return NextResponse.json(
+      apiError(error, getRequestContext()?.requestId, 'wiki.search_failed'),
+      { status: 500 },
+    );
   }
 });

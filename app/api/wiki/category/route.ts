@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import { requireAdmin } from '@/lib/server-auth';
 import {
   getCategoryWiki,
@@ -6,7 +7,6 @@ import {
   startCategoryWikiWorker,
   getCategoryWikiRunStart,
 } from '@/lib/category-wiki-worker';
-import { logger } from '@/lib/logging';
 import {
   enforceContentLength,
   isRequestBodyTooLargeError,
@@ -42,10 +42,10 @@ export async function GET(req: Request) {
     const wiki = getCategoryWiki(primary, secondary);
     return NextResponse.json(wiki);
   } catch (error) {
-    logger.error('wiki.category_get_failed', {
-      error: error instanceof Error ? error.message : String(error),
+    const requestId = req.headers.get('x-request-id') ?? undefined;
+    return NextResponse.json(apiError(error, requestId, 'wiki.category_get_failed'), {
+      status: 500,
     });
-    return NextResponse.json({ error: 'Failed to get category wiki' }, { status: 500 });
   }
 }
 
@@ -76,9 +76,9 @@ export async function POST(req: Request) {
     if (isRequestBodyTooLargeError(error)) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    logger.error('wiki.category_post_failed', {
-      error: error instanceof Error ? error.message : String(error),
+    const requestId = req.headers.get('x-request-id') ?? undefined;
+    return NextResponse.json(apiError(error, requestId, 'wiki.category_post_failed'), {
+      status: 500,
     });
-    return NextResponse.json({ error: 'Failed to create category wiki run' }, { status: 500 });
   }
 }

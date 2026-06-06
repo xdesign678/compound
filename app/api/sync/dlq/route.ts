@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import { deleteAnalysisJob, retryAnalysisJobs, startAnalysisWorker } from '@/lib/analysis-worker';
 import { requireAdmin } from '@/lib/server-auth';
 import { syncObs } from '@/lib/sync-observability';
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
       message: retried > 0 ? '已把死信任务重新加入队列。' : '没有找到可重试的死信任务。',
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const requestId = req.headers.get('x-request-id') ?? undefined;
+    return NextResponse.json(apiError(err, requestId, 'sync.dlq.failed'), { status: 500 });
   }
 }

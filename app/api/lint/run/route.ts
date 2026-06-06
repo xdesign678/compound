@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import { enforceContentLength, readLlmConfigOverride } from '@/lib/request-guards';
 import { createLintRun, startLintWorker } from '@/lib/lint-worker';
-import { logger } from '@/lib/logging';
 import type { LlmConfig } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -34,9 +34,7 @@ export async function POST(req: Request) {
     startLintWorker(runId, llmConfig);
     return NextResponse.json({ runId, ok: true });
   } catch (err) {
-    logger.error('lint.run_start_failed', {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return NextResponse.json({ error: 'Failed to start lint run' }, { status: 500 });
+    const requestId = req.headers.get('x-request-id') ?? undefined;
+    return NextResponse.json(apiError(err, requestId, 'lint.run_start_failed'), { status: 500 });
   }
 }

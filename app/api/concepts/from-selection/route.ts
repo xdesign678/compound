@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import {
@@ -59,10 +60,7 @@ export const POST = withRequestTracing(async (req: Request) => {
       error: err instanceof Error ? err.message : String(err),
     });
     return NextResponse.json(
-      {
-        error: '选段建页启动失败，请检查 API 配置或稍后重试。',
-        requestId: getRequestContext()?.requestId,
-      },
+      apiError(err, getRequestContext()?.requestId, 'selection_wiki.run_start_failed'),
       { status: 500 },
     );
   }

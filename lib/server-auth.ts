@@ -109,5 +109,6 @@ export function requireAdmin(req: Request): NextResponse | null {
 
   if (isAuthorizedRequest(req)) return null;
 
-  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const requestId = req.headers.get('x-request-id') ?? undefined;
+  return NextResponse.json({ error: 'Unauthorized', requestId }, { status: 401 });
 }

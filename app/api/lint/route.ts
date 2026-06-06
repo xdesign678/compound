@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import { analyzeLintConcepts } from '@/lib/lint-worker';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
@@ -60,13 +61,8 @@ export const POST = withRequestTracing(async (req: Request) => {
     if (isRequestBodyTooLargeError(err)) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
-    logger.error('lint.failed', { error: err instanceof Error ? err.message : String(err) });
-    return NextResponse.json(
-      {
-        error: 'Lint processing failed. Please check your API configuration.',
-        requestId: getRequestContext()?.requestId,
-      },
-      { status: 500 },
-    );
+    return NextResponse.json(apiError(err, getRequestContext()?.requestId, 'lint.failed'), {
+      status: 500,
+    });
   }
 });

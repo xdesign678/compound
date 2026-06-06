@@ -12,10 +12,12 @@ test('classifyQueryError groups malformed synthesis JSON as parse', () => {
   assert.equal(classifyQueryError(new Error('Unexpected gateway response shape')), 'parse');
 });
 
-test('publicQueryErrorMessage redacts bearer-like secrets from explainable errors', () => {
+test('publicQueryErrorMessage returns generic message — never leaks internals', () => {
   const message = publicQueryErrorMessage(
     new Error('Gateway 500: Authorization Bearer secret-token-value-123456 failed'),
   );
-  assert.match(message, /Bearer \[redacted\]/);
+  assert.equal(message, 'Internal server error');
+  assert.doesNotMatch(message, /Bearer/);
   assert.doesNotMatch(message, /secret-token-value/);
+  assert.doesNotMatch(message, /Gateway/);
 });

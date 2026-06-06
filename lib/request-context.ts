@@ -19,6 +19,7 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { apiError } from './api-error';
 import { observeHttpRequest } from './observability/prometheus';
 import {
   createQueryScope,
@@ -218,11 +219,11 @@ export function withRequestTracing<Args extends unknown[], R extends Response>(
         applyTraceResponseHeaders(response.headers, ctx);
         return response;
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        const fallback = new Response(
-          JSON.stringify({ error: message, requestId: ctx.requestId }),
-          { status: 500, headers: { 'content-type': 'application/json' } },
-        );
+        const body = apiError(err, ctx.requestId, 'api.unhandled_error');
+        const fallback = new Response(JSON.stringify(body), {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        });
         status = fallback.status;
         applyTraceResponseHeaders(fallback.headers, ctx);
         return fallback;

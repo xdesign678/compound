@@ -616,7 +616,7 @@ export const POST = withRequestTracing(async (req: Request) => {
           } catch (err) {
             clearInterval(keepaliveInterval);
             logger.error('query.failed', {
-              error: publicQueryErrorMessage(err),
+              error: err instanceof Error ? err.message : String(err),
               stageDurations: stageTelemetry.snapshot(),
             });
             sendSSE('error', {
@@ -731,7 +731,10 @@ export const POST = withRequestTracing(async (req: Request) => {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
     const error = publicQueryErrorMessage(err);
-    logger.error('query.failed', { error, stageDurations: stageTelemetry.snapshot() });
+    logger.error('query.failed', {
+      error: err instanceof Error ? err.message : String(err),
+      stageDurations: stageTelemetry.snapshot(),
+    });
     return NextResponse.json(
       {
         error,

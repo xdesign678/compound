@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import { logger } from '@/lib/logging';
 import { repo } from '@/lib/server-db';
 import { requireAdmin } from '@/lib/server-auth';
@@ -45,8 +46,7 @@ export async function GET(req: Request) {
       concepts: repo.getConceptsByIds(ids),
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('data.concepts_failed', { error: message });
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    const requestId = req.headers.get('x-request-id') ?? undefined;
+    return NextResponse.json(apiError(err, requestId, 'data.concepts_failed'), { status: 500 });
   }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { apiError } from '@/lib/api-error';
 import { requireAdmin } from '@/lib/server-auth';
 import { syncObs } from '@/lib/sync-observability';
 import { getEmbeddingMetrics } from '@/lib/embedding';
@@ -6,7 +7,6 @@ import { getReviewMetrics } from '@/lib/review-queue';
 import { startAnalysisWorker } from '@/lib/analysis-worker';
 import { deriveStory } from '@/lib/sync-narrative';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
-import { logger } from '@/lib/server-logger';
 
 export const runtime = 'nodejs';
 export const maxDuration = 10;
@@ -38,10 +38,8 @@ export const GET = withRequestTracing(async (req: Request) => {
     const story = deriveStory(merged);
     return NextResponse.json({ ...merged, story });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('sync.dashboard.failed', { error: message });
     return NextResponse.json(
-      { error: message, requestId: getRequestContext()?.requestId },
+      apiError(err, getRequestContext()?.requestId, 'sync.dashboard.failed'),
       { status: 500 },
     );
   }

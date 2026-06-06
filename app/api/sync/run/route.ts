@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { startGithubSync } from '@/lib/github-sync-runner';
 import { retryAnalysisJobs, startAnalysisWorker } from '@/lib/analysis-worker';
+import { apiError } from '@/lib/api-error';
 import { requireAdmin } from '@/lib/server-auth';
 import { syncRateLimit } from '@/lib/rate-limit';
 import { syncObs } from '@/lib/sync-observability';
@@ -85,11 +86,8 @@ export const POST = withRequestTracing(async (req: Request) => {
       message: messageParts.join(' · '),
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error('sync.run.failed', { error: message });
-    return NextResponse.json(
-      { error: message, requestId: getRequestContext()?.requestId },
-      { status: 500 },
-    );
+    return NextResponse.json(apiError(err, getRequestContext()?.requestId, 'sync.run.failed'), {
+      status: 500,
+    });
   }
 });
