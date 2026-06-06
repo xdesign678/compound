@@ -9,6 +9,13 @@ import { useAppStore, friendlyErrorMessage } from '@/lib/store';
 import { askWikiStream, archiveAnswerAsConcept } from '@/lib/api-client';
 import { pickStableConceptTitles } from '@/lib/ask-suggestions';
 import {
+  createThrottleState,
+  appendAndCheckFlush,
+  forceFlush,
+  resetThrottleState,
+  type StreamingThrottleState,
+} from '@/lib/streaming-render';
+import {
   fetchModelSettings,
   getLlmConfig,
   modelLabel,
@@ -187,6 +194,8 @@ export function useAskState() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const pickerSearchRef = useRef<HTMLInputElement>(null);
+  const throttleRef = useRef<StreamingThrottleState>(createThrottleState());
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const history = useLiveQuery(async () => getDb().askHistory.orderBy('at').toArray(), []);
   const conceptCount = useLiveQuery(async () => getDb().concepts.count(), []);
@@ -393,6 +402,7 @@ export function useAskState() {
       setLoading(true);
       setStreamingText('');
       setLiveStages([]);
+      resetThrottleState(throttleRef.current);
 
       // Mutable buffer of stages observed during this request. We collect
       // here (instead of relying on `liveStages` state) so we can persist
@@ -429,15 +439,40 @@ export function useAskState() {
         setLiveStages([...stageBuffer]);
       }
 
+      /** Flush the accumulated throttle text to React state for rendering. */
+      function flushStreamingText() {
+        setStreamingText(throttleRef.current.text);
+      }
+
       try {
         const resp = await askWikiStream(
           finalText,
           [...recentHistory, { role: 'user', text: finalText }],
           (delta) => {
-            setStreamingText((prev) => prev + delta);
+            // Throttled accumulation: only flush to React state when the
+            // throttle policy says so, instead of every single token.
+            const shouldFlush = appendAndCheckFlush(throttleRef.current, delta, Date.now());
+            if (shouldFlush) {
+              flushStreamingText();
+            } else if (!flushTimerRef.current) {
+              // Schedule a fallback flush so text doesn't stay stale for
+              // too long when deltas arrive just under the interval threshold.
+              flushTimerRef.current = setTimeout(() => {
+                flushTimerRef.current = null;
+                flushStreamingText();
+              }, 60);
+            }
           },
           { onStage: applyStage },
         );
+
+        // Final flush: ensure all remaining buffered text is rendered
+        // with full quality (complete markdown parse of the entire text).
+        if (flushTimerRef.current) {
+          clearTimeout(flushTimerRef.current);
+          flushTimerRef.current = null;
+        }
+        flushStreamingText();
 
         const aiMsg: AskMessage = {
           id: 'm-' + nanoid(8),
@@ -467,6 +502,11 @@ export function useAskState() {
         setLoading(false);
         setStreamingText('');
         setLiveStages([]);
+        resetThrottleState(throttleRef.current);
+        if (flushTimerRef.current) {
+          clearTimeout(flushTimerRef.current);
+          flushTimerRef.current = null;
+        }
         requestAnimationFrame(() => textareaRef.current?.focus());
       }
     },

@@ -1,7 +1,6 @@
 'use client';
 
 import { memo, useEffect, useRef, useMemo } from 'react';
-import DOMPurify from 'dompurify';
 import { renderMarkdown } from '@/lib/format';
 import { useAppStore } from '@/lib/store';
 import { getDb } from '@/lib/db';
@@ -51,7 +50,9 @@ function ProseComponent({
 
   const html = useMemo(() => {
     if (!markdown) return '';
-    return DOMPurify.sanitize(renderMarkdown(markdown));
+    // renderMarkdown already applies DOMPurify.sanitize with a strict
+    // allowlist in browser context — no double-sanitize needed.
+    return renderMarkdown(markdown);
   }, [markdown]);
 
   useEffect(() => {
