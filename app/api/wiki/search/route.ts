@@ -35,6 +35,9 @@ export const POST = withRequestTracing(async (req: Request) => {
     }
 
     // Validate and clamp numeric limits (VAL-API-013 / VAL-API-014)
+    let conceptLimit = DEFAULT_CONCEPT_LIMIT;
+    let chunkLimit = DEFAULT_CHUNK_LIMIT;
+
     if (body.conceptLimit !== undefined && body.conceptLimit !== null) {
       const clamped = clampLimit(body.conceptLimit, MAX_CONCEPT_LIMIT);
       if (clamped === undefined) {
@@ -43,7 +46,7 @@ export const POST = withRequestTracing(async (req: Request) => {
           { status: 400 },
         );
       }
-      body.conceptLimit = clamped;
+      conceptLimit = clamped;
     }
     if (body.chunkLimit !== undefined && body.chunkLimit !== null) {
       const clamped = clampLimit(body.chunkLimit, MAX_CHUNK_LIMIT);
@@ -53,13 +56,10 @@ export const POST = withRequestTracing(async (req: Request) => {
           { status: 400 },
         );
       }
-      body.chunkLimit = clamped;
+      chunkLimit = clamped;
     }
 
-    const context = wikiRepo.searchWikiContext(query, {
-      conceptLimit: body.conceptLimit ?? DEFAULT_CONCEPT_LIMIT,
-      chunkLimit: body.chunkLimit ?? DEFAULT_CHUNK_LIMIT,
-    });
+    const context = wikiRepo.searchWikiContext(query, { conceptLimit, chunkLimit });
 
     return NextResponse.json(context);
   } catch (error) {

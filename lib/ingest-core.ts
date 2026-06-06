@@ -159,14 +159,8 @@ ${categoryList}
     return true;
   });
 
-  // Filter relatedConceptIds in new concepts
-  for (const c of parsed.newConcepts) {
-    c.relatedConceptIds = (c.relatedConceptIds || []).filter((id) => existingIds.has(id));
-    c.categories = normalizeCategoryState({ categories: c.categories || [] }).categories;
-  }
-
   // Guard against malformed LLM fields — skip concepts with non-string title/summary/body
-  // rather than crashing on .trim() (typeof guard + structured log per malformed concept).
+  // BEFORE accessing relatedConceptIds / categories to avoid TypeError on non-array fields.
   parsed.newConcepts = parsed.newConcepts.filter((c) => {
     if (typeof c.title !== 'string' || typeof c.summary !== 'string') {
       logger.warn('ingest.llm_malformed_concept_skipped', {
@@ -185,6 +179,12 @@ ${categoryList}
     }
     return true;
   });
+
+  // Filter relatedConceptIds in new concepts (only reached for well-typed concepts)
+  for (const c of parsed.newConcepts) {
+    c.relatedConceptIds = (c.relatedConceptIds || []).filter((id) => existingIds.has(id));
+    c.categories = normalizeCategoryState({ categories: c.categories || [] }).categories;
+  }
 
   return parsed;
 }

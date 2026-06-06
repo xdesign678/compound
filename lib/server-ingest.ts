@@ -99,6 +99,9 @@ export async function ingestSourceToServerDb(
   });
 
   // 4. Compose new concepts (with typeof guards for LLM-returned fields)
+  // Defense-in-depth: ingest-core.ts already filters malformed concepts, but
+  // this secondary guard ensures safety even if runIngestLLM is called from
+  // a code path that bypasses the ingest-core filter.
   const newConceptIds: string[] = [];
   const newConcepts: Concept[] = resp.newConcepts
     .filter((nc) => typeof nc.title === 'string' && typeof nc.summary === 'string')

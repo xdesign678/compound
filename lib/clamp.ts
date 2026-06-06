@@ -42,11 +42,14 @@ export function parsePositiveInt(value: unknown, max: number): number | undefine
 }
 
 /**
- * Convenience wrapper: parse a query/body value and **clamp** it to `[1, max]`.
- * Returns the clamped integer, or `undefined` if the input is malformed.
+ * Convenience alias for `parsePositiveInt`. The name emphasises the *clamping*
+ * semantics (large but valid integers are silently clamped, only truly
+ * non-numeric / non-integer / non-positive inputs are rejected as `undefined`).
  *
- * Use this when the caller wants to accept out-of-range but valid integers
- * (e.g. `conceptLimit: 999999 → 100`) while still rejecting non-numeric input.
+ * Prefer `clampLimit` at call-sites where the caller responds with 400 for
+ * malformed input and clamps out-of-range input (e.g. API query params).
+ * Prefer `parsePositiveInt` at call-sites where the "parse" semantics are
+ * clearer (e.g. internal logic that just needs a safe integer).
  */
 export function clampLimit(value: unknown, max: number): number | undefined {
   return parsePositiveInt(value, max);
