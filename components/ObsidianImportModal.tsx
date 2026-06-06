@@ -1,5 +1,6 @@
 'use client';
 
+import '@/app/modals.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { useModalKeyboard } from '@/lib/hooks/useModalKeyboard';

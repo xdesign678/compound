@@ -1,5 +1,6 @@
 'use client';
 
+import '@/app/modals.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { Icon } from './Icons';

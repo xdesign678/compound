@@ -1,3 +1,4 @@
+import '../sync/ops-sync.css';
 import ReviewQueue from '@/components/ReviewQueue';
 
 export const metadata = {

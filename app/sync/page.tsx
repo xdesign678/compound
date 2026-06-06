@@ -1,3 +1,4 @@
+import './ops-sync.css';
 import SyncDashboard from '@/components/SyncDashboard';
 
 export const metadata = {

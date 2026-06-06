@@ -1,3 +1,4 @@
+import './recap.css';
 import { RecapView } from '@/components/views/RecapView';
 
 export const metadata = {

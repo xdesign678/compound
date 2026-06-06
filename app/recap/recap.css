@@ -1,0 +1,419 @@
+/* === Recap styles (extracted from globals.css) === */
+
+/* ─── Recap (Today's Review) ─────────────────────────────────── */
+
+/* Entry list — wraps the recap card so it shares horizontal padding with concept cards */
+.recap-entry-list {
+  margin-top: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.recap-entry-list-library {
+  padding: 0 16px;
+  margin-bottom: var(--space-md);
+}
+
+/* Entry card — reuses .concept-card visual; this only adds icon + arrow tweaks */
+.recap-entry-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+}
+.recap-entry-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.recap-entry-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  font-weight: 650;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.recap-entry-title svg {
+  width: 14px;
+  height: 14px;
+  color: var(--brand-clay);
+  flex-shrink: 0;
+}
+.recap-entry-count {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.recap-entry-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: var(--text-tertiary);
+}
+.recap-entry-action svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Recap page root — exact viewport fit, no body scroll */
+.recap-root {
+  --recap-card-height: min(760px, calc(100dvh - 96px - var(--safe-bottom)));
+
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+/* Header — fixed, non-scrollable */
+.recap-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-section);
+  background: var(--bg-primary);
+  flex-shrink: 0;
+}
+.recap-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--motion-duration-fast) var(--motion-ease-standard);
+}
+.recap-back-btn:hover {
+  background: var(--bg-hover);
+}
+.recap-back-btn svg {
+  width: 20px;
+  height: 20px;
+}
+.recap-header-title {
+  flex: 1;
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.recap-header-progress {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Card stack area — fills remaining viewport space, centered */
+.recap-stack-area {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 14px calc(10px + var(--safe-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.recap-stack {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+}
+
+/* Card sizing — fills almost all viewport below header with small padding */
+.recap-card-ghost-1,
+.recap-card-ghost-2,
+.recap-card-top {
+  height: var(--recap-card-height);
+}
+
+/* Ghost / behind cards — peek out laterally so the deck reads as a stack */
+.recap-card-ghost-1,
+.recap-card-ghost-2 {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border-radius: 14px;
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+}
+.recap-card-ghost-1 {
+  z-index: 1;
+  transform: translateX(10px) translateY(8px) rotate(1.5deg);
+  opacity: 0.5;
+}
+.recap-card-ghost-2 {
+  z-index: 0;
+  transform: translateX(-4px) translateY(16px) rotate(-0.5deg);
+  opacity: 0.25;
+}
+
+/* Top / active card — shorter, content scrolls inside */
+.recap-card-top {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  background: var(--bg-card);
+  border-radius: 14px;
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-md);
+  cursor: grab;
+  touch-action: pan-y;
+  will-change: transform;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.recap-card-top:active {
+  cursor: grabbing;
+}
+
+/* Inner container — keeps actions visible while the body scrolls. */
+.recap-card-scroll {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px 18px 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Card content */
+.recap-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.recap-card-tag {
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  padding: 3px 9px;
+  background: var(--brand-clay-soft);
+  color: var(--brand-clay);
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+}
+.recap-card-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: var(--leading-tight);
+  margin: 0 0 4px;
+  letter-spacing: -0.02em;
+  flex-shrink: 0;
+}
+/* Body shell — wraps the verbatim ConceptDetail prose, separated from the title */
+.recap-card-body-shell {
+  padding-top: 10px;
+  padding-right: 2px;
+  margin-top: var(--space-2xs);
+  border-top: 1px solid var(--border-section);
+  margin-bottom: var(--space-sm);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  /* Slim, low-contrast scrollbar so it stays out of the way of the prose */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(60, 50, 40, 0.18) transparent;
+}
+.recap-card-body-shell::-webkit-scrollbar {
+  width: 4px;
+}
+.recap-card-body-shell::-webkit-scrollbar-track {
+  background: transparent;
+}
+.recap-card-body-shell::-webkit-scrollbar-thumb {
+  background: rgba(60, 50, 40, 0.18);
+  border-radius: var(--radius-full);
+  transition: background var(--motion-duration-fast) var(--motion-ease-standard);
+}
+.recap-card-body-shell:hover::-webkit-scrollbar-thumb {
+  background: rgba(60, 50, 40, 0.3);
+}
+.recap-card-body-shell .concept-body-prose > *:last-child {
+  margin-bottom: 0;
+}
+.recap-card-empty {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+/* Footer inside card */
+.recap-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border-section);
+  flex-shrink: 0;
+}
+.recap-card-read-more {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--brand-clay);
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  cursor: pointer;
+  transition: opacity var(--motion-duration-fast) var(--motion-ease-standard);
+}
+.recap-card-read-more:hover {
+  opacity: 0.75;
+}
+.recap-card-read-more svg {
+  width: 14px;
+  height: 14px;
+}
+.recap-card-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+.recap-card-meta svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* "深入阅读" side drawer on web — reuses .library-detail-overlay base, just retunes the size */
+.recap-peek-modal {
+  width: min(64vw, 960px);
+  max-width: calc(100vw - 24px);
+}
+.recap-peek-modal .library-detail-modal-scroll > .concept-detail {
+  padding-left: clamp(24px, 3vw, 40px);
+  padding-right: clamp(24px, 3vw, 40px);
+}
+
+/* ---- Web / tablet — give the card more breathing room ---- */
+@media (min-width: 768px) {
+  .recap-root {
+    --recap-card-height: min(820px, calc(100dvh - 112px - var(--safe-bottom)));
+  }
+  .recap-stack-area {
+    padding: 24px 28px calc(24px + var(--safe-bottom));
+  }
+  .recap-stack {
+    max-width: 720px;
+  }
+  .recap-card-ghost-1,
+  .recap-card-ghost-2,
+  .recap-card-top {
+    border-radius: 18px;
+  }
+  .recap-card-ghost-1 {
+    transform: translateX(14px) translateY(12px) rotate(1.2deg);
+  }
+  .recap-card-ghost-2 {
+    transform: translateX(-6px) translateY(22px) rotate(-0.6deg);
+  }
+  .recap-card-scroll {
+    padding: 36px 44px 24px;
+  }
+  .recap-card-tags {
+    gap: var(--space-sm);
+    margin-bottom: 18px;
+  }
+  .recap-card-tag {
+    font-size: var(--text-xs);
+    padding: 4px 12px;
+  }
+  .recap-card-title {
+    font-size: 22px;
+    margin: 0 0 10px;
+  }
+  .recap-card-body-shell {
+    padding-top: var(--space-xl);
+    margin-top: var(--space-sm);
+    margin-bottom: 14px;
+  }
+  .recap-card-footer {
+    padding-top: 14px;
+  }
+  .recap-card-read-more {
+    font-size: var(--text-base);
+  }
+}
+
+@media (min-width: 1024px) {
+  .recap-stack {
+    max-width: 780px;
+  }
+  .recap-card-scroll {
+    padding: 44px 56px 28px;
+  }
+  .recap-card-title {
+    font-size: var(--text-2xl);
+  }
+}
+
+/* Empty / complete / loading screens */
+.recap-state-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 60px 28px;
+  text-align: center;
+}
+.recap-state-icon {
+  width: 44px;
+  height: 44px;
+  color: var(--brand-clay);
+}
+.recap-state-icon svg {
+  width: 100%;
+  height: 100%;
+}
+.recap-state-heading {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+.recap-state-body {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 260px;
+  line-height: var(--leading-body);
+}
