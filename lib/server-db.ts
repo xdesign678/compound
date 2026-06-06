@@ -792,32 +792,35 @@ export const repo = {
   ): number {
     if (!oldSourceId || !newSourceId || oldSourceId === newSourceId) return 0;
 
-    const rows = getServerDb()
+    const db = getServerDb();
+    const rows = db
       .prepare(`SELECT * FROM concepts WHERE sources LIKE ? ESCAPE '\\'`)
       .all(jsonArrayValueLikePattern(oldSourceId)) as ConceptRow[];
 
     let changed = 0;
-    for (const row of rows) {
-      const concept = rowToConcept(row);
-      if (!concept.sources.includes(oldSourceId)) continue;
-      const nextSources = Array.from(
-        new Set(
-          concept.sources.map((sourceId) => (sourceId === oldSourceId ? newSourceId : sourceId)),
-        ),
-      );
-      if (
-        nextSources.length === concept.sources.length &&
-        nextSources.every((sourceId, index) => sourceId === concept.sources[index])
-      ) {
-        continue;
+    db.transaction(() => {
+      for (const row of rows) {
+        const concept = rowToConcept(row);
+        if (!concept.sources.includes(oldSourceId)) continue;
+        const nextSources = Array.from(
+          new Set(
+            concept.sources.map((sourceId) => (sourceId === oldSourceId ? newSourceId : sourceId)),
+          ),
+        );
+        if (
+          nextSources.length === concept.sources.length &&
+          nextSources.every((sourceId, index) => sourceId === concept.sources[index])
+        ) {
+          continue;
+        }
+        repo.upsertConcept({
+          ...concept,
+          sources: nextSources,
+          updatedAt,
+        });
+        changed += 1;
       }
-      repo.upsertConcept({
-        ...concept,
-        sources: nextSources,
-        updatedAt,
-      });
-      changed += 1;
-    }
+    })();
 
     return changed;
   },
@@ -852,14 +855,16 @@ export const repo = {
         if (!/no such table/i.test(msg)) throw err;
       }
     };
-    db.prepare(`DELETE FROM concepts WHERE id = ?`).run(id);
-    safeExec(`DELETE FROM concept_fts WHERE concept_id = ?`, [id]);
-    safeExec(`DELETE FROM concept_evidence WHERE concept_id = ?`, [id]);
-    safeExec(`DELETE FROM concept_relations WHERE source_concept_id = ? OR target_concept_id = ?`, [
-      id,
-      id,
-    ]);
-    safeExec(`DELETE FROM concept_versions WHERE concept_id = ?`, [id]);
+    db.transaction(() => {
+      db.prepare(`DELETE FROM concepts WHERE id = ?`).run(id);
+      safeExec(`DELETE FROM concept_fts WHERE concept_id = ?`, [id]);
+      safeExec(`DELETE FROM concept_evidence WHERE concept_id = ?`, [id]);
+      safeExec(
+        `DELETE FROM concept_relations WHERE source_concept_id = ? OR target_concept_id = ?`,
+        [id, id],
+      );
+      safeExec(`DELETE FROM concept_versions WHERE concept_id = ?`, [id]);
+    })();
     invalidateCategoryKeysCache();
   },
 
@@ -870,24 +875,27 @@ export const repo = {
    */
   replaceRelatedId(oldId: string, newId: string | null, updatedAt = Date.now()): number {
     if (!oldId) return 0;
-    const rows = getServerDb()
+    const db = getServerDb();
+    const rows = db
       .prepare(`SELECT * FROM concepts WHERE related LIKE ? ESCAPE '\\'`)
       .all(jsonArrayValueLikePattern(oldId)) as ConceptRow[];
     let changed = 0;
-    for (const row of rows) {
-      const concept = rowToConcept(row);
-      if (!concept.related.includes(oldId)) continue;
-      const mapped = concept.related
-        .map((id) => (id === oldId ? newId : id))
-        .filter((id): id is string => Boolean(id) && id !== concept.id);
-      const nextRelated = Array.from(new Set(mapped));
-      const unchanged =
-        nextRelated.length === concept.related.length &&
-        nextRelated.every((value, index) => value === concept.related[index]);
-      if (unchanged) continue;
-      repo.upsertConcept({ ...concept, related: nextRelated, updatedAt });
-      changed += 1;
-    }
+    db.transaction(() => {
+      for (const row of rows) {
+        const concept = rowToConcept(row);
+        if (!concept.related.includes(oldId)) continue;
+        const mapped = concept.related
+          .map((id) => (id === oldId ? newId : id))
+          .filter((id): id is string => Boolean(id) && id !== concept.id);
+        const nextRelated = Array.from(new Set(mapped));
+        const unchanged =
+          nextRelated.length === concept.related.length &&
+          nextRelated.every((value, index) => value === concept.related[index]);
+        if (unchanged) continue;
+        repo.upsertConcept({ ...concept, related: nextRelated, updatedAt });
+        changed += 1;
+      }
+    })();
     return changed;
   },
 

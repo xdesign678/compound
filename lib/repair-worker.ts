@@ -471,16 +471,20 @@ async function runMergeJob(runId: string, job: RepairJobRow): Promise<void> {
     updatedAt: ts,
     version: primary.version + 1,
   };
-  repo.upsertConcept(mergedConcept);
-
-  // Rewrite all references from secondary → primary, then delete secondary.
-  repo.replaceRelatedId(secondary.id, primary.id, ts);
-  repo.deleteConcept(secondary.id);
-  const nextPrimary = repo.getConcept(primary.id) ?? mergedConcept;
-  compileConceptArtifactsAfterManualChange({
-    updatedConcepts: [{ previous: primary, next: nextPrimary }],
-    changeSummary: `合并重复概念「${secondary.title}」。`,
-  });
+  // Atomic concept-graph mutation: upsert merged page, rewire all references
+  // from secondary → primary, delete secondary, and recompile artifacts in one
+  // transaction so a crash mid-way leaves no duplicate concept or dangling
+  // `related` id behind.
+  getServerDb().transaction(() => {
+    repo.upsertConcept(mergedConcept);
+    repo.replaceRelatedId(secondary.id, primary.id, ts);
+    repo.deleteConcept(secondary.id);
+    const nextPrimary = repo.getConcept(primary.id) ?? mergedConcept;
+    compileConceptArtifactsAfterManualChange({
+      updatedConcepts: [{ previous: primary, next: nextPrimary }],
+      changeSummary: `合并重复概念「${secondary.title}」。`,
+    });
+  })();
 
   const summary = readSummary(runId);
   summary.merged += 1;
