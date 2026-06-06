@@ -62,6 +62,8 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     assertProductionConfig();
     await import('./sentry.server.config');
+    const { registerGlobalCrashGuards } = await import('./lib/process-crash-guards');
+    registerGlobalCrashGuards();
   }
   if (process.env.NEXT_RUNTIME === 'edge') {
     await import('./sentry.edge.config');

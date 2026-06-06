@@ -1501,20 +1501,42 @@ function startWorkerLoop(pool: WorkerPoolConfig, reason: string, queued: number)
         const result = await runAnalysisWorkerOnce({ stages: pool.stages });
         if (result.claimed === 0) break;
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      try {
+        syncObs.recordEvent({
+          level: 'error',
+          stage: 'llm',
+          message: `分析 worker 崩溃：${pool.name} — ${message.slice(0, 180)}`,
+          meta: { event: 'analysis.worker_crashed', pool: pool.name, error: message.slice(0, 500) },
+        });
+      } catch {
+        // The DB itself may be the failure source (e.g. SQLITE_BUSY/disk full);
+        // the .catch() below still prevents an unhandled rejection.
+      }
     } finally {
       activeWorkerCounts.set(pool.name, Math.max(0, (activeWorkerCounts.get(pool.name) ?? 1) - 1));
-      syncObs.recordEvent({
-        stage: 'llm',
-        level: 'success',
-        message: `分析 worker 空闲：${pool.name}`,
-        meta: { event: 'analysis.worker_idle', pool: pool.name },
-      });
+      try {
+        syncObs.recordEvent({
+          stage: 'llm',
+          level: 'success',
+          message: `分析 worker 空闲：${pool.name}`,
+          meta: { event: 'analysis.worker_idle', pool: pool.name },
+        });
+      } catch {
+        // Best-effort idle marker; never let a logging failure escape the loop.
+      }
     }
   })();
   const g = globalThis as unknown as { __activeAnalysisWorkerPromises?: Set<Promise<void>> };
   g.__activeAnalysisWorkerPromises ??= new Set();
   g.__activeAnalysisWorkerPromises.add(workerPromise);
-  void workerPromise.finally(() => g.__activeAnalysisWorkerPromises?.delete(workerPromise));
+  void workerPromise
+    .catch(() => {
+      // Loop already records analysis.worker_crashed; swallow here so a failing
+      // tick never surfaces as a process-level unhandled rejection.
+    })
+    .finally(() => g.__activeAnalysisWorkerPromises?.delete(workerPromise));
 }
 
 /**
