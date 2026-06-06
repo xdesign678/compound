@@ -367,6 +367,23 @@ export function recoverStaleAnalysisJobs(): { jobs: number; items: number } {
   const ts = now();
   const cutoff = ts - LEASE_MS;
   const db = getServerDb();
+  const deadRes = db
+    .prepare(
+      `UPDATE analysis_jobs
+         SET status = 'failed',
+             locked_at = NULL,
+             locked_by = NULL,
+             attempts = COALESCE(attempts, 0) + 1,
+             error = COALESCE(error, 'lease expired (max attempts exhausted)'),
+             error_category = COALESCE(error_category, 'transient'),
+             finished_at = ?,
+             dead_letter_at = ?,
+             updated_at = ?
+       WHERE status = 'running'
+         AND COALESCE(locked_at, started_at, updated_at) < ?
+         AND COALESCE(attempts, 0) >= COALESCE(max_attempts, 3)`,
+    )
+    .run(ts, ts, ts, cutoff);
   const jobsRes = db
     .prepare(
       `UPDATE analysis_jobs
@@ -377,7 +394,9 @@ export function recoverStaleAnalysisJobs(): { jobs: number; items: number } {
              error = COALESCE(error, 'lease expired (worker crashed)'),
              not_before_at = ?,
              updated_at = ?
-       WHERE status = 'running' AND COALESCE(locked_at, started_at, updated_at) < ?`,
+       WHERE status = 'running'
+         AND COALESCE(locked_at, started_at, updated_at) < ?
+         AND COALESCE(attempts, 0) < COALESCE(max_attempts, 3)`,
     )
     .run(ts, ts, cutoff);
   const itemsRes = db
@@ -390,19 +409,24 @@ export function recoverStaleAnalysisJobs(): { jobs: number; items: number } {
        WHERE status = 'running' AND updated_at < ?`,
     )
     .run(ts, cutoff);
-  if (Number(jobsRes.changes) > 0 || Number(itemsRes.changes) > 0) {
+  const deadLettered = Number(deadRes.changes ?? 0);
+  const requeued = Number(jobsRes.changes ?? 0);
+  const jobs = deadLettered + requeued;
+  if (jobs > 0 || Number(itemsRes.changes) > 0) {
     syncObs.recordEvent({
-      level: 'warn',
+      level: deadLettered > 0 ? 'error' : 'warn',
       stage: 'llm',
-      message: `自动回收孤儿任务：analysis_jobs ${jobsRes.changes} · sync_run_items ${itemsRes.changes}`,
+      message: `自动回收孤儿任务：重入队 ${requeued} · 死信 ${deadLettered} · sync_run_items ${itemsRes.changes}`,
       meta: {
         event: 'sync.lease_recovered',
-        jobs: Number(jobsRes.changes ?? 0),
+        jobs,
+        requeued,
+        deadLettered,
         items: Number(itemsRes.changes ?? 0),
       },
     });
   }
-  return { jobs: Number(jobsRes.changes ?? 0), items: Number(itemsRes.changes ?? 0) };
+  return { jobs, items: Number(itemsRes.changes ?? 0) };
 }
 
 function activeWorkerCount(): number {
@@ -736,26 +760,27 @@ function maybeFinalizeItemAfterStage(job: AnalysisJobRow): void {
   maybeFinishRun(job.run_id || null);
 }
 
-function finishJob(
+export function finishJob(
   job: AnalysisJobRow,
   status: Extract<JobStatus, 'succeeded' | 'skipped' | 'cancelled'>,
   error?: string,
 ): void {
   const ts = now();
   const durationMs = job.started_at ? Math.max(0, ts - job.started_at) : null;
-  getServerDb()
+  const res = getServerDb()
     .prepare(
       `UPDATE analysis_jobs
        SET status = ?, error = ?, finished_at = ?, updated_at = ?, duration_ms = COALESCE(duration_ms, ?),
            locked_at = NULL, locked_by = NULL
-       WHERE id = ?`,
+       WHERE id = ? AND status = 'running'`,
     )
     .run(status, error ?? null, ts, ts, durationMs, job.id);
+  if (Number(res.changes) === 0) return;
   recordStageCache(job, status, error);
   maybeFinalizeItemAfterStage(job);
 }
 
-function failJob(job: AnalysisJobRow, err: unknown): void {
+export function failJob(job: AnalysisJobRow, err: unknown): void {
   const message = err instanceof Error ? err.message : String(err);
   const category = classifyJobError(err);
   const attempts = (job.attempts || 0) + 1;
@@ -767,7 +792,7 @@ function failJob(job: AnalysisJobRow, err: unknown): void {
   const ts = now();
   const durationMs = job.started_at ? Math.max(0, ts - job.started_at) : null;
 
-  getServerDb()
+  const res = getServerDb()
     .prepare(
       `UPDATE analysis_jobs
        SET status = ?, attempts = ?, error = ?, error_category = ?, not_before_at = ?, updated_at = ?,
@@ -775,7 +800,7 @@ function failJob(job: AnalysisJobRow, err: unknown): void {
            duration_ms = CASE WHEN ? THEN ? ELSE duration_ms END,
            dead_letter_at = CASE WHEN ? THEN ? ELSE NULL END,
            locked_at = NULL, locked_by = NULL
-       WHERE id = ?`,
+       WHERE id = ? AND status = 'running'`,
     )
     .run(
       terminal ? 'failed' : 'queued',
@@ -792,6 +817,7 @@ function failJob(job: AnalysisJobRow, err: unknown): void {
       ts,
       job.id,
     );
+  if (Number(res.changes) === 0) return;
 
   syncObs.recordEvent({
     runId: job.run_id,
