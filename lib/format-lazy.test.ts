@@ -24,9 +24,13 @@ describe('format lazy-loaders', () => {
 
   it('loadDOMPurify resolves to a module with sanitize', async () => {
     const mod = await loadDOMPurify();
-    // In Node.js (no window), DOMPurify may not fully work but the module should load
-    // In a real browser environment it would have .sanitize
-    assert.ok(mod !== undefined, 'loadDOMPurify should resolve');
+    // In Node.js (no window), DOMPurify may not fully initialize,
+    // but if the module resolves it MUST have a .sanitize method.
+    if (mod) {
+      assert.equal(typeof mod.sanitize, 'function', 'resolved module must have .sanitize');
+    }
+    // If null (no window), that's also acceptable — the fail-close path
+    // in renderMarkdown handles it safely.
   });
 
   it('loadDOMPurify returns cached module on second call (dedup)', async () => {
@@ -89,5 +93,15 @@ describe('setMarkdownBreaks / getMarkdownBreaks', () => {
 describe('escapeHTML', () => {
   it('escapes special characters', () => {
     assert.equal(escapeHTML('<script>&"foo"'), '&lt;script&gt;&amp;&quot;foo&quot;');
+  });
+
+  it('neutralizes dangerous HTML when used as fail-close fallback', () => {
+    const dangerous = '<img src=x onerror=alert(1)>';
+    const safe = escapeHTML(dangerous);
+    // escapeHTML turns < > into &lt; &gt; — the browser will render this as
+    // literal text, NOT as an actual <img> tag. This is the fail-close guarantee.
+    assert.ok(!safe.includes('<'), 'raw < must not survive');
+    assert.ok(!safe.includes('>'), 'raw > must not survive');
+    assert.ok(safe.includes('&lt;'), 'angle brackets should be HTML-escaped');
   });
 });

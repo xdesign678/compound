@@ -29,7 +29,11 @@ export async function loadMarked(): Promise<MarkedModule | null> {
       mod.marked.setOptions({ gfm: true, breaks: readBreaksPref() });
       return mod;
     })
-    .catch(() => null);
+    .catch(() => {
+      // Clear cached failure so future calls can retry
+      _markedLoadPromise = null;
+      return null;
+    });
   return _markedLoadPromise;
 }
 
@@ -48,19 +52,43 @@ export async function loadDOMPurify(): Promise<DOMPurifyModuleShape | null> {
   if (_dompurifyLoadPromise) return _dompurifyLoadPromise;
   _dompurifyLoadPromise = import('dompurify')
     .then((mod) => {
-      // mod.default is the DOMPurify sanitizer (callable with .sanitize etc.)
-      const sanitizer = (mod as Record<string, unknown>).default;
-      if (
-        sanitizer &&
-        typeof sanitizer === 'object' &&
-        typeof (sanitizer as Record<string, unknown>).sanitize === 'function'
-      ) {
-        _dompurifyModule = sanitizer as DOMPurifyModuleShape;
+      // mod.default is the DOMPurify sanitizer. It can be a function (with
+      // .sanitize etc.) or an object — both shapes are valid depending on
+      // bundler/runtime configuration.
+      const candidate = (mod as Record<string, unknown>).default;
+      const sanitizer = extractDOMPurifySanitizer(candidate);
+      if (sanitizer) {
+        _dompurifyModule = sanitizer;
       }
       return _dompurifyModule;
     })
-    .catch(() => null);
+    .catch(() => {
+      // Clear cached failure so future calls can retry
+      _dompurifyLoadPromise = null;
+      return null;
+    });
   return _dompurifyLoadPromise;
+}
+
+/** Accept DOMPurify as either a function (common ESM default) or object with .sanitize. */
+function extractDOMPurifySanitizer(candidate: unknown): DOMPurifyModuleShape | null {
+  if (!candidate) return null;
+  // Function form: the default export IS the sanitizer factory, and its
+  // .sanitize method is directly callable after .createWindow initialization.
+  if (
+    typeof candidate === 'function' &&
+    typeof (candidate as unknown as Record<string, unknown>).sanitize === 'function'
+  ) {
+    return candidate as unknown as DOMPurifyModuleShape;
+  }
+  // Object form: the default export is an object with .sanitize.
+  if (
+    typeof candidate === 'object' &&
+    typeof (candidate as Record<string, unknown>).sanitize === 'function'
+  ) {
+    return candidate as DOMPurifyModuleShape;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,6 +219,10 @@ export async function renderMarkdown(md: string): Promise<string> {
           'tabindex',
         ],
       });
+    } else {
+      // Fail-close: DOMPurify unavailable → strip all tags for safety.
+      // This is a degraded experience (no formatting) but prevents XSS.
+      html = escapeHTML(html);
     }
   }
 

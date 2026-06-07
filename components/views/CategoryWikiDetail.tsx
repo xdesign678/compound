@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { loadMarked, loadDOMPurify } from '@/lib/format';
+import { loadMarked, loadDOMPurify, escapeHTML } from '@/lib/format';
 import { useAppStore } from '@/lib/store';
 import {
   getCategoryWiki,
@@ -212,7 +212,7 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
             ADD_TAGS: ['span'],
             ADD_ATTR: ['data-wikilink', 'id'],
           })
-        : raw;
+        : escapeHTML(raw);
       if (!cancelled) setHtmlContent(sanitized);
     });
     return () => {
