@@ -6375,6 +6375,902 @@ button {
   height: 15px;
 }
 
+@media (prefers-contrast: more) {
+  body {
+    color: var(--text-primary);
+  }
+
+  :is(
+    a,
+    button,
+    input,
+    textarea,
+    select,
+    summary,
+    [role='button'],
+    [role='link'],
+    [role='menuitem'],
+    [role='option'],
+    [role='switch'],
+    [role='tab'],
+    [tabindex]:not([tabindex='-1'])
+  ):focus-visible {
+    outline-width: 3px;
+    box-shadow: none;
+  }
+
+  :is(
+    .concept-card,
+    .source-card,
+    .detail-panel,
+    .modal,
+    .settings-drawer,
+    .toast,
+    .offline-count,
+    .command-palette
+  ) {
+    border-color: color-mix(in srgb, var(--text-primary) 36%, var(--border-default));
+  }
+}
+
+/* Ask tab height */
+.ask-tab {
+  height: 100%;
+}
+
+/* Tablet breakpoint: 768px–1023px — icon-only sidebar, no bottom tabbar */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .tabbar {
+    display: none;
+  }
+
+  .desktop-sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 60px;
+    min-width: 60px;
+    padding: 18px 8px 16px;
+    gap: var(--space-md);
+    overflow: hidden;
+  }
+
+  .desktop-frame {
+    display: grid;
+    grid-template-columns: 60px minmax(0, 1fr);
+    gap: var(--space-md);
+    height: 100%;
+    min-height: 0;
+  }
+
+  .desktop-shell {
+    padding: var(--space-lg);
+    background: transparent;
+  }
+
+  .desktop-brand-title,
+  .desktop-brand-kicker,
+  .desktop-brand-meta {
+    display: none;
+  }
+
+  .desktop-sidebar-btn {
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+    padding: 0;
+    background: transparent;
+  }
+
+  .desktop-sidebar-footer {
+    flex-direction: column;
+    gap: var(--space-2xs);
+    padding: 0;
+    background: transparent;
+    border: none;
+  }
+
+  .desktop-sidebar-btn span {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  body {
+    background: var(--bg-secondary);
+  }
+
+  .desktop-shell {
+    padding: var(--space-2xl);
+    background: transparent;
+  }
+
+  .desktop-frame {
+    height: 100%;
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    gap: 18px;
+    min-height: 0;
+  }
+
+  .desktop-sidebar {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 18px 16px 16px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    box-shadow: none;
+  }
+
+  .desktop-brand {
+    padding: 8px 6px 4px;
+  }
+
+  .desktop-brand-kicker {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--brand-clay-text);
+    margin-bottom: var(--space-sm);
+  }
+
+  .desktop-brand-title {
+    font-family: var(--font-sans);
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    margin-bottom: var(--space-sm);
+  }
+
+  .desktop-brand-meta {
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+
+  .desktop-sidebar-footer {
+    margin-top: auto;
+    padding-top: var(--space-sm);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+
+  .desktop-sidebar-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 7.5px;
+    background: var(--bg-muted);
+    color: var(--text-primary);
+    font-weight: 500;
+    font-size: 14px;
+    border: 1px solid transparent;
+    transition:
+      background var(--motion-duration-fast) var(--motion-ease-standard),
+      border-color var(--motion-duration-fast) var(--motion-ease-standard),
+      box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+      color var(--motion-duration-fast) var(--motion-ease-standard),
+      opacity var(--motion-duration-fast) var(--motion-ease-standard),
+      transform var(--motion-duration-fast) var(--motion-ease-standard);
+  }
+
+  .desktop-sidebar-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-light);
+  }
+
+  .desktop-sidebar-footer:has(.icon-only) {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0;
+    padding: var(--space-sm) var(--space-lg);
+    background: var(--bg-muted);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-light);
+  }
+
+  .desktop-sidebar-btn.icon-only {
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+    padding: 0;
+    flex-shrink: 0;
+    background: transparent;
+    border-radius: var(--radius-md);
+  }
+
+  .desktop-sidebar-btn.icon-only:hover {
+    background: var(--bg-hover);
+  }
+
+  .desktop-sidebar-btn svg {
+    width: 18px;
+    height: 18px;
+    color: var(--text-secondary);
+  }
+
+  .desktop-content {
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(360px, 430px) minmax(0, 1fr);
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+  }
+
+  .desktop-content.single-pane {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktop-content.resizable {
+    grid-template-columns: var(--desktop-primary-width) 4px minmax(0, 1fr);
+  }
+
+  .desktop-divider {
+    width: 4px;
+    min-width: 4px;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    z-index: 1;
+    transition: background 0.15s ease;
+  }
+
+  .desktop-divider:hover {
+    background: var(--border-section);
+  }
+
+  .desktop-divider:active {
+    background: var(--border-active, var(--accent));
+  }
+
+  .desktop-primary-panel,
+  .desktop-detail-panel {
+    min-width: 0;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-primary);
+  }
+
+  .desktop-primary-panel {
+    border-right: 1px solid var(--border-section);
+  }
+
+  .desktop-content.single-pane .desktop-primary-panel,
+  .desktop-content.resizable .desktop-primary-panel {
+    border-right: none;
+  }
+
+  .desktop-primary-scroll,
+  .desktop-detail-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .desktop-detail-panel {
+    background: var(--bg-primary);
+  }
+
+  .desktop-fab {
+    right: 24px;
+    bottom: 24px;
+  }
+
+  .desktop-detail-empty {
+    min-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+  }
+
+  .desktop-detail-empty-inner {
+    max-width: 360px;
+  }
+
+  .desktop-detail-kicker {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--brand-clay-text);
+    margin-bottom: var(--space-md);
+  }
+
+  .desktop-detail-empty h2 {
+    font-family: var(--font-sans);
+    font-size: 28px;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    margin: 0 0 12px;
+  }
+
+  .desktop-detail-empty p {
+    font-family: var(--font-reading);
+    font-size: 16px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .stats-row,
+  .section-heading,
+  .concept-list,
+  .view-lead,
+  .view-padding,
+  .ask-toolbar,
+  .activity-subtabs,
+  .activity-filter-bar,
+  .activity-list,
+  .health-view,
+  .concept-detail,
+  .ask-messages {
+    padding-left: var(--space-2xl);
+    padding-right: var(--space-2xl);
+  }
+
+  .stats-row {
+    padding-bottom: 18px;
+  }
+
+  .section-heading {
+    padding-top: var(--space-2xl);
+    padding-bottom: var(--space-md);
+  }
+
+  .view-padding,
+  .activity-list,
+  .health-view,
+  .concept-detail {
+    padding-bottom: var(--space-3xl);
+  }
+
+  .concept-list {
+    gap: var(--space-md);
+  }
+
+  .list-end-hint {
+    padding-bottom: 48px;
+    min-height: 22vh;
+  }
+
+  .ask-empty {
+    padding-top: 64px;
+  }
+
+  .desktop-detail-scroll > .concept-detail {
+    margin: 0 auto;
+    padding-left: clamp(24px, 3vw, 40px);
+    padding-right: clamp(24px, 3vw, 40px);
+  }
+
+  .suggested-questions {
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  .msg-user {
+    max-width: min(70%, 720px);
+  }
+
+  .ask-input-bar {
+    padding: 16px 24px 18px;
+  }
+
+  .ask-composer-card {
+    padding: 20px 20px 16px;
+  }
+
+  .ask-model-flyout {
+    width: 360px;
+  }
+
+  .activity-subtabs {
+    padding-top: 18px;
+    padding-bottom: var(--space-md);
+  }
+
+  .activity-subtabs .subtab {
+    flex: 0 0 auto;
+    min-width: 120px;
+    padding: 10px 18px;
+  }
+
+  .activity-filter-bar {
+    padding-top: 0;
+    padding-bottom: var(--space-sm);
+  }
+
+  .health-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-md);
+  }
+}
+
+/* Typography cascade: reading elements */
+.prose,
+.note-editor-content,
+.msg-user,
+.msg-ai-body {
+  font-family: var(--font-reading);
+  font-size: var(--prose-font-size, 16px);
+  line-height: var(--prose-line-height, 1.7);
+  color: var(--text-body);
+}
+
+/* Heading hierarchy */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.header-title,
+.desktop-brand-title {
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+h1 {
+  font-size: clamp(2.5rem, 2.041rem + 1.959vw, 4rem);
+  line-height: 1.1;
+}
+h2 {
+  font-size: clamp(1.75rem, 1.673rem + 0.327vw, 2.5rem);
+  line-height: 1.2;
+}
+h3 {
+  font-size: clamp(1.25rem, 1.173rem + 0.327vw, 1.75rem);
+  line-height: 1.3;
+}
+
+/* Sibling dimming for lists */
+.concept-list:has(.concept-card:hover) .concept-card:not(:hover),
+.source-list:has(.source-card:hover) .source-card:not(:hover) {
+  opacity: 0.6;
+  transition: opacity 300ms ease;
+}
+
+/* Card-type elements: shared flat style */
+.project-card,
+.stat-card,
+.finding-item,
+.msg-sources {
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  box-shadow: none;
+  transition:
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+@media (max-width: 767px) {
+  /* 整体：让 app 紧贴可视高度，随键盘上移 */
+  .app-shell {
+    bottom: var(--ask-kb-offset, 0px);
+  }
+
+  /* 去掉 scroll container 底部 16px，避免 composer 与 tabbar 之间出现空白 */
+  .app-main {
+    padding-bottom: 0;
+  }
+
+  /* 消息区：收紧左右内边距，底部留出输入条高度的缓冲 */
+  .ask-messages {
+    padding: 12px 14px 14px;
+  }
+
+  .ask-stream {
+    min-height: unset;
+  }
+
+  /* 消息间距 */
+  .msg {
+    margin-bottom: 14px;
+  }
+
+  /* 用户气泡：更贴近 Claude 风格，略小圆角、收紧字号 */
+  .msg-user {
+    max-width: 88%;
+    padding: 10px 14px;
+    font-size: var(--text-base);
+    line-height: 1.55;
+    border-radius: 16px 16px 4px 16px;
+  }
+
+  /* AI 回答区域（全局已把卡片设为透明）：阅读字号与行距 */
+  .prose-answer,
+  .msg-ai-body {
+    font-size: var(--prose-font-size, 15.5px);
+    line-height: var(--prose-line-height, 1.82);
+  }
+  .prose-answer p {
+    margin-bottom: var(--space-lg);
+  }
+  .prose-answer p:last-child {
+    margin-bottom: 0;
+  }
+
+  .msg-ai-label {
+    margin-bottom: 6px;
+    font-size: 10.5px;
+  }
+
+  .msg-sources {
+    margin-top: 10px;
+    padding: 10px 12px;
+  }
+
+  .save-as-page {
+    margin-top: 10px;
+    padding: 7px 10px;
+    font-size: 11.5px;
+  }
+  .msg-answer-actions .save-as-page {
+    margin-top: 0;
+  }
+
+  /* 空态：整体上移，不要太空旷 */
+  .ask-empty {
+    padding: 28px 16px 12px;
+  }
+
+  .ask-empty .big-icon {
+    width: 52px;
+    height: 52px;
+    margin-bottom: var(--space-lg);
+    border-radius: 16px;
+  }
+
+  .ask-empty .big-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .ask-empty h3 {
+    font-size: var(--text-xl);
+    margin-bottom: var(--space-sm);
+  }
+
+  .ask-empty p {
+    font-size: 14.5px;
+    line-height: 1.65;
+    margin-bottom: 18px;
+  }
+
+  .suggested-questions {
+    gap: var(--space-xs);
+  }
+
+  .suggested-q {
+    padding: 7px 13px;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+
+  /* 工具条（新对话按钮） */
+  .ask-toolbar {
+    padding: 8px 14px 0;
+  }
+
+  /* 输入条：紧贴下方 tab bar；安全区由 tabbar 负责 */
+  .ask-input-bar {
+    padding: 6px 12px 0;
+    border-top: none;
+    background:
+      linear-gradient(180deg, rgba(250, 249, 245, 0), var(--bg-primary) 28%), var(--bg-primary);
+    box-sizing: border-box;
+  }
+
+  .ask-input-inner {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .ask-composer-card {
+    padding: 11px 12px 9px;
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 22px rgba(20, 20, 18, 0.07);
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* textarea：16px 防 iOS 放大，小一点的起始高度 */
+  .ask-textarea,
+  .ask-composer-card .ask-textarea {
+    font-size: 16px !important;
+    min-height: 24px;
+    max-height: 140px;
+    line-height: 1.5;
+    padding: 2px 2px 0;
+  }
+
+  /* 工具栏：横排居中，缩小间距 */
+  .ask-composer-toolbar {
+    margin-top: 6px;
+    gap: var(--space-xs);
+    align-items: center;
+  }
+
+  .ask-composer-actions {
+    gap: var(--space-xs);
+    flex-wrap: nowrap;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .ask-tool-btn {
+    padding: 6px 9px;
+    font-size: var(--text-xs);
+    gap: var(--space-2xs);
+    border-radius: 7.5px !important;
+    height: 30px;
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  .ask-tool-btn-leading {
+    font-size: var(--text-sm);
+  }
+
+  /* 模型按钮：截断过长名 */
+  .ask-model-btn {
+    max-width: min(100%, 160px);
+    overflow: hidden;
+    flex-shrink: 1;
+  }
+
+  .ask-model-btn > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+
+  /* 隐藏桌面专属键盘提示 */
+  .ask-composer-hint {
+    display: none;
+  }
+
+  .ask-composer-submit {
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .ask-send-btn,
+  .ask-composer-card .ask-send-btn {
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 8px !important;
+  }
+
+  .ask-send-btn svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  /* mention chip */
+  .ask-mentions-row {
+    gap: var(--space-xs);
+    margin-bottom: var(--space-sm);
+  }
+
+  .ask-mention-chip {
+    padding: var(--space-2xs) var(--space-sm);
+    font-size: 11.5px;
+    border-radius: 7.5px !important;
+    gap: var(--space-xs);
+  }
+
+  .ask-mention-chip-title {
+    max-width: 140px;
+  }
+
+  /* 浮层遮罩：手机端点击空白处关闭，并覆盖 tab bar */
+  .ask-flyout-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: var(--z-modal);
+    animation: askBackdropIn 180ms var(--motion-ease-standard);
+  }
+
+  /* 浮层：手机端改为底部弹出面板，盖住 composer 与 tab bar */
+  .ask-flyout {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: var(--ask-kb-offset, 0px);
+    top: auto;
+    transform: none;
+    width: 100%;
+    max-width: 100%;
+    max-height: 75dvh;
+    padding: 14px 14px calc(18px + var(--safe-bottom));
+    border-radius: 16px 16px 0 0;
+    border: 1px solid var(--border-light);
+    border-bottom: none;
+    box-shadow: 0 -10px 32px rgba(20, 20, 19, 0.18);
+    overflow-y: auto;
+    z-index: var(--z-modal);
+    animation: askSheetIn 220ms var(--motion-ease-emphasized);
+  }
+
+  /* 输入法唤起时吸附到 composer 上方 */
+  .ask-flyout.ask-inline-flyout {
+    bottom: calc(72px + var(--safe-bottom) + var(--ask-kb-offset, 0px));
+    max-height: 60vh;
+    padding: 14px 14px;
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -10px 24px rgba(20, 20, 19, 0.12);
+    z-index: 40;
+  }
+
+  .ask-model-flyout,
+  .ask-reference-flyout {
+    width: 100%;
+    left: 0;
+    right: 0;
+  }
+
+  .ask-flyout-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .ask-flyout::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: var(--radius-full);
+    background: var(--border-default);
+    margin: -4px auto 10px;
+  }
+
+  .ask-flyout-search {
+    padding: 9px 11px;
+  }
+
+  .ask-segmented {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .ask-segmented-btn {
+    flex: 1;
+  }
+
+  .ask-reference-item {
+    padding: 9px 10px;
+    border-radius: 8px !important;
+  }
+
+  .ask-model-option {
+    padding: 10px 12px;
+    border-radius: 8px !important;
+  }
+}
+
+/* 平板/非桌面端（<1024px）同样走底部 sheet + 遮罩 */
+@media (max-width: 1023px) {
+  .ask-flyout-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: var(--z-modal);
+    animation: askBackdropIn 180ms var(--motion-ease-standard);
+  }
+
+  .ask-flyout {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: var(--ask-kb-offset, 0px);
+    top: auto;
+    transform: none;
+    width: 100%;
+    max-width: 100%;
+    max-height: 75dvh;
+    padding: 14px 14px calc(18px + var(--safe-bottom));
+    border-radius: 16px 16px 0 0;
+    border: 1px solid var(--border-light);
+    border-bottom: none;
+    box-shadow: 0 -10px 32px rgba(20, 20, 19, 0.18);
+    overflow-y: auto;
+    z-index: var(--z-modal);
+    animation: askSheetIn 220ms var(--motion-ease-emphasized);
+  }
+
+  .ask-flyout.ask-inline-flyout {
+    bottom: calc(72px + var(--safe-bottom) + var(--ask-kb-offset, 0px));
+    max-height: 60vh;
+    padding: 14px 14px;
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -10px 24px rgba(20, 20, 19, 0.12);
+    z-index: 40;
+  }
+
+  .ask-model-flyout,
+  .ask-reference-flyout {
+    width: 100%;
+    left: 0;
+    right: 0;
+  }
+
+  .ask-flyout-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .ask-flyout::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: var(--radius-full);
+    background: var(--border-default);
+    margin: -4px auto 10px;
+  }
+
+  .ask-segmented {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .ask-segmented-btn {
+    flex: 1;
+  }
+}
+
+@keyframes askSheetIn {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes askBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -6382,6 +7278,7 @@ button {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
     scroll-behavior: auto !important;
   }
 }
