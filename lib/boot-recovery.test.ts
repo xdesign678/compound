@@ -91,7 +91,8 @@ test(
     ).run(Date.now(), future, Date.now());
 
     const recovered = recoverStaleRepairJobs();
-    assert.equal(recovered, 1, 'exactly the stale job is recovered');
+    assert.equal(recovered.requeued, 1, 'exactly the stale job is requeued');
+    assert.equal(recovered.deadLettered, 0, 'no jobs dead-lettered');
 
     const stale = db
       .prepare(`SELECT status, locked_by FROM repair_jobs WHERE id = 'rj-stale'`)

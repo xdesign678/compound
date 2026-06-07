@@ -817,7 +817,20 @@ export function failJob(job: AnalysisJobRow, err: unknown): void {
       ts,
       job.id,
     );
-  if (Number(res.changes) === 0) return;
+  if (Number(res.changes) === 0) {
+    // Job was no longer running (e.g. cancelled); still try to clean up the
+    // payload blob so it doesn't linger until retention GC.
+    if (job.stage === 'github_ingest') {
+      try {
+        deleteGithubIngestPayloadBlob(
+          parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload),
+        );
+      } catch {
+        // Best-effort; retention GC will eventually clean it up.
+      }
+    }
+    return;
+  }
 
   if (terminal && job.stage === 'github_ingest') {
     deleteGithubIngestPayloadBlob(
@@ -871,7 +884,20 @@ export function failJobPermanently(job: AnalysisJobRow, message: string): boolea
        WHERE id = ? AND status = 'running'`,
     )
     .run(attempts, message.slice(0, 500), ts, ts, durationMs, ts, job.id);
-  if (Number(res.changes) === 0) return false;
+  if (Number(res.changes) === 0) {
+    // Job was no longer running (e.g. cancelled); still try to clean up the
+    // payload blob so it doesn't linger until retention GC.
+    if (job.stage === 'github_ingest') {
+      try {
+        deleteGithubIngestPayloadBlob(
+          parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload),
+        );
+      } catch {
+        // Best-effort; retention GC will eventually clean it up.
+      }
+    }
+    return false;
+  }
 
   if (job.stage === 'github_ingest') {
     deleteGithubIngestPayloadBlob(

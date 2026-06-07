@@ -59,6 +59,7 @@ export interface RepairJobRow {
   locked_at: number | null;
   lease_expires_at: number | null;
   attempts: number;
+  max_attempts: number;
   updated_at: number;
 }
 
@@ -85,6 +86,7 @@ export interface RepairRunStatusResponse {
 
 const WORKER_ID = `repair-${nanoid(6)}`;
 const JOB_CAP = Math.max(1, Number(process.env.COMPOUND_REPAIR_JOB_CAP || 50));
+const REPAIR_MAX_ATTEMPTS = Math.max(1, Number(process.env.COMPOUND_REPAIR_MAX_ATTEMPTS || 3));
 const REPAIR_LEASE_MS = Math.max(
   60_000,
   Number(process.env.COMPOUND_REPAIR_LEASE_MS || 5 * 60_000),
@@ -142,6 +144,9 @@ export function ensureRepairSchema(): void {
   if (!cols.has('lease_expires_at')) {
     db.exec(`ALTER TABLE repair_jobs ADD COLUMN lease_expires_at INTEGER;`);
   }
+  if (!cols.has('max_attempts')) {
+    db.exec(`ALTER TABLE repair_jobs ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 3;`);
+  }
 }
 
 function normalizeFindings(findings: RepairFindingInput[]): RepairFindingInput[] {
@@ -197,8 +202,8 @@ export function createRepairRun(findings: RepairFindingInput[]): CreateRepairRun
      VALUES (?, ?, ?, 0, 0, ?, ?)`,
   );
   const insertJob = db.prepare(
-    `INSERT INTO repair_jobs (id, run_id, kind, payload_json, status, attempts, updated_at)
-     VALUES (?, ?, ?, ?, 'queued', 0, ?)`,
+    `INSERT INTO repair_jobs (id, run_id, kind, payload_json, status, attempts, max_attempts, updated_at)
+     VALUES (?, ?, ?, ?, 'queued', 0, ?, ?)`,
   );
 
   const txn = db.transaction(() => {
@@ -209,7 +214,14 @@ export function createRepairRun(findings: RepairFindingInput[]): CreateRepairRun
         conceptIds: finding.conceptIds,
         message: finding.message || '',
       };
-      insertJob.run(`rj-${nanoid(10)}`, runId, kind, JSON.stringify(payload), ts);
+      insertJob.run(
+        `rj-${nanoid(10)}`,
+        runId,
+        kind,
+        JSON.stringify(payload),
+        REPAIR_MAX_ATTEMPTS,
+        ts,
+      );
     }
   });
   txn();
@@ -259,14 +271,19 @@ function bumpCounter(runId: string, field: 'done' | 'failed'): void {
   getServerDb().prepare(`UPDATE repair_runs SET ${field} = ${field} + 1 WHERE id = ?`).run(runId);
 }
 
-function markJob(id: string, status: RepairJobStatus, patch: { error?: string | null } = {}): void {
-  getServerDb()
+function markJob(
+  id: string,
+  status: RepairJobStatus,
+  patch: { error?: string | null } = {},
+): boolean {
+  const res = getServerDb()
     .prepare(
       `UPDATE repair_jobs
          SET status = ?, error = ?, locked_by = NULL, locked_at = NULL, lease_expires_at = NULL, updated_at = ?
-       WHERE id = ?`,
+       WHERE id = ? AND status = 'running'`,
     )
     .run(status, patch.error ?? null, now(), id);
+  return Number(res.changes) > 0;
 }
 
 function claimOneJob(runId: string, usedIds: Set<string>): RepairJobRow | null {
@@ -351,9 +368,12 @@ function finalizeRun(runId: string): void {
   const run = getRun(runId);
   if (!run || run.status !== 'running') return;
   const status: RepairRunStatus = run.failed > 0 && run.done === 0 ? 'failed' : 'done';
-  getServerDb()
-    .prepare(`UPDATE repair_runs SET status = ?, finished_at = ? WHERE id = ?`)
+  const res = getServerDb()
+    .prepare(
+      `UPDATE repair_runs SET status = ?, finished_at = ? WHERE id = ? AND status = 'running'`,
+    )
     .run(status, now(), runId);
+  if (Number(res.changes) === 0) return;
   const summary = readSummary(runId);
   writeActivity(runId, summary, status);
 }
@@ -684,15 +704,17 @@ async function dispatchJob(runId: string, job: RepairJobRow): Promise<void> {
       .prepare(`SELECT status FROM repair_jobs WHERE id = ?`)
       .get(job.id) as { status: RepairJobStatus } | undefined;
     if (latest?.status === 'running') {
-      markJob(job.id, 'done');
-      bumpCounter(runId, 'done');
+      if (markJob(job.id, 'done')) {
+        bumpCounter(runId, 'done');
+      }
     } else if (latest?.status === 'skipped') {
       bumpCounter(runId, 'done');
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    markJob(job.id, 'failed', { error: message.slice(0, 500) });
-    bumpCounter(runId, 'failed');
+    if (markJob(job.id, 'failed', { error: message.slice(0, 500) })) {
+      bumpCounter(runId, 'failed');
+    }
     logger.warn('repair.job_failed', { runId, jobId: job.id, kind: job.kind, error: message });
   }
 }
@@ -728,10 +750,9 @@ export function startRepairWorker(runId: string): void {
         error: err instanceof Error ? err.message : String(err),
       });
       const db = getServerDb();
-      db.prepare(`UPDATE repair_runs SET status = 'failed', finished_at = ? WHERE id = ?`).run(
-        now(),
-        runId,
-      );
+      db.prepare(
+        `UPDATE repair_runs SET status = 'failed', finished_at = ? WHERE id = ? AND status = 'running'`,
+      ).run(now(), runId);
     })
     .finally(() => {
       g.__compoundRepairWorkers?.delete(runId);
@@ -745,19 +766,70 @@ export function startRepairWorker(runId: string): void {
  * selects `status='queued'`) would never reclaim them and they'd be dropped
  * forever. Aligns with `recoverStaleAnalysisJobs`. Returns the number requeued.
  */
-export function recoverStaleRepairJobs(): number {
+export function recoverStaleRepairJobs(): { requeued: number; deadLettered: number } {
   ensureRepairSchema();
   const ts = now();
-  const res = getServerDb()
+  const db = getServerDb();
+
+  // Dead-letter: stale running jobs that have exhausted their attempt budget.
+  const deadRes = db
     .prepare(
       `UPDATE repair_jobs
-         SET status = 'queued', locked_by = NULL, locked_at = NULL, lease_expires_at = NULL, updated_at = ?
-       WHERE status = 'running' AND COALESCE(lease_expires_at, updated_at) < ?`,
+         SET status = 'failed',
+             error = COALESCE(error, 'lease expired (max attempts exhausted)'),
+             locked_by = NULL,
+             locked_at = NULL,
+             lease_expires_at = NULL,
+             updated_at = ?
+       WHERE status = 'running'
+         AND COALESCE(lease_expires_at, updated_at) < ?
+         AND COALESCE(attempts, 0) >= COALESCE(max_attempts, 3)`,
     )
     .run(ts, ts);
-  const changes = Number(res.changes ?? 0);
-  if (changes > 0) logger.warn('repair.lease_recovered', { jobs: changes });
-  return changes;
+  const deadLettered = Number(deadRes.changes ?? 0);
+
+  // Requeue: stale running jobs that still have attempts left.
+  const requeueRes = db
+    .prepare(
+      `UPDATE repair_jobs
+         SET status = 'queued',
+             locked_by = NULL,
+             locked_at = NULL,
+             lease_expires_at = NULL,
+             updated_at = ?
+       WHERE status = 'running'
+         AND COALESCE(lease_expires_at, updated_at) < ?
+         AND COALESCE(attempts, 0) < COALESCE(max_attempts, 3)`,
+    )
+    .run(ts, ts);
+  const requeued = Number(requeueRes.changes ?? 0);
+
+  const total = requeued + deadLettered;
+  if (total > 0) logger.warn('repair.lease_recovered', { jobs: total, requeued, deadLettered });
+
+  // Recount failed jobs per run so finalizeRun sees the correct counters.
+  if (deadLettered > 0) {
+    const affectedRuns = db
+      .prepare(
+        `SELECT DISTINCT run_id FROM repair_jobs
+         WHERE updated_at = ? AND status = 'failed' AND locked_by IS NULL`,
+      )
+      .all(ts) as Array<{ run_id: string }>;
+    for (const row of affectedRuns) {
+      const failedCount = Number(
+        (
+          db
+            .prepare(
+              `SELECT COUNT(*) AS cnt FROM repair_jobs WHERE run_id = ? AND status = 'failed'`,
+            )
+            .get(row.run_id) as { cnt: number }
+        ).cnt,
+      );
+      db.prepare(`UPDATE repair_runs SET failed = ? WHERE id = ?`).run(failedCount, row.run_id);
+    }
+  }
+
+  return { requeued, deadLettered };
 }
 
 /** Drain any still-running repair runs after a server restart. */
