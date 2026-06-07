@@ -10,15 +10,34 @@ import { DESKTOP_LAYOUT_MIN_WIDTH, isDesktopWidth } from '@/lib/responsive';
 
 import { Header } from '@/components/Header';
 import { TabBar } from '@/components/TabBar';
-import { CommandPalette } from '@/components/CommandPalette';
-import { OfflineBanner } from '@/components/OfflineBanner';
-import { TaskCenter } from '@/components/TaskCenter';
-import { SelectionWikiProgress } from '@/components/SelectionWikiProgress';
 import { useKeyboardShortcuts } from '@/lib/hooks/useKeyboardShortcuts';
 import { useOnlineStatus } from '@/lib/hooks/useOnlineStatus';
 import { useResizable } from '@/lib/hooks/useResizable';
-import { SwipeBack } from '@/components/SwipeBack';
 import { PullToRefresh } from '@/components/PullToRefresh';
+
+const CommandPalette = dynamic(
+  () => import('@/components/CommandPalette').then((m) => ({ default: m.CommandPalette })),
+  { ssr: false },
+);
+const OfflineBanner = dynamic(
+  () => import('@/components/OfflineBanner').then((m) => ({ default: m.OfflineBanner })),
+  { ssr: false },
+);
+const TaskCenter = dynamic(
+  () => import('@/components/TaskCenter').then((m) => ({ default: m.TaskCenter })),
+  { ssr: false },
+);
+const SelectionWikiProgress = dynamic(
+  () =>
+    import('@/components/SelectionWikiProgress').then((m) => ({
+      default: m.SelectionWikiProgress,
+    })),
+  { ssr: false },
+);
+const SwipeBack = dynamic(
+  () => import('@/components/SwipeBack').then((m) => ({ default: m.SwipeBack })),
+  { ssr: false },
+);
 import { Icon } from '@/components/Icons';
 
 const ViewSkeleton = () => (

@@ -1,5 +1,6 @@
 'use client';
 
+import './ask-view.css';
 import { useAskState } from '../../lib/hooks/useAskState';
 import { AskComposer } from '../ask/AskComposer';
 import { AskMessageList } from '../ask/AskMessageList';

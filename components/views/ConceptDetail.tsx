@@ -1,5 +1,6 @@
 'use client';
 
+import './concept-detail.css';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';

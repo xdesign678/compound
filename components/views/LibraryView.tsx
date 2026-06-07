@@ -1,5 +1,7 @@
 'use client';
 
+import './library-detail.css';
+import './library-view.css';
 import {
   useState,
   useMemo,

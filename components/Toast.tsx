@@ -1,5 +1,6 @@
 'use client';
 
+import './toast.css';
 import { useState } from 'react';
 import { useAppStore, type ToastState } from '@/lib/store';
 import { t, useLocale } from '@/lib/i18n';

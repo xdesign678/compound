@@ -1,5 +1,6 @@
 'use client';
 
+import './category-wiki-detail.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { loadMarked, loadDOMPurify, escapeHTML } from '@/lib/format';
 import { useAppStore } from '@/lib/store';

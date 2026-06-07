@@ -1,0 +1,20 @@
+/* ── SwipeBack indicator ─────────────────────────────────────── */
+.swipe-back-indicator {
+  position: fixed;
+  left: env(safe-area-inset-left, 0px);
+  top: 50%;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--bg-button);
+  color: var(--text-on-button);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: var(--shadow-md);
+}

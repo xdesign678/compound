@@ -1,0 +1,52 @@
+/* Offline Banner */
+.offline-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-task-center);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--color-warning);
+  color: #1a1a18;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  animation: offline-slide-in var(--motion-duration-base) var(--motion-ease-emphasized);
+}
+.offline-banner-text {
+  font-weight: 600;
+}
+.offline-banner-hint {
+  opacity: 0.8;
+}
+.offline-banner-close {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: var(--space-2xs) var(--space-xs);
+  border-radius: var(--radius-sm);
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.offline-banner-close:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.1);
+}
+@keyframes offline-slide-in {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}

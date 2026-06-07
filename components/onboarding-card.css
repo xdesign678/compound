@@ -1,0 +1,138 @@
+/* Onboarding Card */
+.onboarding-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2xl);
+  padding: 40px 20px;
+}
+.empty-state.empty-state-spacious.onboarding-card {
+  padding: 40px 20px 72px;
+}
+.onboarding-hero {
+  text-align: center;
+}
+.onboarding-desc {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: var(--leading-body);
+  max-width: 320px;
+  margin: 8px auto 0;
+}
+.onboarding-choice-hint,
+.onboarding-compact-desc {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  line-height: var(--leading-tight);
+  margin: 8px 0 0;
+}
+.onboarding-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 320px;
+}
+.onboarding-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  transition:
+    border-color var(--motion-duration-fast),
+    background var(--motion-duration-fast);
+}
+.onboarding-option:hover {
+  border-color: var(--brand-clay);
+  background: var(--brand-clay-soft);
+}
+.onboarding-option-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand-clay);
+  flex-shrink: 0;
+}
+.onboarding-option-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.onboarding-option-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+.onboarding-option-sub {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+.onboarding-skip {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  padding: var(--space-2xs) var(--space-sm);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.onboarding-skip:hover,
+.onboarding-skip:focus-visible {
+  color: var(--brand-clay-text);
+}
+.onboarding-card-dismissed {
+  gap: 18px;
+}
+.onboarding-actions-compact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+@media (max-width: 640px) {
+  .empty-state.empty-state-spacious.onboarding-card {
+    gap: 18px;
+    padding: 24px 20px 96px;
+  }
+  .onboarding-skip {
+    top: 10px;
+  }
+  .onboarding-options {
+    gap: var(--space-sm);
+  }
+  .onboarding-option {
+    gap: var(--space-md);
+    padding: 11px 14px;
+  }
+  .onboarding-option-icon {
+    width: 30px;
+    height: 30px;
+  }
+  .onboarding-option-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+  .onboarding-desc {
+    line-height: 1.58;
+  }
+  .onboarding-choice-hint {
+    margin-top: var(--space-2xs);
+  }
+}
+
+/* Selection Wiki progress */

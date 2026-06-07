@@ -1,5 +1,6 @@
 'use client';
 
+import './task-center.css';
 import { useState } from 'react';
 import { useAppStore, type TaskItem, type TaskStatus, type TaskKind } from '@/lib/store';
 import { isOfflineError } from '@/lib/api-client';

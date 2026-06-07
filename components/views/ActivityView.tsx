@@ -1,5 +1,6 @@
 'use client';
 
+import './activity-view.css';
 import { useId } from 'react';
 import { useAppStore, type ActivitySubTab } from '@/lib/store';
 import { Icon } from '../Icons';

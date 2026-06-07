@@ -1,5 +1,6 @@
 'use client';
 
+import './command-palette.css';
 import { useState, useEffect, useRef, useDeferredValue, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';

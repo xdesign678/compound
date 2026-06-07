@@ -1,5 +1,6 @@
 'use client';
 
+import './onboarding-card.css';
 import { useEffect, useState } from 'react';
 
 import { useAppStore } from '@/lib/store';

@@ -1,5 +1,6 @@
 'use client';
 
+import './swipe-back.css';
 import { useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '@/lib/store';
 import { hapticLight, hapticSuccess } from '@/lib/haptic';

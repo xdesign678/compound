@@ -1,5 +1,6 @@
 'use client';
 
+import './offline-banner.css';
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/lib/store';
 
