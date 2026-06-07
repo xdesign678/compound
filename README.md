@@ -97,6 +97,43 @@ docker run --rm -p 3000:3000 \
 - The browser also keeps an IndexedDB cache for fast local reads.
 - User-supplied custom LLM endpoints must use the user’s own API key. The server-owned key is never sent to a user-supplied URL.
 
+## 稳定性与性能加固
+
+近期的四轮加固已全部通过验证（56 项断言 + 375 条 node:test + 类型检查 + lint 零警告）。
+
+### 后端稳定性（里程碑 1）
+
+- **进程级崩溃守卫**：`instrumentation.ts` 注册 `unhandledRejection` / `uncaughtException`，未捕获异常不再拖垮整个进程
+- **Analysis Worker 循环 `.catch()`**：与其他 Worker 一致，循环内异常不再静默丢失
+- **启动时卡死任务自动恢复**：sync / analysis / repair 中处于 running 但已超时的任务，启动时自动标记为失败并重试
+- **任务终态守卫**：`finishJob` / `failJob` / `failJobPermanently` 只更新 `running` 状态的任务，防止状态机紊乱
+- **毒丸任务死信路径**：反复失败的任务进入 dead-letter 而非无限重试
+- **原子化概念写入**：多步写入包裹在 SQLite 事务中，杜绝半成品数据
+- **原子化 Source Artifact 操作**：删除 + 插入在单一事务中完成
+- **数据保留 / GC 模块**：可配置 append-only 表（sync_events、model_runs 等）的行数上限，自动清理历史数据
+
+### API 健壮性（里程碑 2）
+
+- **统一请求体大小限制**：所有写入路由使用 `readJsonWithLimit`，超限返回 413
+- **认证暴力破解防护**：失败认证限速 + `Retry-After` 响应头
+- **Webhook 限速**：HMAC 校验之前先做频率限制，避免签名验证成为瓶颈
+- **统一错误响应**：`apiError()` 辅助函数，防止内部细节泄露
+- **输入校验 4xx**：非法输入不再返回 500，一律正确状态码
+- **网关超时覆盖 Body 读取阶段**：客户端断连时中止正在进行的 LLM 调用
+
+### 前端流畅度（里程碑 3）
+
+- **字体优化**：移除 Noto Serif SC 预加载，改用系统 CJK 衬线回退字体
+- **CSS 拆分**：globals.css 按路由拆分，首屏 CSS 从 ~300KB 降至 ~27KB
+- **Ask 流式渲染节流**：消除逐 token 重新解析的 O(n²) 开销
+- **Observer / 滚动优化**：移除全局 subtree MutationObserver，IntersectionObserver 仅用于滚动锚点
+- **IDB `bulkGet` 替代逐条获取**；marked / dompurify 懒加载；移除未使用的 postcss 依赖
+
+### 收尾（里程碑 4）
+
+- 新增 server-only 模块纳入 ESLint 受限路径与 AGENTS.md 列表
+- repair-worker 终态写入守卫 + cancelled 任务 blob 清理 + repair 死信路径
+
 ## Checks
 
 ```bash
