@@ -112,18 +112,18 @@ export function CommandPalette() {
       const q = deferredQuery.trim().toLowerCase();
       const db = getDb();
       if (!q) return [];
-      const byTitle = await db.concepts.where('title').startsWithIgnoreCase(q).limit(30).toArray();
-      const byTitleIds = new Set(byTitle.map((c) => c.id));
-      const byScan = await db.concepts
-        .filter(
-          (c) =>
-            !byTitleIds.has(c.id) &&
-            (c.title.toLowerCase().includes(q) || c.summary.toLowerCase().includes(q)),
-        )
-        .limit(20)
+      // Use .filter() instead of .where('title') — 'title' is not a Dexie
+      // indexed keyPath, so .where('title') throws SchemaError at runtime.
+      const matched = await db.concepts
+        .filter((c) => {
+          const title = (c.title ?? '').toLowerCase();
+          const summary = (c.summary ?? '').toLowerCase();
+          return title.includes(q) || summary.includes(q);
+        })
+        .limit(50)
         .toArray();
       const byRecent = await db.concepts.orderBy('updatedAt').reverse().limit(80).toArray();
-      const candidates = new Map([...byTitle, ...byScan, ...byRecent].map((c) => [c.id, c]));
+      const candidates = new Map([...matched, ...byRecent].map((c) => [c.id, c]));
       return Array.from(candidates.values()).slice(0, 100);
     },
     [open, deferredQuery],
@@ -136,14 +136,14 @@ export function CommandPalette() {
       const q = deferredQuery.trim().toLowerCase();
       const db = getDb();
       if (!q) return [];
-      const byTitle = await db.sources.where('title').startsWithIgnoreCase(q).limit(10).toArray();
-      const byTitleIds = new Set(byTitle.map((s) => s.id));
-      const byScan = await db.sources
-        .filter((s) => !byTitleIds.has(s.id) && s.title.toLowerCase().includes(q))
-        .limit(20)
+      // Use .filter() instead of .where('title') — 'title' is not a Dexie
+      // indexed keyPath, so .where('title') throws SchemaError at runtime.
+      const matched = await db.sources
+        .filter((s) => (s.title ?? '').toLowerCase().includes(q))
+        .limit(30)
         .toArray();
-      const byRecent = await db.sources.orderBy('updatedAt').reverse().limit(40).toArray();
-      const candidates = new Map([...byTitle, ...byScan, ...byRecent].map((s) => [s.id, s]));
+      const byRecent = await db.sources.orderBy('ingestedAt').reverse().limit(40).toArray();
+      const candidates = new Map([...matched, ...byRecent].map((s) => [s.id, s]));
       return Array.from(candidates.values()).slice(0, 60);
     },
     [open, deferredQuery],
@@ -211,7 +211,7 @@ export function CommandPalette() {
           id: `concept-${c.id}`,
           type: 'concept',
           label: c.title,
-          sublabel: c.summary.slice(0, 60),
+          sublabel: (c.summary ?? '').slice(0, 60),
           action: () => {
             store.getState().closeCommandPalette();
             store.getState().rememberRecentItem({ kind: 'concept', id: c.id, title: c.title });
