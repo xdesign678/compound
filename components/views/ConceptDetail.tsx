@@ -206,12 +206,12 @@ export function ConceptDetail({ id }: { id: string }) {
     if (!concept) return [];
     const items = await getDb().sources.bulkGet(concept.sources);
     return items.filter(Boolean);
-  }, [concept?.sources.join(',')]);
+  }, [concept?.sources.slice().sort().join(',')]);
   const related = useLiveQuery(async () => {
     if (!concept) return [];
     const items = await getDb().concepts.bulkGet(concept.related);
     return items.filter(Boolean);
-  }, [concept?.related.join(',')]);
+  }, [concept?.related.slice().sort().join(',')]);
   const hasFullBody = hasConceptBodyContent(concept);
 
   // TOC derived from concept.body markdown headings

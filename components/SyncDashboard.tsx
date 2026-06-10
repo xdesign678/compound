@@ -92,6 +92,15 @@ function DashboardInner() {
     return () => window.clearInterval(timer);
   }, [load, paused, dashboard?.activeRun?.status]);
 
+  // Auto-pause polling when the tab is hidden to avoid wasted requests.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) setPaused(true);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
   const story = dashboard?.story ?? null;
   const run = dashboard?.activeRun ?? dashboard?.latestRuns?.[0] ?? null;
   const reviewOpenRaw = dashboard?.coverage?.reviewOpen;

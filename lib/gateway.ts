@@ -517,9 +517,14 @@ async function drainSSEStream(
             if (json?.usage && typeof json.usage === 'object') {
               usage = { ...usage, ...(json.usage as Record<string, unknown>) };
             }
-          } catch {
+          } catch (parseErr) {
             // Some providers (OpenRouter free tier) intersperse comment frames
-            // like `: OPENROUTER PROCESSING`. Safely ignored.
+            // like `: OPENROUTER PROCESSING`. Safely ignored, but log for debug.
+            const rawPreview = data.slice(0, 200);
+            logger.warn('gateway.sse_json_parse_failed', {
+              preview: rawPreview,
+              error: parseErr instanceof Error ? parseErr.message : String(parseErr),
+            });
           }
         }
       }

@@ -55,6 +55,9 @@ export async function POST(req: Request) {
     if (isRequestBodyTooLargeError(err)) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
+    if (err instanceof SyntaxError) {
+      return NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 });
+    }
     body = {};
   }
   const title = clampString(body.title, MAX_TITLE_CHARS) || '新归档概念';

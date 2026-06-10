@@ -174,6 +174,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
   const primaryRailRef = useRef<HTMLDivElement | null>(null);
   const filterResetSkipRef = useRef(true);
   const scrollRestoredRef = useRef(false);
+  const prevCategoryTreeRef = useRef<CategoryTree[]>([]);
 
   const handleLibraryScroll = useCallback((scrollTop: number) => {
     useAppStore.getState().setLibraryState({ scrollTop });
@@ -268,8 +269,14 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
 
   const categoryTree = useMemo(() => {
     if (!concepts) return [];
-    return buildCategoryTree(concepts);
-  }, [concepts]);
+    // Skip recomputation while the user is typing a search — the tree is not
+    // visible during search anyway and a background sync can trigger a costly
+    // full rebuild on every concept update.
+    if (deferredQuery.trim()) return prevCategoryTreeRef.current;
+    const tree = buildCategoryTree(concepts);
+    prevCategoryTreeRef.current = tree;
+    return tree;
+  }, [concepts, deferredQuery]);
 
   useEffect(() => {
     const rail = primaryRailRef.current;

@@ -113,18 +113,14 @@ export function CommandPalette() {
       const q = deferredQuery.trim().toLowerCase();
       const db = getDb();
       if (!q) return [];
-      // Use .filter() instead of .where('title') — 'title' is not a Dexie
-      // indexed keyPath, so .where('title') throws SchemaError at runtime.
-      const matched = await db.concepts
-        .filter((c) => {
-          const title = (c.title ?? '').toLowerCase();
-          const summary = (c.summary ?? '').toLowerCase();
-          return title.includes(q) || summary.includes(q);
-        })
-        .limit(50)
-        .toArray();
+      // v9 added a 'title' index — use prefix search for fast narrowing,
+      // then client-side filter for summary matches.
+      const byTitle = await db.concepts.where('title').startsWithIgnoreCase(q).limit(50).toArray();
       const byRecent = await db.concepts.orderBy('updatedAt').reverse().limit(80).toArray();
-      const candidates = new Map([...matched, ...byRecent].map((c) => [c.id, c]));
+      const bySummary = byRecent.filter(
+        (c) => (c.summary ?? '').toLowerCase().includes(q) && !byTitle.some((t) => t.id === c.id),
+      );
+      const candidates = new Map([...byTitle, ...bySummary, ...byRecent].map((c) => [c.id, c]));
       return Array.from(candidates.values()).slice(0, 100);
     },
     [open, deferredQuery],
@@ -137,14 +133,9 @@ export function CommandPalette() {
       const q = deferredQuery.trim().toLowerCase();
       const db = getDb();
       if (!q) return [];
-      // Use .filter() instead of .where('title') — 'title' is not a Dexie
-      // indexed keyPath, so .where('title') throws SchemaError at runtime.
-      const matched = await db.sources
-        .filter((s) => (s.title ?? '').toLowerCase().includes(q))
-        .limit(30)
-        .toArray();
+      const byTitle = await db.sources.where('title').startsWithIgnoreCase(q).limit(30).toArray();
       const byRecent = await db.sources.orderBy('ingestedAt').reverse().limit(40).toArray();
-      const candidates = new Map([...matched, ...byRecent].map((s) => [s.id, s]));
+      const candidates = new Map([...byTitle, ...byRecent].map((s) => [s.id, s]));
       return Array.from(candidates.values()).slice(0, 60);
     },
     [open, deferredQuery],

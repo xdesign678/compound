@@ -253,9 +253,14 @@ export function SourceDetail({ id }: { id: string }) {
   const canEdit = hasFullContent;
   const canSave = canEdit && isDirty && saveStatus !== 'saving';
 
+  // Mirror blocks into a ref so the auto-save timer always reads the latest
+  // value instead of a stale closure snapshot from a previous render.
+  const blocksRef = useRef(blocks);
+  blocksRef.current = blocks;
+
   const handleSave = useCallback(
     async (rawContent?: string) => {
-      const joined = rawContent ?? joinBlocksToMarkdown(blocks);
+      const joined = rawContent ?? joinBlocksToMarkdown(blocksRef.current);
       if (!canEdit || joined === (source?.rawContent ?? '') || saveStatus === 'saving') return;
       setSaveStatus('saving');
       try {
@@ -272,7 +277,7 @@ export function SourceDetail({ id }: { id: string }) {
         setSaveStatus('error');
       }
     },
-    [blocks, canEdit, id, saveStatus, source?.rawContent, source?.title],
+    [canEdit, id, saveStatus, source?.rawContent, source?.title],
   );
 
   useEffect(() => {
@@ -288,7 +293,7 @@ export function SourceDetail({ id }: { id: string }) {
   const handleCommit = useCallback(
     (blockId: string, raw: string) => {
       if (!source) return;
-      const updatedBlocks = replaceBlockRaw(blocks, blockId, raw);
+      const updatedBlocks = replaceBlockRaw(blocksRef.current, blockId, raw);
       const joined = joinBlocksToMarkdown(updatedBlocks);
       const nextBlocks = splitMarkdownBlocks(joined, source.title);
       setBlocks(nextBlocks);
@@ -301,7 +306,7 @@ export function SourceDetail({ id }: { id: string }) {
         clearSourceDraft(id);
       }
     },
-    [blocks, handleSave, id, source],
+    [handleSave, id, source],
   );
 
   useEffect(() => {

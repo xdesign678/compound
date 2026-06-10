@@ -43,12 +43,26 @@ function maybeGc(store: Store, now: number): void {
   }
 }
 
+interface ClientBucket {
+  key: string;
+  /** Effective limit = options.limit * limitMultiplier. */
+  limitMultiplier: number;
+  /** Shared buckets are never cleared by rateLimitReset (one user's success
+   *  must not erase the failure history of an ongoing attack). */
+  shared: boolean;
+}
+
+/** Headroom for the shared fallback bucket in untrusted-proxy mode: several
+ *  real clients can stay active before collateral 429s, while a spoofing
+ *  attacker rotating headers is still capped at this multiple. */
+const UNTRUSTED_SHARED_LIMIT_MULTIPLIER = 5;
+
 /**
  * Only honor x-forwarded-for / x-real-ip when COMPOUND_TRUST_PROXY=true, so a
  * raw-internet-facing deployment can't be bypassed with a spoofed header.
  * Zeabur / Vercel / Cloudflare terminate TLS in front — set the flag there.
  */
-function getClientKey(req: Request): string {
+function getClientBuckets(req: Request): ClientBucket[] {
   const trustProxy = process.env.COMPOUND_TRUST_PROXY === 'true';
   const chain = (req.headers.get('x-forwarded-for') ?? '')
     .split(',')
@@ -60,8 +74,12 @@ function getClientKey(req: Request): string {
     // the last entry is trustworthy — earlier entries arrive straight from
     // the client and are spoofable (would allow rate-limit evasion).
     const lastHop = chain[chain.length - 1];
-    if (lastHop && net.isIP(lastHop)) return lastHop;
-    if (realIp && net.isIP(realIp)) return realIp;
+    if (lastHop && net.isIP(lastHop)) {
+      return [{ key: lastHop, limitMultiplier: 1, shared: false }];
+    }
+    if (realIp && net.isIP(realIp)) {
+      return [{ key: realIp, limitMultiplier: 1, shared: false }];
+    }
   }
   // WARNING: Without COMPOUND_TRUST_PROXY=true there is no trustworthy client
   // identity. Set COMPOUND_TRUST_PROXY=true when running behind a trusted
@@ -82,17 +100,31 @@ function getClientKey(req: Request): string {
       logger.warn('rate_limit.trust_proxy_disabled', context);
     }
   }
-  // Untrusted proxy headers still partition buckets: behind a misconfigured
-  // proxy each real client keeps its own quota instead of one shared 'anon'
-  // bucket that a single aggressive client could exhaust for everyone.
-  // Spoofed values only isolate the spoofer; the store stays bounded via
-  // MAX_ENTRIES.
+  // Untrusted proxy headers partition buckets so one real client behind a
+  // misconfigured proxy cannot exhaust everyone's quota — but they are
+  // spoofable, so a shared fallback bucket (higher cap, checked in parallel)
+  // keeps header rotation from bypassing the limiter entirely.
   if (chain.length || realIp) {
-    return `untrusted:${chain.join(',')}|${realIp}`.slice(0, 200);
+    return [
+      {
+        key: `untrusted:${chain.join(',')}|${realIp}`.slice(0, 200),
+        limitMultiplier: 1,
+        shared: false,
+      },
+      { key: 'anon', limitMultiplier: UNTRUSTED_SHARED_LIMIT_MULTIPLIER, shared: true },
+    ];
   }
   // Direct connection without any proxy headers: per-deployment constant so
   // the limiter still functions as a global throttle.
-  return 'anon';
+  return [{ key: 'anon', limitMultiplier: 1, shared: false }];
+}
+
+function tooManyRequests(resetAt: number, now: number): NextResponse {
+  const retryAfter = Math.max(1, Math.ceil((resetAt - now) / 1000));
+  return NextResponse.json(
+    { error: 'Too many requests', retryAfter },
+    { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+  );
 }
 
 export function rateLimit(
@@ -105,22 +137,27 @@ export function rateLimit(
   const now = Date.now();
   const store = getStore();
   maybeGc(store, now);
-  const key = `${scope}:${getClientKey(req)}`;
-  const current = store.get(key);
 
-  if (!current || current.resetAt <= now) {
-    store.set(key, { count: 1, resetAt: now + options.windowMs });
-    return null;
+  // Increment every bucket first so a denial in one bucket still records the
+  // attempt in the others, then deny if ANY bucket is over its limit.
+  // Use the latest resetAt across all over-limit buckets for Retry-After so
+  // the client does not retry prematurely and hit a different bucket's cap.
+  let anyDenied = false;
+  let maxDeniedResetAt = 0;
+  for (const bucket of getClientBuckets(req)) {
+    const key = `${scope}:${bucket.key}`;
+    const current = store.get(key);
+    if (!current || current.resetAt <= now) {
+      store.set(key, { count: 1, resetAt: now + options.windowMs });
+      continue;
+    }
+    current.count += 1;
+    if (current.count > options.limit * bucket.limitMultiplier) {
+      maxDeniedResetAt = Math.max(maxDeniedResetAt, current.resetAt);
+      anyDenied = true;
+    }
   }
-
-  current.count += 1;
-  if (current.count <= options.limit) return null;
-
-  const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
-  return NextResponse.json(
-    { error: 'Too many requests', retryAfter },
-    { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-  );
+  return anyDenied ? tooManyRequests(maxDeniedResetAt, now) : null;
 }
 
 export function llmRateLimit(req: Request): NextResponse | null {
@@ -146,17 +183,13 @@ export function rateLimitCheck(
 
   const now = Date.now();
   const store = getStore();
-  const key = `${scope}:${getClientKey(req)}`;
-  const current = store.get(key);
-
-  if (!current || current.resetAt <= now) return null;
-  if (current.count <= options.limit) return null;
-
-  const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
-  return NextResponse.json(
-    { error: 'Too many requests', retryAfter },
-    { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-  );
+  for (const bucket of getClientBuckets(req)) {
+    const current = store.get(`${scope}:${bucket.key}`);
+    if (!current || current.resetAt <= now) continue;
+    if (current.count <= options.limit * bucket.limitMultiplier) continue;
+    return tooManyRequests(current.resetAt, now);
+  }
+  return null;
 }
 
 /** Increment the counter for the given scope/client.
@@ -172,30 +205,33 @@ export function rateLimitIncrement(
   const now = Date.now();
   const store = getStore();
   maybeGc(store, now);
-  const key = `${scope}:${getClientKey(req)}`;
-  const current = store.get(key);
 
-  if (!current || current.resetAt <= now) {
-    store.set(key, { count: 1, resetAt: now + options.windowMs });
-    return null;
+  let denied: NextResponse | null = null;
+  for (const bucket of getClientBuckets(req)) {
+    const key = `${scope}:${bucket.key}`;
+    const current = store.get(key);
+    if (!current || current.resetAt <= now) {
+      store.set(key, { count: 1, resetAt: now + options.windowMs });
+      continue;
+    }
+    current.count += 1;
+    if (current.count > options.limit * bucket.limitMultiplier) {
+      denied ??= tooManyRequests(current.resetAt, now);
+    }
   }
-
-  current.count += 1;
-  if (current.count <= options.limit) return null;
-
-  const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
-  return NextResponse.json(
-    { error: 'Too many requests', retryAfter },
-    { status: 429, headers: { 'Retry-After': String(retryAfter) } },
-  );
+  return denied;
 }
 
 /** Delete the rate-limit bucket for the given scope/client.
- *  Use after a successful action (e.g., correct login) to clear failure history. */
+ *  Use after a successful action (e.g., correct login) to clear failure history.
+ *  Shared fallback buckets are kept: one user's success must not erase the
+ *  failure history of an ongoing brute-force attack. */
 export function rateLimitReset(req: Request, scope: string): void {
   const store = getStore();
-  const key = `${scope}:${getClientKey(req)}`;
-  store.delete(key);
+  for (const bucket of getClientBuckets(req)) {
+    if (bucket.shared) continue;
+    store.delete(`${scope}:${bucket.key}`);
+  }
 }
 
 // ─── Auth brute-force protection (counts only failed attempts) ──────────

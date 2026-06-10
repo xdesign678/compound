@@ -118,6 +118,14 @@ export class CompoundDB extends Dexie {
             concept.categoryKeys = normalized.categoryKeys;
           });
       });
+    // v9: add title index for command palette / search (case-insensitive via
+    // Dexie's built-in collation, but we use .startsWithIgnoreCase for prefix).
+    this.version(9).stores({
+      sources: 'id, ingestedAt, type, externalKey, title',
+      concepts: 'id, updatedAt, createdAt, *sources, *related, *categoryKeys, title',
+      activity: 'id, at, type, [type+at]',
+      askHistory: 'id, at',
+    });
   }
 }
 

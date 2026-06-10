@@ -127,6 +127,12 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Other same-origin: stale-while-revalidate
+  // Exclude RSC data requests — they are not content-hashed and caching them
+  // can serve stale React Server Component payloads after navigation.
+  if (url.pathname.startsWith('/_next/') && !url.pathname.startsWith('/_next/static/')) {
+    event.respondWith(fetch(request));
+    return;
+  }
   event.respondWith(
     caches.match(request).then((cached) => {
       const fetchPromise = fetch(request)

@@ -586,8 +586,8 @@ function invalidateCategoryKeysCache(): void {
  */
 function noteCategoryKeysOnWrite(keys: string[] | undefined): void {
   if (!_categoryKeysCache) return;
-  const cached = _categoryKeysCache.keys;
-  if ((keys ?? []).some((key) => !cached.includes(key))) {
+  const cached = new Set(_categoryKeysCache.keys);
+  if ((keys ?? []).some((key) => !cached.has(key))) {
     _categoryKeysCache = null;
   }
 }
@@ -753,8 +753,12 @@ export const repo = {
 
   listConceptsBySourceId(sourceId: string, options: RecordQueryOptions = {}): Concept[] {
     if (!sourceId) return [];
-    const clauses = [`sources LIKE ? ESCAPE '\\'`];
-    const params: Array<string | number> = [jsonArrayValueLikePattern(sourceId)];
+    // Use json_each for exact matching instead of LIKE, which can produce
+    // false positives when one sourceId is a substring of another.
+    const clauses = [
+      `EXISTS (SELECT 1 FROM json_each(concepts.sources) WHERE json_each.value = ?)`,
+    ];
+    const params: Array<string | number> = [sourceId];
     if (typeof options.after === 'number' && Number.isFinite(options.after)) {
       clauses.push('updated_at > ?');
       params.push(Math.trunc(options.after));
@@ -772,9 +776,7 @@ export const repo = {
           ORDER BY updated_at DESC${limitClause}`,
       )
       .all(...params, ...limitParams) as ConceptRow[];
-    return rows
-      .map((row) => rowToConcept(row, options.summariesOnly ? 'partial' : 'full'))
-      .filter((concept) => concept.sources.includes(sourceId));
+    return rows.map((row) => rowToConcept(row, options.summariesOnly ? 'partial' : 'full'));
   },
 
   getConceptsByIds(ids: string[], options: { summariesOnly?: boolean } = {}): Concept[] {

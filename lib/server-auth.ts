@@ -43,8 +43,10 @@ export function safeEqual(a: string, b: string): boolean {
   bufA.copy(paddedA);
   bufB.copy(paddedB);
 
-  // Fold in a length-mismatch check that doesn't short-circuit.
-  return bufA.length === bufB.length && timingSafeEqual(paddedA, paddedB);
+  // Always perform the comparison so the timing is independent of length,
+  // then fold in the length check (no short-circuit).
+  const contentEqual = timingSafeEqual(paddedA, paddedB);
+  return bufA.length === bufB.length && contentEqual;
 }
 
 function tokenFromAuthorizationHeader(value: string | null): string {
