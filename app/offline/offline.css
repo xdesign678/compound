@@ -103,6 +103,9 @@
 
 .offline-primary-action,
 .offline-secondary-action {
+  /* The offline page does not load the global border-box reset; without this
+     the width:100% + padding mobile variant overflows the viewport. */
+  box-sizing: border-box;
   min-height: 44px;
   display: inline-flex;
   align-items: center;

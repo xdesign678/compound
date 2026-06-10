@@ -230,6 +230,12 @@
 .recap-card-read-more:hover {
   opacity: 0.75;
 }
+/* Touch devices: 44px minimum hit target. */
+@media (pointer: coarse) {
+  .recap-card-read-more {
+    min-height: 44px;
+  }
+}
 .recap-card-read-more svg {
   width: 14px;
   height: 14px;

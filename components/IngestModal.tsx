@@ -1,5 +1,6 @@
 'use client';
 
+import '@/components/modals.css';
 import '@/app/modals.css';
 import { useState, useEffect, useRef, type DragEvent } from 'react';
 import { useAppStore, type TaskItem } from '@/lib/store';

@@ -1,5 +1,6 @@
 'use client';
 
+import '@/components/modals.css';
 import '@/app/modals.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/lib/store';
@@ -81,6 +82,10 @@ export function GithubSyncModal() {
   const [pulling, setPulling] = useState(false);
   const [visible, setVisible] = useState(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Bumped on every open/close so in-flight polls from a previous modal
+  // lifecycle can detect they are stale and drop their results instead of
+  // overwriting the state of a newly started sync.
+  const pollGenerationRef = useRef(0);
   const pulledAfterDoneRef = useRef(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -99,6 +104,7 @@ export function GithubSyncModal() {
 
   // 打开时重置状态
   useEffect(() => {
+    pollGenerationRef.current += 1;
     if (open) {
       setPhase('idle');
       setError(null);
@@ -120,16 +126,19 @@ export function GithubSyncModal() {
   }, [open]);
 
   const pollOnce = useCallback(async (jobId: string, consecutiveFailures = 0) => {
+    const generation = pollGenerationRef.current;
     try {
       const res = await fetch(`/api/sync/status?jobId=${encodeURIComponent(jobId)}`, {
         cache: 'no-store',
         headers: withRequestId(getAdminAuthHeaders()),
       });
+      if (generation !== pollGenerationRef.current) return;
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new PollHttpError(res.status, `状态查询失败 (${res.status}): ${text.slice(0, 200)}`);
       }
       const data = (await res.json()) as JobStatus;
+      if (generation !== pollGenerationRef.current) return;
       setPollIssue(null);
       setJob(data);
       if (data.status === 'running') {
@@ -150,6 +159,7 @@ export function GithubSyncModal() {
         setError(data.error || '同步失败');
       }
     } catch (e) {
+      if (generation !== pollGenerationRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
       const plan = getPollFailurePlan({
         status: e instanceof PollHttpError ? e.status : undefined,
@@ -173,6 +183,7 @@ export function GithubSyncModal() {
   }, []);
 
   const start = useCallback(async () => {
+    const generation = pollGenerationRef.current;
     setPhase('starting');
     setError(null);
     setPollIssue(null);
@@ -186,14 +197,17 @@ export function GithubSyncModal() {
         method: 'POST',
         headers: withRequestId(getAdminAuthHeaders()),
       });
+      if (generation !== pollGenerationRef.current) return;
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new Error(`启动失败 (${res.status}): ${text.slice(0, 200)}`);
       }
       const data = (await res.json()) as { jobId: string; existing?: boolean };
+      if (generation !== pollGenerationRef.current) return;
       setPhase('running');
       void pollOnce(data.jobId);
     } catch (e) {
+      if (generation !== pollGenerationRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
       setError(redactSensitiveText(msg));
       setPhase('failed');

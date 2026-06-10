@@ -337,6 +337,52 @@ test('terminal failJob deletes the blob; a transient (non-terminal) failJob keep
   assert.equal(blobCount(), 0);
 });
 
+test('runRetention deletes aged orphan payload blobs but keeps blobs of active jobs', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { getServerDb } = await import('./server-db');
+  const { queueGithubIngestJob } = await import('./analysis-worker');
+  const { runRetention } = await import('./retention');
+  const db = getServerDb();
+
+  const queue = (suffix: string) =>
+    queueGithubIngestJob({
+      runId: `run-orphan-${suffix}`,
+      itemId: `item-orphan-${suffix}`,
+      repoSlug: 'owner/repo',
+      branch: 'main',
+      path: `${suffix}.md`,
+      sha: `sha-${suffix}`,
+      externalKey: `owner/repo:main:${suffix}.md`,
+      title: suffix,
+      rawContent: `# body ${suffix}`,
+    });
+  const activeJobId = queue('active');
+  const orphanJobId = queue('orphan');
+
+  // Simulate a crash orphan: the job row disappears without blob cleanup.
+  db.prepare(`DELETE FROM analysis_jobs WHERE id = ?`).run(orphanJobId);
+  // Backdate both blobs beyond the retention window.
+  const tenDaysAgo = Date.now() - 10 * 24 * 60 * 60 * 1000;
+  db.prepare(`UPDATE analysis_payload_blobs SET last_used_at = ?`).run(tenDaysAgo);
+
+  const result = runRetention({ payloadBlobMaxAgeDays: 7 });
+
+  assert.equal(result.orphanPayloadBlobsDeleted, 1);
+  const remaining = db.prepare(`SELECT ref FROM analysis_payload_blobs`).all() as Array<{
+    ref: string;
+  }>;
+  assert.equal(remaining.length, 1);
+  const activePayload = db
+    .prepare(`SELECT payload_json FROM analysis_jobs WHERE id = ?`)
+    .get(activeJobId) as { payload_json: string };
+  assert.equal(
+    remaining[0].ref,
+    (JSON.parse(activePayload.payload_json) as { rawContentRef: string }).rawContentRef,
+  );
+});
+
 test('maybeRunRetention runs once then is throttled within the min interval', async (t) => {
   const env = setupTempDb();
   t.after(env.cleanup);

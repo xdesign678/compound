@@ -34,6 +34,7 @@ export interface RetentionLimits {
   modelRuns: TableRetentionLimit;
   stageCache: TableRetentionLimit;
   conceptVersionsPerConcept: number;
+  payloadBlobMaxAgeDays: number;
 }
 
 export interface RetentionResult {
@@ -44,6 +45,7 @@ export interface RetentionResult {
   orphanEvidenceDeleted: number;
   orphanRelationsDeleted: number;
   orphanChunkEmbeddingsDeleted: number;
+  orphanPayloadBlobsDeleted: number;
   checkpointed: boolean;
 }
 
@@ -54,6 +56,7 @@ const DEFAULT_LIMITS: RetentionLimits = {
   modelRuns: { maxRows: 100_000, maxAgeDays: 180 },
   stageCache: { maxRows: 50_000, maxAgeDays: 120 },
   conceptVersionsPerConcept: 50,
+  payloadBlobMaxAgeDays: 7,
 };
 
 const DEFAULT_MIN_INTERVAL_MS = 5 * 60_000;
@@ -108,6 +111,11 @@ export function resolveRetentionLimits(overrides?: Partial<RetentionLimits>): Re
       DEFAULT_LIMITS.conceptVersionsPerConcept,
       1,
     ),
+    payloadBlobMaxAgeDays: envInt(
+      'COMPOUND_RETENTION_PAYLOAD_BLOBS_MAX_AGE_DAYS',
+      DEFAULT_LIMITS.payloadBlobMaxAgeDays,
+      1,
+    ),
   };
   if (!overrides) return base;
   return {
@@ -116,6 +124,7 @@ export function resolveRetentionLimits(overrides?: Partial<RetentionLimits>): Re
     stageCache: { ...base.stageCache, ...overrides.stageCache },
     conceptVersionsPerConcept:
       overrides.conceptVersionsPerConcept ?? base.conceptVersionsPerConcept,
+    payloadBlobMaxAgeDays: overrides.payloadBlobMaxAgeDays ?? base.payloadBlobMaxAgeDays,
   };
 }
 
@@ -236,6 +245,39 @@ function deleteOrphanChunkEmbeddings(db: DB): number {
 }
 
 /**
+ * Delete `analysis_payload_blobs` rows that outlived their job. Terminal job
+ * paths already delete their own blob; this pass catches blobs orphaned by a
+ * process crash mid-job. Blobs referenced by a queued/running job are always
+ * kept regardless of age.
+ */
+function deleteOrphanPayloadBlobs(db: DB, maxAgeDays: number, now: number): number {
+  if (!tableExists(db, 'analysis_payload_blobs')) return 0;
+  const cutoff = now - maxAgeDays * DAY_MS;
+  if (!tableExists(db, 'analysis_jobs')) {
+    return Number(
+      db.prepare(`DELETE FROM analysis_payload_blobs WHERE last_used_at < ?`).run(cutoff).changes ||
+        0,
+    );
+  }
+  // The IS NOT NULL filter keeps NULL out of the NOT IN set: a single NULL
+  // would make every comparison unknown and the DELETE a silent no-op.
+  return Number(
+    db
+      .prepare(
+        `DELETE FROM analysis_payload_blobs
+          WHERE last_used_at < ?
+            AND ref NOT IN (
+              SELECT json_extract(payload_json, '$.rawContentRef')
+              FROM analysis_jobs
+              WHERE status IN ('queued', 'running')
+                AND json_extract(payload_json, '$.rawContentRef') IS NOT NULL
+            )`,
+      )
+      .run(cutoff).changes || 0,
+  );
+}
+
+/**
  * Run all retention passes once, unconditionally. Each pass is independent and
  * idempotent; missing tables are skipped. Safe to call from tests directly.
  */
@@ -269,6 +311,7 @@ export function runRetention(overrides?: Partial<RetentionLimits>): RetentionRes
     orphanEvidenceDeleted: deleteOrphanEvidence(db),
     orphanRelationsDeleted: deleteOrphanRelations(db),
     orphanChunkEmbeddingsDeleted: deleteOrphanChunkEmbeddings(db),
+    orphanPayloadBlobsDeleted: deleteOrphanPayloadBlobs(db, limits.payloadBlobMaxAgeDays, now),
     checkpointed: false,
   };
 

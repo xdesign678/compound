@@ -50,18 +50,22 @@ function maybeGc(store: Store, now: number): void {
  */
 function getClientKey(req: Request): string {
   const trustProxy = process.env.COMPOUND_TRUST_PROXY === 'true';
+  const chain = (req.headers.get('x-forwarded-for') ?? '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const realIp = req.headers.get('x-real-ip')?.trim() ?? '';
   if (trustProxy) {
-    const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-    if (forwarded && net.isIP(forwarded)) return forwarded;
-    const realIp = req.headers.get('x-real-ip')?.trim();
+    // The trusted proxy in front of us APPENDS the real client IP, so only
+    // the last entry is trustworthy — earlier entries arrive straight from
+    // the client and are spoofable (would allow rate-limit evasion).
+    const lastHop = chain[chain.length - 1];
+    if (lastHop && net.isIP(lastHop)) return lastHop;
     if (realIp && net.isIP(realIp)) return realIp;
   }
-  // Fall back to a per-deployment constant so the limiter still functions as
-  // a global throttle even without IP attribution.
-  // WARNING: Without COMPOUND_TRUST_PROXY=true, ALL users share the same
-  // rate-limit bucket ('anon'), meaning a single aggressive client can
-  // exhaust the quota for everyone. Set COMPOUND_TRUST_PROXY=true when
-  // running behind a trusted reverse proxy (Vercel, Cloudflare, etc.).
+  // WARNING: Without COMPOUND_TRUST_PROXY=true there is no trustworthy client
+  // identity. Set COMPOUND_TRUST_PROXY=true when running behind a trusted
+  // reverse proxy (Zeabur, Vercel, Cloudflare, etc.).
   //
   // In production this is escalated to ERROR-level so the misconfig surfaces
   // on Sentry / log aggregators — `instrumentation.ts` also prints a loud
@@ -78,6 +82,16 @@ function getClientKey(req: Request): string {
       logger.warn('rate_limit.trust_proxy_disabled', context);
     }
   }
+  // Untrusted proxy headers still partition buckets: behind a misconfigured
+  // proxy each real client keeps its own quota instead of one shared 'anon'
+  // bucket that a single aggressive client could exhaust for everyone.
+  // Spoofed values only isolate the spoofer; the store stays bounded via
+  // MAX_ENTRIES.
+  if (chain.length || realIp) {
+    return `untrusted:${chain.join(',')}|${realIp}`.slice(0, 200);
+  }
+  // Direct connection without any proxy headers: per-deployment constant so
+  // the limiter still functions as a global throttle.
   return 'anon';
 }
 

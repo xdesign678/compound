@@ -1,5 +1,6 @@
 'use client';
 
+import '@/components/modals.css';
 import './source-detail.css';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';

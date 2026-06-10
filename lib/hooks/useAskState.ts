@@ -197,6 +197,17 @@ export function useAskState() {
   const throttleRef = useRef<StreamingThrottleState>(createThrottleState());
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // The fallback flush timer is normally cleared in handleSend's finally
+  // block, but unmounting mid-stream (tab switch) would leave it pending.
+  useEffect(() => {
+    return () => {
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const history = useLiveQuery(async () => getDb().askHistory.orderBy('at').toArray(), []);
   const conceptCount = useLiveQuery(async () => getDb().concepts.count(), []);
 

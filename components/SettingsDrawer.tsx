@@ -1,5 +1,6 @@
 'use client';
 
+import '@/components/modals.css';
 import '@/app/modals.css';
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useAppStore } from '@/lib/store';

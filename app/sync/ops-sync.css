@@ -3760,3 +3760,16 @@
     opacity: 1 !important;
   }
 }
+
+/* Touch devices: keep ops/sync controls at the 44px minimum hit target. */
+@media (pointer: coarse) {
+  .ops-btn,
+  .sync-v2-btn {
+    min-height: 44px;
+  }
+  .sync-v2-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}

@@ -2,7 +2,11 @@ import { nanoid } from 'nanoid';
 import { NextResponse } from 'next/server';
 import { normalizeCategoryState } from '@/lib/category-normalization';
 import { escapeHTML } from '@/lib/format';
-import { enforceContentLength } from '@/lib/request-guards';
+import {
+  enforceContentLength,
+  isRequestBodyTooLargeError,
+  readJsonWithLimit,
+} from '@/lib/request-guards';
 import { requireAdmin } from '@/lib/server-auth';
 import { getServerDb, repo } from '@/lib/server-db';
 import { compileConceptArtifactsAfterManualChange } from '@/lib/wiki-compiler';
@@ -44,7 +48,15 @@ export async function POST(req: Request) {
   const denied = requireAdmin(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
-  const body = await req.json().catch(() => ({}));
+  let body: Record<string, unknown>;
+  try {
+    body = await readJsonWithLimit<Record<string, unknown>>(req, MAX_BODY_BYTES);
+  } catch (err) {
+    if (isRequestBodyTooLargeError(err)) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    body = {};
+  }
   const title = clampString(body.title, MAX_TITLE_CHARS) || '新归档概念';
   const summary = clampString(body.summary, MAX_SUMMARY_CHARS) || title;
   const answerBody = clampString(body.body, MAX_ANSWER_CHARS);

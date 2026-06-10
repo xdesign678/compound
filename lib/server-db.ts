@@ -578,6 +578,20 @@ function invalidateCategoryKeysCache(): void {
   _categoryKeysCache = null;
 }
 
+/**
+ * Concept upserts are the hottest write path (every ingest / merge / sync
+ * touches it). Only drop the cache when the write introduces a key the cache
+ * has not seen — keys that merely became unused stay until the 30s TTL
+ * expires, which is an acceptable staleness bound.
+ */
+function noteCategoryKeysOnWrite(keys: string[] | undefined): void {
+  if (!_categoryKeysCache) return;
+  const cached = _categoryKeysCache.keys;
+  if ((keys ?? []).some((key) => !cached.includes(key))) {
+    _categoryKeysCache = null;
+  }
+}
+
 // --------------------------------------------------------------------
 // Public repository API
 // --------------------------------------------------------------------
@@ -708,7 +722,7 @@ export const repo = {
       updated_at: c.updatedAt,
       version: c.version ?? 1,
     });
-    invalidateCategoryKeysCache();
+    noteCategoryKeysOnWrite(c.categoryKeys);
   },
 
   getConcept(id: string): Concept | null {

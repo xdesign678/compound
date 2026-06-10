@@ -140,7 +140,9 @@
   box-shadow: 0 0 0 4px var(--brand-clay-soft);
 }
 
-/* Prevent iOS Safari from zooming when focusing inputs on mobile. */
+/* Prevent iOS Safari from zooming when focusing inputs on mobile.
+   !important so later component stylesheets (e.g. .ask-flyout-search input,
+   .settings-field input) cannot re-shrink a focusable field below 16px. */
 @media (max-width: 767px) {
   input:not([type]),
   input[type='text'],
@@ -152,7 +154,7 @@
   input[type='password'],
   textarea,
   select {
-    font-size: 16px;
+    font-size: 16px !important;
   }
 }
 
@@ -396,6 +398,14 @@ button {
 .back-btn svg {
   width: 18px;
   height: 18px;
+}
+/* Touch devices: 44px minimum hit target for the detail back button. */
+@media (pointer: coarse) {
+  .back-btn {
+    min-height: 44px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
 }
 
 /* Main */

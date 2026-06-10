@@ -1,5 +1,6 @@
 'use client';
 
+import '@/components/modals.css';
 import './concept-detail.css';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -180,6 +181,10 @@ export function ConceptDetail({ id }: { id: string }) {
     text: '',
   });
   const [creatingFromSelection, setCreatingFromSelection] = useState(false);
+  // Mirrored into a ref so the selection effect can read the latest value
+  // without re-registering its 11 document/window listeners on every toggle.
+  const creatingFromSelectionRef = useRef(false);
+  creatingFromSelectionRef.current = creatingFromSelection;
   const [tocOpen, setTocOpen] = useState(false);
   const [tocVisible, setTocVisible] = useState(false);
   const tocTitleId = useId();
@@ -359,7 +364,7 @@ export function ConceptDetail({ id }: { id: string }) {
     if (typeof window === 'undefined') return undefined;
 
     const updateFromSelection = () => {
-      if (creatingFromSelection) return;
+      if (creatingFromSelectionRef.current) return;
       const shell = bodyShellRef.current;
       if (!shell) return;
       const sel = window.getSelection();
@@ -439,7 +444,7 @@ export function ConceptDetail({ id }: { id: string }) {
     const handleSelectionChange = () => {
       const sel = window.getSelection();
       const action = getSelectionChangeAction({
-        creatingFromSelection,
+        creatingFromSelection: creatingFromSelectionRef.current,
         hasSelection: Boolean(sel),
         isCollapsed: Boolean(sel?.isCollapsed),
         selectionInProgress: selectionInProgressRef.current,
@@ -454,7 +459,7 @@ export function ConceptDetail({ id }: { id: string }) {
     };
     const handleScroll = () => {
       if (suppressDismissRef.current) return;
-      if (creatingFromSelection) return;
+      if (creatingFromSelectionRef.current) return;
       dismissSelectionPopover();
     };
     const handleViewportChange = () => {
@@ -487,7 +492,7 @@ export function ConceptDetail({ id }: { id: string }) {
       window.visualViewport?.removeEventListener('resize', handleViewportChange);
       window.visualViewport?.removeEventListener('scroll', handleViewportChange);
     };
-  }, [creatingFromSelection, dismissSelectionPopover]);
+  }, [dismissSelectionPopover]);
 
   const handleCreateFromSelection = useCallback(async () => {
     if (creatingFromSelection) return;

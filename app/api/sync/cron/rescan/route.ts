@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { apiError } from '@/lib/api-error';
-import { requireAdmin } from '@/lib/server-auth';
+import { requireAdmin, safeEqual } from '@/lib/server-auth';
 import { startGithubSync } from '@/lib/github-sync-runner';
 
 export const runtime = 'nodejs';
@@ -10,7 +10,9 @@ function isCronAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET?.trim();
   if (!secret) return false;
   const auth = req.headers.get('authorization') || '';
-  return auth === `Bearer ${secret}`;
+  const bearerPrefix = 'Bearer ';
+  if (!auth.startsWith(bearerPrefix)) return false;
+  return safeEqual(auth.slice(bearerPrefix.length).trim(), secret);
 }
 
 async function run(req: Request, options: { allowAdmin: boolean }) {
