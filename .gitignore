@@ -37,7 +37,11 @@ next-env.d.ts
 
 # MCP / AI tooling local cache
 .codex/
-.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/visual-ux-to-code/
+!.agents/skills/visual-ux-to-code/SKILL.md
 .serena/
 .verdent/
 
