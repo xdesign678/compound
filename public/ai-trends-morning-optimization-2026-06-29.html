@@ -1,0 +1,1353 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" href="data:,">
+  <title>AI 趋势深度晨报优化示意 | 2026-06-29</title>
+  <style>
+    :root {
+      --bg-primary: #faf9f5;
+      --bg-secondary: #f5f0e8;
+      --bg-hover: #f1ece4;
+      --bg-active: rgba(20,20,19,0.06);
+      --bg-card: #fefdfb;
+      --bg-button: #cc785c;
+      --bg-button-hover: #a9583e;
+      --bg-muted: #ebe6df;
+      --surface-card: #efe9de;
+      --surface-dark: #181715;
+      --surface-dark-elevated: #252320;
+      --text-primary: #141413;
+      --text-body: rgba(20,20,19,0.85);
+      --text-secondary: #5e5d59;
+      --text-tertiary: #74726c;
+      --text-on-button: #faf9f5;
+      --text-on-dark: #faf9f5;
+      --text-on-dark-soft: #a09d96;
+      --border-light: rgba(20,20,19,0.08);
+      --border-default: rgba(20,20,19,0.12);
+      --border-section: rgba(20,20,19,0.06);
+      --accent-rust: #cc785c;
+      --accent-rust-strong: #a9583e;
+      --accent-moss: #6f7d5d;
+      --accent-ink: #425f60;
+      --accent-plum: #75617a;
+      --accent-gold: #8a6f3e;
+      --state-success: #5a856a;
+      --state-warning: #c4834a;
+      --font-display: "Songti SC", "Noto Serif SC", "Iowan Old Style", Georgia, "Times New Roman", serif;
+      --font-sans: Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-reading: "Songti SC", "Noto Serif SC", Georgia, "Times New Roman", serif;
+      --font-mono: "Geist Mono", "JetBrains Mono", "SF Mono", Consolas, monospace;
+      --shadow-sm: 0 1px 3px rgba(20,20,19,0.08);
+      --shadow-md: 0 4px 12px rgba(20,20,19,0.12);
+      --site-margin: clamp(1rem, 0.28rem + 3.1vw, 4.5rem);
+      --nav-height: 68px;
+      --nav-height-mobile: 56px;
+      --transition-fast: 150ms ease;
+      --transition-base: 200ms ease;
+    }
+
+    .dark {
+      --bg-primary: #1a1a18;
+      --bg-secondary: #232320;
+      --bg-hover: #2a2a27;
+      --bg-active: rgba(236,233,225,0.08);
+      --bg-card: #232320;
+      --bg-button: #cc785c;
+      --bg-button-hover: #e08f72;
+      --bg-muted: #2a2a27;
+      --surface-card: #252320;
+      --surface-dark: #10100f;
+      --surface-dark-elevated: #2c2a26;
+      --text-primary: #ece9e1;
+      --text-body: rgba(236,233,225,0.85);
+      --text-secondary: #9b9b95;
+      --text-tertiary: #827f77;
+      --text-on-button: #ffffff;
+      --text-on-dark: #faf9f5;
+      --text-on-dark-soft: #a09d96;
+      --border-light: rgba(236,233,225,0.08);
+      --border-default: rgba(236,233,225,0.12);
+      --border-section: rgba(236,233,225,0.06);
+      --state-success: #7aab87;
+      --state-warning: #d4a06a;
+      --shadow-sm: 0 1px 3px rgba(20,20,19,0.24);
+      --shadow-md: 0 4px 12px rgba(20,20,19,0.32);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      overflow-x: hidden;
+      background: var(--bg-primary);
+      color: var(--text-body);
+      font-family: var(--font-reading);
+      font-size: 17px;
+      line-height: 1.6;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    ::selection {
+      background: rgba(204,120,92,0.5);
+      color: inherit;
+    }
+
+    a {
+      color: inherit;
+      text-decoration-line: underline;
+      text-decoration-color: rgba(20,20,19,0.3);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.2em;
+      transition: text-decoration-color var(--transition-fast), color var(--transition-fast);
+    }
+
+    a:hover {
+      text-decoration-color: rgba(20,20,19,0.6);
+    }
+
+    .dark a {
+      text-decoration-color: rgba(236,233,225,0.3);
+    }
+
+    .dark a:hover {
+      text-decoration-color: rgba(236,233,225,0.6);
+    }
+
+    h4,
+    .eyebrow,
+    .nav,
+    .button,
+    .pill,
+    .metric,
+    .read-path,
+    .thesis-card,
+    .event-card,
+    .signal-card,
+    .paper-card,
+    .source-item,
+    .footer,
+    .tag,
+    .label,
+    .impact-row,
+    .timeline,
+    .source-meta {
+      font-family: var(--font-sans);
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin: 0;
+      color: var(--text-primary);
+      letter-spacing: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-family: var(--font-display);
+      font-weight: 500;
+    }
+
+    h1 {
+      max-width: 900px;
+      font-size: 64px;
+      line-height: 1.08;
+    }
+
+    h2 {
+      margin: 0 0 24px;
+      font-size: 42px;
+      line-height: 1.16;
+    }
+
+    h3 {
+      margin: 0 0 12px;
+      font-size: 25px;
+      line-height: 1.3;
+    }
+
+    h4 {
+      margin: 0 0 8px;
+      font-size: 1.05rem;
+      line-height: 1.4;
+      font-weight: 600;
+    }
+
+    p {
+      margin: 0 0 18px;
+    }
+
+    ul,
+    ol {
+      margin: 0;
+      padding-left: 1.2em;
+    }
+
+    li {
+      margin: 0 0 10px;
+    }
+
+    button {
+      min-width: 44px;
+      min-height: 44px;
+      font-family: var(--font-sans);
+    }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      height: var(--nav-height);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 0 var(--site-margin);
+      border-bottom: 1px solid var(--border-section);
+      background: color-mix(in srgb, var(--bg-primary) 92%, transparent);
+      backdrop-filter: blur(12px);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-primary);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .brand-mark {
+      width: 18px;
+      height: 18px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--accent-rust);
+      box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-rust) 14%, transparent);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 18px;
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+    }
+
+    .nav-links a {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border-default);
+      border-radius: 7.5px;
+      background: transparent;
+      color: var(--text-primary);
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 0.88rem;
+      transition: background var(--transition-base), transform var(--transition-base), border-color var(--transition-base);
+    }
+
+    .button:hover {
+      background: var(--bg-hover);
+      transform: translateY(-1px);
+    }
+
+    .button[aria-pressed="true"] {
+      background: var(--bg-button);
+      color: var(--text-on-button);
+      border-color: transparent;
+    }
+
+    .button[aria-pressed="true"]:hover {
+      background: var(--bg-button-hover);
+    }
+
+    .menu-toggle {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .mobile-menu {
+      position: fixed;
+      top: var(--nav-height-mobile);
+      left: 0;
+      right: 0;
+      z-index: 19;
+      display: grid;
+      grid-template-rows: 0fr;
+      border-bottom: 1px solid var(--border-section);
+      background: var(--bg-primary);
+      overflow: hidden;
+      transition: grid-template-rows 260ms ease;
+    }
+
+    .mobile-menu.open {
+      grid-template-rows: 1fr;
+    }
+
+    .mobile-menu-inner {
+      min-height: 0;
+      overflow: hidden;
+      padding: 0 var(--site-margin);
+    }
+
+    .mobile-menu.open .mobile-menu-inner {
+      padding-top: 16px;
+      padding-bottom: 18px;
+    }
+
+    .mobile-menu a {
+      display: block;
+      min-height: 44px;
+      color: var(--text-primary);
+      text-decoration: none;
+      font-family: var(--font-sans);
+      font-size: 0.95rem;
+      line-height: 44px;
+      border-bottom: 1px solid var(--border-section);
+    }
+
+    .hero {
+      padding: 82px var(--site-margin) 54px;
+      border-bottom: 1px solid var(--border-section);
+    }
+
+    .wide {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .content {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+      gap: 40px;
+      align-items: end;
+    }
+
+    .eyebrow {
+      margin: 0 0 14px;
+      color: var(--text-secondary);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .lede {
+      max-width: 760px;
+      margin-top: 28px;
+      color: var(--text-body);
+      font-size: 21px;
+      line-height: 1.7;
+    }
+
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .pill,
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      border: 1px solid var(--border-default);
+      border-radius: 7.5px;
+      padding: 4px 10px;
+      color: var(--text-secondary);
+      background: color-mix(in srgb, var(--surface-card) 54%, var(--bg-card));
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+
+    .decision-panel {
+      min-width: 0;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: var(--surface-dark);
+      color: var(--text-on-dark-soft);
+      padding: 26px;
+    }
+
+    .decision-panel p {
+      margin-bottom: 12px;
+      color: var(--text-on-dark-soft);
+      font-family: var(--font-reading);
+      font-size: 0.98rem;
+    }
+
+    .decision-panel h2 {
+      color: var(--text-on-dark);
+    }
+
+    .decision-panel .eyebrow {
+      color: #e8a55a;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .metric {
+      min-width: 0;
+      border-top: 1px solid rgba(250,249,245,0.12);
+      padding-top: 12px;
+    }
+
+    .metric strong {
+      display: block;
+      color: var(--text-on-dark);
+      font-size: 1.1rem;
+      line-height: 1.2;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 4px;
+      color: var(--text-on-dark-soft);
+      font-size: 0.76rem;
+      line-height: 1.35;
+    }
+
+    .section {
+      padding: 72px var(--site-margin);
+      border-bottom: 1px solid var(--border-section);
+    }
+
+    .section.alt {
+      background: var(--bg-secondary);
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, 0.8fr) minmax(280px, 0.45fr);
+      gap: 32px;
+      align-items: end;
+      margin-bottom: 28px;
+    }
+
+    .section-note {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 0.98rem;
+    }
+
+    .path-grid,
+    .thesis-grid,
+    .signal-grid,
+    .paper-grid {
+      display: grid;
+      gap: 16px;
+      min-width: 0;
+    }
+
+    .path-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .thesis-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .signal-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .paper-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .card-grid:has(.card:hover) .card:not(:hover),
+    .path-grid:has(.card:hover) .card:not(:hover),
+    .thesis-grid:has(.card:hover) .card:not(:hover),
+    .signal-grid:has(.card:hover) .card:not(:hover),
+    .paper-grid:has(.card:hover) .card:not(:hover) {
+      opacity: 0.68;
+    }
+
+    .card,
+    .read-path,
+    .thesis-card,
+    .event-card,
+    .signal-card,
+    .paper-card,
+    .source-item {
+      min-width: 0;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface-card) 42%, var(--bg-card));
+      box-shadow: none;
+      transition: box-shadow var(--transition-base), opacity var(--transition-base), transform var(--transition-base);
+    }
+
+    .card:hover,
+    .read-path:hover,
+    .thesis-card:hover,
+    .event-card:hover,
+    .signal-card:hover,
+    .paper-card:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-1px);
+    }
+
+    .read-path,
+    .thesis-card,
+    .signal-card,
+    .paper-card {
+      padding: 22px;
+    }
+
+    .read-path .label,
+    .thesis-card .label {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      margin-bottom: 14px;
+      color: var(--accent-rust);
+      font-size: 0.76rem;
+      font-weight: 600;
+    }
+
+    .read-path p,
+    .thesis-card p,
+    .event-card p,
+    .paper-card p,
+    .signal-card p {
+      margin-bottom: 0;
+      color: var(--text-body);
+      font-family: var(--font-reading);
+    }
+
+    .impact-map {
+      display: grid;
+      grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .timeline {
+      position: sticky;
+      top: calc(var(--nav-height) + 24px);
+      display: grid;
+      gap: 12px;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 76px minmax(0, 1fr);
+      gap: 14px;
+      border-bottom: 1px solid var(--border-section);
+      padding: 0 0 14px;
+    }
+
+    .timeline-item strong {
+      color: var(--text-primary);
+      font-size: 0.95rem;
+    }
+
+    .timeline-item span {
+      color: var(--text-tertiary);
+      font-size: 0.76rem;
+      line-height: 1.4;
+    }
+
+    .timeline-item p {
+      margin: 0;
+      color: var(--text-body);
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+
+    .event-stack {
+      display: grid;
+      gap: 16px;
+    }
+
+    .event-card {
+      padding: 24px;
+    }
+
+    .event-card[hidden],
+    .paper-card[hidden],
+    .signal-card[hidden] {
+      display: none;
+    }
+
+    .event-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 16px;
+    }
+
+    .impact-grid {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .impact-row {
+      display: grid;
+      grid-template-columns: 120px minmax(0, 1fr);
+      gap: 12px;
+      border-top: 1px solid var(--border-section);
+      padding-top: 12px;
+      color: var(--text-body);
+      font-size: 0.92rem;
+      line-height: 1.55;
+    }
+
+    .impact-row strong {
+      color: var(--text-primary);
+      font-size: 0.86rem;
+    }
+
+    .signal-top,
+    .paper-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 12px;
+      color: var(--text-secondary);
+      font-size: 0.78rem;
+    }
+
+    .meter {
+      position: relative;
+      height: 6px;
+      margin-top: 18px;
+      overflow: hidden;
+      border-radius: 7.5px;
+      background: var(--bg-muted);
+    }
+
+    .meter span {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: var(--w);
+      border-radius: inherit;
+      background: currentColor;
+      color: var(--accent-rust);
+    }
+
+    .signal-card:nth-child(2) .meter span { color: var(--accent-moss); }
+    .signal-card:nth-child(3) .meter span { color: var(--accent-ink); }
+    .signal-card:nth-child(4) .meter span { color: var(--accent-plum); }
+    .signal-card:nth-child(5) .meter span { color: var(--accent-gold); }
+    .signal-card:nth-child(6) .meter span { color: var(--accent-rust); }
+
+    .paper-card {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .paper-card dl {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+    }
+
+    .paper-card dt {
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .paper-card dd {
+      margin: 3px 0 0;
+      color: var(--text-body);
+      font-family: var(--font-reading);
+    }
+
+    .source-list {
+      display: grid;
+      gap: 10px;
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .source-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: baseline;
+      padding: 14px 16px;
+      font-size: 0.92rem;
+    }
+
+    .source-item a {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .source-meta {
+      color: var(--text-tertiary);
+      font-size: 0.76rem;
+      white-space: nowrap;
+    }
+
+    .design-notes {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 26px;
+    }
+
+    .footer {
+      padding: 34px var(--site-margin) 48px;
+      color: var(--text-secondary);
+      font-size: 0.86rem;
+      text-align: center;
+    }
+
+    .compact .deep-only {
+      display: none;
+    }
+
+    .compact .section {
+      padding-top: 56px;
+      padding-bottom: 56px;
+    }
+
+    .compact .event-card,
+    .compact .paper-card,
+    .compact .thesis-card {
+      padding: 18px;
+    }
+
+    @media (max-width: 980px) {
+      .hero-grid,
+      .section-head,
+      .impact-map,
+      .path-grid,
+      .thesis-grid,
+      .signal-grid,
+      .paper-grid,
+      .design-notes {
+        grid-template-columns: 1fr;
+      }
+
+      .timeline {
+        position: static;
+      }
+    }
+
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 42px;
+        line-height: 1.12;
+      }
+
+      h2 {
+        font-size: 30px;
+        line-height: 1.18;
+      }
+
+      h3 {
+        font-size: 22px;
+      }
+
+      .lede {
+        font-size: 18px;
+        line-height: 1.72;
+      }
+
+      .nav {
+        height: var(--nav-height-mobile);
+      }
+
+      .nav-links {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .menu-toggle {
+        position: static;
+        width: auto;
+        height: auto;
+        margin: 0;
+        overflow: visible;
+        clip-path: none;
+        opacity: 1;
+        pointer-events: auto;
+        visibility: visible;
+        display: inline-flex;
+      }
+
+      .hero {
+        padding-top: 48px;
+        padding-bottom: 40px;
+      }
+
+      .section {
+        padding-top: 64px;
+        padding-bottom: 64px;
+      }
+
+      .metric-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .timeline-item,
+      .impact-row,
+      .source-item {
+        grid-template-columns: 1fr;
+      }
+
+      .source-item {
+        gap: 4px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav" aria-label="主导航">
+    <a class="brand" href="#top" aria-label="回到顶部">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>AI 趋势晨报</span>
+    </a>
+    <div class="nav-links" aria-label="章节导航">
+      <a href="#decision">速读</a>
+      <a href="#events">事件</a>
+      <a href="#radar">趋势</a>
+      <a href="#papers">论文</a>
+      <a href="#sources">来源</a>
+      <button class="button" id="densityToggle" type="button" aria-pressed="false">紧凑</button>
+      <button class="button" id="themeToggle" type="button" aria-label="切换明暗模式">明暗</button>
+    </div>
+    <button class="button menu-toggle" id="menuToggle" type="button" aria-controls="mobileMenu" aria-expanded="false">目录</button>
+  </nav>
+
+  <div class="mobile-menu" id="mobileMenu" aria-hidden="true" inert>
+    <div class="mobile-menu-inner">
+      <a href="#decision">三分钟速读</a>
+      <a href="#events">事件影响链</a>
+      <a href="#radar">水下趋势</a>
+      <a href="#papers">论文矩阵</a>
+      <a href="#sources">来源列表</a>
+      <button class="button" id="mobileDensityToggle" type="button" aria-pressed="false">紧凑阅读</button>
+      <button class="button" id="mobileThemeToggle" type="button">切换明暗</button>
+    </div>
+  </div>
+
+  <main id="top">
+    <header class="hero">
+      <div class="wide hero-grid">
+        <div>
+          <p class="eyebrow">2026-06-29 早间版 · 优化示意</p>
+          <h1>把晨报从“长文章”改成“判断入口”。</h1>
+          <p class="lede">今天的主线不是某个模型发布，而是前沿模型进入受控发布，agent 竞争转向运行时、企业分发、证据链和算力系统。</p>
+          <div class="meta-row" aria-label="报告元信息">
+            <span class="pill">观察窗口：2026-06-26 至 2026-06-29</span>
+            <span class="pill">内容来源：官方、政府、论文、媒体</span>
+            <span class="pill">示意重点：层级、路径、证据链</span>
+          </div>
+        </div>
+        <aside class="decision-panel" aria-label="今日最重要判断">
+          <p class="eyebrow">先读这一屏</p>
+          <h2>今日一句话</h2>
+          <p>AI 竞争正在从“谁模型更强”转向“谁能控制首发、交付企业场景、解释安全证据，并把推理成本压下来”。</p>
+          <div class="metric-grid" aria-label="今日信号摘要">
+            <div class="metric"><strong>5</strong><span>重大事件</span></div>
+            <div class="metric"><strong>6</strong><span>趋势信号</span></div>
+            <div class="metric"><strong>6</strong><span>技术论文</span></div>
+          </div>
+        </aside>
+      </div>
+    </header>
+
+    <section class="section" id="decision">
+      <div class="wide">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">阅读路径</p>
+            <h2>先帮读者决定怎么读。</h2>
+          </div>
+          <p class="section-note">原版的内容已经足够厚；这里的优化是把读者从“从头读到尾”解放出来，先给路径，再给深读。</p>
+        </div>
+        <div class="path-grid">
+          <article class="read-path card">
+            <span class="label">3 分钟</span>
+            <h3>只看结论</h3>
+            <p>读今日一句话、四个核心判断和趋势雷达，适合早会前快速建立方向感。</p>
+          </article>
+          <article class="read-path card">
+            <span class="label">12 分钟</span>
+            <h3>看事件影响链</h3>
+            <p>按“事实、判断、影响、后续观察”读五个事件，适合决定今天要追哪些新闻。</p>
+          </article>
+          <article class="read-path card">
+            <span class="label">30 分钟</span>
+            <h3>看论文和来源</h3>
+            <p>从 agent 安全、工具隐私、世界模型和训练监控里找产品与研究线索。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section alt">
+      <div class="wide">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">今日核心判断</p>
+            <h2>把四个判断改成可复述的标题。</h2>
+          </div>
+          <p class="section-note">每张卡只讲一个判断，避免读者在长段落里找重点。</p>
+        </div>
+        <div class="thesis-grid">
+          <article class="thesis-card card">
+            <span class="label">01 · 发布机制</span>
+            <h3>前沿模型发布正在制度化。</h3>
+            <p>GPT-5.6 Sol 预览和美国行政令放在一起看，模型首发越来越像“安全、政府、可信客户”共同参与的流程。</p>
+          </article>
+          <article class="thesis-card card">
+            <span class="label">02 · 企业入口</span>
+            <h3>agent 价值从问答转向流程接管。</h3>
+            <p>HP、Slack、Codex 和企业部署的共同点，是让 AI 进入权限、协作、审计和长期任务。</p>
+          </article>
+          <article class="thesis-card card">
+            <span class="label">03 · 开源压力</span>
+            <h3>闭源护城河改名为治理。</h3>
+            <p>开源权重继续压低能力溢价，闭源厂商必须证明安全、可靠、合规和责任归属值这个价格。</p>
+          </article>
+          <article class="thesis-card card">
+            <span class="label">04 · 算力系统</span>
+            <h3>成本战从 GPU 变成系统战。</h3>
+            <p>Jalapeño、主权算力和云厂商芯片说明：推理成本、供电、部署渠道和客户合同会一起决定胜负。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="events">
+      <div class="wide">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">事件影响链</p>
+            <h2>每个事件都回答“所以呢”。</h2>
+          </div>
+          <p class="section-note">优化重点：把“事实”和“判断”之后再补一层“对谁有影响”，让深读更像决策材料。</p>
+        </div>
+        <div class="impact-map">
+          <aside class="timeline" aria-label="今日事件时间线">
+            <div class="timeline-item">
+              <span>06-24</span>
+              <p><strong>Jalapeño</strong><br>推理芯片把成本战前移到基础设施。</p>
+            </div>
+            <div class="timeline-item">
+              <span>06-25</span>
+              <p><strong>Agents work</strong><br>企业 agent 进入工作流和审计语境。</p>
+            </div>
+            <div class="timeline-item">
+              <span>06-26</span>
+              <p><strong>GPT-5.6 Sol</strong><br>前沿模型首发进入受控发布叙事。</p>
+            </div>
+            <div class="timeline-item">
+              <span>06-28</span>
+              <p><strong>HP Frontier</strong><br>PC 与企业入口成为模型分发位。</p>
+            </div>
+          </aside>
+
+          <div class="event-stack">
+            <article class="event-card card">
+              <div class="event-meta">
+                <span class="tag">官方 RSS</span>
+                <span class="tag">政府文件</span>
+                <span class="tag">高确定性</span>
+              </div>
+              <h3>OpenAI：模型、企业入口、推理芯片拼成同一张路线图。</h3>
+              <p>HP Frontier、GPT-5.6 Sol、agents work 和 Jalapeño 不应分开看。它们分别对应分发、模型、工作流和推理成本。</p>
+              <div class="impact-grid">
+                <div class="impact-row"><strong>已确认事实</strong><span>OpenAI RSS 给出相关条目；白宫文件写到安全基准、covered frontier model 和发布前访问。</span></div>
+                <div class="impact-row"><strong>基于证据的判断</strong><span>OpenAI 的竞争焦点正从单一 API，转向模型、企业入口和自有推理基础设施的一体化交付。</span></div>
+                <div class="impact-row"><strong>读者该看什么</strong><span>观察 HP 合作是否露出真实部署形态，以及 GPT-5.6 Sol 是否出现第三方能力和安全评测。</span></div>
+              </div>
+            </article>
+
+            <article class="event-card card">
+              <div class="event-meta">
+                <span class="tag">媒体报道</span>
+                <span class="tag">政策信号</span>
+                <span class="tag">需继续跟踪</span>
+              </div>
+              <h3>受控发布：不是减速，而是把首发权变成稀缺资产。</h3>
+              <p>The Verge、AP、Guardian 把 GPT-5.6 Sol 和 Anthropic 模型访问节奏放进美国审查背景里讨论。</p>
+              <div class="impact-grid">
+                <div class="impact-row"><strong>已确认事实</strong><span>白宫行政令描述政府与开发者协作、分类基准和可信伙伴早期访问；媒体报道描述近期受限发布安排。</span></div>
+                <div class="impact-row"><strong>基于证据的判断</strong><span>模型首发会变成能力、政策、红队证据和客户访问控制的组合问题。</span></div>
+                <div class="impact-row"><strong>读者该看什么</strong><span>看后续是否出现更明确的安全证据包、访问分层和事故责任条款。</span></div>
+              </div>
+            </article>
+
+            <article class="event-card card">
+              <div class="event-meta">
+                <span class="tag">产品报道</span>
+                <span class="tag">企业场景</span>
+                <span class="tag">中高确定性</span>
+              </div>
+              <h3>Claude Tag 与企业 agent：协作界面正在替代聊天框。</h3>
+              <p>Claude Tag 的报道和 OpenAI 的企业部署条目都说明，agent 的落点正从单人问答进入团队协作环境。</p>
+              <div class="impact-grid">
+                <div class="impact-row"><strong>已确认事实</strong><span>OpenAI 近期密集发布企业部署、agents work、Codex 使用案例；Claude Tag 暂按媒体报道处理。</span></div>
+                <div class="impact-row"><strong>基于证据的判断</strong><span>下一轮产品竞争会发生在团队可见性、权限系统和流程接管上。</span></div>
+                <div class="impact-row"><strong>读者该看什么</strong><span>看 agent 是否能给出可审计轨迹，而不是只在聊天框里给出最终答案。</span></div>
+              </div>
+            </article>
+
+            <article class="event-card card">
+              <div class="event-meta">
+                <span class="tag">媒体报道</span>
+                <span class="tag">开源竞争</span>
+                <span class="tag">边界明确</span>
+              </div>
+              <h3>GLM-5.2 与开源压力：闭源厂商要用治理证明溢价。</h3>
+              <p>GLM-5.2 把中国开源模型、长程 coding、网络安全能力和蒸馏争议推到同一个讨论场。</p>
+              <div class="impact-grid">
+                <div class="impact-row"><strong>已确认事实</strong><span>相关能力、风险和 benchmark 主要来自媒体与厂商口径，不应写成第三方完全复现结论。</span></div>
+                <div class="impact-row"><strong>基于证据的判断</strong><span>开源会继续制造价格压力，但企业会为审计、合规、可靠性和责任归属付费。</span></div>
+                <div class="impact-row"><strong>读者该看什么</strong><span>等独立复现的 coding、cybersecurity、agent benchmark，而不是只看发布口径。</span></div>
+              </div>
+            </article>
+
+            <article class="event-card card deep-only">
+              <div class="event-meta">
+                <span class="tag">资本报道</span>
+                <span class="tag">世界模型</span>
+                <span class="tag">长期信号</span>
+              </div>
+              <h3>General Intuition：世界模型叙事重新升温。</h3>
+              <p>Axios 报道其融资 3.2 亿美元，方向是从游戏环境中发展 AI。它和推理芯片、主权算力一样，都在回应长期 agent 与机器人需要现实反馈的问题。</p>
+              <div class="impact-grid">
+                <div class="impact-row"><strong>已确认事实</strong><span>融资来自媒体报道；Jalapeño 来自官方 RSS；欧洲与云芯片背景来自公开报道。</span></div>
+                <div class="impact-row"><strong>基于证据的判断</strong><span>游戏和仿真可能成为新数据矿，因为纯文本 agent 的天花板会被现实反馈和物理一致性限制。</span></div>
+                <div class="impact-row"><strong>读者该看什么</strong><span>看融资之后是否转化为可复用数据、仿真环境和机器人训练闭环。</span></div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section alt" id="radar">
+      <div class="wide">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">水下趋势雷达</p>
+            <h2>趋势卡要像仪表盘，不像装饰条。</h2>
+          </div>
+          <p class="section-note">每个信号都保留强度，但必须配一句“为什么今天要看”。</p>
+        </div>
+        <div class="signal-grid">
+          <article class="signal-card card">
+            <div class="signal-top"><h4>发布预审</h4><span>88%</span></div>
+            <p>前沿模型开始接受政府、可信客户和安全团队的提前可见性。</p>
+            <div class="meter" aria-hidden="true"><span style="--w: 88%"></span></div>
+          </article>
+          <article class="signal-card card">
+            <div class="signal-top"><h4>运行时防御</h4><span>82%</span></div>
+            <p>agent 安全从训练期 alignment 转向工具调用、记忆、权限和轨迹审计。</p>
+            <div class="meter" aria-hidden="true"><span style="--w: 82%"></span></div>
+          </article>
+          <article class="signal-card card">
+            <div class="signal-top"><h4>企业分发</h4><span>79%</span></div>
+            <p>Slack、PC 厂商、云合同和开发平台正在成为模型分发入口。</p>
+            <div class="meter" aria-hidden="true"><span style="--w: 79%"></span></div>
+          </article>
+          <article class="signal-card card">
+            <div class="signal-top"><h4>开源追赶</h4><span>76%</span></div>
+            <p>开源权重不只冲击价格，也会放大蒸馏、滥用和责任边界争议。</p>
+            <div class="meter" aria-hidden="true"><span style="--w: 76%"></span></div>
+          </article>
+          <article class="signal-card card">
+            <div class="signal-top"><h4>推理芯片</h4><span>74%</span></div>
+            <p>下一阶段成本战在推理端，芯片、调度和模型架构会一起优化。</p>
+            <div class="meter" aria-hidden="true"><span style="--w: 74%"></span></div>
+          </article>
+          <article class="signal-card card">
+            <div class="signal-top"><h4>数据边界</h4><span>71%</span></div>
+            <p>向量库隐私、工具调用泄露、合成数据来源会成为企业采购审查项。</p>
+            <div class="meter" aria-hidden="true"><span style="--w: 71%"></span></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="papers">
+      <div class="wide">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">论文矩阵</p>
+            <h2>论文区从“逐篇摘要”变成“可转化线索”。</h2>
+          </div>
+          <p class="section-note">每篇论文都回答四个问题：问题、方法、重要性、局限。读者更容易决定要不要点原文。</p>
+        </div>
+        <div class="paper-grid">
+          <article class="paper-card card">
+            <div class="paper-meta"><span>arXiv 2606.28270</span><span>Agent 安全</span></div>
+            <h3>Agent-Native Immune System</h3>
+            <dl>
+              <div><dt>研究问题</dt><dd>带记忆、工具和多 agent 协作的系统，传统聊天安全边界不够用了。</dd></div>
+              <div><dt>核心方法</dt><dd>提出六层 Immune Tower，把防御机制嵌进 agent 的认知和执行循环。</dd></div>
+              <div><dt>为什么重要</dt><dd>模型价值观正确，不等于工具调用不会被劫持。</dd></div>
+              <div><dt>局限</dt><dd>更像架构框架，产品效果仍需要标准协议和大规模评测。</dd></div>
+            </dl>
+          </article>
+
+          <article class="paper-card card">
+            <div class="paper-meta"><span>arXiv 2606.28153</span><span>越狱机制</span></div>
+            <h3>Robust Harmful Features</h3>
+            <dl>
+              <div><dt>研究问题</dt><dd>越狱提示到底改动了模型内部哪些安全相关部件。</dd></div>
+              <div><dt>核心方法</dt><dd>分析注意力头，区分被压制的头和仍保持安全激活的头。</dd></div>
+              <div><dt>为什么重要</dt><dd>如果危险特征仍存在，产品可尝试读取内部激活做实时检测。</dd></div>
+              <div><dt>局限</dt><dd>机制解释依赖具体模型，跨模型泛化要谨慎。</dd></div>
+            </dl>
+          </article>
+
+          <article class="paper-card card">
+            <div class="paper-meta"><span>arXiv 2606.28128</span><span>具身世界模型</span></div>
+            <h3>PhysisForcing</h3>
+            <dl>
+              <div><dt>研究问题</dt><dd>视频模型常在接触、变形和轨迹连续性上违反物理直觉。</dd></div>
+              <div><dt>核心方法</dt><dd>用像素轨迹对齐和语义关系对齐，把监督集中在物理一致性区域。</dd></div>
+              <div><dt>为什么重要</dt><dd>世界模型更可信，机器人就能先在模型里试动作。</dd></div>
+              <div><dt>局限</dt><dd>从仿真 benchmark 到真实机器人仍有距离。</dd></div>
+            </dl>
+          </article>
+
+          <article class="paper-card card">
+            <div class="paper-meta"><span>arXiv 2606.28279</span><span>代码 agent</span></div>
+            <h3>HORIZON</h3>
+            <dl>
+              <div><dt>研究问题</dt><dd>硬件设计能否像软件仓库一样被 agent 长期演化、评测和回放。</dd></div>
+              <div><dt>核心方法</dt><dd>用 Markdown harness 生成项目包，包含知识、评测、通过条件和 runtime 策略。</dd></div>
+              <div><dt>为什么重要</dt><dd>agent 的工程边界在仓库、评测和回放闭环，不在单段代码。</dd></div>
+              <div><dt>局限</dt><dd>受控代理任务不等于真实芯片设计已被解决。</dd></div>
+            </dl>
+          </article>
+
+          <article class="paper-card card deep-only">
+            <div class="paper-meta"><span>arXiv 2606.28116</span><span>大模型训练</span></div>
+            <h3>Mechanism-Driven Monitors</h3>
+            <dl>
+              <div><dt>研究问题</dt><dd>训练故障在 loss 发散前可能已经积累很久。</dd></div>
+              <div><dt>核心方法</dt><dd>从 flash attention、MoE router 等模块构造早期报警指标。</dd></div>
+              <div><dt>为什么重要</dt><dd>减少训练浪费，让大模型训练更像工业过程控制。</dd></div>
+              <div><dt>局限</dt><dd>不同架构的早期故障信号不同，工程部署要结合具体训练栈。</dd></div>
+            </dl>
+          </article>
+
+          <article class="paper-card card deep-only">
+            <div class="paper-meta"><span>arXiv 2606.28061</span><span>工具隐私</span></div>
+            <h3>ToolPrivacyBench</h3>
+            <dl>
+              <div><dt>研究问题</dt><dd>工具型 agent 可能完成任务，却把不必要的私人信息传给错误工具。</dd></div>
+              <div><dt>核心方法</dt><dd>构造 2,150 个案例，记录工具参数和后端审计日志。</dd></div>
+              <div><dt>为什么重要</dt><dd>把 agent 评测从答案是否正确推进到执行轨迹是否合规。</dd></div>
+              <div><dt>局限</dt><dd>仍是 mock backend 和 benchmark，真实企业系统更复杂。</dd></div>
+            </dl>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section alt" id="design">
+      <div class="wide">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">这版到底优化了什么</p>
+            <h2>以后可以固化成晨报模板。</h2>
+          </div>
+          <p class="section-note">这部分是给生成流程看的：它不是正文内容，而是模板策略。</p>
+        </div>
+        <div class="design-notes">
+          <article class="thesis-card card">
+            <span class="label">入口</span>
+            <h3>先给一句话结论</h3>
+            <p>读者不用先读完 3,000 字，第一屏就知道今天 AI 世界发生了什么结构变化。</p>
+          </article>
+          <article class="thesis-card card">
+            <span class="label">结构</span>
+            <h3>事件按影响排序</h3>
+            <p>不是按新闻来源平铺，而是按“对行业判断的贡献”组织。</p>
+          </article>
+          <article class="thesis-card card">
+            <span class="label">证据</span>
+            <h3>事实和判断分层</h3>
+            <p>官方、政府、媒体、论文分开标注，避免把报道口径写成确定事实。</p>
+          </article>
+          <article class="thesis-card card">
+            <span class="label">复用</span>
+            <h3>紧凑模式可自动生成</h3>
+            <p>每天默认生成完整稿，同时给忙碌读者一个可折叠的速读版本。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="sources">
+      <div class="content">
+        <p class="eyebrow">来源列表</p>
+        <h2>关键事实来源。</h2>
+        <ul class="source-list">
+          <li class="source-item"><a href="https://openai.com/news/rss.xml" target="_blank" rel="noopener">OpenAI News RSS：HP Frontier、GPT-5.6 Sol、agents work、Jalapeño 等条目</a><span class="source-meta">官方 RSS</span></li>
+          <li class="source-item"><a href="https://openai.com/index/hp-frontier-partnership" target="_blank" rel="noopener">OpenAI：HP Inc. launches Frontier strategic partnership with OpenAI</a><span class="source-meta">官方页面</span></li>
+          <li class="source-item"><a href="https://openai.com/index/previewing-gpt-5-6-sol" target="_blank" rel="noopener">OpenAI：Previewing GPT-5.6 Sol</a><span class="source-meta">官方页面</span></li>
+          <li class="source-item"><a href="https://openai.com/index/how-agents-are-transforming-work" target="_blank" rel="noopener">OpenAI：How agents are transforming work</a><span class="source-meta">官方页面</span></li>
+          <li class="source-item"><a href="https://openai.com/index/openai-broadcom-jalapeno-inference-chip" target="_blank" rel="noopener">OpenAI：OpenAI and Broadcom unveil LLM-optimized inference chip</a><span class="source-meta">官方页面</span></li>
+          <li class="source-item"><a href="https://www.whitehouse.gov/presidential-actions/2026/06/promoting-advanced-artificial-intelligence-innovation-and-security/" target="_blank" rel="noopener">White House：Promoting Advanced Artificial Intelligence Innovation and Security</a><span class="source-meta">政府文件</span></li>
+          <li class="source-item"><a href="https://www.theverge.com/ai-artificial-intelligence/957845/openai-gpt-5-6-trump-administration-ai-preview" target="_blank" rel="noopener">The Verge：OpenAI unveils GPT-5.6 amid US AI regulatory drama</a><span class="source-meta">媒体报道</span></li>
+          <li class="source-item"><a href="https://www.theguardian.com/technology/2026/jun/26/openai-ai-model-release-trump-us-sam-altman-gpt-anthropic-mythos" target="_blank" rel="noopener">The Guardian：OpenAI model release and Anthropic Mythos context</a><span class="source-meta">媒体报道</span></li>
+          <li class="source-item"><a href="https://apnews.com/article/065d5398baac7f16c8265c2cb8ba2baa" target="_blank" rel="noopener">AP：OpenAI and Anthropic limit release of AI models after US review</a><span class="source-meta">媒体报道</span></li>
+          <li class="source-item"><a href="https://www.axios.com/2026/06/27/anthropic-fable-5-return-soon" target="_blank" rel="noopener">Axios：Powerful Anthropic model, Fable 5, on track to return soon</a><span class="source-meta">媒体报道</span></li>
+          <li class="source-item"><a href="https://www.axios.com/2026/06/25/china-glm-52-open-source-hackers" target="_blank" rel="noopener">Axios：China's new open-source model accelerates AI hacking threat</a><span class="source-meta">媒体报道</span></li>
+          <li class="source-item"><a href="https://www.wsj.com/tech/ai/chinese-ai-anthropic-mythos-cybersecurity-574b02c2" target="_blank" rel="noopener">Wall Street Journal：China Has Matched Anthropic in Cybersecurity, Resetting AI Race</a><span class="source-meta">媒体报道</span></li>
+          <li class="source-item"><a href="https://www.techradar.com/pro/bringing-claude-tag-into-slack-is-about-making-ai-multiplayer-you-can-now-tag-claude-directly-in-slack" target="_blank" rel="noopener">TechRadar：Bringing Claude Tag into Slack</a><span class="source-meta">产品报道</span></li>
+          <li class="source-item"><a href="https://www.axios.com/2026/06/26/general-intuition-ai-gaming" target="_blank" rel="noopener">Axios：General Intuition raises $320 million to develop AI from gaming</a><span class="source-meta">资本报道</span></li>
+          <li class="source-item"><a href="https://arxiv.org/abs/2606.28270" target="_blank" rel="noopener">arXiv 2606.28270：Agent-Native Immune System</a><span class="source-meta">论文</span></li>
+          <li class="source-item"><a href="https://arxiv.org/abs/2606.28153" target="_blank" rel="noopener">arXiv 2606.28153：Robust Harmful Features Under Jailbreak Attacks</a><span class="source-meta">论文</span></li>
+          <li class="source-item"><a href="https://arxiv.org/abs/2606.28128" target="_blank" rel="noopener">arXiv 2606.28128：PhysisForcing</a><span class="source-meta">论文</span></li>
+          <li class="source-item"><a href="https://arxiv.org/abs/2606.28279" target="_blank" rel="noopener">arXiv 2606.28279：Agentic Hardware Design as Repository-Level Code Evolution</a><span class="source-meta">论文</span></li>
+          <li class="source-item"><a href="https://arxiv.org/abs/2606.28116" target="_blank" rel="noopener">arXiv 2606.28116：Mechanism-Driven Monitors for LLM Training Instability</a><span class="source-meta">论文</span></li>
+          <li class="source-item"><a href="https://arxiv.org/abs/2606.28061" target="_blank" rel="noopener">arXiv 2606.28061：ToolPrivacyBench</a><span class="source-meta">论文</span></li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    示意生成时间：2026-06-29。内容使用今日 AI 趋势晨报主线，页面用于讨论信息架构和阅读体验。
+  </footer>
+
+  <script>
+    const root = document.documentElement;
+    const themeToggle = document.getElementById("themeToggle");
+    const mobileThemeToggle = document.getElementById("mobileThemeToggle");
+    const densityToggle = document.getElementById("densityToggle");
+    const mobileDensityToggle = document.getElementById("mobileDensityToggle");
+    const menuToggle = document.getElementById("menuToggle");
+    const mobileMenu = document.getElementById("mobileMenu");
+    const storedTheme = localStorage.getItem("ai-trends-demo-theme");
+    const storedDensity = localStorage.getItem("ai-trends-demo-density");
+
+    if (storedTheme === "dark") {
+      root.classList.add("dark");
+    }
+
+    if (storedDensity === "compact") {
+      document.body.classList.add("compact");
+      densityToggle.setAttribute("aria-pressed", "true");
+      mobileDensityToggle.setAttribute("aria-pressed", "true");
+    }
+
+    function toggleTheme() {
+      root.classList.toggle("dark");
+      localStorage.setItem("ai-trends-demo-theme", root.classList.contains("dark") ? "dark" : "light");
+    }
+
+    function syncDensityButtons(isCompact) {
+      densityToggle.setAttribute("aria-pressed", isCompact ? "true" : "false");
+      mobileDensityToggle.setAttribute("aria-pressed", isCompact ? "true" : "false");
+    }
+
+    function toggleDensity() {
+      const isCompact = !document.body.classList.contains("compact");
+      document.body.classList.toggle("compact", isCompact);
+      localStorage.setItem("ai-trends-demo-density", isCompact ? "compact" : "full");
+      syncDensityButtons(isCompact);
+    }
+
+    function closeMenu() {
+      mobileMenu.classList.remove("open");
+      mobileMenu.setAttribute("aria-hidden", "true");
+      mobileMenu.setAttribute("inert", "");
+      menuToggle.setAttribute("aria-expanded", "false");
+    }
+
+    function toggleMenu() {
+      const open = !mobileMenu.classList.contains("open");
+      mobileMenu.classList.toggle("open", open);
+      mobileMenu.setAttribute("aria-hidden", open ? "false" : "true");
+      menuToggle.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) {
+        mobileMenu.removeAttribute("inert");
+      } else {
+        mobileMenu.setAttribute("inert", "");
+      }
+    }
+
+    themeToggle.addEventListener("click", toggleTheme);
+    mobileThemeToggle.addEventListener("click", toggleTheme);
+    densityToggle.addEventListener("click", toggleDensity);
+    mobileDensityToggle.addEventListener("click", toggleDensity);
+    menuToggle.addEventListener("click", toggleMenu);
+    mobileMenu.querySelectorAll("a").forEach((link) => link.addEventListener("click", closeMenu));
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeMenu();
+    });
+    window.addEventListener("resize", () => {
+      if (window.innerWidth > 768) closeMenu();
+    });
+  </script>
+</body>
+</html>
