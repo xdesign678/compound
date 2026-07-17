@@ -516,7 +516,11 @@ async function captureVisuals(browser, baseUrl, pageId, surface, updateBaseline)
   for (const [name, viewport] of Object.entries(VIEWPORTS)) {
     const { context, page } = await preparePage(browser, baseUrl, surface, viewport);
     const currentPath = join(AUDIT_DIR, `${pageId}-${name}.png`);
-    const baselinePath = join(VISUAL_BASELINE_DIR, `${pageId}-${name}.png`);
+    // CJK glyph metrics differ between the developer workstation and GitHub's
+    // Ubuntu image. Keep strict 1% comparisons against a baseline captured on
+    // the same platform instead of weakening the visual regression threshold.
+    const baselineSuffix = process.env.CI ? '-ci' : '';
+    const baselinePath = join(VISUAL_BASELINE_DIR, `${pageId}-${name}${baselineSuffix}.png`);
     const diffPath = join(AUDIT_DIR, `${pageId}-${name}-diff.png`);
 
     await page.screenshot({ path: currentPath, fullPage: true });
