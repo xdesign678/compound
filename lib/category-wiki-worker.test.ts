@@ -143,6 +143,52 @@ test('auto queue creates category wiki runs for every discovered secondary categ
   assert.equal(listCategoryWikiRuns('心理学', '', 5).length, 0);
 });
 
+test('category wiki run never persists custom LLM credentials', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { createCategoryWikiRun } = await import('./category-wiki-worker');
+  const { getServerDb } = await import('./server-db');
+  const runId = createCategoryWikiRun({
+    primary: '安全',
+    secondary: '秘密管理',
+    llmConfig: {
+      apiKey: 'sk-must-not-be-persisted',
+      apiUrl: 'https://llm.example.test/v1/chat/completions',
+      model: 'private-model',
+    },
+  });
+
+  const row = getServerDb()
+    .prepare('SELECT request_json FROM category_wiki_runs WHERE id = ?')
+    .get(runId) as { request_json: string };
+  assert.deepEqual(JSON.parse(row.request_json), {
+    primary: '安全',
+    secondary: '秘密管理',
+  });
+  assert.equal(row.request_json.includes('sk-must-not-be-persisted'), false);
+});
+
+test('category wiki active-run uniqueness is enforced by SQLite', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { createCategoryWikiRun } = await import('./category-wiki-worker');
+  const { getServerDb } = await import('./server-db');
+  const first = createCategoryWikiRun({ primary: '工程', secondary: '并发' });
+  const second = createCategoryWikiRun({ primary: '工程', secondary: '并发' });
+
+  assert.equal(second, first);
+  const count = getServerDb()
+    .prepare(
+      `SELECT COUNT(*) AS count
+         FROM category_wiki_runs
+        WHERE primary_category = ? AND secondary_category = ? AND status = 'running'`,
+    )
+    .get('工程', '并发') as { count: number };
+  assert.equal(count.count, 1);
+});
+
 test('auto queue skips fresh category wiki content and requeues stale content', async (t) => {
   const env = setupTempDb();
   t.after(env.cleanup);

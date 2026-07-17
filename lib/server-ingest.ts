@@ -17,6 +17,7 @@ import { escapeHTML } from './format';
 import { contextualizeChunk, contextualizeChunkBatch } from './contextual-chunk';
 import { logger } from './server-logger';
 import { autoQueueCategoryWikis } from './category-wiki-worker';
+import { requireHttpUrl } from './safe-url';
 import type { Source, Concept, ActivityLog, SourceType, LlmConfig } from './types';
 
 export interface ServerIngestInput {
@@ -65,7 +66,7 @@ export async function ingestSourceToServerDb(
     title: input.title.trim(),
     type: input.type,
     author: input.author?.trim() || undefined,
-    url: input.url?.trim() || undefined,
+    url: requireHttpUrl(input.url),
     rawContent: input.rawContent,
     ingestedAt: now,
     externalKey: input.externalKey,
@@ -187,6 +188,17 @@ export async function ingestSourceToServerDb(
 
   // 8. Write everything in a single transaction (better-sqlite3 is synchronous)
   const trx = getServerDb().transaction(() => {
+    for (const next of updatedConceptDocs) {
+      const base = conceptById.get(next.id);
+      const current = repo.getConcept(next.id);
+      if (
+        base &&
+        current &&
+        (current.version !== base.version || current.updatedAt !== base.updatedAt)
+      ) {
+        throw new Error(`concept changed concurrently during ingest: ${next.id}`);
+      }
+    }
     repo.insertSource(source);
 
     for (const next of updatedConceptDocs) {
@@ -221,7 +233,7 @@ export async function ingestSourceToServerDb(
 
     repo.insertActivity(activity);
   });
-  trx();
+  trx.immediate();
 
   const affectedConceptIds = Array.from(
     new Set([...newConceptIds, ...updatedConceptIds, ...biDirUpdates.map((update) => update.id)]),

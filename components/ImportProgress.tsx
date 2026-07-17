@@ -56,7 +56,15 @@ export function ImportProgress({
       {detail && <div className="import-progress-detail">{detail}</div>}
 
       {typeof boundedProgress === 'number' && (
-        <div className="import-progress-bar" aria-label={`${title}进度 ${boundedProgress}%`}>
+        <div
+          className="import-progress-bar"
+          role="progressbar"
+          aria-label={`${title}进度`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={boundedProgress}
+          aria-valuetext={`${boundedProgress}%`}
+        >
           <div className="import-progress-fill" style={{ width: `${boundedProgress}%` }} />
         </div>
       )}

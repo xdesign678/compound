@@ -8,7 +8,7 @@
 import { getServerDb } from './server-db';
 import { wikiRepo, type QueryContext, type SourceChunk } from './wiki-db';
 import { CircuitBreakerOpenError, getCircuitBreaker } from './circuit-breaker';
-import { validatePublicHttpsApiUrl } from './gateway';
+import { fetchPublicHttpsApi, validatePublicHttpsApiUrl } from './gateway';
 import { logger } from './logging';
 import { LRUMap } from './lru-cache';
 import {
@@ -181,7 +181,7 @@ async function remoteEmbeddings(texts: string[], signal?: AbortSignal): Promise<
   let res: Response;
   try {
     res = await breaker.execute(async () => {
-      const response = await fetch(url, {
+      const response = await fetchPublicHttpsApi(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${key}`,

@@ -245,6 +245,7 @@ export function IngestModal() {
         aria-describedby={
           step === 'choose' ? 'ingest-modal-desc' : confirmClose ? undefined : 'ingest-link-desc'
         }
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-handle" />

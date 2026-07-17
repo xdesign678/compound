@@ -2,6 +2,7 @@
   --brand-clay: #d97757;
   --brand-clay-text: #7d3522;
   --brand-clay-soft: rgba(217, 119, 87, 0.12);
+  --text-on-clay: #141413;
   --bg-primary: #faf9f5;
   --bg-secondary: #f9f9f7;
   --bg-hover: #f5f4f0;
@@ -105,6 +106,7 @@
   --text-secondary: #9b9b95;
   --text-tertiary: #9a9a94;
   --brand-clay-text: #f0a183;
+  --text-on-clay: #1a1a18;
   --text-on-button: #1a1a18;
 
   --border-light: rgba(236, 233, 225, 0.08);
@@ -1243,6 +1245,22 @@ button {
     border: none;
   }
 
+  .desktop-sidebar-add {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: var(--radius-md);
+    background: var(--brand-clay);
+    color: var(--text-on-clay);
+  }
+
+  .desktop-sidebar-add span:last-child {
+    display: none;
+  }
+
   .desktop-sidebar-btn span {
     display: none;
   }
@@ -1314,6 +1332,37 @@ button {
     display: flex;
     flex-direction: column;
     gap: var(--space-xs);
+  }
+
+  .desktop-sidebar-add {
+    width: 100%;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    border-radius: var(--radius-md);
+    background: var(--brand-clay);
+    color: var(--text-on-clay);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    font-weight: 650;
+    transition:
+      background var(--motion-duration-fast) var(--motion-ease-standard),
+      transform var(--motion-duration-fast) var(--motion-ease-standard);
+  }
+
+  .desktop-sidebar-add:hover {
+    background: var(--brand-clay-text);
+  }
+
+  .desktop-sidebar-add:active {
+    transform: scale(0.985);
+  }
+
+  .desktop-sidebar-add svg {
+    width: 18px;
+    height: 18px;
   }
 
   .desktop-sidebar-btn {
@@ -1401,10 +1450,17 @@ button {
     position: relative;
     z-index: 1;
     transition: background 0.15s ease;
+    touch-action: none;
   }
 
-  .desktop-divider:hover {
+  .desktop-divider:hover,
+  .desktop-divider:focus-visible {
     background: var(--border-section);
+  }
+
+  .desktop-divider:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
 
   .desktop-divider:active {

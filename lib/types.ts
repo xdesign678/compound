@@ -9,6 +9,8 @@ export interface Source {
   url?: string;
   rawContent: string;
   ingestedAt: number;
+  /** Last server-side mutation time. Legacy/local rows fall back to ingestedAt. */
+  updatedAt?: number;
   contentStatus?: ContentStatus;
   /**
    * 外部同步来源的唯一标识，用于去重与增量更新。

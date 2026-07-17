@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import net from 'node:net';
 import { logger } from './logging';
+import { getServerDb } from './server-db';
 
 type Bucket = {
   resetAt: number;
@@ -23,6 +24,54 @@ function getStore(): Store {
   return globalThis._compoundRateLimitStore;
 }
 
+function shouldUseSqliteStore(): boolean {
+  return (
+    process.env.COMPOUND_RATE_LIMIT_BACKEND === 'sqlite' || process.env.NODE_ENV === 'production'
+  );
+}
+
+function ensureSqliteStore(): void {
+  getServerDb().exec(`
+    CREATE TABLE IF NOT EXISTS rate_limit_buckets (
+      key TEXT PRIMARY KEY,
+      count INTEGER NOT NULL,
+      reset_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_rate_limit_buckets_reset
+      ON rate_limit_buckets(reset_at);
+  `);
+}
+
+function incrementSqliteBucket(key: string, now: number, windowMs: number): Bucket {
+  ensureSqliteStore();
+  const row = getServerDb()
+    .prepare(
+      `INSERT INTO rate_limit_buckets(key, count, reset_at, updated_at)
+       VALUES (@key, 1, @next_reset, @now)
+       ON CONFLICT(key) DO UPDATE SET
+         count = CASE WHEN reset_at <= @now THEN 1 ELSE count + 1 END,
+         reset_at = CASE WHEN reset_at <= @now THEN @next_reset ELSE reset_at END,
+         updated_at = @now
+       RETURNING count, reset_at`,
+    )
+    .get({ key, now, next_reset: now + windowMs }) as { count: number; reset_at: number };
+  return { count: row.count, resetAt: row.reset_at };
+}
+
+function readSqliteBucket(key: string, now: number): Bucket | null {
+  ensureSqliteStore();
+  const row = getServerDb()
+    .prepare(`SELECT count, reset_at FROM rate_limit_buckets WHERE key = ? AND reset_at > ?`)
+    .get(key, now) as { count: number; reset_at: number } | undefined;
+  return row ? { count: row.count, resetAt: row.reset_at } : null;
+}
+
+function resetSqliteBucket(key: string): void {
+  ensureSqliteStore();
+  getServerDb().prepare(`DELETE FROM rate_limit_buckets WHERE key = ?`).run(key);
+}
+
 /** Max entries retained. When exceeded we sweep expired buckets aggressively. */
 const MAX_ENTRIES = 5_000;
 /** Minimum interval between background sweeps. */
@@ -40,6 +89,27 @@ function maybeGc(store: Store, now: number): void {
     const sorted = [...store.entries()].sort((a, b) => a[1].resetAt - b[1].resetAt);
     const overflow = store.size - MAX_ENTRIES;
     for (let i = 0; i < overflow; i++) store.delete(sorted[i][0]);
+  }
+}
+
+function maybeGcSqlite(now: number): void {
+  const lastGc = globalThis._compoundRateLimitGcAt ?? 0;
+  if (now - lastGc < GC_MIN_INTERVAL_MS) return;
+  globalThis._compoundRateLimitGcAt = now;
+  ensureSqliteStore();
+  const db = getServerDb();
+  db.prepare(`DELETE FROM rate_limit_buckets WHERE reset_at <= ?`).run(now);
+  const count = Number(
+    (db.prepare(`SELECT COUNT(*) AS count FROM rate_limit_buckets`).get() as { count: number })
+      .count,
+  );
+  if (count > MAX_ENTRIES) {
+    db.prepare(
+      `DELETE FROM rate_limit_buckets
+        WHERE key IN (
+          SELECT key FROM rate_limit_buckets ORDER BY reset_at ASC LIMIT ?
+        )`,
+    ).run(count - MAX_ENTRIES);
   }
 }
 
@@ -135,8 +205,10 @@ export function rateLimit(
   if (options.limit <= 0) return null;
 
   const now = Date.now();
-  const store = getStore();
-  maybeGc(store, now);
+  const sqlite = shouldUseSqliteStore();
+  const store = sqlite ? null : getStore();
+  if (sqlite) maybeGcSqlite(now);
+  else maybeGc(store!, now);
 
   // Increment every bucket first so a denial in one bucket still records the
   // attempt in the others, then deny if ANY bucket is over its limit.
@@ -146,12 +218,18 @@ export function rateLimit(
   let maxDeniedResetAt = 0;
   for (const bucket of getClientBuckets(req)) {
     const key = `${scope}:${bucket.key}`;
-    const current = store.get(key);
-    if (!current || current.resetAt <= now) {
-      store.set(key, { count: 1, resetAt: now + options.windowMs });
-      continue;
-    }
-    current.count += 1;
+    const current = sqlite
+      ? incrementSqliteBucket(key, now, options.windowMs)
+      : (() => {
+          const existing = store!.get(key);
+          if (!existing || existing.resetAt <= now) {
+            const created = { count: 1, resetAt: now + options.windowMs };
+            store!.set(key, created);
+            return created;
+          }
+          existing.count += 1;
+          return existing;
+        })();
     if (current.count > options.limit * bucket.limitMultiplier) {
       maxDeniedResetAt = Math.max(maxDeniedResetAt, current.resetAt);
       anyDenied = true;
@@ -182,9 +260,11 @@ export function rateLimitCheck(
   if (options.limit <= 0) return null;
 
   const now = Date.now();
-  const store = getStore();
+  const sqlite = shouldUseSqliteStore();
+  const store = sqlite ? null : getStore();
   for (const bucket of getClientBuckets(req)) {
-    const current = store.get(`${scope}:${bucket.key}`);
+    const key = `${scope}:${bucket.key}`;
+    const current = sqlite ? readSqliteBucket(key, now) : store!.get(key);
     if (!current || current.resetAt <= now) continue;
     if (current.count <= options.limit * bucket.limitMultiplier) continue;
     return tooManyRequests(current.resetAt, now);
@@ -203,18 +283,26 @@ export function rateLimitIncrement(
   if (options.limit <= 0) return null;
 
   const now = Date.now();
-  const store = getStore();
-  maybeGc(store, now);
+  const sqlite = shouldUseSqliteStore();
+  const store = sqlite ? null : getStore();
+  if (sqlite) maybeGcSqlite(now);
+  else maybeGc(store!, now);
 
   let denied: NextResponse | null = null;
   for (const bucket of getClientBuckets(req)) {
     const key = `${scope}:${bucket.key}`;
-    const current = store.get(key);
-    if (!current || current.resetAt <= now) {
-      store.set(key, { count: 1, resetAt: now + options.windowMs });
-      continue;
-    }
-    current.count += 1;
+    const current = sqlite
+      ? incrementSqliteBucket(key, now, options.windowMs)
+      : (() => {
+          const existing = store!.get(key);
+          if (!existing || existing.resetAt <= now) {
+            const created = { count: 1, resetAt: now + options.windowMs };
+            store!.set(key, created);
+            return created;
+          }
+          existing.count += 1;
+          return existing;
+        })();
     if (current.count > options.limit * bucket.limitMultiplier) {
       denied ??= tooManyRequests(current.resetAt, now);
     }
@@ -227,10 +315,13 @@ export function rateLimitIncrement(
  *  Shared fallback buckets are kept: one user's success must not erase the
  *  failure history of an ongoing brute-force attack. */
 export function rateLimitReset(req: Request, scope: string): void {
-  const store = getStore();
+  const sqlite = shouldUseSqliteStore();
+  const store = sqlite ? null : getStore();
   for (const bucket of getClientBuckets(req)) {
     if (bucket.shared) continue;
-    store.delete(`${scope}:${bucket.key}`);
+    const key = `${scope}:${bucket.key}`;
+    if (sqlite) resetSqliteBucket(key);
+    else store!.delete(key);
   }
 }
 

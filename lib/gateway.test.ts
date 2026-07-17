@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { CircuitBreakerOpenError, resetCircuitBreakersForTests } from './circuit-breaker';
-import { chat, isReasoningModel } from './gateway';
+import { chat, fetchPublicHttpsApi, isReasoningModel } from './gateway';
 import {
   renderPrometheusMetrics,
   resetPrometheusMetricsForTests,
@@ -67,6 +67,67 @@ test('rejects custom api url without a user-provided api key', { concurrency: fa
     },
   );
 });
+
+test(
+  'safe API fetch follows only same-origin 307/308 redirects',
+  { concurrency: false },
+  async () => {
+    const requested: string[] = [];
+    await withEnv({ COMPOUND_SKIP_DNS_GUARD: 'true' }, async () => {
+      await withMockFetch(
+        (async (input) => {
+          requested.push(String(input));
+          if (requested.length === 1) {
+            return new Response(null, {
+              status: 307,
+              headers: { location: '/v2/chat/completions' },
+            });
+          }
+          return new Response('{}', { status: 200 });
+        }) as typeof fetch,
+        async () => {
+          const response = await fetchPublicHttpsApi('https://example.com/v1/chat/completions', {
+            method: 'POST',
+            body: '{}',
+          });
+          assert.equal(response.status, 200);
+        },
+      );
+    });
+    assert.deepEqual(requested, [
+      'https://example.com/v1/chat/completions',
+      'https://example.com/v2/chat/completions',
+    ]);
+  },
+);
+
+test(
+  'safe API fetch rejects cross-origin redirects before forwarding credentials',
+  { concurrency: false },
+  async () => {
+    let requests = 0;
+    await withEnv({ COMPOUND_SKIP_DNS_GUARD: 'true' }, async () => {
+      await withMockFetch(
+        (async () => {
+          requests += 1;
+          return new Response(null, {
+            status: 307,
+            headers: { location: 'https://other.example.test/private' },
+          });
+        }) as typeof fetch,
+        async () => {
+          await assert.rejects(
+            fetchPublicHttpsApi('https://example.com/v1/chat/completions', {
+              headers: { Authorization: 'Bearer secret' },
+            }),
+            /different origin/,
+          );
+        },
+      );
+    });
+    assert.equal(requests, 1);
+  },
+);
 
 test(
   'uses the user key for custom api urls instead of the server key',

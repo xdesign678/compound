@@ -16,6 +16,7 @@ export default defineConfig({
   },
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: Boolean(process.env.CI),
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
   use: {
     ...devices['Desktop Chrome'],

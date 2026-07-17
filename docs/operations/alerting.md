@@ -26,6 +26,11 @@ Load `ops/alerting/prometheus-rules.yml` through the Prometheus `rule_files`
 setting and route `severity="critical"` to the primary on-call target. Route
 `severity="warning"` to a lower-urgency channel that is still reviewed daily.
 
+The repository validates alert rules, but it cannot prove delivery through an
+external Alertmanager or hosting account. After configuring a receiver, fire a
+test alert and record the delivery timestamp, target channel, and acknowledgement
+in the deployment change record before treating notifications as operational.
+
 ## Editing rules
 
 Edit `ops/alerting/compound-alerts.json`, then run:

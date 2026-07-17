@@ -29,6 +29,8 @@ output/
 .local/
 .playwright-cli/
 .playwright-mcp/
+playwright-report/
+tests/e2e/.results/
 .husky/_
 
 # Local planning docs (not deployed)

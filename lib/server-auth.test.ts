@@ -76,6 +76,22 @@ test('accepts basic auth password as admin token', { concurrency: false }, async
   );
 });
 
+test('malformed admin cookie is rejected without throwing', { concurrency: false }, async () => {
+  await withEnv(
+    {
+      COMPOUND_ADMIN_TOKEN: 'secret',
+      ADMIN_TOKEN: undefined,
+      NODE_ENV: 'production',
+    },
+    () => {
+      const req = new Request('http://example.com/api/data', {
+        headers: { cookie: 'compound_admin_token=%E0%A4%A' },
+      });
+      assert.equal(isAuthorizedRequest(req), false);
+    },
+  );
+});
+
 test('returns 503 in production when admin token is missing', { concurrency: false }, async () => {
   await withEnv(
     {

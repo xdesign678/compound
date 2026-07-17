@@ -36,6 +36,7 @@ const csp = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
   output: 'standalone',
   env: {
     NEXT_PUBLIC_BUILD_ID: buildId,
@@ -47,7 +48,7 @@ const nextConfig = {
   productionBrowserSourceMaps: !!process.env.SENTRY_AUTH_TOKEN,
   // Native / Rust-binding modules — keep external so webpack doesn't try to
   // bundle their `.node` artifacts.
-  serverExternalPackages: ['better-sqlite3', '@node-rs/jieba'],
+  serverExternalPackages: ['better-sqlite3', '@node-rs/jieba', 'undici'],
   experimental: {
     serverActions: { allowedOrigins },
     // Tree-shake & on-demand compile imports from large icon/util packages so

@@ -20,8 +20,9 @@ const AUDIT_OUTPUT_PATTERNS = [
 const SERVER_OUTPUT_PATTERNS = [/Ready in/, /Starting/, /Compiled/, /Error:/, /failed/i];
 
 function parseArgs(argv) {
-  const args = { surfaces: Object.keys(SURFACES) };
+  const args = { surfaces: Object.keys(SURFACES), updateBaseline: false };
   for (const arg of argv) {
+    if (arg === '--update-baseline') args.updateBaseline = true;
     if (arg.startsWith('--surfaces=')) {
       args.surfaces = arg
         .slice('--surfaces='.length)
@@ -96,14 +97,16 @@ function pipeFilteredLines(stream, target, patterns) {
   });
 }
 
-function runAuditPage(pageId, baseUrl) {
+function runAuditPage(pageId, baseUrl, updateBaseline) {
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
     const heartbeat = setInterval(() => {
       process.stdout.write(`Still auditing ${pageId}...\n`);
     }, HEARTBEAT_MS);
-    const child = spawn(process.execPath, ['scripts/audit-page.mjs', `--page=${pageId}`], {
+    const childArgs = ['scripts/audit-page.mjs', `--page=${pageId}`];
+    if (updateBaseline) childArgs.push('--update-baseline');
+    const child = spawn(process.execPath, childArgs, {
       cwd: ROOT_DIR,
       env: {
         ...process.env,
@@ -155,6 +158,10 @@ async function readSurfaceSummary(pageId, auditExitCode) {
     const summary = JSON.parse(raw);
     const lighthouse = summary.lighthouse ?? {};
     const lighthouseFailures = [];
+    if (auditExitCode !== 0) lighthouseFailures.push(`audit exit ${auditExitCode}`);
+    if (lighthouse.runtimeError) {
+      lighthouseFailures.push(`runtime error: ${lighthouse.runtimeError}`);
+    }
     if ((lighthouse.pwa ?? 0) < MIN_PWA) lighthouseFailures.push(`PWA ${lighthouse.pwa}`);
     if ((lighthouse.a11y ?? 0) < MIN_A11Y) lighthouseFailures.push(`A11y ${lighthouse.a11y}`);
     if ((lighthouse.bestPractices ?? 0) < MIN_BEST_PRACTICES) {
@@ -252,7 +259,7 @@ async function main() {
     for (const pageId of args.surfaces) {
       process.stdout.write(`\n===== AUDIT ALL: ${pageId} =====\n`);
       await clearSurfaceSummary(pageId);
-      const auditExitCode = await runAuditPage(pageId, baseUrl);
+      const auditExitCode = await runAuditPage(pageId, baseUrl, args.updateBaseline);
       results.push(await readSurfaceSummary(pageId, auditExitCode));
     }
   });

@@ -14,6 +14,8 @@ import { useKeyboardShortcuts } from '@/lib/hooks/useKeyboardShortcuts';
 import { useOnlineStatus } from '@/lib/hooks/useOnlineStatus';
 import { useResizable } from '@/lib/hooks/useResizable';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
+import { t, useLocale } from '@/lib/i18n';
 
 const CommandPalette = dynamic(
   () => import('@/components/CommandPalette').then((m) => ({ default: m.CommandPalette })),
@@ -129,6 +131,7 @@ function useDelayedUnmount(isOpen: boolean, delayMs = MODAL_EXIT_DURATION_MS): b
 }
 
 export default function Page() {
+  useLocale();
   useKeyboardShortcuts();
   useOnlineStatus();
   const tab = useAppStore((s) => s.tab);
@@ -146,8 +149,12 @@ export default function Page() {
   const [isDesktop, setIsDesktop] = useState(false);
   const [libraryOverlayDetail, setLibraryOverlayDetail] = useState<typeof detail>(null);
   const [libraryOverlayVisible, setLibraryOverlayVisible] = useState(false);
+  const [bootstrapReady, setBootstrapReady] = useState(false);
   const libraryOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const desktopContentRef = useRef<HTMLElement>(null);
+  const libraryDetailDialogRef = useRef<HTMLDivElement>(null);
+  const mobileDetailDialogRef = useRef<HTMLDivElement>(null);
+  const mobileAskDialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     setMounted(true);
     hydrateHomeStyle();
@@ -189,30 +196,13 @@ export default function Page() {
     [mounted],
   );
 
-  // Auto-seed on first run — mark as sample data so users can clear it
-  const seedingRef = useRef(false);
+  // Cloud reconciliation must finish before first-run sample seeding, otherwise
+  // a populated server can be mixed with local demo records.
+  const bootstrapRef = useRef(false);
   useEffect(() => {
-    if (!mounted || conceptCount === undefined || sourceCount === undefined) return;
-    if (seedingRef.current) return;
-    if (localStorage.getItem('compound_seeded')) return;
-    if (conceptCount > 0 || sourceCount > 0) return;
-    seedingRef.current = true;
-    (async () => {
-      const { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } = await import('@/lib/seed');
-      const db = getDb();
-      await db.sources.bulkPut(SEED_SOURCES);
-      await db.concepts.bulkPut(SEED_CONCEPTS);
-      await db.activity.bulkPut(SEED_ACTIVITY);
-      localStorage.setItem('compound_seeded', '1');
-      localStorage.setItem('compound_is_sample', '1');
-    })();
-  }, [mounted, conceptCount, sourceCount]);
-
-  // Pull cloud snapshot once on mount so all browsers share the same view.
-  const pulledRef = useRef(false);
-  useEffect(() => {
-    if (!mounted || pulledRef.current) return;
-    pulledRef.current = true;
+    if (!mounted || bootstrapRef.current) return;
+    bootstrapRef.current = true;
+    let cancelled = false;
     (async () => {
       try {
         const { pullSnapshotFromCloud } = await import('@/lib/cloud-sync');
@@ -221,10 +211,39 @@ export default function Page() {
         // Non-fatal: local-only mode still works.
         console.warn('[cloud-sync] snapshot pull failed:', e);
       }
+
+      const db = getDb();
+      const [currentConceptCount, currentSourceCount] = await Promise.all([
+        db.concepts.count(),
+        db.sources.count(),
+      ]);
+      if (
+        currentConceptCount === 0 &&
+        currentSourceCount === 0 &&
+        !localStorage.getItem('compound_seeded')
+      ) {
+        const { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } = await import('@/lib/seed');
+        await db.transaction('rw', [db.sources, db.concepts, db.activity], async () => {
+          await db.sources.bulkPut(SEED_SOURCES);
+          await db.concepts.bulkPut(SEED_CONCEPTS);
+          await db.activity.bulkPut(SEED_ACTIVITY);
+        });
+        localStorage.setItem('compound_seeded', '1');
+        localStorage.setItem('compound_is_sample', '1');
+      }
+      if (!cancelled) setBootstrapReady(true);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [mounted]);
 
-  const ready = mounted && conceptCount !== undefined && sourceCount !== undefined;
+  const hasLocalRows = (conceptCount ?? 0) > 0 || (sourceCount ?? 0) > 0;
+  const ready =
+    mounted &&
+    (bootstrapReady || hasLocalRows) &&
+    conceptCount !== undefined &&
+    sourceCount !== undefined;
   const modalOpen = useAppStore((s) => s.modalOpen);
   const settingsOpen = useAppStore((s) => s.settingsOpen);
   const obsidianImportOpen = useAppStore((s) => s.obsidianImportOpen);
@@ -244,6 +263,16 @@ export default function Page() {
   const desktopSummary = ready
     ? `${conceptCount ?? 0} 个概念 · ${sourceCount ?? 0} 份资料`
     : '正在同步本地知识库';
+
+  useFocusTrap(
+    libraryDetailDialogRef,
+    isDesktop && usesDetailOverlay && libraryOverlayVisible && libraryOverlayDetail !== null,
+  );
+  useFocusTrap(mobileDetailDialogRef, !isDesktop && detail !== null && tab !== 'ask');
+  useFocusTrap(
+    mobileAskDialogRef,
+    !isDesktop && tab === 'ask' && libraryOverlayVisible && libraryOverlayDetail !== null,
+  );
 
   useEffect(() => {
     return () => {
@@ -373,18 +402,31 @@ export default function Page() {
 
             <TabBar variant="sidebar" />
 
+            <button type="button" className="desktop-sidebar-add" onClick={openModal}>
+              <span aria-hidden="true">
+                <Icon.Plus />
+              </span>
+              <span>{t('tab.addSource')}</span>
+            </button>
+
             <div className="desktop-sidebar-footer">
               <button
                 type="button"
                 className="desktop-sidebar-btn icon-only"
                 onClick={openGithubSync}
-                aria-label="从 GitHub 同步"
+                aria-label={t('header.githubSync')}
+                title={t('header.githubSync')}
               >
                 <span aria-hidden="true">
                   <Icon.Github />
                 </span>
               </button>
-              <Link className="desktop-sidebar-btn icon-only" href="/sync" aria-label="同步控制台">
+              <Link
+                className="desktop-sidebar-btn icon-only"
+                href="/sync"
+                aria-label={t('header.syncConsole')}
+                title={t('header.syncConsole')}
+              >
                 <span aria-hidden="true">
                   <Icon.Activity />
                 </span>
@@ -393,7 +435,8 @@ export default function Page() {
                 type="button"
                 className="desktop-sidebar-btn icon-only"
                 onClick={openObsidianImport}
-                aria-label="从 Obsidian 批量导入"
+                aria-label={t('header.obsidianImport')}
+                title={t('header.obsidianImport')}
               >
                 <span aria-hidden="true">
                   <Icon.Ingest />
@@ -403,7 +446,8 @@ export default function Page() {
                 type="button"
                 className="desktop-sidebar-btn icon-only"
                 onClick={openSettings}
-                aria-label="打开设置"
+                aria-label={t('header.settings')}
+                title={t('header.settings')}
               >
                 <span aria-hidden="true">
                   <Icon.Settings />
@@ -448,8 +492,10 @@ export default function Page() {
           >
             <div
               className={`library-detail-modal${tab === 'ask' ? ' ask-detail-modal' : ''}`}
+              ref={libraryDetailDialogRef}
               role="dialog"
               aria-modal="true"
+              tabIndex={-1}
               aria-label={libraryOverlayDetail.type === 'concept' ? '概念详情' : '资料详情'}
               onClick={(e) => e.stopPropagation()}
             >
@@ -485,7 +531,9 @@ export default function Page() {
           useAppStore.getState().showToast('数据已刷新');
         }}
       />
-      <Header conceptCount={conceptCount ?? 0} sourceCount={sourceCount ?? 0} loading={!ready} />
+      {!(detail && tab !== 'ask') && (
+        <Header conceptCount={conceptCount ?? 0} sourceCount={sourceCount ?? 0} loading={!ready} />
+      )}
 
       <main className="app-main">
         <div
@@ -503,8 +551,10 @@ export default function Page() {
       {detail && tab !== 'ask' && !isDesktop && (
         <div
           className="mobile-detail-overlay"
+          ref={mobileDetailDialogRef}
           role="dialog"
           aria-modal="true"
+          tabIndex={-1}
           aria-label={detail.type === 'concept' ? '概念详情' : '资料详情'}
         >
           <header className="mobile-detail-header">
@@ -533,8 +583,10 @@ export default function Page() {
         >
           <div
             className="library-detail-modal ask-detail-modal"
+            ref={mobileAskDialogRef}
             role="dialog"
             aria-modal="true"
+            tabIndex={-1}
             aria-label={libraryOverlayDetail.type === 'concept' ? '概念详情' : '资料详情'}
             onClick={(e) => e.stopPropagation()}
           >

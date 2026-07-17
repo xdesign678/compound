@@ -91,15 +91,18 @@ docker run --rm -p 3000:3000 \
 - GitHub sync uses a long-running Node process and a SQLite-backed job table. Prefer container deployment over serverless.
 - `/sync` shows run-level progress, file-level status, analysis worker state, retry/cancel controls, and index coverage.
 - `/review` shows low-confidence or large-change review items before they are accepted by a human.
-- [`docs/deployment-observability.md`](docs/deployment-observability.md) explains where to watch deploy impact in real time: Zeabur, Sentry, GitHub Actions, `/api/health`, `/api/metrics`, `/sync`, `/review`, and Slack deploy notifications.
+- [`docs/deployment-observability.md`](docs/deployment-observability.md) explains where to watch deploy impact in real time: Zeabur, Sentry, GitHub Actions, `/api/health`, `/api/metrics`, `/sync`, and `/review`. Notification delivery is configured in the hosting or Alertmanager layer and is not claimed as repository-enforced.
 - Incident response playbooks live in [`runbooks/`](runbooks/). Start there for production 503s, auth lockouts, stuck GitHub sync, LLM gateway failures, and SQLite persistence issues.
 - The service writes SQLite data under `DATA_DIR`.
+- `npm run backup` creates and verifies an online SQLite snapshot. Replicate
+  `COMPOUND_BACKUP_DIR` outside the application volume and follow
+  [`runbooks/data-persistence.md`](runbooks/data-persistence.md) for restore drills.
 - The browser also keeps an IndexedDB cache for fast local reads.
 - User-supplied custom LLM endpoints must use the user’s own API key. The server-owned key is never sent to a user-supplied URL.
 
 ## 稳定性与性能加固
 
-近期的四轮加固已全部通过验证（56 项断言 + 375 条 node:test + 类型检查 + lint 零警告）。
+加固变更由可重复的质量门禁验证；测试数量以当前 `npm test` 输出为准，避免 README 中的手工数字随测试增减而失真。
 
 ### 后端稳定性（里程碑 1）
 
@@ -139,6 +142,8 @@ docker run --rm -p 3000:3000 \
 ```bash
 npm run typecheck
 npm run test
+npm run check            # complete local quality gate, including coverage, audit, backup drill and build
+npm run test:e2e         # real browser regression suite
 npm run docs:api:check   # ensures docs/api-reference.md is up to date
 npm run build
 npm run build:measure    # writes tmp/build-metrics.json for build duration and static size

@@ -3,9 +3,15 @@ import { apiError } from '@/lib/api-error';
 import { deleteAnalysisJob, retryAnalysisJobs, startAnalysisWorker } from '@/lib/analysis-worker';
 import { requireAdmin } from '@/lib/server-auth';
 import { syncObs } from '@/lib/sync-observability';
+import {
+  enforceContentLength,
+  isRequestBodyTooLargeError,
+  readJsonWithLimit,
+} from '@/lib/request-guards';
 
 export const runtime = 'nodejs';
 export const maxDuration = 10;
+const MAX_BODY_BYTES = 4_000;
 
 /**
  * Retry or delete one analysis dead-letter job from the `/sync` advanced
@@ -14,13 +20,18 @@ export const maxDuration = 10;
  * Guards: admin token.
  */
 export async function POST(req: Request) {
-  const denied = requireAdmin(req);
+  const denied = requireAdmin(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
   try {
-    const body = (await req.json().catch(() => ({}))) as {
+    let body: {
       action?: 'retry' | 'delete';
       jobId?: string;
-    };
+    } = {};
+    try {
+      body = await readJsonWithLimit(req, MAX_BODY_BYTES);
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) throw error;
+    }
     const jobId = body.jobId?.trim();
     if (!jobId) return NextResponse.json({ error: 'Missing jobId' }, { status: 400 });
     if (body.action !== 'retry' && body.action !== 'delete') {
@@ -55,6 +66,9 @@ export async function POST(req: Request) {
       message: retried > 0 ? '已把死信任务重新加入队列。' : '没有找到可重试的死信任务。',
     });
   } catch (err) {
+    if (isRequestBodyTooLargeError(err)) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     const requestId = req.headers.get('x-request-id') ?? undefined;
     return NextResponse.json(apiError(err, requestId, 'sync.dlq.failed'), { status: 500 });
   }

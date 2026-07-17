@@ -110,6 +110,7 @@ export async function PATCH(req: Request) {
       ...existing,
       title: title || existing.title,
       rawContent,
+      updatedAt: Date.now(),
     };
     const activity: ActivityLog = {
       id: `a-${nanoid(8)}`,

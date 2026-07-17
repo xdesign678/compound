@@ -232,7 +232,9 @@ Source: [`app/api/data/snapshot/route.ts`](../app/api/data/snapshot/route.ts)
 #### GET
 
 GET /api/data/snapshot
-Returns either the summary dataset or an incremental delta since `?since=...`.
+Returns a stable full snapshot or an incremental change delta after `?cursor=...`.
+Full snapshots use `?beforeCursor=...` for stable pagination and return the
+authoritative cursor that clients persist for the next pull.
 Supports `?limit=N&offset=M` for pagination (defaults: limit=5000, offset=0).
 Full concept bodies / source raw content are fetched on demand by detail views
 and heavy workflows such as ask / categorize.
@@ -620,12 +622,12 @@ Guards: admin token.
 
 Source: [`app/api/sync/dlq/route.ts`](../app/api/sync/dlq/route.ts)
 
-| Field       | Value         |
-| ----------- | ------------- |
-| Methods     | `POST`        |
-| Runtime     | `nodejs`      |
-| maxDuration | 10            |
-| Guards      | `admin-token` |
+| Field       | Value                                   |
+| ----------- | --------------------------------------- |
+| Methods     | `POST`                                  |
+| Runtime     | `nodejs`                                |
+| maxDuration | 10                                      |
+| Guards      | `admin-token`, `content-length-guarded` |
 
 #### POST
 
@@ -714,12 +716,12 @@ token; webhooks are anonymous), body size limit.
 
 Source: [`app/api/sync/retry/route.ts`](../app/api/sync/retry/route.ts)
 
-| Field       | Value         |
-| ----------- | ------------- |
-| Methods     | `POST`        |
-| Runtime     | `nodejs`      |
-| maxDuration | 10            |
-| Guards      | `admin-token` |
+| Field       | Value                                   |
+| ----------- | --------------------------------------- |
+| Methods     | `POST`                                  |
+| Runtime     | `nodejs`                                |
+| maxDuration | 10                                      |
+| Guards      | `admin-token`, `content-length-guarded` |
 
 #### POST
 
@@ -729,12 +731,12 @@ _No JSDoc comment found above the `POST` handler. Add a leading `/** ... */` blo
 
 Source: [`app/api/sync/run/route.ts`](../app/api/sync/run/route.ts)
 
-| Field       | Value         |
-| ----------- | ------------- |
-| Methods     | `POST`        |
-| Runtime     | `nodejs`      |
-| maxDuration | 30            |
-| Guards      | `admin-token` |
+| Field       | Value                                   |
+| ----------- | --------------------------------------- |
+| Methods     | `POST`                                  |
+| Runtime     | `nodejs`                                |
+| maxDuration | 30                                      |
+| Guards      | `admin-token`, `content-length-guarded` |
 
 #### POST
 

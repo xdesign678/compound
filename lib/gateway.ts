@@ -10,8 +10,9 @@
  * Legacy fallback: AI_GATEWAY_API_KEY / AI_GATEWAY_URL are also accepted.
  */
 
-import { promises as dns } from 'node:dns';
+import { lookup as dnsLookup, promises as dns } from 'node:dns';
 import net from 'node:net';
+import { Agent } from 'undici';
 import { CircuitBreakerOpenError, getCircuitBreaker } from './circuit-breaker';
 import { recordModelRun } from './model-runs';
 import { logger } from './logging';
@@ -23,6 +24,7 @@ import { pauseLlmBudget, type LlmBudgetName } from './llm-budgets';
 import { getModelForTask } from './model-history';
 
 const METADATA_HOSTS = new Set(['metadata.google.internal', 'metadata', 'metadata.goog']);
+const MAX_SAFE_REDIRECTS = 3;
 
 function budgetForTask(task: string): LlmBudgetName | null {
   if (task === 'ingest') return 'github_ingest';
@@ -93,6 +95,34 @@ function isBlockedIP(ip: string): boolean {
   return true; // unknown format — reject
 }
 
+const publicHttpsDispatcher = new Agent({
+  connect: {
+    lookup(hostname, options, callback) {
+      const normalizedHost = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+      if (normalizedHost === 'localhost' || METADATA_HOSTS.has(normalizedHost)) {
+        callback(new Error('Blocked network destination'), '', 0);
+        return;
+      }
+      dnsLookup(hostname, { all: true, verbatim: true }, (error, records) => {
+        if (error) {
+          callback(error, '', 0);
+          return;
+        }
+        if (records.length === 0 || records.some((record) => isBlockedIP(record.address))) {
+          recordLlmSsrfBlock({ host: normalizedHost });
+          callback(new Error('Blocked network destination'), '', 0);
+          return;
+        }
+        const requestedFamily = typeof options === 'object' ? options.family : undefined;
+        const selected =
+          records.find((record) => !requestedFamily || record.family === requestedFamily) ??
+          records[0];
+        callback(null, selected.address, selected.family);
+      });
+    },
+  },
+});
+
 export async function validatePublicHttpsApiUrl(url: string): Promise<void> {
   let parsed: URL;
   try {
@@ -152,6 +182,38 @@ export async function validatePublicHttpsApiUrl(url: string): Promise<void> {
       throw new Error('Invalid API URL: resolves to a blocked network range');
     }
   }
+}
+
+export async function fetchPublicHttpsApi(url: string, init: RequestInit): Promise<Response> {
+  let currentUrl = new URL(url);
+  const originalOrigin = currentUrl.origin;
+
+  for (let redirectCount = 0; redirectCount <= MAX_SAFE_REDIRECTS; redirectCount += 1) {
+    await validatePublicHttpsApiUrl(currentUrl.toString());
+    const response = await fetch(currentUrl, {
+      ...init,
+      redirect: 'manual',
+      dispatcher: publicHttpsDispatcher,
+    } as RequestInit & { dispatcher: Agent });
+
+    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+    const location = response.headers.get('location');
+    if (!location) return response;
+    if (redirectCount === MAX_SAFE_REDIRECTS) {
+      throw new Error('LLM endpoint exceeded the safe redirect limit');
+    }
+
+    const nextUrl = new URL(location, currentUrl);
+    if (nextUrl.origin !== originalOrigin) {
+      throw new Error('LLM endpoint redirected to a different origin');
+    }
+    if (![307, 308].includes(response.status)) {
+      throw new Error('LLM endpoint returned an unsafe method-changing redirect');
+    }
+    currentUrl = nextUrl;
+  }
+
+  throw new Error('LLM endpoint redirect handling failed');
 }
 
 const HAPPYCAPY_GATEWAY = 'https://ai-gateway.happycapy.ai/api/v1/chat/completions';
@@ -520,9 +582,8 @@ async function drainSSEStream(
           } catch (parseErr) {
             // Some providers (OpenRouter free tier) intersperse comment frames
             // like `: OPENROUTER PROCESSING`. Safely ignored, but log for debug.
-            const rawPreview = data.slice(0, 200);
             logger.warn('gateway.sse_json_parse_failed', {
-              preview: rawPreview,
+              frameLength: data.length,
               error: parseErr instanceof Error ? parseErr.message : String(parseErr),
             });
           }
@@ -699,7 +760,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
       armIdle();
 
       try {
-        const response = await fetch(gatewayUrl, {
+        const response = await fetchPublicHttpsApi(gatewayUrl, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${apiKey}`,
@@ -720,7 +781,10 @@ export async function chat(opts: ChatOptions): Promise<string> {
             latencyMs: Date.now() - startedAt,
             error: `gateway_${response.status}`,
           });
-          throw new GatewayResponseError(response.status, errText.slice(0, 200));
+          throw new GatewayResponseError(
+            response.status,
+            `provider error body length=${errText.length}`,
+          );
         }
 
         applyGatewayRateLimitHeaders(task, response.headers);
@@ -743,7 +807,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
           } catch {
             throw new GatewayResponseError(
               response.status,
-              `Non-JSON body (first 200 chars): ${textBody.slice(0, 200)}`,
+              `non-JSON body length=${textBody.length}`,
             );
           }
         }
@@ -848,10 +912,10 @@ export async function chat(opts: ChatOptions): Promise<string> {
     latencyMs: Date.now() - startedAt,
     error: 'unexpected_shape',
   });
-  const preview = wantStream
-    ? `[stream] finish_reason=${finishReason ?? 'null'} content_length=${(streamedContent ?? '').length}`
-    : JSON.stringify(nonStreamParsedData ?? {}).slice(0, 600);
-  throw new Error(`Unexpected gateway response shape. Body preview: ${preview}`);
+  const responseMetadata = wantStream
+    ? `stream finish_reason=${finishReason ?? 'null'} content_length=${(streamedContent ?? '').length}`
+    : `json_type=${Array.isArray(nonStreamParsedData) ? 'array' : typeof nonStreamParsedData}`;
+  throw new Error(`Unexpected gateway response shape (${responseMetadata})`);
 }
 
 /**
@@ -877,8 +941,9 @@ export function parseJSON<T>(raw: string): T {
       return JSON.parse(fixUnescapedQuotes(text)) as T;
     } catch (e2) {
       logger.error('gateway.parse_json_failed', {
-        rawPreview: text.slice(0, 500),
-        fixedPreview: fixUnescapedQuotes(text).slice(0, 500),
+        rawLength: text.length,
+        fixedLength: fixUnescapedQuotes(text).length,
+        errorName: e2 instanceof Error ? e2.name : typeof e2,
       });
       throw e2;
     }

@@ -20,7 +20,7 @@ import type { Database as DB } from 'better-sqlite3';
 
 import { ensureAnalysisWorkerSchema } from './analysis-worker';
 import { logger } from './logging';
-import { getServerDb } from './server-db';
+import { getServerDb, repo } from './server-db';
 import { ensureSyncObservabilitySchema } from './sync-observability';
 import { ensureWikiCompilerSchema } from './wiki-db';
 
@@ -33,6 +33,8 @@ export interface RetentionLimits {
   syncEvents: TableRetentionLimit;
   modelRuns: TableRetentionLimit;
   stageCache: TableRetentionLimit;
+  syncChanges: TableRetentionLimit;
+  terminalHistory: TableRetentionLimit;
   conceptVersionsPerConcept: number;
   payloadBlobMaxAgeDays: number;
 }
@@ -41,6 +43,8 @@ export interface RetentionResult {
   syncEventsDeleted: number;
   modelRunsDeleted: number;
   stageCacheDeleted: number;
+  syncChangesDeleted: number;
+  terminalHistoryDeleted: number;
   conceptVersionsDeleted: number;
   orphanEvidenceDeleted: number;
   orphanRelationsDeleted: number;
@@ -55,6 +59,8 @@ const DEFAULT_LIMITS: RetentionLimits = {
   syncEvents: { maxRows: 50_000, maxAgeDays: 90 },
   modelRuns: { maxRows: 100_000, maxAgeDays: 180 },
   stageCache: { maxRows: 50_000, maxAgeDays: 120 },
+  syncChanges: { maxRows: 250_000, maxAgeDays: 180 },
+  terminalHistory: { maxRows: 50_000, maxAgeDays: 90 },
   conceptVersionsPerConcept: 50,
   payloadBlobMaxAgeDays: 7,
 };
@@ -106,6 +112,30 @@ export function resolveRetentionLimits(overrides?: Partial<RetentionLimits>): Re
         1,
       ),
     },
+    syncChanges: {
+      maxRows: envInt(
+        'COMPOUND_RETENTION_SYNC_CHANGES_MAX_ROWS',
+        DEFAULT_LIMITS.syncChanges.maxRows,
+        1_000,
+      ),
+      maxAgeDays: envInt(
+        'COMPOUND_RETENTION_SYNC_CHANGES_MAX_AGE_DAYS',
+        DEFAULT_LIMITS.syncChanges.maxAgeDays,
+        7,
+      ),
+    },
+    terminalHistory: {
+      maxRows: envInt(
+        'COMPOUND_RETENTION_TERMINAL_HISTORY_MAX_ROWS',
+        DEFAULT_LIMITS.terminalHistory.maxRows,
+        1_000,
+      ),
+      maxAgeDays: envInt(
+        'COMPOUND_RETENTION_TERMINAL_HISTORY_MAX_AGE_DAYS',
+        DEFAULT_LIMITS.terminalHistory.maxAgeDays,
+        7,
+      ),
+    },
     conceptVersionsPerConcept: envInt(
       'COMPOUND_RETENTION_CONCEPT_VERSIONS_MAX',
       DEFAULT_LIMITS.conceptVersionsPerConcept,
@@ -122,6 +152,8 @@ export function resolveRetentionLimits(overrides?: Partial<RetentionLimits>): Re
     syncEvents: { ...base.syncEvents, ...overrides.syncEvents },
     modelRuns: { ...base.modelRuns, ...overrides.modelRuns },
     stageCache: { ...base.stageCache, ...overrides.stageCache },
+    syncChanges: { ...base.syncChanges, ...overrides.syncChanges },
+    terminalHistory: { ...base.terminalHistory, ...overrides.terminalHistory },
     conceptVersionsPerConcept:
       overrides.conceptVersionsPerConcept ?? base.conceptVersionsPerConcept,
     payloadBlobMaxAgeDays: overrides.payloadBlobMaxAgeDays ?? base.payloadBlobMaxAgeDays,
@@ -185,6 +217,46 @@ function trimConceptVersions(db: DB, maxPerConcept: number): number {
       )
       .run(maxPerConcept).changes || 0,
   );
+}
+
+function trimTerminalHistory(db: DB, limit: TableRetentionLimit, now: number): number {
+  const specs = [
+    ['analysis_jobs', 'updated_at'],
+    ['sync_jobs', 'started_at'],
+    ['category_wiki_runs', 'updated_at'],
+    ['selection_wiki_runs', 'updated_at'],
+    ['lint_runs', 'started_at'],
+    ['repair_jobs', 'updated_at'],
+  ] as const;
+  const cutoff = now - limit.maxAgeDays * DAY_MS;
+  let deleted = 0;
+  for (const [table, timeColumn] of specs) {
+    if (!tableExists(db, table)) continue;
+    deleted += Number(
+      db
+        .prepare(
+          `DELETE FROM ${table}
+            WHERE status NOT IN ('queued', 'running')
+              AND ${timeColumn} < ?`,
+        )
+        .run(cutoff).changes || 0,
+    );
+    deleted += Number(
+      db
+        .prepare(
+          `DELETE FROM ${table}
+            WHERE status NOT IN ('queued', 'running')
+              AND id NOT IN (
+                SELECT id FROM ${table}
+                 WHERE status NOT IN ('queued', 'running')
+                 ORDER BY ${timeColumn} DESC
+                 LIMIT ?
+              )`,
+        )
+        .run(limit.maxRows).changes || 0,
+    );
+  }
+  return deleted;
 }
 
 function deleteOrphanEvidence(db: DB): number {
@@ -307,6 +379,8 @@ export function runRetention(overrides?: Partial<RetentionLimits>): RetentionRes
       limits.stageCache,
       now,
     ),
+    syncChangesDeleted: repo.compactSyncChanges({ ...limits.syncChanges, now }),
+    terminalHistoryDeleted: trimTerminalHistory(db, limits.terminalHistory, now),
     conceptVersionsDeleted: trimConceptVersions(db, limits.conceptVersionsPerConcept),
     orphanEvidenceDeleted: deleteOrphanEvidence(db),
     orphanRelationsDeleted: deleteOrphanRelations(db),

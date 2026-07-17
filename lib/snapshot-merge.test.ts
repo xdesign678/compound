@@ -84,3 +84,24 @@ test('preserves full local source raw content when remote snapshot matches same 
     contentStatus: 'full',
   });
 });
+
+test('accepts an edited source when updatedAt advances without changing ingestedAt', () => {
+  const local: Source = {
+    id: 's-1',
+    title: '原文',
+    type: 'file',
+    rawContent: '旧正文',
+    ingestedAt: 20,
+    updatedAt: 20,
+    contentStatus: 'full',
+  };
+  const remote: Source = {
+    ...local,
+    title: '新标题',
+    rawContent: '',
+    updatedAt: 21,
+    contentStatus: 'partial',
+  };
+
+  assert.equal(mergeRemoteSource(local, remote), remote);
+});

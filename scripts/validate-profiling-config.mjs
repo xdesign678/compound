@@ -26,8 +26,9 @@ expectScriptIncludes('profile:build', ['--cpu-prof', '--cpu-prof-dir=tmp/profile
 expectScriptIncludes('profile:server', [
   '--cpu-prof',
   '--cpu-prof-dir=tmp/profiles/server',
-  'next start',
+  'npm start',
 ]);
+expectScriptIncludes('start', ['scripts/start-standalone.mjs']);
 expectScriptIncludes('profile:heap:build', ['--heap-prof', '--heap-prof-dir=tmp/profiles/heap']);
 expectScriptIncludes('validate:profiling', ['scripts/validate-profiling-config.mjs']);
 expect(

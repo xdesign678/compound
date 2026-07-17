@@ -1,0 +1,8 @@
+.next/
+node_modules/
+playwright-report/
+tests/e2e/.results/
+tmp/
+output/
+public/workbox-*.js
+public/swe-worker-*.js

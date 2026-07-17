@@ -72,6 +72,27 @@ export function SettingsDrawer() {
   const [visible, setVisible] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
+  const activateAdjacentTab = (event: React.KeyboardEvent, currentIndex: number) => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    const tabList = event.currentTarget.closest('[role="tablist"]');
+    const lastIndex = TABS.length - 1;
+    let nextIndex = currentIndex;
+    if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = lastIndex;
+    else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      nextIndex = (currentIndex + 1) % TABS.length;
+    } else {
+      nextIndex = (currentIndex - 1 + TABS.length) % TABS.length;
+    }
+    setActiveTab(TABS[nextIndex].id);
+    requestAnimationFrame(() => {
+      tabList?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[nextIndex]?.focus();
+    });
+  };
+
   useEffect(() => {
     if (isOpen) {
       requestAnimationFrame(() => {
@@ -130,15 +151,19 @@ export function SettingsDrawer() {
         <div className="settings-layout">
           {/* 桌面端侧栏导航（≥768px 显示） */}
           <nav className="settings-sidebar" role="tablist" aria-label={t('settings.categories')}>
-            {TABS.map((tab) => {
+            {TABS.map((tab, index) => {
               const TabIcon = tab.icon;
               return (
                 <button
                   key={tab.id}
+                  id={`settings-tab-desktop-${tab.id}`}
                   role="tab"
                   aria-selected={activeTab === tab.id}
+                  aria-controls={`settings-panel-${tab.id}`}
+                  tabIndex={activeTab === tab.id ? 0 : -1}
                   className={`settings-sidebar-item${activeTab === tab.id ? ' active' : ''}`}
                   onClick={() => setActiveTab(tab.id)}
+                  onKeyDown={(event) => activateAdjacentTab(event, index)}
                 >
                   <span className="settings-sidebar-icon">
                     <TabIcon />
@@ -157,13 +182,17 @@ export function SettingsDrawer() {
                 role="tablist"
                 aria-label={t('settings.categories')}
               >
-                {TABS.map((tab) => (
+                {TABS.map((tab, index) => (
                   <button
                     key={tab.id}
+                    id={`settings-tab-mobile-${tab.id}`}
                     role="tab"
                     aria-selected={activeTab === tab.id}
+                    aria-controls={`settings-panel-${tab.id}`}
+                    tabIndex={activeTab === tab.id ? 0 : -1}
                     className={activeTab === tab.id ? 'active' : ''}
                     onClick={() => setActiveTab(tab.id)}
+                    onKeyDown={(event) => activateAdjacentTab(event, index)}
                   >
                     {t(tab.labelKey)}
                   </button>
@@ -172,7 +201,13 @@ export function SettingsDrawer() {
             </div>
 
             {/* Tab 内容 */}
-            <div className="settings-panel">
+            <div
+              className="settings-panel"
+              id={`settings-panel-${activeTab}`}
+              role="tabpanel"
+              aria-labelledby={`settings-tab-desktop-${activeTab}`}
+              tabIndex={0}
+            >
               {activeTab === 'general' && <GeneralTab />}
               {activeTab === 'model' && <ModelTab />}
               {activeTab === 'data' && <DataTab onCloseAction={close} />}

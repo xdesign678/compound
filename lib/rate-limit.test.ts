@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 // Tests use spoofed x-forwarded-for headers to simulate distinct clients —
 // that only works when the rate limiter is told to trust the proxy chain.
@@ -253,4 +256,41 @@ test('webhook rate limit is per-client', () => {
   for (let i = 0; i < 11; i++) webhookRateLimit(reqA);
   assert.equal(webhookRateLimit(reqA)?.status, 429, 'client A blocked');
   assert.equal(webhookRateLimit(reqB), null, 'client B not blocked');
+});
+
+test('sqlite rate-limit backend survives in-memory store resets', async (t) => {
+  const previousBackend = process.env.COMPOUND_RATE_LIMIT_BACKEND;
+  const previousDataDir = process.env.DATA_DIR;
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'compound-rate-limit-'));
+  process.env.COMPOUND_RATE_LIMIT_BACKEND = 'sqlite';
+  process.env.DATA_DIR = tempDir;
+  const closeDb = () => {
+    const holder = (globalThis as Record<string, unknown>).__compound_sqlite__ as
+      | { db?: { close?: () => void } }
+      | undefined;
+    holder?.db?.close?.();
+    delete (globalThis as Record<string, unknown>).__compound_sqlite__;
+  };
+  t.after(() => {
+    closeDb();
+    if (previousBackend === undefined) delete process.env.COMPOUND_RATE_LIMIT_BACKEND;
+    else process.env.COMPOUND_RATE_LIMIT_BACKEND = previousBackend;
+    if (previousDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previousDataDir;
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  closeDb();
+  const req = makeReq('10.0.0.60');
+  assert.equal(rateLimit(req, 'persistent', { limit: 1, windowMs: 60_000 }), null);
+  assert.equal(rateLimit(req, 'persistent', { limit: 1, windowMs: 60_000 })?.status, 429);
+
+  resetRateLimitStore();
+  assert.equal(rateLimitCheck(req, 'persistent', { limit: 1, windowMs: 60_000 })?.status, 429);
+
+  const { getServerDb } = await import('./server-db');
+  const row = getServerDb()
+    .prepare(`SELECT count FROM rate_limit_buckets WHERE key = 'persistent:10.0.0.60'`)
+    .get() as { count: number };
+  assert.equal(row.count, 2);
 });

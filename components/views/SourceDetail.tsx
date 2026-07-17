@@ -2,6 +2,7 @@
 
 import '@/components/modals.css';
 import './source-detail.css';
+import './detail-chips.css';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -23,6 +24,7 @@ import {
 } from '@/lib/markdown-editor/block-split';
 import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 import { SourceBlockEditor } from './SourceBlockEditor';
+import { normalizeHttpUrl } from '@/lib/safe-url';
 
 interface SourceTocItem {
   id: string;
@@ -87,6 +89,8 @@ export function SourceDetail({ id }: { id: string }) {
   const [tocVisible, setTocVisible] = useState(false);
   const textareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const activeBlockIdRef = useRef<string | null>(null);
+  const saveInFlightRef = useRef(false);
+  const queuedSaveRef = useRef<string | null>(null);
 
   const source = useLiveQuery(async () => getDb().sources.get(id), [id]);
   const generated = useLiveQuery(
@@ -203,10 +207,11 @@ export function SourceDetail({ id }: { id: string }) {
       setIsDirty(dirty);
       if (dirty) {
         writeSourceDraft(id, joined);
+        if (saveInFlightRef.current) queuedSaveRef.current = joined;
       } else {
         clearSourceDraft(id);
       }
-      setSaveStatus((current) => (current === 'idle' ? current : 'idle'));
+      setSaveStatus((current) => (current === 'saving' ? current : 'idle'));
     },
     [id, source?.rawContent],
   );
@@ -260,24 +265,46 @@ export function SourceDetail({ id }: { id: string }) {
 
   const handleSave = useCallback(
     async (rawContent?: string) => {
-      const joined = rawContent ?? joinBlocksToMarkdown(blocksRef.current);
-      if (!canEdit || joined === (source?.rawContent ?? '') || saveStatus === 'saving') return;
-      setSaveStatus('saving');
+      const requestedContent = rawContent ?? joinBlocksToMarkdown(blocksRef.current);
+      if (!canEdit || requestedContent === (source?.rawContent ?? '')) return;
+      queuedSaveRef.current = requestedContent;
+      if (saveInFlightRef.current) return;
+
+      saveInFlightRef.current = true;
       try {
-        await updateSourceContent({
-          id,
-          title: source?.title,
-          rawContent: joined,
-        });
-        clearSourceDraft(id);
-        setIsDirty(false);
-        setSaveStatus('saved');
-      } catch (err) {
-        console.warn('[source-detail] save failed:', err);
-        setSaveStatus('error');
+        while (queuedSaveRef.current !== null) {
+          const contentToSave: string = queuedSaveRef.current;
+          queuedSaveRef.current = null;
+          setSaveStatus('saving');
+          try {
+            await updateSourceContent({
+              id,
+              title: source?.title,
+              rawContent: contentToSave,
+            });
+          } catch (err) {
+            queuedSaveRef.current = null;
+            console.warn('[source-detail] save failed:', err);
+            setSaveStatus('error');
+            return;
+          }
+
+          const latestContent = joinBlocksToMarkdown(blocksRef.current);
+          if (latestContent === contentToSave && queuedSaveRef.current === null) {
+            clearSourceDraft(id);
+            setIsDirty(false);
+            setSaveStatus('saved');
+          } else {
+            writeSourceDraft(id, latestContent);
+            setIsDirty(true);
+            queuedSaveRef.current = latestContent;
+          }
+        }
+      } finally {
+        saveInFlightRef.current = false;
       }
     },
-    [canEdit, id, saveStatus, source?.rawContent, source?.title],
+    [canEdit, id, source?.rawContent, source?.title],
   );
 
   useEffect(() => {
@@ -310,7 +337,7 @@ export function SourceDetail({ id }: { id: string }) {
   );
 
   useEffect(() => {
-    if (!canEdit || !isDirty || saveStatus === 'saving') return;
+    if (!canEdit || !isDirty || saveStatus === 'saving' || saveStatus === 'error') return;
     const timer = window.setTimeout(() => {
       void handleSave();
     }, 1200);
@@ -403,7 +430,8 @@ export function SourceDetail({ id }: { id: string }) {
   const generatedItems = generated ?? [];
   const wordCount = currentMarkdown.length;
   const readingMinutes = wordCount > 0 ? Math.max(1, Math.round(wordCount / 400)) : 0;
-  const sourceHost = source.url ? formatSourceHost(source.url) : null;
+  const safeSourceUrl = normalizeHttpUrl(source.url);
+  const sourceHost = safeSourceUrl ? formatSourceHost(safeSourceUrl) : null;
 
   return (
     <article className="concept-detail source-detail-page">
@@ -435,9 +463,9 @@ export function SourceDetail({ id }: { id: string }) {
           {source.author && <span>{source.author}</span>}
           {wordCount > 0 && <span>{wordCount.toLocaleString()} 字</span>}
           {readingMinutes > 0 && <span>约 {readingMinutes} 分钟</span>}
-          {source.url && sourceHost && (
+          {safeSourceUrl && sourceHost && (
             <a
-              href={source.url}
+              href={safeSourceUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="source-hero-meta-link"

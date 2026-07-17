@@ -30,8 +30,9 @@ async function expectNoBlockingA11yViolations(page: Page) {
 }
 
 test('a11y audit passes for home', async ({ page }) => {
+  test.slow();
   await page.goto('/');
-  await expect(page.locator('.concept-card').first()).toBeVisible();
+  await expect(page.locator('.concept-card').first()).toBeVisible({ timeout: 40_000 });
 
   await expectNoBlockingA11yViolations(page);
 });

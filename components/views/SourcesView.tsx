@@ -1,5 +1,6 @@
 'use client';
 
+import './sources.css';
 import { useMemo, useCallback, useRef, useLayoutEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
@@ -20,6 +21,7 @@ export function SourcesView() {
   const visibleCount = useAppStore((s) => s.sourcesState.visibleCount);
   const query = useAppStore((s) => s.sourcesState.query);
   const setSourcesState = useAppStore((s) => s.setSourcesState);
+  const normalizedQuery = query.trim().toLowerCase();
 
   const setQuery = useCallback(
     (value: string) => setSourcesState({ query: value, visibleCount: PAGE_SIZE }),
@@ -46,17 +48,37 @@ export function SourcesView() {
     onScroll: handleScrollPersist,
   });
 
-  const sources = useLiveQuery(
-    async () => getDb().sources.orderBy('ingestedAt').reverse().toArray(),
-    [],
-  );
+  const sources = useLiveQuery(async () => {
+    const db = getDb();
+    if (!normalizedQuery) {
+      return db.sources.orderBy('ingestedAt').reverse().limit(visibleCount).toArray();
+    }
+    const matches = await db.sources
+      .filter((source) => {
+        const searchable = [
+          source.title,
+          source.author ?? '',
+          source.url ?? '',
+          SOURCE_TYPE_LABELS[source.type],
+        ]
+          .join(' ')
+          .toLowerCase();
+        return searchable.includes(normalizedQuery);
+      })
+      .toArray();
+    return matches.sort((a, b) => b.ingestedAt - a.ingestedAt);
+  }, [normalizedQuery, visibleCount]);
 
   const totalSourceCount = useLiveQuery(async () => getDb().sources.count(), []);
+  const sourceIdsKey = sources?.map((source) => source.id).join('\u0000') ?? '';
 
   const conceptCountBySource = useLiveQuery(async () => {
+    if (!sources?.length) return new Map<string, number>();
     const db = getDb();
-    // Single pass: load all concepts' sources arrays and count
-    const allConcepts = await db.concepts.toArray();
+    const allConcepts = await db.concepts
+      .where('sources')
+      .anyOf(sources.map((source) => source.id))
+      .toArray();
     const map = new Map<string, number>();
     for (const concept of allConcepts) {
       for (const sourceId of concept.sources) {
@@ -64,32 +86,19 @@ export function SourcesView() {
       }
     }
     return map;
-  }, [sources]);
-
-  const normalizedQuery = query.trim().toLowerCase();
+  }, [sourceIdsKey]);
 
   const matchedSources = useMemo(() => {
     if (!sources) return [];
-    if (!normalizedQuery) return sources;
-    return sources.filter((source) => {
-      const searchable = [
-        source.title,
-        source.author ?? '',
-        source.url ?? '',
-        SOURCE_TYPE_LABELS[source.type],
-      ]
-        .join(' ')
-        .toLowerCase();
-      return searchable.includes(normalizedQuery);
-    });
-  }, [normalizedQuery, sources]);
+    return sources;
+  }, [sources]);
 
   const filteredSources = useMemo(
     () => matchedSources.slice(0, visibleCount),
     [matchedSources, visibleCount],
   );
 
-  const totalMatches = matchedSources.length;
+  const totalMatches = normalizedQuery ? matchedSources.length : (totalSourceCount ?? 0);
 
   // Restore the list scroll only once after Dexie has finished hydrating the source list.
   useLayoutEffect(() => {

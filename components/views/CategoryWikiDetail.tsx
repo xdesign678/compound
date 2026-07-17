@@ -128,7 +128,8 @@ async function loadMermaid() {
       mod.default.initialize({
         startOnLoad: false,
         theme: 'default',
-        securityLevel: 'loose',
+        securityLevel: 'strict',
+        flowchart: { htmlLabels: false },
       });
       return mod;
     })
@@ -137,8 +138,8 @@ async function loadMermaid() {
 }
 
 async function renderMermaidBlocks(container: HTMLElement): Promise<void> {
-  const mermaid = await loadMermaid();
-  if (!mermaid) return;
+  const [mermaid, domPurify] = await Promise.all([loadMermaid(), loadDOMPurify()]);
+  if (!mermaid || !domPurify) return;
 
   const codeBlocks = container.querySelectorAll('code.language-mermaid');
   for (let i = 0; i < codeBlocks.length; i++) {
@@ -153,7 +154,11 @@ async function renderMermaidBlocks(container: HTMLElement): Promise<void> {
       const { svg } = await mermaid.default.render(chartId, rawCode);
       const wrapper = document.createElement('div');
       wrapper.className = 'mermaid-chart';
-      wrapper.innerHTML = svg;
+      wrapper.innerHTML = domPurify.sanitize(svg, {
+        USE_PROFILES: { svg: true, svgFilters: true },
+        FORBID_TAGS: ['script', 'foreignObject', 'iframe', 'object', 'embed'],
+        FORBID_ATTR: ['href', 'xlink:href', 'style'],
+      });
       pre.replaceWith(wrapper);
     } catch {
       const fallback = document.createElement('div');
@@ -177,6 +182,9 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
   const contentRef = useRef<HTMLDivElement>(null);
   const mermaidRenderedRef = useRef(false);
   const autoTriggeredRef = useRef(false);
+  const targetKey = `${primary}\u0000${secondary}`;
+  const activeTargetRef = useRef(targetKey);
+  activeTargetRef.current = targetKey;
 
   const concepts = useLiveQuery(
     async () => getDb().concepts.orderBy('updatedAt').reverse().toArray(),
@@ -226,22 +234,25 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
     setError(null);
     try {
       const result = await getCategoryWiki(primary, secondary);
+      if (activeTargetRef.current !== targetKey) return;
       setWiki(result);
     } catch (err) {
+      if (activeTargetRef.current !== targetKey) return;
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
-      setLoading(false);
+      if (activeTargetRef.current === targetKey) setLoading(false);
     }
-  }, [primary, secondary]);
+  }, [primary, secondary, targetKey]);
 
   const fetchRuns = useCallback(async () => {
     try {
       const list = await listCategoryWikiRuns(primary, secondary, HISTORY_LIMIT);
+      if (activeTargetRef.current !== targetKey) return;
       setRuns(list);
     } catch {
       // 更新记录是辅助信息，加载失败不打断主流程
     }
-  }, [primary, secondary]);
+  }, [primary, secondary, targetKey]);
 
   useEffect(() => {
     autoTriggeredRef.current = false;

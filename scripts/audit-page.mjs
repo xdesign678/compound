@@ -70,12 +70,16 @@ export const SURFACES = {
   },
   settingsGeneral: {
     url: '/',
-    setup: (page) => openHeaderAction(page, ['设置', '打开设置']),
+    setup: async (page) => {
+      await openHeaderAction(page, ['设置', '打开设置']);
+      await page.getByRole('dialog', { name: /设置|Settings/ }).waitFor({ timeout: 30_000 });
+    },
   },
   settingsData: {
     url: '/',
     setup: async (page) => {
       await openHeaderAction(page, ['设置', '打开设置']);
+      await page.getByRole('dialog', { name: /设置|Settings/ }).waitFor({ timeout: 30_000 });
       await page.getByRole('tab', { name: '数据' }).click();
     },
   },
@@ -83,17 +87,24 @@ export const SURFACES = {
     url: '/',
     setup: async (page) => {
       await openHeaderAction(page, ['设置', '打开设置']);
+      await page.getByRole('dialog', { name: /设置|Settings/ }).waitFor({ timeout: 30_000 });
       await page.getByRole('tab', { name: '模型' }).click();
     },
   },
   ingestModal: { url: '/', setup: (page) => openAddSource(page) },
   githubSync: {
     url: '/',
-    setup: (page) => openHeaderAction(page, '从 GitHub 同步'),
+    setup: async (page) => {
+      await openHeaderAction(page, '从 GitHub 同步');
+      await page.getByRole('dialog').waitFor({ timeout: 30_000 });
+    },
   },
   obsidianImport: {
     url: '/',
-    setup: (page) => openHeaderAction(page, '从 Obsidian 批量导入'),
+    setup: async (page) => {
+      await openHeaderAction(page, '从 Obsidian 批量导入');
+      await page.getByRole('dialog').waitFor({ timeout: 30_000 });
+    },
   },
   onboarding: {
     url: '/',
@@ -212,10 +223,9 @@ async function openAddSource(page) {
     .first();
   if (await addButton.isVisible().catch(() => false)) {
     await addButton.click();
-    return;
+  } else {
+    await page.keyboard.press('n');
   }
-
-  await page.keyboard.press('n');
   await page.getByRole('dialog', { name: '添加新资料' }).waitFor({ timeout: 30_000 });
 }
 
@@ -235,9 +245,10 @@ function printDryRun() {
 }
 
 function parseArgs(argv) {
-  const args = { pageId: '', updateBaseline: false, dryRun: false };
+  const args = { pageId: '', updateBaseline: false, dryRun: false, selfTest: false };
   for (const arg of argv) {
     if (arg === '--dry-run') args.dryRun = true;
+    if (arg === '--self-test-fail-closed') args.selfTest = true;
     if (arg === '--update-baseline') args.updateBaseline = true;
     if (arg.startsWith('--page=')) args.pageId = arg.slice('--page='.length);
   }
@@ -438,7 +449,7 @@ async function runAxe(page) {
 
 async function compareScreenshots(currentPath, baselinePath, diffPath) {
   if (!existsSync(baselinePath)) {
-    return { ratio: 0, status: 'missing-baseline' };
+    return { ratio: 1, status: 'missing-baseline' };
   }
 
   const currentImage = sharp(currentPath).ensureAlpha().raw();
@@ -532,8 +543,11 @@ function summarizeLighthouse(mobile, desktop, pwaScore) {
   };
 }
 
-function assertThresholds({ lighthouseSummary, axeSummary, visualSummary }) {
+export function assertThresholds({ lighthouseSummary, axeSummary, visualSummary }) {
   const failures = [];
+  if (lighthouseSummary.runtimeError) {
+    failures.push(`Lighthouse runtime error: ${lighthouseSummary.runtimeError}`);
+  }
   if (lighthouseSummary.pwa < MIN_PWA) failures.push(`PWA ${lighthouseSummary.pwa} < ${MIN_PWA}`);
   if (lighthouseSummary.a11y < MIN_A11Y)
     failures.push(`A11y ${lighthouseSummary.a11y} < ${MIN_A11Y}`);
@@ -546,6 +560,10 @@ function assertThresholds({ lighthouseSummary, axeSummary, visualSummary }) {
     );
   }
   for (const [name, result] of Object.entries(visualSummary)) {
+    if (result.status !== 'compared') {
+      failures.push(`${name} visual baseline ${result.status}`);
+      continue;
+    }
     if (result.ratio > VISUAL_DIFF_TOLERANCE) {
       failures.push(`${name} visual diff ${result.ratio} > ${VISUAL_DIFF_TOLERANCE}`);
     }
@@ -572,7 +590,7 @@ async function runAudit(pageId, updateBaseline) {
     const { context, page } = await preparePage(browser, baseUrl, surface, VIEWPORTS.desktop);
     const pwaSummary = await runPwaChecks(page, baseUrl);
     const bestPracticeSummary = await runBestPracticeChecks(baseUrl);
-    let lighthouseSummary = summarizeLighthouse(
+    const lighthouseSummary = summarizeLighthouse(
       mobileLighthouse,
       desktopLighthouse,
       pwaSummary.score,
@@ -583,22 +601,8 @@ async function runAudit(pageId, updateBaseline) {
     const lighthouseRuntimeError =
       mobileLighthouse.raw.runtimeError || desktopLighthouse.raw.runtimeError;
     if (lighthouseRuntimeError) {
-      lighthouseSummary = {
-        ...lighthouseSummary,
-        a11y: axeSummary.critical === 0 && axeSummary.serious === 0 ? 100 : 0,
-        bestPractices: bestPracticeSummary.score,
-        mobile: {
-          ...lighthouseSummary.mobile,
-          a11y: axeSummary.critical === 0 && axeSummary.serious === 0 ? 100 : 0,
-          bestPractices: bestPracticeSummary.score,
-        },
-        desktop: {
-          ...lighthouseSummary.desktop,
-          a11y: axeSummary.critical === 0 && axeSummary.serious === 0 ? 100 : 0,
-          bestPractices: bestPracticeSummary.score,
-        },
-        fallback: 'lighthouse-local-dev-runtime-error',
-      };
+      lighthouseSummary.runtimeError =
+        lighthouseRuntimeError.message || lighthouseRuntimeError.code || 'unknown runtime error';
     }
 
     const visualSummary = await captureVisuals(browser, baseUrl, pageId, surface, updateBaseline);
@@ -661,6 +665,24 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (args.dryRun) {
     printDryRun();
     process.exit(0);
+  }
+
+  if (args.selfTest) {
+    const failures = assertThresholds({
+      lighthouseSummary: {
+        pwa: 100,
+        a11y: 100,
+        bestPractices: 100,
+        runtimeError: 'navigation failed',
+      },
+      axeSummary: { critical: 0, serious: 0 },
+      visualSummary: {
+        mobile: { ratio: 1, status: 'missing-baseline' },
+        desktop: { ratio: 0, status: 'compared' },
+      },
+    });
+    process.stdout.write(`${JSON.stringify(failures)}\n`);
+    process.exit(failures.length === 2 ? 0 : 1);
   }
 
   if (!args.pageId) {

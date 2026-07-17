@@ -1,53 +1,53 @@
 # Compound Code Map
 
-Generated at: 2026-05-07T05:22:14.017Z
+Generated at: 2026-07-17T17:56:37.863Z
 
-Files scanned: 229
-Local import edges: 562
+Files scanned: 320
+Local import edges: 781
 
 ## Areas
 
 | Area       | Files | Outgoing imports | Incoming imports |
 | ---------- | ----: | ---------------: | ---------------: |
-| app        |    46 |              193 |                0 |
-| components |    53 |              174 |               77 |
-| lib        |   117 |              192 |              485 |
-| scripts    |    13 |                3 |                0 |
+| app        |    54 |              252 |                0 |
+| components |    60 |              225 |               85 |
+| lib        |   184 |              296 |              691 |
+| scripts    |    22 |                8 |                5 |
 
 ## Most Referenced Files
 
-| File                            | Imported by | Imports |
-| ------------------------------- | ----------: | ------: |
-| `lib/types.ts`                  |          47 |       0 |
-| `lib/server-auth.ts`            |          38 |       0 |
-| `lib/store.ts`                  |          34 |       5 |
-| `lib/logging.ts`                |          29 |       0 |
-| `lib/server-db.ts`              |          23 |       3 |
-| `components/Icons.tsx`          |          22 |       1 |
-| `lib/request-context.ts`        |          17 |       2 |
-| `lib/db.ts`                     |          16 |       3 |
-| `lib/wiki-db.ts`                |          16 |       4 |
-| `lib/format.ts`                 |          14 |       0 |
-| `lib/rate-limit.ts`             |          12 |       1 |
-| `lib/request-guards.ts`         |          12 |       1 |
-| `components/sync/types.ts`      |          11 |       0 |
-| `lib/server-logger.ts`          |          11 |       1 |
-| `lib/prompts.ts`                |          10 |       0 |
-| `lib/api-client.ts`             |           9 |       7 |
-| `lib/category-normalization.ts` |           9 |       1 |
-| `lib/gateway.ts`                |           9 |       5 |
-| `lib/sync-observability.ts`     |           9 |       3 |
-| `lib/admin-auth-client.ts`      |           8 |       0 |
-| `lib/trace-client.ts`           |           7 |       0 |
-| `lib/cloud-sync.ts`             |           6 |       5 |
-| `lib/github-sync-runner.ts`     |           6 |       7 |
-| `lib/review-queue.ts`           |           6 |       2 |
-| `lib/wiki-compiler.ts`          |           6 |       3 |
-| `lib/analysis-worker.ts`        |           5 |       8 |
-| `lib/embedding.ts`              |           5 |       4 |
-| `lib/llm-config.ts`             |           5 |       3 |
-| `lib/store/types.ts`            |           5 |       4 |
-| `lib/utils.ts`                  |           5 |       0 |
+| File                              | Imported by | Imports |
+| --------------------------------- | ----------: | ------: |
+| `lib/types.ts`                    |          56 |       0 |
+| `lib/server-auth.ts`              |          45 |       0 |
+| `lib/store.ts`                    |          40 |       5 |
+| `lib/logging.ts`                  |          35 |       0 |
+| `lib/api-error.ts`                |          29 |       1 |
+| `lib/server-db.ts`                |          28 |       3 |
+| `components/Icons.tsx`            |          25 |       1 |
+| `lib/request-guards.ts`           |          22 |       1 |
+| `lib/db.ts`                       |          18 |       3 |
+| `lib/request-context.ts`          |          18 |       3 |
+| `lib/wiki-db.ts`                  |          17 |       4 |
+| `lib/format.ts`                   |          15 |       0 |
+| `lib/prompts.ts`                  |          14 |       0 |
+| `lib/rate-limit.ts`               |          14 |       2 |
+| `lib/api-client.ts`               |          13 |       8 |
+| `lib/server-logger.ts`            |          12 |       1 |
+| `components/sync/types.ts`        |          11 |       0 |
+| `lib/sync-observability.ts`       |          11 |       3 |
+| `lib/utils.ts`                    |          11 |       0 |
+| `lib/gateway.ts`                  |          10 |       9 |
+| `lib/observability/prometheus.ts` |          10 |       3 |
+| `lib/admin-auth-client.ts`        |           9 |       0 |
+| `lib/category-normalization.ts`   |           9 |       1 |
+| `lib/analysis-worker.ts`          |           8 |      12 |
+| `lib/category-wiki-worker.ts`     |           8 |       6 |
+| `lib/cloud-sync.ts`               |           8 |       5 |
+| `lib/model-history.ts`            |           8 |       3 |
+| `lib/hooks/useFocusTrap.ts`       |           7 |       0 |
+| `lib/i18n/index.ts`               |           7 |       2 |
+| `lib/trace-client.ts`             |           7 |       0 |
 
 ## Boundary Notes
 

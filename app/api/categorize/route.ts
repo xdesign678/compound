@@ -4,7 +4,8 @@ import { normalizeCategoryKeys, normalizeCategoryState } from '@/lib/category-no
 import { chat, parseJSON } from '@/lib/gateway';
 import { CATEGORIZE_SYSTEM_PROMPT, CATEGORIZE_SYSTEM_PROMPT_VERSION } from '@/lib/prompts';
 import { requireAdmin } from '@/lib/server-auth';
-import { repo } from '@/lib/server-db';
+import { getServerDb, repo } from '@/lib/server-db';
+import { compileConceptArtifactsAfterManualChange } from '@/lib/wiki-compiler';
 import { autoQueueCategoryWikis } from '@/lib/category-wiki-worker';
 import { llmRateLimit } from '@/lib/rate-limit';
 import {
@@ -24,30 +25,45 @@ const MAX_BODY_BYTES = 256_000;
 const MAX_BATCH_SIZE = 20;
 
 function persistCategoryResults(results: CategorizeResponse['results']): string[] {
-  const changedConceptIds: string[] = [];
-  const ts = Date.now();
+  return getServerDb().transaction(() => {
+    const changedConceptIds: string[] = [];
+    const updatedConcepts: Array<{
+      previous: NonNullable<ReturnType<typeof repo.getConcept>>;
+      next: NonNullable<ReturnType<typeof repo.getConcept>>;
+    }> = [];
+    const ts = Date.now();
 
-  for (const result of results) {
-    const concept = repo.getConcept(result.id);
-    if (!concept) continue;
-    const normalized = normalizeCategoryState({ categories: result.categories || [] });
-    if (
-      JSON.stringify(concept.categories || []) === JSON.stringify(normalized.categories) &&
-      JSON.stringify(concept.categoryKeys || []) === JSON.stringify(normalized.categoryKeys)
-    ) {
-      continue;
+    for (const result of results) {
+      const concept = repo.getConcept(result.id);
+      if (!concept) continue;
+      const normalized = normalizeCategoryState({ categories: result.categories || [] });
+      if (
+        JSON.stringify(concept.categories || []) === JSON.stringify(normalized.categories) &&
+        JSON.stringify(concept.categoryKeys || []) === JSON.stringify(normalized.categoryKeys)
+      ) {
+        continue;
+      }
+      const next = {
+        ...concept,
+        categories: normalized.categories,
+        categoryKeys: normalized.categoryKeys,
+        updatedAt: ts,
+        version: concept.version + 1,
+      };
+      repo.upsertConcept(next);
+      updatedConcepts.push({ previous: concept, next });
+      changedConceptIds.push(concept.id);
     }
-    repo.upsertConcept({
-      ...concept,
-      categories: normalized.categories,
-      categoryKeys: normalized.categoryKeys,
-      updatedAt: ts,
-      version: concept.version + 1,
-    });
-    changedConceptIds.push(concept.id);
-  }
 
-  return changedConceptIds;
+    if (updatedConcepts.length > 0) {
+      compileConceptArtifactsAfterManualChange({
+        updatedConcepts,
+        changeSummary: '自动分类更新。',
+      });
+    }
+
+    return changedConceptIds;
+  })();
 }
 
 export const POST = withRequestTracing(async (req: Request) => {

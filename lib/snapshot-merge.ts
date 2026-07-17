@@ -1,8 +1,14 @@
 import type { Concept, Source } from './types';
 
+function sourceRevision(source: Source): number {
+  return source.updatedAt ?? source.ingestedAt;
+}
+
 function shouldPreserveFullSource(local: Source | undefined, remote: Source): boolean {
   if (!local || local.contentStatus !== 'full') return false;
-  return local.ingestedAt === remote.ingestedAt && local.externalKey === remote.externalKey;
+  return (
+    sourceRevision(local) === sourceRevision(remote) && local.externalKey === remote.externalKey
+  );
 }
 
 function shouldPreserveFullConcept(local: Concept | undefined, remote: Concept): boolean {
@@ -12,7 +18,7 @@ function shouldPreserveFullConcept(local: Concept | undefined, remote: Concept):
 
 export function mergeRemoteSource(local: Source | undefined, remote: Source): Source {
   if (!local) return remote;
-  if (remote.ingestedAt < local.ingestedAt) return local;
+  if (sourceRevision(remote) < sourceRevision(local)) return local;
   if (shouldPreserveFullSource(local, remote)) {
     return {
       ...remote,

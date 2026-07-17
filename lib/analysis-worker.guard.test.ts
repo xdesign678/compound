@@ -71,6 +71,57 @@ test('finishJob does not resurrect a job cancelled while in-flight', async (t) =
   assert.equal(after.status, 'cancelled');
 });
 
+test('stale worker cannot finish a job after a newer lease takes ownership', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { getServerDb, repo } = await import('./server-db');
+  const { queueAdvancedAnalysisJob, finishJob } = await import('./analysis-worker');
+  repo.insertSource({
+    id: 's-fenced',
+    title: 'Fenced',
+    type: 'file',
+    rawContent: '# Body',
+    ingestedAt: Date.now(),
+  });
+  const jobId = queueAdvancedAnalysisJob({ sourceId: 's-fenced', stage: 'qa_index' });
+  const db = getServerDb();
+  const ts = Date.now();
+  db.prepare(
+    `UPDATE analysis_jobs
+        SET status = 'running', started_at = ?, locked_at = ?, locked_by = 'worker-old', lease_version = 1
+      WHERE id = ?`,
+  ).run(ts, ts, jobId);
+  const staleJob = db.prepare(`SELECT * FROM analysis_jobs WHERE id = ?`).get(jobId) as Parameters<
+    typeof finishJob
+  >[0];
+
+  db.prepare(
+    `UPDATE analysis_jobs
+        SET status = 'running', locked_at = ?, locked_by = 'worker-new', lease_version = 2
+      WHERE id = ?`,
+  ).run(ts + 1, jobId);
+  finishJob(staleJob, 'succeeded');
+
+  const stillOwned = db
+    .prepare(`SELECT status, locked_by, lease_version FROM analysis_jobs WHERE id = ?`)
+    .get(jobId) as { status: string; locked_by: string; lease_version: number };
+  assert.deepEqual(stillOwned, {
+    status: 'running',
+    locked_by: 'worker-new',
+    lease_version: 2,
+  });
+
+  const currentJob = db
+    .prepare(`SELECT * FROM analysis_jobs WHERE id = ?`)
+    .get(jobId) as Parameters<typeof finishJob>[0];
+  finishJob(currentJob, 'succeeded');
+  const finished = db.prepare(`SELECT status FROM analysis_jobs WHERE id = ?`).get(jobId) as {
+    status: string;
+  };
+  assert.equal(finished.status, 'succeeded');
+});
+
 test('failJob does not requeue a job cancelled while in-flight', async (t) => {
   const env = setupTempDb();
   t.after(env.cleanup);

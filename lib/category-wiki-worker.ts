@@ -58,7 +58,8 @@ export interface CategoryWikiAutoQueueResult {
 }
 
 export function ensureCategoryWikiSchema(): void {
-  getServerDb().exec(`
+  const db = getServerDb();
+  db.exec(`
     CREATE TABLE IF NOT EXISTS category_wiki_runs (
       id TEXT PRIMARY KEY,
       primary_category TEXT NOT NULL,
@@ -75,6 +76,46 @@ export function ensureCategoryWikiSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_category_wiki_runs_status
       ON category_wiki_runs(status, started_at DESC);
   `);
+  db.transaction(() => {
+    const persistedRows = db
+      .prepare(
+        `SELECT id, primary_category, secondary_category, request_json
+           FROM category_wiki_runs`,
+      )
+      .all() as Array<{
+      id: string;
+      primary_category: string;
+      secondary_category: string;
+      request_json: string;
+    }>;
+    const scrubRequest = db.prepare(`UPDATE category_wiki_runs SET request_json = ? WHERE id = ?`);
+    for (const row of persistedRows) {
+      const safeRequest = JSON.stringify({
+        primary: row.primary_category,
+        secondary: row.secondary_category,
+      });
+      if (row.request_json !== safeRequest) scrubRequest.run(safeRequest, row.id);
+    }
+    db.prepare(
+      `UPDATE category_wiki_runs
+          SET status = 'failed',
+              error = COALESCE(error, '重复运行已自动合并'),
+              finished_at = COALESCE(finished_at, ?),
+              updated_at = ?
+        WHERE status = 'running'
+          AND rowid NOT IN (
+            SELECT MAX(rowid)
+              FROM category_wiki_runs
+             WHERE status = 'running'
+             GROUP BY primary_category, secondary_category
+          )`,
+    ).run(now(), now());
+    db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_category_wiki_runs_active_pair
+        ON category_wiki_runs(primary_category, secondary_category)
+        WHERE status = 'running';
+    `);
+  })();
 }
 
 export function computeConceptIdsHash(concepts: Array<{ id: string; updatedAt: number }>): string {
@@ -164,17 +205,22 @@ export function createCategoryWikiRun(input: CategoryWikiRequest): string {
   const ts = now();
   const runId = `cw-${nanoid(10)}`;
 
-  const existing = getActiveRunForCategory(input.primary, input.secondary);
-  if (existing) return existing.id;
-
-  getServerDb()
+  const persistedRequest: CategoryWikiRequest = {
+    primary: input.primary,
+    secondary: input.secondary,
+  };
+  const result = getServerDb()
     .prepare(
-      `INSERT INTO category_wiki_runs
+      `INSERT OR IGNORE INTO category_wiki_runs
         (id, primary_category, secondary_category, status, phase, request_json, started_at, updated_at)
        VALUES (?, ?, ?, 'running', 'queued', ?, ?, ?)`,
     )
-    .run(runId, input.primary, input.secondary, JSON.stringify(input), ts, ts);
-  return runId;
+    .run(runId, input.primary, input.secondary, JSON.stringify(persistedRequest), ts, ts);
+  if (result.changes > 0) return runId;
+
+  const existing = getActiveRunForCategory(input.primary, input.secondary);
+  if (!existing) throw new Error('分类 Wiki 任务创建冲突，请重试');
+  return existing.id;
 }
 
 export function getCategoryWikiRunStart(runId: string): CategoryWikiRunStartResponse | null {

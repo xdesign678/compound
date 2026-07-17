@@ -491,39 +491,6 @@
   grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   gap: 10px;
 }
-.related-chip {
-  background: transparent;
-  padding: 10px 14px;
-  border-radius: 7.5px;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  color: var(--text-primary);
-  cursor: pointer;
-  transition:
-    background var(--motion-duration-fast) var(--motion-ease-standard),
-    border-color var(--motion-duration-fast) var(--motion-ease-standard),
-    box-shadow var(--motion-duration-base) var(--motion-ease-standard),
-    color var(--motion-duration-fast) var(--motion-ease-standard),
-    opacity var(--motion-duration-fast) var(--motion-ease-standard),
-    transform var(--motion-duration-fast) var(--motion-ease-standard);
-  line-height: 1.4;
-  display: flex;
-  align-items: center;
-  text-align: left;
-  border: 1px solid var(--border-light);
-  min-width: 0;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-.related-chip:hover {
-  background: var(--bg-hover);
-  transform: translateY(-1px);
-}
-.related-chip:active {
-  background: var(--bg-active);
-  transform: translateY(0);
-}
-
 .edit-log-item {
   display: flex;
   gap: var(--space-lg);

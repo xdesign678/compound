@@ -59,6 +59,7 @@ interface AnalysisJobRow {
   not_before_at?: number | null;
   locked_at?: number | null;
   locked_by?: string | null;
+  lease_version?: number | null;
   max_attempts?: number | null;
   input_hash?: string | null;
   output_hash?: string | null;
@@ -184,6 +185,7 @@ export function ensureAnalysisWorkerSchema(): void {
   addColumnIfMissing('analysis_jobs', 'not_before_at', 'INTEGER');
   addColumnIfMissing('analysis_jobs', 'locked_at', 'INTEGER');
   addColumnIfMissing('analysis_jobs', 'locked_by', 'TEXT');
+  addColumnIfMissing('analysis_jobs', 'lease_version', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing('analysis_jobs', 'max_attempts', 'INTEGER NOT NULL DEFAULT 3');
   addColumnIfMissing('analysis_jobs', 'input_hash', 'TEXT');
   addColumnIfMissing('analysis_jobs', 'output_hash', 'TEXT');
@@ -474,7 +476,8 @@ function claimJobs(limit: number, stages?: AdvancedAnalysisStage[]): AnalysisJob
   const claimed: AnalysisJobRow[] = [];
   const stmt = db.prepare(
     `UPDATE analysis_jobs
-     SET status = 'running', locked_at = ?, locked_by = ?, started_at = COALESCE(started_at, ?), updated_at = ?, heartbeat_at = ?
+     SET status = 'running', locked_at = ?, locked_by = ?, lease_version = COALESCE(lease_version, 0) + 1,
+         started_at = COALESCE(started_at, ?), updated_at = ?, heartbeat_at = ?
      WHERE id = ? AND status = 'queued'`,
   );
   for (const row of rows) {
@@ -486,12 +489,23 @@ function claimJobs(limit: number, stages?: AdvancedAnalysisStage[]): AnalysisJob
         status: 'running',
         locked_at: ts,
         locked_by: WORKER_ID,
+        lease_version: (row.lease_version ?? 0) + 1,
         started_at: row.started_at ?? ts,
         heartbeat_at: ts,
         updated_at: ts,
       });
   }
   return claimed;
+}
+
+function leaseGuard(job: AnalysisJobRow): { clause: string; params: unknown[] } {
+  if (job.locked_by && Number.isFinite(job.lease_version)) {
+    return {
+      clause: ' AND locked_by = ? AND lease_version = ?',
+      params: [job.locked_by, job.lease_version],
+    };
+  }
+  return { clause: ' AND locked_by IS NULL', params: [] };
 }
 
 function stableHash(value: string): string {
@@ -524,13 +538,14 @@ function currentRunSignal(runId: string | null | undefined): AbortSignal | undef
 
 function refreshJobHeartbeat(job: AnalysisJobRow): void {
   const ts = now();
+  const guard = leaseGuard(job);
   getServerDb()
     .prepare(
       `UPDATE analysis_jobs
           SET heartbeat_at = ?, locked_at = ?, updated_at = ?
-        WHERE id = ? AND status = 'running'`,
+        WHERE id = ? AND status = 'running'${guard.clause}`,
     )
-    .run(ts, ts, ts, job.id);
+    .run(ts, ts, ts, job.id, ...guard.params);
   if (job.item_id) {
     syncObs.updateRunItem(job.item_id, {
       status: 'running',
@@ -767,14 +782,15 @@ export function finishJob(
 ): void {
   const ts = now();
   const durationMs = job.started_at ? Math.max(0, ts - job.started_at) : null;
+  const guard = leaseGuard(job);
   const res = getServerDb()
     .prepare(
       `UPDATE analysis_jobs
        SET status = ?, error = ?, finished_at = ?, updated_at = ?, duration_ms = COALESCE(duration_ms, ?),
            locked_at = NULL, locked_by = NULL
-       WHERE id = ? AND status = 'running'`,
+       WHERE id = ? AND status = 'running'${guard.clause}`,
     )
-    .run(status, error ?? null, ts, ts, durationMs, job.id);
+    .run(status, error ?? null, ts, ts, durationMs, job.id, ...guard.params);
   if (Number(res.changes) === 0) return;
   recordStageCache(job, status, error);
   maybeFinalizeItemAfterStage(job);
@@ -791,6 +807,7 @@ export function failJob(job: AnalysisJobRow, err: unknown): void {
     : Math.min(15 * 60_000, 1000 * 2 ** attempts + Math.floor(Math.random() * 500));
   const ts = now();
   const durationMs = job.started_at ? Math.max(0, ts - job.started_at) : null;
+  const guard = leaseGuard(job);
 
   const res = getServerDb()
     .prepare(
@@ -800,7 +817,7 @@ export function failJob(job: AnalysisJobRow, err: unknown): void {
            duration_ms = CASE WHEN ? THEN ? ELSE duration_ms END,
            dead_letter_at = CASE WHEN ? THEN ? ELSE NULL END,
            locked_at = NULL, locked_by = NULL
-       WHERE id = ? AND status = 'running'`,
+       WHERE id = ? AND status = 'running'${guard.clause}`,
     )
     .run(
       terminal ? 'failed' : 'queued',
@@ -816,6 +833,7 @@ export function failJob(job: AnalysisJobRow, err: unknown): void {
       terminal ? 1 : 0,
       ts,
       job.id,
+      ...guard.params,
     );
   if (Number(res.changes) === 0) {
     // Job was no longer running (e.g. cancelled); still try to clean up the
@@ -867,6 +885,7 @@ export function failJobPermanently(job: AnalysisJobRow, message: string): boolea
   const ts = now();
   const attempts = job.max_attempts || 1;
   const durationMs = job.started_at ? Math.max(0, ts - job.started_at) : null;
+  const guard = leaseGuard(job);
   const res = getServerDb()
     .prepare(
       `UPDATE analysis_jobs
@@ -881,9 +900,9 @@ export function failJobPermanently(job: AnalysisJobRow, message: string): boolea
            dead_letter_at = ?,
            locked_at = NULL,
            locked_by = NULL
-       WHERE id = ? AND status = 'running'`,
+       WHERE id = ? AND status = 'running'${guard.clause}`,
     )
-    .run(attempts, message.slice(0, 500), ts, ts, durationMs, ts, job.id);
+    .run(attempts, message.slice(0, 500), ts, ts, durationMs, ts, job.id, ...guard.params);
   if (Number(res.changes) === 0) {
     // Job was no longer running (e.g. cancelled); still try to clean up the
     // payload blob so it doesn't linger until retention GC.

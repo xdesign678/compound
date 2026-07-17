@@ -126,6 +126,21 @@ export class CompoundDB extends Dexie {
       activity: 'id, at, type, [type+at]',
       askHistory: 'id, at',
     });
+    this.version(10)
+      .stores({
+        sources: 'id, ingestedAt, updatedAt, type, externalKey, title',
+        concepts: 'id, updatedAt, createdAt, *sources, *related, *categoryKeys, title',
+        activity: 'id, at, type, [type+at]',
+        askHistory: 'id, at',
+      })
+      .upgrade((tx) =>
+        tx
+          .table('sources')
+          .toCollection()
+          .modify((source) => {
+            source.updatedAt = source.updatedAt ?? source.ingestedAt;
+          }),
+      );
   }
 }
 

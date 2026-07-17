@@ -133,6 +133,7 @@ function runMigrations(db: DB): void {
       url           TEXT,
       raw_content   TEXT NOT NULL,
       ingested_at   INTEGER NOT NULL,
+      updated_at    INTEGER NOT NULL,
       external_key  TEXT,
       last_synced_commit_sha TEXT
     );
@@ -233,6 +234,16 @@ function runMigrations(db: DB): void {
     );
     CREATE INDEX IF NOT EXISTS idx_category_wiki_runs_status
       ON category_wiki_runs(status, started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS sync_changes (
+      seq          INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type  TEXT NOT NULL,
+      entity_id    TEXT NOT NULL,
+      operation    TEXT NOT NULL CHECK(operation IN ('upsert', 'delete')),
+      changed_at   INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sync_changes_entity
+      ON sync_changes(entity_type, entity_id, seq DESC);
   `);
 
   const conceptColumns = new Set(
@@ -266,8 +277,60 @@ function runMigrations(db: DB): void {
   if (!sourceColumns.has('last_synced_commit_sha')) {
     db.exec(`ALTER TABLE sources ADD COLUMN last_synced_commit_sha TEXT;`);
   }
+  if (!sourceColumns.has('updated_at')) {
+    db.exec(`ALTER TABLE sources ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;`);
+  }
+  db.exec(`
+    UPDATE sources SET updated_at = ingested_at WHERE updated_at <= 0;
+    CREATE INDEX IF NOT EXISTS idx_sources_updated_at ON sources(updated_at);
+  `);
 
   runCategoryNormalizationIfNeeded(db);
+  backfillSyncChangesIfNeeded(db);
+}
+
+const SYNC_CHANGE_BACKFILL_REVISION = '2026-07-sync-change-log-v1';
+
+function backfillSyncChangesIfNeeded(db: DB): void {
+  const row = db
+    .prepare(`SELECT value FROM meta WHERE key = ?`)
+    .get('sync_change_backfill_revision') as { value: string } | undefined;
+  if (row?.value === SYNC_CHANGE_BACKFILL_REVISION) return;
+
+  const insert = db.prepare(
+    `INSERT INTO sync_changes(entity_type, entity_id, operation, changed_at)
+     VALUES (?, ?, 'upsert', ?)`,
+  );
+  db.transaction(() => {
+    for (const source of db.prepare(`SELECT id, updated_at FROM sources`).all() as Array<{
+      id: string;
+      updated_at: number;
+    }>) {
+      insert.run('source', source.id, source.updated_at);
+    }
+    for (const concept of db.prepare(`SELECT id, updated_at FROM concepts`).all() as Array<{
+      id: string;
+      updated_at: number;
+    }>) {
+      insert.run('concept', concept.id, concept.updated_at);
+    }
+    for (const activity of db.prepare(`SELECT id, at FROM activity`).all() as Array<{
+      id: string;
+      at: number;
+    }>) {
+      insert.run('activity', activity.id, activity.at);
+    }
+    for (const ask of db.prepare(`SELECT id, at FROM ask_history`).all() as Array<{
+      id: string;
+      at: number;
+    }>) {
+      insert.run('ask', ask.id, ask.at);
+    }
+    db.prepare(`INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)`).run(
+      'sync_change_backfill_revision',
+      SYNC_CHANGE_BACKFILL_REVISION,
+    );
+  })();
 }
 
 /**
@@ -337,6 +400,7 @@ interface SourceRow {
   url: string | null;
   raw_content: string;
   ingested_at: number;
+  updated_at: number;
   external_key: string | null;
   last_synced_commit_sha: string | null;
 }
@@ -388,6 +452,31 @@ interface TimeWindowWithLimit extends TimeWindowOptions {
 
 interface RecordQueryOptions extends TimeWindowWithLimit {
   summariesOnly?: boolean;
+}
+
+export type SyncEntityType = 'source' | 'concept' | 'activity' | 'ask';
+export type SyncOperation = 'upsert' | 'delete';
+
+export interface SyncChange {
+  seq: number;
+  entityType: SyncEntityType;
+  entityId: string;
+  operation: SyncOperation;
+  changedAt: number;
+}
+
+function recordSyncChange(
+  entityType: SyncEntityType,
+  entityId: string,
+  operation: SyncOperation,
+  changedAt = Date.now(),
+): void {
+  getServerDb()
+    .prepare(
+      `INSERT INTO sync_changes(entity_type, entity_id, operation, changed_at)
+       VALUES (?, ?, ?, ?)`,
+    )
+    .run(entityType, entityId, operation, Math.trunc(changedAt));
 }
 
 function parseJsonArray<T>(s: string | null | undefined, fallback: T[] = []): T[] {
@@ -461,6 +550,7 @@ function rowToSource(r: SourceRow, contentStatus: ContentStatus = 'full'): Sourc
     url: r.url ?? undefined,
     rawContent: r.raw_content,
     ingestedAt: r.ingested_at,
+    updatedAt: r.updated_at,
     contentStatus,
     externalKey: r.external_key ?? undefined,
     lastSyncedCommitSha: r.last_synced_commit_sha ?? undefined,
@@ -486,7 +576,7 @@ function rowToConcept(r: ConceptRow, contentStatus: ContentStatus = 'full'): Con
 
 function selectSourceColumns(summariesOnly = false): string {
   return summariesOnly
-    ? `id, title, type, author, url, '' AS raw_content, ingested_at, external_key, last_synced_commit_sha`
+    ? `id, title, type, author, url, '' AS raw_content, ingested_at, updated_at, external_key, last_synced_commit_sha`
     : '*';
 }
 
@@ -597,12 +687,134 @@ function noteCategoryKeysOnWrite(keys: string[] | undefined): void {
 // --------------------------------------------------------------------
 
 export const repo = {
+  // ---- monotonic cloud-sync change log -------------------------
+  getLatestSyncCursor(): number {
+    const row = cachedPrepare(`SELECT COALESCE(MAX(seq), 0) AS cursor FROM sync_changes`).get() as
+      | { cursor: number }
+      | undefined;
+    return Number(row?.cursor ?? 0);
+  },
+
+  getSyncCursorFloor(): number {
+    const row = cachedPrepare(`SELECT value FROM meta WHERE key = 'sync_change_floor'`).get() as
+      | { value: string }
+      | undefined;
+    const parsed = Number(row?.value ?? 0);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : 0;
+  },
+
+  compactSyncChanges(options: { maxRows: number; maxAgeDays: number; now?: number }): number {
+    const db = getServerDb();
+    const now = options.now ?? Date.now();
+    const cutoff = now - Math.max(1, options.maxAgeDays) * 24 * 60 * 60 * 1000;
+    const ageRow = db
+      .prepare(`SELECT COALESCE(MAX(seq), 0) AS seq FROM sync_changes WHERE changed_at < ?`)
+      .get(cutoff) as { seq: number };
+    const countRow = db
+      .prepare(`SELECT seq FROM sync_changes ORDER BY seq DESC LIMIT 1 OFFSET ?`)
+      .get(Math.max(1, Math.trunc(options.maxRows))) as { seq: number } | undefined;
+    const floor = Math.max(Number(ageRow.seq || 0), Number(countRow?.seq || 0));
+    if (floor <= 0) return 0;
+
+    return db.transaction(() => {
+      const result = db
+        .prepare(
+          `DELETE FROM sync_changes
+            WHERE seq <= ?
+              AND seq NOT IN (
+                SELECT MAX(seq) FROM sync_changes GROUP BY entity_type, entity_id
+              )`,
+        )
+        .run(floor);
+      const previousFloor = repo.getSyncCursorFloor();
+      db.prepare(`INSERT OR REPLACE INTO meta(key, value) VALUES('sync_change_floor', ?)`).run(
+        String(Math.max(previousFloor, floor)),
+      );
+      return Number(result.changes || 0);
+    })();
+  },
+
+  listSyncChanges(options: { after: number; before: number; limit: number }): SyncChange[] {
+    const limit = Math.max(1, Math.min(5000, Math.trunc(options.limit)));
+    const rows = cachedPrepare(
+      `SELECT seq, entity_type, entity_id, operation, changed_at
+         FROM sync_changes
+        WHERE seq > ? AND seq <= ?
+        ORDER BY seq ASC
+        LIMIT ?`,
+    ).all(Math.trunc(options.after), Math.trunc(options.before), limit) as Array<{
+      seq: number;
+      entity_type: SyncEntityType;
+      entity_id: string;
+      operation: SyncOperation;
+      changed_at: number;
+    }>;
+    return rows.map((row) => ({
+      seq: row.seq,
+      entityType: row.entity_type,
+      entityId: row.entity_id,
+      operation: row.operation,
+      changedAt: row.changed_at,
+    }));
+  },
+
+  listEntityIdsAtSyncCursor(
+    entityType: SyncEntityType,
+    cursor: number,
+    options: { limit: number; offset: number },
+  ): string[] {
+    const limit = Math.max(1, Math.min(5000, Math.trunc(options.limit)));
+    const offset = Math.max(0, Math.trunc(options.offset));
+    const rows = getServerDb()
+      .prepare(
+        `WITH latest AS (
+           SELECT entity_id, MAX(seq) AS seq
+             FROM sync_changes
+            WHERE entity_type = ? AND seq <= ?
+            GROUP BY entity_id
+         )
+         SELECT latest.entity_id
+           FROM latest
+           JOIN sync_changes change ON change.seq = latest.seq
+          WHERE change.operation = 'upsert'
+          ORDER BY latest.seq DESC
+          LIMIT ? OFFSET ?`,
+      )
+      .all(entityType, Math.trunc(cursor), limit, offset) as Array<{ entity_id: string }>;
+    return rows.map((row) => row.entity_id);
+  },
+
+  countEntityIdsAtSyncCursor(entityType: SyncEntityType, cursor: number): number {
+    const row = getServerDb()
+      .prepare(
+        `WITH latest AS (
+           SELECT entity_id, MAX(seq) AS seq
+             FROM sync_changes
+            WHERE entity_type = ? AND seq <= ?
+            GROUP BY entity_id
+         )
+         SELECT COUNT(*) AS count
+           FROM latest
+           JOIN sync_changes change ON change.seq = latest.seq
+          WHERE change.operation = 'upsert'`,
+      )
+      .get(entityType, Math.trunc(cursor)) as { count: number } | undefined;
+    return Number(row?.count ?? 0);
+  },
+
   // ---- sources ---------------------------------------------------
   insertSource(s: Source): void {
+    const previous = cachedPrepare(`SELECT updated_at FROM sources WHERE id = ?`).get(s.id) as
+      | { updated_at: number }
+      | undefined;
+    const requestedUpdatedAt = s.updatedAt ?? s.ingestedAt;
+    const updatedAt = previous
+      ? Math.max(requestedUpdatedAt, previous.updated_at + 1)
+      : requestedUpdatedAt;
     cachedPrepare(
       `INSERT OR REPLACE INTO sources
-          (id, title, type, author, url, raw_content, ingested_at, external_key, last_synced_commit_sha)
-          VALUES (@id, @title, @type, @author, @url, @raw_content, @ingested_at, @external_key, @last_synced_commit_sha)`,
+          (id, title, type, author, url, raw_content, ingested_at, updated_at, external_key, last_synced_commit_sha)
+          VALUES (@id, @title, @type, @author, @url, @raw_content, @ingested_at, @updated_at, @external_key, @last_synced_commit_sha)`,
     ).run({
       id: s.id,
       title: s.title,
@@ -611,9 +823,11 @@ export const repo = {
       url: s.url ?? null,
       raw_content: s.rawContent,
       ingested_at: s.ingestedAt,
+      updated_at: updatedAt,
       external_key: s.externalKey ?? null,
       last_synced_commit_sha: s.lastSyncedCommitSha ?? null,
     });
+    recordSyncChange('source', s.id, 'upsert', updatedAt);
   },
 
   getSource(id: string): Source | null {
@@ -631,20 +845,50 @@ export const repo = {
   },
 
   deleteSource(id: string): void {
-    cachedPrepare(`DELETE FROM sources WHERE id = ?`).run(id);
+    if (!id) return;
+    const db = getServerDb();
+    db.transaction(() => {
+      const affected = db
+        .prepare(`SELECT * FROM concepts WHERE sources LIKE ? ESCAPE '\\'`)
+        .all(jsonArrayValueLikePattern(id)) as ConceptRow[];
+      const updatedAt = Date.now();
+      for (const row of affected) {
+        const concept = rowToConcept(row);
+        if (!concept.sources.includes(id)) continue;
+        repo.upsertConcept({
+          ...concept,
+          sources: concept.sources.filter((sourceId) => sourceId !== id),
+          updatedAt,
+          version: concept.version + 1,
+        });
+      }
+      db.prepare(`DELETE FROM sources WHERE id = ?`).run(id);
+      recordSyncChange('source', id, 'delete', updatedAt);
+    })();
   },
 
   updateSourceLastSyncedCommitSha(id: string, commitSha: string): void {
-    cachedPrepare(`UPDATE sources SET last_synced_commit_sha = ? WHERE id = ?`).run(commitSha, id);
+    const updatedAt = Date.now();
+    const result = cachedPrepare(
+      `UPDATE sources SET last_synced_commit_sha = ?, updated_at = ? WHERE id = ?`,
+    ).run(commitSha, updatedAt, id);
+    if (result.changes > 0) recordSyncChange('source', id, 'upsert', updatedAt);
   },
 
   updateGithubSourcesLastSyncedCommitSha(repoSlug: string, commitSha: string): number {
-    const result = cachedPrepare(
-      `UPDATE sources
-          SET last_synced_commit_sha = ?
-        WHERE external_key LIKE ?`,
-    ).run(commitSha, `github:${repoSlug}:%`);
-    return Number(result.changes || 0);
+    const db = getServerDb();
+    const ids = db
+      .prepare(`SELECT id FROM sources WHERE external_key LIKE ?`)
+      .all(`github:${repoSlug}:%`) as Array<{ id: string }>;
+    if (ids.length === 0) return 0;
+    const updatedAt = Date.now();
+    db.transaction(() => {
+      db.prepare(
+        `UPDATE sources SET last_synced_commit_sha = ?, updated_at = ? WHERE external_key LIKE ?`,
+      ).run(commitSha, updatedAt, `github:${repoSlug}:%`);
+      for (const row of ids) recordSyncChange('source', row.id, 'upsert', updatedAt);
+    })();
+    return ids.length;
   },
 
   listSources(options: RecordQueryOptions = {}): Source[] {
@@ -705,6 +949,10 @@ export const repo = {
 
   // ---- concepts --------------------------------------------------
   upsertConcept(c: Concept): void {
+    const previous = cachedPrepare(`SELECT updated_at FROM concepts WHERE id = ?`).get(c.id) as
+      | { updated_at: number }
+      | undefined;
+    const updatedAt = previous ? Math.max(c.updatedAt, previous.updated_at + 1) : c.updatedAt;
     cachedPrepare(
       `INSERT OR REPLACE INTO concepts
           (id, title, summary, body, sources, related, categories, category_keys, created_at, updated_at, version)
@@ -719,10 +967,11 @@ export const repo = {
       categories: JSON.stringify(c.categories ?? []),
       category_keys: JSON.stringify(c.categoryKeys ?? []),
       created_at: c.createdAt,
-      updated_at: c.updatedAt,
+      updated_at: updatedAt,
       version: c.version ?? 1,
     });
     noteCategoryKeysOnWrite(c.categoryKeys);
+    recordSyncChange('concept', c.id, 'upsert', updatedAt);
   },
 
   getConcept(id: string): Concept | null {
@@ -880,6 +1129,7 @@ export const repo = {
         [id, id],
       );
       safeExec(`DELETE FROM concept_versions WHERE concept_id = ?`, [id]);
+      recordSyncChange('concept', id, 'delete');
     })();
     invalidateCategoryKeysCache();
   },
@@ -1011,6 +1261,18 @@ export const repo = {
       concept_ids: JSON.stringify(a.relatedConceptIds ?? []),
       at: a.at,
     });
+    recordSyncChange('activity', a.id, 'upsert', a.at);
+  },
+
+  getActivityByIds(ids: string[]): ActivityLog[] {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) return [];
+    const placeholders = uniqueIds.map(() => '?').join(', ');
+    const rows = getServerDb()
+      .prepare(`SELECT * FROM activity WHERE id IN (${placeholders})`)
+      .all(...uniqueIds) as ActivityRow[];
+    const rowMap = mapRowsById(rows.map(rowToActivity));
+    return uniqueIds.map((id) => rowMap.get(id)).filter((row): row is ActivityLog => Boolean(row));
   },
 
   listActivity(limitOrOptions: number | TimeWindowWithLimit = 500): ActivityLog[] {
@@ -1032,6 +1294,17 @@ export const repo = {
       .prepare(`SELECT * FROM ask_history ${clause} ORDER BY at DESC${hasLimit ? ' LIMIT ?' : ''}`)
       .all(...(hasLimit ? [...params, Math.trunc(options.limit!)] : params)) as AskRow[];
     return rows.map(rowToAsk);
+  },
+
+  getAskHistoryByIds(ids: string[]): AskMessage[] {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) return [];
+    const placeholders = uniqueIds.map(() => '?').join(', ');
+    const rows = getServerDb()
+      .prepare(`SELECT * FROM ask_history WHERE id IN (${placeholders})`)
+      .all(...uniqueIds) as AskRow[];
+    const rowMap = mapRowsById(rows.map(rowToAsk));
+    return uniqueIds.map((id) => rowMap.get(id)).filter((row): row is AskMessage => Boolean(row));
   },
 
   // ---- sync jobs -------------------------------------------------

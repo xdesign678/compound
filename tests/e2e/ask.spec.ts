@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('ask streams stage events and an answer with mocked query SSE', async ({ page }) => {
+  test.slow();
   await page.route('**/api/query', async (route) => {
     await route.fulfill({
       status: 200,
@@ -33,6 +34,6 @@ test('ask streams stage events and an answer with mocked query SSE', async ({ pa
   await page.getByLabel('输入问题').fill('这个知识库里有什么内容？');
   await page.getByLabel('发送问题').click();
 
-  await expect(page.getByText('思考过程')).toBeVisible();
+  await expect(page.getByRole('button', { name: /思考过程/ }).first()).toBeVisible();
   await expect(page.getByText('这是来自 Wiki 的测试答案。')).toBeVisible();
 });

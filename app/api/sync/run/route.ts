@@ -7,9 +7,15 @@ import { syncRateLimit } from '@/lib/rate-limit';
 import { syncObs } from '@/lib/sync-observability';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
 import { logger } from '@/lib/server-logger';
+import {
+  enforceContentLength,
+  isRequestBodyTooLargeError,
+  readJsonWithLimit,
+} from '@/lib/request-guards';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
+const MAX_BODY_BYTES = 1_000;
 
 /**
  * POST /api/sync/run
@@ -29,11 +35,17 @@ export const maxDuration = 30;
  * Guards: admin token + sync rate-limit.
  */
 export const POST = withRequestTracing(async (req: Request) => {
-  const denied = requireAdmin(req) || syncRateLimit(req);
+  const denied =
+    requireAdmin(req) || syncRateLimit(req) || enforceContentLength(req, MAX_BODY_BYTES);
   if (denied) return denied;
 
   try {
-    const body = (await req.json().catch(() => ({}))) as { force?: boolean };
+    let body: { force?: boolean } = {};
+    try {
+      body = await readJsonWithLimit<{ force?: boolean }>(req, MAX_BODY_BYTES);
+    } catch (error) {
+      if (isRequestBodyTooLargeError(error)) throw error;
+    }
     const force = Boolean(body?.force);
 
     const sync = startGithubSync({ force });
@@ -86,6 +98,9 @@ export const POST = withRequestTracing(async (req: Request) => {
       message: messageParts.join(' · '),
     });
   } catch (err) {
+    if (isRequestBodyTooLargeError(err)) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     return NextResponse.json(apiError(err, getRequestContext()?.requestId, 'sync.run.failed'), {
       status: 500,
     });

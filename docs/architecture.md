@@ -84,7 +84,7 @@ flowchart LR
 
 | 模块                                                            | 主要职责                                                                 | 依赖                                                                        |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| `lib/server-db.ts`                                              | 打开 / 迁移 SQLite，封装 concepts、sources、sync_runs、review_queue 等表 | `better-sqlite3`, `DATA_DIR`                                                |
+| `lib/server-db.ts`                                              | 打开 / 迁移 SQLite，封装领域表、单调变更游标、持久化限流桶与保留清理入口 | `better-sqlite3`, `DATA_DIR`                                                |
 | `lib/server-auth.ts`                                            | 服务端 admin token 验证、子路径白名单                                    | `process.env`，与 `middleware.ts` 共享 token                                |
 | `lib/gateway.ts`                                                | LLM 转发、SSRF 防护、超时与限流                                          | Node `dns/net`、`lib/rate-limit.ts`、`lib/model-runs.ts`                    |
 | `lib/github-sync-*`                                             | 拉取、分页、断点续传、删除模式（soft/hard）                              | GitHub Contents API                                                         |
@@ -196,7 +196,7 @@ flowchart LR
 | 错误与性能     | [Sentry Issues](https://sentry.io/issues/)、[Sentry Performance](https://sentry.io/performance/)                                                                                                                                                                       | 按 `SENTRY_RELEASE` 看新错误、请求 trace、source map 后的真实堆栈。                           |
 | 指标面板       | `GET /api/metrics`，接入 [Grafana](https://grafana.com/docs/grafana/latest/dashboards/)、[Datadog OpenMetrics](https://docs.datadoghq.com/integrations/openmetrics/) 或 [New Relic Prometheus](https://docs.newrelic.com/docs/infrastructure/prometheus-integrations/) | 观察 5xx、p95 延迟、进程 uptime、内存、同步失败、分析队列、review queue、embedding fallback。 |
 | 应用内实时状态 | `/api/health`、`/api/wiki/health`、`/sync`、`/review`                                                                                                                                                                                                                  | 验证生产配置、Wiki 索引覆盖度、GitHub 同步进度、分析 worker 状态、人工评审压力。              |
-| 部署通知       | Zeabur 项目通知，或 GitHub Actions + [`SLACK_WEBHOOK_URL`](https://api.slack.com/messaging/webhooks)                                                                                                                                                                   | 每次部署把环境、commit、部署链接、健康检查、`/sync` 链接和 Sentry release 链接发到 Slack。    |
+| 部署通知       | Zeabur 项目通知或外部 Alertmanager receiver                                                                                                                                                                                                                            | 通知路由不在仓库内；部署账户必须配置 receiver，并用测试告警验证真实送达。                     |
 
 ## 7. API 路由地图
 
@@ -214,7 +214,7 @@ flowchart LR
 | `/api/wiki/rebuild-index`              | POST     | 重建分块索引                             |
 | `/api/data/concepts`                   | GET/POST | 概念 CRUD                                |
 | `/api/data/sources`                    | GET      | 文件来源                                 |
-| `/api/data/snapshot`                   | GET      | 全量快照（浏览器同步用）                 |
+| `/api/data/snapshot`                   | GET      | 游标化全量/增量快照，含删除 tombstone    |
 | `/api/sync/github/list`                | GET      | 列出 GitHub 仓库内容                     |
 | `/api/sync/github/content`             | GET      | 拉取单文件                               |
 | `/api/sync/github/run`                 | POST     | 触发一次同步                             |

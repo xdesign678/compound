@@ -9,7 +9,15 @@ const DEFAULT_RATIO = 0.5;
 export interface UseResizableReturn {
   primaryWidth: number | null;
   dividerProps: {
-    onMouseDown: (e: React.MouseEvent) => void;
+    role: 'separator';
+    tabIndex: number;
+    'aria-label': string;
+    'aria-orientation': 'vertical';
+    'aria-valuemin': number;
+    'aria-valuemax': number;
+    'aria-valuenow': number | undefined;
+    onPointerDown: (event: React.PointerEvent) => void;
+    onKeyDown: (event: React.KeyboardEvent) => void;
   };
 }
 
@@ -75,23 +83,32 @@ export function useResizable(
     return () => cancelAnimationFrame(raf);
   }, [enabled, containerRef, applyWidth]);
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+  const getBounds = useCallback(() => {
+    const width = (containerRef.current?.getBoundingClientRect().width ?? 0) - DIVIDER_WIDTH;
+    return {
+      min: MIN_PANEL_WIDTH,
+      max: Math.max(MIN_PANEL_WIDTH, width - MIN_PANEL_WIDTH),
+    };
+  }, [containerRef]);
+
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent) => {
       if (!enabled) return;
-      e.preventDefault();
+      event.preventDefault();
 
       const container = containerRef.current;
       if (!container) return;
 
       const rect = container.getBoundingClientRect();
+      event.currentTarget.setPointerCapture(event.pointerId);
 
       dragStateRef.current = {
-        startX: e.clientX,
+        startX: event.clientX,
         startWidth: widthRef.current ?? Math.round(rect.width * DEFAULT_RATIO),
         startContainerWidth: rect.width,
       };
 
-      const handleMouseMove = (moveEvent: MouseEvent) => {
+      const handlePointerMove = (moveEvent: PointerEvent) => {
         const drag = dragStateRef.current;
         if (!drag) return;
 
@@ -102,28 +119,61 @@ export function useResizable(
         applyWidth(newWidth);
       };
 
-      const handleMouseUp = () => {
+      const handlePointerUp = () => {
         const final = widthRef.current;
         if (final !== null) {
           setPrimaryWidth(final);
         }
         dragStateRef.current = null;
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('pointermove', handlePointerMove);
+        document.removeEventListener('pointerup', handlePointerUp);
+        document.removeEventListener('pointercancel', handlePointerUp);
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
       };
 
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('pointermove', handlePointerMove);
+      document.addEventListener('pointerup', handlePointerUp);
+      document.addEventListener('pointercancel', handlePointerUp);
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
     },
     [containerRef, enabled, applyWidth],
   );
 
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (!enabled || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const bounds = getBounds();
+      const step = event.shiftKey ? 40 : 16;
+      const current = widthRef.current ?? Math.round((bounds.min + bounds.max) / 2);
+      let next = current;
+      if (event.key === 'ArrowLeft') next = current - step;
+      if (event.key === 'ArrowRight') next = current + step;
+      if (event.key === 'Home') next = bounds.min;
+      if (event.key === 'End') next = bounds.max;
+      next = Math.max(bounds.min, Math.min(bounds.max, next));
+      applyWidth(next);
+      setPrimaryWidth(next);
+    },
+    [applyWidth, enabled, getBounds],
+  );
+
+  const bounds = getBounds();
+
   return {
     primaryWidth,
-    dividerProps: { onMouseDown: handleMouseDown },
+    dividerProps: {
+      role: 'separator',
+      tabIndex: 0,
+      'aria-label': '调整列表与详情面板宽度',
+      'aria-orientation': 'vertical',
+      'aria-valuemin': bounds.min,
+      'aria-valuemax': bounds.max,
+      'aria-valuenow': primaryWidth ?? undefined,
+      onPointerDown: handlePointerDown,
+      onKeyDown: handleKeyDown,
+    },
   };
 }

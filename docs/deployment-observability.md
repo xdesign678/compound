@@ -16,8 +16,9 @@ rolling out and during the first minutes after it is live.
 
 ## Deploy notification channel
 
-Production deploy notifications should go to the team Slack channel that owns
-Compound operations.
+Production deploy notifications should go to the operations channel that owns
+Compound. Delivery is external to this repository: Zeabur notifications or an
+Alertmanager receiver must be configured and tested in the deployment account.
 
 Use Zeabur project notifications when the service is deployed by Zeabur. If the
 deploy later moves into GitHub Actions, use a repository secret named
@@ -73,8 +74,8 @@ least these panels:
 
 Start with these alerts and tune them after a week of production data:
 
-- Any sustained 5xx rate above 1% for 5 minutes.
-- p95 latency above 2 seconds for normal page/API requests.
+- Any sustained 5xx rate above 5% for 10 minutes.
+- p95 latency above 2.5 seconds for 15 minutes.
 - process uptime resets more than twice in 10 minutes.
 - any sync run stuck for more than 15 minutes.
 - any `compound_sync_errors` value that increases after a deploy.

@@ -79,7 +79,11 @@ function tokenFromCookie(value: string | null): string {
   for (const pair of pairs) {
     const [key, ...rest] = pair.split('=');
     if (key === 'compound_admin_token') {
-      return decodeURIComponent(rest.join('='));
+      try {
+        return decodeURIComponent(rest.join('='));
+      } catch {
+        return '';
+      }
     }
   }
 
