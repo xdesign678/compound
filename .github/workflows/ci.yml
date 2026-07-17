@@ -31,6 +31,14 @@ jobs:
       - run: npm run lint -- --max-warnings=0
       - run: npm run typecheck
       - run: npm run test
+      - run: npm run knip
+      - run: npm run validate:profiling
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: SQLite backup and restore drill
+        run: npm run backup:drill
 
       - name: Test coverage
         run: npm run test:coverage
@@ -94,6 +102,23 @@ jobs:
       - name: Accessibility smoke tests
         run: npm run test:a11y
 
+      - name: Functional browser tests
+        run: npm run test:e2e
+
+      - name: Fail-closed UX audit
+        run: npm run audit:ux:all -- --surfaces=globalShell,sources,sourceDetail,settingsGeneral
+
+      - name: Upload browser audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-quality-evidence
+          path: |
+            playwright-report
+            tests/e2e/.results
+            tmp/ux-audit
+          if-no-files-found: warn
+
       - name: Build (with performance tracking)
         run: npm run build:measure
 
@@ -105,4 +130,21 @@ jobs:
           path: tmp/build-metrics.json
           if-no-files-found: warn
 
-      - run: docker build -t compound .
+      - name: Build container
+        run: docker build -t compound .
+
+      - name: Start and health-check container
+        run: |
+          docker run -d --name compound-ci -p 3000:3000 \
+            -e COMPOUND_ADMIN_TOKEN=e2e-token \
+            -e DATA_DIR=/data \
+            compound
+          trap 'docker logs compound-ci; docker rm -f compound-ci >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent --show-error http://127.0.0.1:3000/api/health >/dev/null; then
+              docker inspect --format='{{.State.Health.Status}}' compound-ci
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
