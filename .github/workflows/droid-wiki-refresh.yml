@@ -8,6 +8,8 @@ on:
 jobs:
   wiki-refresh:
     runs-on: ubuntu-latest
+    env:
+      FACTORY_API_KEY: ${{ secrets.FACTORY_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -24,6 +26,9 @@ jobs:
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - name: Generate wiki
+        if: env.FACTORY_API_KEY != ''
         run: droid exec --auto high "/wiki"
-        env:
-          FACTORY_API_KEY: ${{ secrets.FACTORY_API_KEY }}
+
+      - name: Skip wiki generation when Factory is not configured
+        if: env.FACTORY_API_KEY == ''
+        run: echo "FACTORY_API_KEY is not configured; skipping optional wiki refresh."
