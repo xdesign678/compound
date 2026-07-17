@@ -12,7 +12,16 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Factory Droid
-        run: curl -fsSL https://app.factory.ai/cli | sh
+        env:
+          DROID_VERSION: 0.174.0
+          DROID_SHA256: b5d9c44769466f566b8478978b4963b89e8fb8097d8cd73640801a61f2b9cafa
+        run: |
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            "https://downloads.factory.ai/factory-cli/releases/${DROID_VERSION}/linux/x64-baseline/droid" \
+            --output "$RUNNER_TEMP/droid"
+          echo "${DROID_SHA256}  $RUNNER_TEMP/droid" | sha256sum --check --strict
+          chmod 0755 "$RUNNER_TEMP/droid"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - name: Generate wiki
         run: droid exec --auto high "/wiki"
