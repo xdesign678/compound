@@ -94,6 +94,7 @@ tmp/profiles/
 .claude/
 .playwright-cli/
 .factory/
+.preview/
 
 # Sentry
 .sentryclirc
