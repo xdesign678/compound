@@ -70,22 +70,24 @@ test(
   async () => {
     resetCircuitBreakersForTests();
 
-    let releaseFirst!: () => void;
-    let firstFetchStarted!: () => void;
-    const firstFetchStartedPromise = new Promise<void>((resolve) => {
-      firstFetchStarted = resolve;
+    let releaseFetches!: () => void;
+    let firstTwoFetchesStarted!: () => void;
+    const firstTwoFetchesStartedPromise = new Promise<void>((resolve) => {
+      firstTwoFetchesStarted = resolve;
     });
-    const releaseFirstPromise = new Promise<void>((resolve) => {
-      releaseFirst = resolve;
+    const releaseFetchesPromise = new Promise<void>((resolve) => {
+      releaseFetches = resolve;
     });
+    let startedFetches = 0;
     let activeFetches = 0;
     let maxActiveFetches = 0;
 
     const mockFetch: typeof fetch = async () => {
+      startedFetches += 1;
       activeFetches += 1;
       maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
-      firstFetchStarted();
-      await releaseFirstPromise;
+      if (startedFetches === 2) firstTwoFetchesStarted();
+      await releaseFetchesPromise;
       activeFetches -= 1;
       return new Response(JSON.stringify({ choices: [{ message: { content: '上下文前缀' } }] }), {
         status: 200,
@@ -107,30 +109,41 @@ test(
             documentTitle: 'doc',
             chunk: 'first chunk',
           });
-          await firstFetchStartedPromise;
-
-          const controller = new AbortController();
-          controller.abort();
-          const queuedAbort = contextualizeChunk({
+          const second = contextualizeChunk({
             fullDocument: 'full document',
             documentTitle: 'doc',
-            chunk: 'queued chunk',
-            signal: controller.signal,
+            chunk: 'second chunk',
           });
-          assert.equal(await queuedAbort, '');
+          await firstTwoFetchesStartedPromise;
 
-          const third = contextualizeChunk({
-            fullDocument: 'full document',
-            documentTitle: 'doc',
-            chunk: 'third chunk',
-          });
-          await new Promise((resolve) => setTimeout(resolve, 50));
-          assert.equal(maxActiveFetches, 1);
+          try {
+            const controller = new AbortController();
+            const queuedAbort = contextualizeChunk({
+              fullDocument: 'full document',
+              documentTitle: 'doc',
+              chunk: 'queued chunk',
+              signal: controller.signal,
+            });
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            controller.abort();
+            assert.equal(await queuedAbort, '');
 
-          releaseFirst();
-          assert.equal(await first, '上下文前缀');
-          assert.equal(await third, '上下文前缀');
-          assert.equal(maxActiveFetches, 1);
+            const fourth = contextualizeChunk({
+              fullDocument: 'full document',
+              documentTitle: 'doc',
+              chunk: 'fourth chunk',
+            });
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            assert.equal(maxActiveFetches, 2);
+
+            releaseFetches();
+            assert.equal(await first, '上下文前缀');
+            assert.equal(await second, '上下文前缀');
+            assert.equal(await fourth, '上下文前缀');
+            assert.equal(maxActiveFetches, 2);
+          } finally {
+            releaseFetches();
+          }
         });
       },
     );

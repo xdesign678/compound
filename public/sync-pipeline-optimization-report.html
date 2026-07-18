@@ -1027,8 +1027,8 @@
           </p>
         </div>
         <div class="hero-meta" aria-label="交付摘要">
-          <div class="hero-meta-row"><span>优化提交</span><strong>cb1aa42</strong></div>
-          <div class="hero-meta-row"><span>自动化测试</span><strong>403 / 403 通过</strong></div>
+          <div class="hero-meta-row"><span>当前版本</span><strong>main · 总并发 10</strong></div>
+          <div class="hero-meta-row"><span>自动化测试</span><strong>406 / 406 通过</strong></div>
           <div class="hero-meta-row"><span>生产构建</span><strong>48 个路由通过</strong></div>
           <div class="hero-meta-row"><span>存储结论</span><strong>继续使用 GitHub</strong></div>
         </div>
@@ -1126,7 +1126,7 @@
             <span class="flow-label">优化后 · 核心优先</span>
             <div class="flow">
               <div class="flow-step"><span class="step-number">1</span><span><strong>Webhook / 定时 / 手动触发</strong>只扫描真实变化，GitHub 继续做源文件库。</span></div>
-              <div class="flow-step"><span class="step-number">2</span><span><strong>核心摄入安全并发 2</strong>资料、概念、分块先写入 SQLite。</span></div>
+              <div class="flow-step"><span class="step-number">2</span><span><strong>全局总并发 10</strong>核心摄入阶段上限 5，资料、概念、分块优先写入 SQLite。</span></div>
               <div class="flow-step"><span class="step-number">3</span><span><strong>完成一个就同步一个</strong>浏览器按变更游标拉增量快照。</span></div>
               <div class="flow-step"><span class="step-number">4</span><span><strong>增强任务分级排队</strong>摘要 50、向量 40、关系 15、情境 5。</span></div>
               <div class="flow-step"><span class="step-number">5</span><span><strong>失败可降级、重试自唤醒</strong>核心内容仍可用，问题中心保留告警。</span></div>
@@ -1157,7 +1157,7 @@
           <article class="change-card">
             <span class="change-index">02 · 并发策略</span>
             <h3>从全局单车道改为分阶段限流</h3>
-            <p>核心摄入、摘要、向量默认并发 2；关系与情境维持 1。这样先获得可感知收益，同时避免一次拉到 4 造成 429 或 SQLite 争用。</p>
+            <p>全局总闸门固定为 10；摄入 5、摘要 4、关系 2、情境 2、向量 2。阶段限额可以并行，但合计永远不会突破总闸门。</p>
             <details><summary>查看技术落点</summary><div class="file-list"><code>lib/llm-budgets.ts</code><code>.env.example</code></div></details>
           </article>
 
@@ -1231,14 +1231,14 @@
         </div>
 
         <div class="proof-grid">
-          <article class="proof-card"><div class="proof-value">403</div><h3>测试通过</h3><p>11 个测试套件，0 失败、0 跳过。</p></article>
+          <article class="proof-card"><div class="proof-value">406</div><h3>测试通过</h3><p>11 个测试套件，0 失败、0 跳过。</p></article>
           <article class="proof-card"><div class="proof-value">48</div><h3>路由构建</h3><p>所有静态与动态路由均生成成功。</p></article>
-          <article class="proof-card"><div class="proof-value">17.7s</div><h3>编译阶段</h3><p>最终构建缓存命中后的编译耗时。</p></article>
+          <article class="proof-card"><div class="proof-value">36.5s</div><h3>编译阶段</h3><p>本次构建缓存命中后的实测编译耗时。</p></article>
           <article class="proof-card"><div class="proof-value">6.07MB</div><h3>静态产物</h3><p><code>.next/static</code> 最终体积。</p></article>
         </div>
 
         <div class="checklist" aria-label="验证清单">
-          <div class="check"><span class="check-mark">✓</span><span><code>npm test</code> · 403 / 403</span></div>
+          <div class="check"><span class="check-mark">✓</span><span><code>npm test</code> · 406 / 406</span></div>
           <div class="check"><span class="check-mark">✓</span><span><code>npm run typecheck</code></span></div>
           <div class="check"><span class="check-mark">✓</span><span><code>npm run lint -- --max-warnings=0</code></span></div>
           <div class="check"><span class="check-mark">✓</span><span><code>npm run format:check</code></span></div>
@@ -1251,9 +1251,9 @@
         <div class="commit-box">
           <div>
             <strong>优化代码已推送到 main</strong>
-            <span>提交 <code>cb1aa42</code> · 未纳入用户原有的 <code>tmp/</code> 工作区改动</span>
+            <span>基础链路提交 <code>cb1aa42</code>；并发升级随当前 <code>main</code> 发布 · 未纳入用户原有的 <code>tmp/</code> 工作区改动</span>
           </div>
-          <a class="button-link" href="https://github.com/xdesign678/compound/commit/cb1aa42" target="_blank" rel="noreferrer">查看提交</a>
+          <a class="button-link" href="https://github.com/xdesign678/compound/commits/main/" target="_blank" rel="noreferrer">查看 main</a>
         </div>
       </section>
 
@@ -1277,7 +1277,7 @@
           <article class="risk-card">
             <span class="priority">持续观察</span>
             <h3>并发采用保守默认值</h3>
-            <p>核心并发从 1 提到 2，而不是直接设为 4。若 429、SQLite busy 和失败率稳定，再按阶段逐级提高。</p>
+            <p>当前使用总并发 10，而不是每个阶段各 10。若 429、超时或写入延迟升高，应下调对应阶段，不要取消全局总闸门。</p>
           </article>
           <article class="risk-card">
             <span class="priority">数据说明</span>
@@ -1286,7 +1286,7 @@
           </article>
         </div>
 
-        <div class="table-wrap">
+        <div class="table-wrap" tabindex="0" role="region" aria-label="上线观察项表格">
           <table>
             <thead>
               <tr><th>上线观察项</th><th>建议口径</th><th>判断标准</th><th>动作</th></tr>

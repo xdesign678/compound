@@ -119,12 +119,22 @@ export class LlmBudgetQueue {
 function readConcurrency(name: LlmBudgetName, envName: string): number {
   const value = Number(process.env[envName]);
   if (Number.isFinite(value) && value > 0) return Math.floor(value);
-  // Two-way concurrency is a deliberately conservative default for the core
-  // ingest and short summary stages. Relations/contextualization remain at 1
-  // because they have historically produced the most rate-limit/output noise.
-  if (name === 'github_ingest' || name === 'summarize' || name === 'embedding') return 2;
-  return 1;
+  const defaults: Record<LlmBudgetName, number> = {
+    github_ingest: 5,
+    summarize: 4,
+    relations: 2,
+    contextualize: 2,
+    embedding: 2,
+  };
+  return defaults[name];
 }
+
+function readTotalConcurrency(): number {
+  const value = Number(process.env.COMPOUND_BACKGROUND_LLM_TOTAL);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 10;
+}
+
+const backgroundLlmBudget = new LlmBudgetQueue('background_total', readTotalConcurrency());
 
 export const llmBudgets: Record<LlmBudgetName, LlmBudgetQueue> = {
   github_ingest: new LlmBudgetQueue(
@@ -154,7 +164,10 @@ export function runWithLlmBudget<T>(
   fn: () => Promise<T> | T,
   options: { signal?: AbortSignal } = {},
 ): Promise<T> {
-  return llmBudgets[bucket].add(fn, options);
+  // Acquire the stage slot first, then the shared slot. Reversing that order
+  // lets tasks waiting on one saturated stage occupy every global slot and
+  // starve otherwise-idle stages.
+  return llmBudgets[bucket].add(() => backgroundLlmBudget.add(fn, options), options);
 }
 
 export function pauseLlmBudget(bucket: LlmBudgetName, ms: number): void {
@@ -163,4 +176,8 @@ export function pauseLlmBudget(bucket: LlmBudgetName, ms: number): void {
 
 export function getLlmBudgetStats(bucket: LlmBudgetName): QueueStats {
   return llmBudgets[bucket].stats();
+}
+
+export function getBackgroundLlmBudgetStats(): QueueStats {
+  return backgroundLlmBudget.stats();
 }

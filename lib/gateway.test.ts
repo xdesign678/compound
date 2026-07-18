@@ -547,6 +547,52 @@ test(
   },
 );
 
+test(
+  'provider 429s back off their jobs without opening the host circuit',
+  { concurrency: false },
+  async () => {
+    resetCircuitBreakersForTests();
+    let fetchCalls = 0;
+
+    await withEnv(
+      {
+        LLM_API_KEY: 'server-key',
+        LLM_API_URL: 'https://example.com/v1/chat/completions',
+        AI_GATEWAY_API_KEY: undefined,
+        COMPOUND_SKIP_DNS_GUARD: 'true',
+        COMPOUND_LLM_CIRCUIT_FAILURE_THRESHOLD: '2',
+      },
+      async () => {
+        const mockFetch: typeof fetch = async () => {
+          fetchCalls += 1;
+          if (fetchCalls <= 3) return new Response('provider busy', { status: 429 });
+          return new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'recovered' }, finish_reason: 'stop' }],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        };
+
+        await withMockFetch(mockFetch, async () => {
+          for (let i = 0; i < 3; i += 1) {
+            await assert.rejects(
+              chat({ messages: [{ role: 'user', content: 'hi' }], maxTokens: 10 }),
+              /Gateway 429/,
+            );
+          }
+          assert.equal(
+            await chat({ messages: [{ role: 'user', content: 'hi' }], maxTokens: 10 }),
+            'recovered',
+          );
+        });
+      },
+    );
+
+    assert.equal(fetchCalls, 4, '429 responses never short-circuit unrelated gateway traffic');
+  },
+);
+
 test('caller-style aborts do not open the gateway circuit', { concurrency: false }, async () => {
   resetCircuitBreakersForTests();
   let fetchCalls = 0;

@@ -4,7 +4,8 @@ import { requireAdmin } from '@/lib/server-auth';
 import { syncObs } from '@/lib/sync-observability';
 import { getEmbeddingMetrics } from '@/lib/embedding';
 import { getReviewMetrics } from '@/lib/review-queue';
-import { startAnalysisWorker } from '@/lib/analysis-worker';
+import { getAnalysisWorkerPoolStats, startAnalysisWorker } from '@/lib/analysis-worker';
+import { getBackgroundLlmBudgetStats, getLlmBudgetStats } from '@/lib/llm-budgets';
 import { deriveStory } from '@/lib/sync-narrative';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
 
@@ -27,6 +28,10 @@ export const GET = withRequestTracing(async (req: Request) => {
   try {
     startAnalysisWorker('dashboard-poll');
     const dashboard = syncObs.getDashboard();
+    const totalLlmBudget = getBackgroundLlmBudgetStats();
+    const workerPools = getAnalysisWorkerPoolStats();
+    const githubWorkerPool = workerPools.find((pool) => pool.name === 'github_ingest');
+    const postWorkerPool = workerPools.find((pool) => pool.name === 'post_ingest');
     const merged = {
       ...dashboard,
       coverage: {
@@ -39,6 +44,17 @@ export const GET = withRequestTracing(async (req: Request) => {
           (sum, item) => sum + Number(item.count || 0),
           0,
         ),
+        backgroundLlmTotalConcurrency: totalLlmBudget.concurrency,
+        backgroundLlmTotalActive: totalLlmBudget.active,
+        backgroundLlmTotalPending: totalLlmBudget.pending,
+        backgroundLlmIngestConcurrency: getLlmBudgetStats('github_ingest').concurrency,
+        backgroundLlmSummaryConcurrency: getLlmBudgetStats('summarize').concurrency,
+        backgroundLlmRelationsConcurrency: getLlmBudgetStats('relations').concurrency,
+        backgroundLlmContextualConcurrency: getLlmBudgetStats('contextualize').concurrency,
+        backgroundLlmEmbeddingConcurrency: getLlmBudgetStats('embedding').concurrency,
+        backgroundWorkerGithubCapacity: githubWorkerPool?.maxWorkers ?? 0,
+        backgroundWorkerPostCapacity: postWorkerPool?.maxWorkers ?? 0,
+        backgroundWorkerActive: workerPools.reduce((sum, pool) => sum + pool.active, 0),
       },
     };
     const story = deriveStory(merged);

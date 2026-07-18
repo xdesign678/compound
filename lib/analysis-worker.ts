@@ -23,7 +23,12 @@ import {
 } from './prompts';
 import { now, parseJson } from './utils';
 import { wikiRepo, type ConceptRelationKind } from './wiki-db';
-import { getLlmBudgetStats, runWithLlmBudget, type LlmBudgetName } from './llm-budgets';
+import {
+  getBackgroundLlmBudgetStats,
+  getLlmBudgetStats,
+  runWithLlmBudget,
+  type LlmBudgetName,
+} from './llm-budgets';
 import { getModelForTask } from './model-history';
 
 export type AdvancedAnalysisStage =
@@ -158,7 +163,7 @@ const STAGE_WORKER_POOLS: WorkerPoolConfig[] = [
       Number(
         process.env.COMPOUND_ANALYSIS_STAGE_WORKERS_GITHUB ||
           process.env.COMPOUND_ANALYSIS_MAX_WORKERS ||
-          2,
+          5,
       ),
     ),
   },
@@ -179,11 +184,23 @@ const STAGE_WORKER_POOLS: WorkerPoolConfig[] = [
       Number(
         process.env.COMPOUND_ANALYSIS_STAGE_WORKERS_POST_INGEST ||
           process.env.COMPOUND_ANALYSIS_MAX_WORKERS ||
-          3,
+          6,
       ),
     ),
   },
 ];
+
+export function getAnalysisWorkerPoolStats(): Array<{
+  name: string;
+  active: number;
+  maxWorkers: number;
+}> {
+  return STAGE_WORKER_POOLS.map((pool) => ({
+    name: pool.name,
+    active: activeWorkerCounts.get(pool.name) ?? 0,
+    maxWorkers: pool.maxWorkers,
+  }));
+}
 
 function tableColumns(table: string): Set<string> {
   const rows = getServerDb().prepare(`PRAGMA table_info(${table})`).all() as Array<{
@@ -647,13 +664,20 @@ async function withBackgroundLlmBudget<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   const stats = getLlmBudgetStats(bucket);
-  if (stats.active >= stats.concurrency || stats.pending > 0 || stats.pausedUntil) {
+  const totalStats = getBackgroundLlmBudgetStats();
+  if (
+    stats.active >= stats.concurrency ||
+    stats.pending > 0 ||
+    stats.pausedUntil ||
+    totalStats.active >= totalStats.concurrency ||
+    totalStats.pending > 0
+  ) {
     syncObs.recordEvent({
       runId: job.run_id,
       itemId: job.item_id,
       stage: job.stage,
       path: job.source_path,
-      message: `等待后台 LLM 队列：${bucket} active=${stats.active}/${stats.concurrency} pending=${stats.pending}`,
+      message: `等待后台 LLM 队列：${bucket} active=${stats.active}/${stats.concurrency} pending=${stats.pending} · total=${totalStats.active}/${totalStats.concurrency} pending=${totalStats.pending}`,
       meta: {
         event: 'analysis.llm_budget_wait',
         bucket,
@@ -661,6 +685,9 @@ async function withBackgroundLlmBudget<T>(
         pending: stats.pending,
         concurrency: stats.concurrency,
         pausedUntil: stats.pausedUntil,
+        totalActive: totalStats.active,
+        totalPending: totalStats.pending,
+        totalConcurrency: totalStats.concurrency,
       },
     });
   }

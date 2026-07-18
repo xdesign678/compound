@@ -82,17 +82,17 @@ flowchart LR
 
 ### 3.2 内部库依赖
 
-| 模块                                                            | 主要职责                                                                 | 依赖                                                                        |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| `lib/server-db.ts`                                              | 打开 / 迁移 SQLite，封装领域表、单调变更游标、持久化限流桶与保留清理入口 | `better-sqlite3`, `DATA_DIR`                                                |
-| `lib/server-auth.ts`                                            | 服务端 admin token 验证、子路径白名单                                    | `process.env`，与 `middleware.ts` 共享 token                                |
-| `lib/gateway.ts`                                                | LLM 转发、SSRF 防护、超时与限流                                          | Node `dns/net`、`lib/rate-limit.ts`、`lib/model-runs.ts`                    |
-| `lib/github-sync-*`                                             | 拉取、分页、断点续传、删除模式（soft/hard）                              | GitHub Contents API                                                         |
-| `lib/analysis-worker.ts`                                        | 把 Markdown 切块 → 概念抽取 → 写入 Wiki DB                               | `lib/wiki-chunk.ts`, `lib/wiki-db.ts`, `lib/embedding.ts`, `lib/gateway.ts` |
-| `lib/repair-worker.ts`                                          | 低置信度概念的二次修复，写入 review queue                                | `lib/review-queue.ts`, `lib/gateway.ts`                                     |
-| `lib/wiki-db.ts` / `lib/wiki-compiler.ts` / `lib/wiki-chunk.ts` | 概念分块、检索（FTS + 向量）、证据链编译                                 | `better-sqlite3`, `lib/embedding.ts`                                        |
-| `lib/db.ts`                                                     | 浏览器侧 Dexie 数据库（IndexedDB）镜像                                   | `dexie`, `dexie-react-hooks`                                                |
-| `lib/store.ts`                                                  | 浏览器全局状态（Zustand）                                                | `zustand`                                                                   |
+| 模块                                                            | 主要职责                                                                 | 依赖                                                     |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `lib/server-db.ts`                                              | 打开 / 迁移 SQLite，封装领域表、单调变更游标、持久化限流桶与保留清理入口 | `better-sqlite3`, `DATA_DIR`                             |
+| `lib/server-auth.ts`                                            | 服务端 admin token 验证、子路径白名单                                    | `process.env`，与 `middleware.ts` 共享 token             |
+| `lib/gateway.ts`                                                | LLM 转发、SSRF 防护、超时与限流                                          | Node `dns/net`、`lib/rate-limit.ts`、`lib/model-runs.ts` |
+| `lib/github-sync-*`                                             | 拉取、分页、断点续传、删除模式（soft/hard）                              | GitHub Contents API                                      |
+| `lib/analysis-worker.ts`                                        | 把 Markdown 切块 → 概念抽取 → 写入 Wiki DB；摄入/后处理分池运行          | `lib/llm-budgets.ts` 提供总并发 10 与阶段并发双层闸门    |
+| `lib/repair-worker.ts`                                          | 低置信度概念的二次修复，写入 review queue                                | `lib/review-queue.ts`, `lib/gateway.ts`                  |
+| `lib/wiki-db.ts` / `lib/wiki-compiler.ts` / `lib/wiki-chunk.ts` | 概念分块、检索（FTS + 向量）、证据链编译                                 | `better-sqlite3`, `lib/embedding.ts`                     |
+| `lib/db.ts`                                                     | 浏览器侧 Dexie 数据库（IndexedDB）镜像                                   | `dexie`, `dexie-react-hooks`                             |
+| `lib/store.ts`                                                  | 浏览器全局状态（Zustand）                                                | `zustand`                                                |
 
 ## 4. 主要数据流
 

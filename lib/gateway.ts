@@ -477,7 +477,10 @@ async function readBodyTextWithAbort(response: Response, signal: AbortSignal): P
 
 function isTransientGatewayFailure(error: unknown): boolean {
   if (error instanceof GatewayResponseError) {
-    return error.status === 408 || error.status === 429 || error.status >= 500;
+    // 429 is capacity feedback, not a host outage. The affected stage already
+    // honors Retry-After and its job retries with backoff; counting concurrent
+    // 429s here would open the host-wide circuit and stop unrelated stages.
+    return error.status === 408 || error.status >= 500;
   }
   if (error instanceof CircuitBreakerOpenError) return false;
   if (isGatewayTimeoutError(error)) return true;

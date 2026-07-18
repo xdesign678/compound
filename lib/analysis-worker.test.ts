@@ -269,7 +269,8 @@ test('source enhancement queue prioritizes summary and defers contextualization'
   t.after(env.cleanup);
 
   const { getServerDb } = await import('./server-db');
-  const { queueSourceEnhancementJobs } = await import('./analysis-worker');
+  const { getAnalysisWorkerPoolStats, queueSourceEnhancementJobs } =
+    await import('./analysis-worker');
   queueSourceEnhancementJobs({
     sourceId: 's-priority',
     sourceSha: 'sha-priority',
@@ -286,6 +287,13 @@ test('source enhancement queue prioritizes summary and defers contextualization'
     { stage: 'relations', priority: 15 },
     { stage: 'contextualize', priority: 5 },
   ]);
+  assert.deepEqual(
+    getAnalysisWorkerPoolStats().map(({ name, maxWorkers }) => ({ name, maxWorkers })),
+    [
+      { name: 'github_ingest', maxWorkers: 5 },
+      { name: 'post_ingest', maxWorkers: 6 },
+    ],
+  );
 });
 
 test('a delayed retry wakes itself without a dashboard poll', { concurrency: false }, async (t) => {

@@ -68,7 +68,8 @@ Optional sync/analysis controls:
 
 - `GITHUB_WEBHOOK_SECRET`: verifies `/api/sync/github/webhook` push events.
 - `CRON_SECRET`: allows scheduled incremental safety scans through `/api/sync/cron/rescan`; an authenticated `POST ...?force=true` is reserved for explicit full rebuilds.
-- `COMPOUND_BACKGROUND_LLM_*`: optional per-stage concurrency limits. Defaults keep ingest/summary at 2 and noisy enhancement stages at 1.
+- `COMPOUND_BACKGROUND_LLM_TOTAL`: shared background LLM concurrency cap (default `10`). `COMPOUND_BACKGROUND_LLM_*` applies per-stage caps underneath it, so stage limits cannot combine past the total.
+- `COMPOUND_ANALYSIS_STAGE_WORKERS_GITHUB` / `COMPOUND_ANALYSIS_STAGE_WORKERS_POST_INGEST`: worker capacities (defaults `5` / `6`). Keep `COMPOUND_ANALYSIS_WORKER_BATCH=1` so workers do not pre-claim large batches while waiting on LLM slots.
 - `COMPOUND_GITHUB_DELETE_MODE`: `soft` by default; set `hard` to remove local records when remote files disappear.
 - `COMPOUND_EMBEDDING_PROVIDER`: `local` by default; set `remote` only when an embedding endpoint is configured.
 - `COMPOUND_EMBEDDING_API_KEY`, `COMPOUND_EMBEDDING_API_URL`, `COMPOUND_EMBEDDING_MODEL`: optional remote embedding settings.
