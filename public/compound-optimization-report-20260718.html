@@ -1,0 +1,1460 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="Compound 2026 年 7 月深度优化报告，涵盖技术架构、安全、同步、恢复、性能、前端体验和完整验证证据。"
+    />
+    <title>Compound 深度优化报告 | 从能用到可信、稳定、好用</title>
+    <style>
+      :root {
+        --bg-primary: #faf9f5;
+        --bg-secondary: #f0eee6;
+        --bg-card: #fefdfb;
+        --bg-muted: #f5f4f0;
+        --bg-button: #0f0f0e;
+        --bg-button-hover: #3d3d3a;
+        --text-primary: #141413;
+        --text-body: rgba(20, 20, 19, 0.86);
+        --text-secondary: #5e5d59;
+        --text-tertiary: #66645d;
+        --text-on-button: #faf9f5;
+        --accent: #9a442d;
+        --accent-soft: #f4dfd4;
+        --state-success: #4f775e;
+        --border-light: rgba(20, 20, 19, 0.08);
+        --border-default: rgba(20, 20, 19, 0.14);
+        --border-section: rgba(20, 20, 19, 0.07);
+        --shadow-sm: 0 1px 3px rgba(20, 20, 19, 0.08);
+        --shadow-md: 0 8px 28px rgba(20, 20, 19, 0.1);
+        --radius-card: 8px;
+        --radius-button: 7.5px;
+        --font-sans:
+          Geist, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          'Noto Sans SC', sans-serif;
+        --font-reading: Lora, Georgia, 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
+        --font-mono: 'Geist Mono', 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+        --site-margin: clamp(1rem, 0.16rem + 3.58vw, 4.5rem);
+        --nav-height: 68px;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg-primary: #1a1a18;
+          --bg-secondary: #232320;
+          --bg-card: #232320;
+          --bg-muted: #2a2a27;
+          --bg-button: #ece9e1;
+          --bg-button-hover: #d4d1c9;
+          --text-primary: #ece9e1;
+          --text-body: rgba(236, 233, 225, 0.86);
+          --text-secondary: #aaa9a2;
+          --text-tertiary: #85847e;
+          --text-on-button: #1a1a18;
+          --accent: #df8a6d;
+          --accent-soft: #3a2923;
+          --state-success: #7aab87;
+          --border-light: rgba(236, 233, 225, 0.08);
+          --border-default: rgba(236, 233, 225, 0.14);
+          --border-section: rgba(236, 233, 225, 0.09);
+          --shadow-sm: 0 1px 3px rgba(15, 15, 14, 0.24);
+          --shadow-md: 0 8px 28px rgba(15, 15, 14, 0.38);
+        }
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+        background: var(--bg-primary);
+      }
+
+      body {
+        margin: 0;
+        overflow-wrap: break-word;
+        background: var(--bg-primary);
+        color: var(--text-body);
+        font-family: var(--font-reading);
+        font-size: 17px;
+        line-height: 1.6;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      ::selection {
+        background: rgba(204, 120, 92, 0.5);
+        color: inherit;
+      }
+
+      a {
+        min-height: 44px;
+        color: inherit;
+        text-decoration: underline;
+        text-decoration-color: rgba(20, 20, 19, 0.3);
+        text-underline-offset: 0.2em;
+        transition: text-decoration-color 150ms ease;
+      }
+
+      a:hover {
+        text-decoration-color: rgba(20, 20, 19, 0.62);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        a {
+          text-decoration-color: rgba(236, 233, 225, 0.3);
+        }
+
+        a:hover {
+          text-decoration-color: rgba(236, 233, 225, 0.62);
+        }
+      }
+
+      button {
+        min-width: 44px;
+        min-height: 44px;
+        border: 0;
+        border-radius: var(--radius-button);
+        font: inherit;
+      }
+
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      summary,
+      nav,
+      .ui-text {
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      p,
+      figure {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 760px;
+        margin-bottom: 24px;
+        font-size: clamp(2.55rem, 6.3vw, 4.5rem);
+        font-weight: 760;
+        line-height: 1.06;
+        letter-spacing: -0.035em;
+      }
+
+      h2 {
+        margin-bottom: 20px;
+        font-size: clamp(1.85rem, 3.5vw, 2.75rem);
+        font-weight: 680;
+        line-height: 1.16;
+        letter-spacing: -0.01em;
+      }
+
+      h3 {
+        margin-bottom: 12px;
+        font-size: clamp(1.24rem, 2vw, 1.55rem);
+        font-weight: 680;
+        line-height: 1.28;
+      }
+
+      h4 {
+        margin-bottom: 8px;
+        font-size: 1rem;
+        font-weight: 680;
+      }
+
+      p {
+        max-width: 68ch;
+        margin-bottom: 18px;
+      }
+
+      code {
+        padding: 2px 5px;
+        border-radius: 4px;
+        background: var(--bg-muted);
+        color: var(--text-primary);
+        font-family: var(--font-mono);
+        font-size: 0.88em;
+        overflow-wrap: anywhere;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 200;
+        height: var(--nav-height);
+        border-bottom: 1px solid var(--border-section);
+        background: var(--bg-primary);
+        background: color-mix(in srgb, var(--bg-primary) 94%, transparent);
+        backdrop-filter: blur(18px);
+      }
+
+      .topbar-inner {
+        display: flex;
+        width: min(100%, 1240px);
+        height: 100%;
+        margin: 0 auto;
+        padding: 0 var(--site-margin);
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .brand {
+        min-height: 44px;
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        font-size: 14px;
+        font-weight: 760;
+        letter-spacing: 0.06em;
+        text-decoration: none;
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+      }
+
+      .nav-links a {
+        display: inline-flex;
+        align-items: center;
+        color: var(--text-secondary);
+        font-size: 14px;
+        text-decoration: none;
+      }
+
+      .nav-links a:hover,
+      .nav-links a:focus-visible {
+        color: var(--text-primary);
+      }
+
+      .menu-button {
+        display: none;
+        padding: 0 12px;
+        background: var(--bg-button);
+        color: var(--text-on-button);
+        cursor: pointer;
+      }
+
+      .mobile-menu {
+        position: fixed;
+        z-index: 199;
+        top: 56px;
+        right: 0;
+        left: 0;
+        display: grid;
+        grid-template-rows: 0fr;
+        border-bottom: 1px solid var(--border-section);
+        background: var(--bg-primary);
+        transition: grid-template-rows 200ms ease;
+      }
+
+      .mobile-menu.open {
+        grid-template-rows: 1fr;
+      }
+
+      .mobile-menu-inner {
+        display: grid;
+        overflow: hidden;
+        padding: 0 var(--site-margin);
+      }
+
+      .mobile-menu.open .mobile-menu-inner {
+        padding-block: 8px 18px;
+      }
+
+      .mobile-menu a {
+        display: flex;
+        min-height: 48px;
+        align-items: center;
+        border-bottom: 1px solid var(--border-section);
+        font-family: var(--font-sans);
+        text-decoration: none;
+      }
+
+      .page {
+        width: min(100%, 1240px);
+        margin: 0 auto;
+        padding: 0 var(--site-margin) max(72px, env(safe-area-inset-bottom));
+      }
+
+      .hero {
+        display: grid;
+        min-height: min(780px, calc(100dvh - var(--nav-height)));
+        padding: 72px 0 80px;
+        align-items: center;
+        grid-template-columns: minmax(0, 0.88fr) minmax(440px, 1.12fr);
+        gap: clamp(36px, 5vw, 72px);
+      }
+
+      .hero-copy {
+        align-self: center;
+      }
+
+      .eyebrow {
+        margin-bottom: 18px;
+        color: var(--accent);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 720;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .lead {
+        max-width: 600px;
+        color: var(--text-secondary);
+        font-size: clamp(1.08rem, 1.4vw, 1.24rem);
+        line-height: 1.62;
+      }
+
+      .status-line {
+        display: flex;
+        margin-top: 28px;
+        flex-wrap: wrap;
+        gap: 10px 24px;
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+
+      .status-line strong {
+        color: var(--state-success);
+        font-weight: 720;
+      }
+
+      .hero-visual {
+        overflow: hidden;
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-card);
+        background: var(--bg-card);
+        box-shadow: var(--shadow-md);
+      }
+
+      .hero-visual img {
+        aspect-ratio: 16 / 10;
+        object-fit: cover;
+      }
+
+      .visual-caption {
+        margin: 0;
+        padding: 14px 16px;
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .section {
+        scroll-margin-top: calc(var(--nav-height) + 18px);
+        padding: 72px 0;
+        border-top: 1px solid var(--border-section);
+      }
+
+      .section-intro {
+        max-width: 680px;
+        color: var(--text-secondary);
+        font-size: 1.05rem;
+      }
+
+      .summary-panel {
+        display: grid;
+        padding: clamp(24px, 4vw, 48px);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-card);
+        background: var(--bg-card);
+        grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+        gap: 40px;
+      }
+
+      .summary-panel blockquote {
+        margin: 0;
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        font-size: clamp(1.45rem, 2.5vw, 2.2rem);
+        font-weight: 620;
+        line-height: 1.3;
+        letter-spacing: -0.015em;
+      }
+
+      .summary-note {
+        align-self: end;
+        color: var(--text-secondary);
+      }
+
+      .summary-note p:last-child {
+        margin-bottom: 0;
+      }
+
+      .metrics {
+        display: grid;
+        margin-top: 24px;
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-card);
+        background: var(--bg-card);
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+      }
+
+      .metric {
+        min-width: 0;
+        padding: 24px 18px;
+        border-right: 1px solid var(--border-light);
+      }
+
+      .metric:last-child {
+        border-right: 0;
+      }
+
+      .metric-value {
+        display: block;
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+        font-size: clamp(1.6rem, 3vw, 2.45rem);
+        font-weight: 760;
+        line-height: 1.1;
+        letter-spacing: -0.03em;
+      }
+
+      .metric-label {
+        display: block;
+        margin-top: 8px;
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .why-grid {
+        display: grid;
+        margin-top: 32px;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 24px;
+      }
+
+      .why-primary,
+      .why-secondary {
+        padding: 28px;
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-card);
+        background: var(--bg-card);
+      }
+
+      .why-primary {
+        min-height: 280px;
+      }
+
+      .why-primary p {
+        font-size: 1.08rem;
+      }
+
+      .why-secondary {
+        display: grid;
+        align-content: end;
+        background: var(--bg-secondary);
+      }
+
+      .architecture {
+        display: grid;
+        margin-top: 36px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .architecture-step {
+        position: relative;
+        min-height: 180px;
+        padding: 24px 20px;
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-card);
+        background: var(--bg-card);
+      }
+
+      .architecture-step:not(:last-child)::after {
+        position: absolute;
+        top: 50%;
+        right: -13px;
+        z-index: 2;
+        width: 14px;
+        color: var(--accent);
+        font-family: var(--font-sans);
+        content: '→';
+        transform: translateY(-50%);
+      }
+
+      .architecture-step p {
+        margin-bottom: 0;
+        color: var(--text-secondary);
+        font-size: 0.96rem;
+      }
+
+      .architecture-label {
+        display: block;
+        margin-bottom: 28px;
+        color: var(--accent);
+        font-family: var(--font-mono);
+        font-size: 12px;
+      }
+
+      .change-list {
+        display: grid;
+        margin-top: 36px;
+        gap: 12px;
+      }
+
+      details {
+        overflow: hidden;
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-card);
+        background: var(--bg-card);
+      }
+
+      summary {
+        position: relative;
+        display: flex;
+        min-height: 64px;
+        padding: 18px 52px 18px 20px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        cursor: pointer;
+        list-style: none;
+        font-size: 1.02rem;
+        font-weight: 680;
+      }
+
+      summary::-webkit-details-marker {
+        display: none;
+      }
+
+      summary::after {
+        position: absolute;
+        right: 20px;
+        color: var(--accent);
+        content: '+';
+        font-size: 22px;
+        font-weight: 400;
+      }
+
+      details[open] summary::after {
+        content: '−';
+      }
+
+      .change-summary {
+        color: var(--text-secondary);
+        font-size: 13px;
+        font-weight: 450;
+        text-align: right;
+      }
+
+      .change-body {
+        display: grid;
+        padding: 0 20px 22px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .change-body p {
+        margin-bottom: 0;
+      }
+
+      .change-before,
+      .change-after {
+        padding-top: 18px;
+        border-top: 1px solid var(--border-section);
+      }
+
+      .change-before h4 {
+        color: var(--text-secondary);
+      }
+
+      .change-after h4 {
+        color: var(--state-success);
+      }
+
+      .comparison {
+        display: grid;
+        margin-top: 36px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px;
+      }
+
+      .comparison figure,
+      .gallery figure {
+        overflow: hidden;
+        margin-bottom: 0;
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-card);
+        background: var(--bg-card);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .comparison img {
+        aspect-ratio: 16 / 10;
+        object-fit: cover;
+      }
+
+      .comparison figcaption,
+      .gallery figcaption {
+        padding: 16px 18px 18px;
+        color: var(--text-secondary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .comparison figcaption strong,
+      .gallery figcaption strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--text-primary);
+        font-size: 15px;
+      }
+
+      .visual-improvements {
+        display: grid;
+        margin-top: 28px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 36px;
+      }
+
+      .visual-item {
+        padding: 20px 0;
+        border-bottom: 1px solid var(--border-section);
+      }
+
+      .visual-item p {
+        margin-bottom: 0;
+        color: var(--text-secondary);
+      }
+
+      .gallery {
+        display: grid;
+        margin-top: 40px;
+        grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
+        gap: 20px;
+        align-items: start;
+      }
+
+      .gallery .desktop-shot img {
+        aspect-ratio: 16 / 10;
+        object-fit: cover;
+      }
+
+      .gallery .mobile-shot {
+        justify-self: center;
+        width: min(100%, 340px);
+      }
+
+      .gallery .mobile-shot img {
+        aspect-ratio: 375 / 667;
+        object-fit: cover;
+      }
+
+      .proof-layout {
+        display: grid;
+        margin-top: 36px;
+        grid-template-columns: 0.72fr 1.28fr;
+        gap: 28px;
+      }
+
+      .proof-callout {
+        display: grid;
+        min-height: 300px;
+        padding: 28px;
+        border-radius: var(--radius-card);
+        background: var(--bg-button);
+        color: var(--text-on-button);
+        align-content: space-between;
+      }
+
+      .proof-callout strong {
+        font-family: var(--font-sans);
+        font-size: clamp(2.5rem, 5vw, 4.4rem);
+        line-height: 1;
+        letter-spacing: -0.04em;
+      }
+
+      .proof-callout p {
+        margin-bottom: 0;
+        color: inherit;
+      }
+
+      .proof-list {
+        display: grid;
+        gap: 0;
+      }
+
+      .proof-row {
+        display: grid;
+        padding: 18px 0;
+        border-bottom: 1px solid var(--border-section);
+        grid-template-columns: minmax(160px, 0.45fr) minmax(0, 1fr);
+        gap: 20px;
+      }
+
+      .proof-row:first-child {
+        padding-top: 0;
+      }
+
+      .proof-row:last-child {
+        border-bottom: 0;
+      }
+
+      .proof-row strong {
+        color: var(--text-primary);
+        font-family: var(--font-sans);
+      }
+
+      .proof-row p {
+        margin-bottom: 0;
+        color: var(--text-secondary);
+      }
+
+      .notes-grid {
+        display: grid;
+        margin-top: 32px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px;
+      }
+
+      .note {
+        padding: 24px;
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-card);
+        background: var(--bg-card);
+      }
+
+      .note p:last-child {
+        margin-bottom: 0;
+      }
+
+      .next-actions {
+        display: grid;
+        margin-top: 32px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .next-action {
+        padding: 24px;
+        border-top: 1px solid var(--border-default);
+      }
+
+      .next-action p {
+        margin-bottom: 0;
+        color: var(--text-secondary);
+      }
+
+      .footer {
+        margin-top: 32px;
+        padding: 48px 0 32px;
+        border-top: 1px solid var(--border-section);
+        color: var(--text-tertiary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+
+      .footer p {
+        max-width: none;
+      }
+
+      .card-grid:has(figure:hover) figure:not(:hover) {
+        opacity: 0.72;
+      }
+
+      figure {
+        transition:
+          opacity 200ms ease,
+          transform 200ms ease,
+          box-shadow 200ms ease;
+      }
+
+      figure:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+      }
+
+      button:focus-visible,
+      a:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+
+      @media (max-width: 940px) {
+        .hero {
+          min-height: auto;
+          grid-template-columns: 1fr;
+        }
+
+        .hero-copy {
+          max-width: 760px;
+        }
+
+        .summary-panel,
+        .why-grid,
+        .proof-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .architecture {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .architecture-step:nth-child(2)::after {
+          display: none;
+        }
+
+        .metrics {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .metric:nth-child(3) {
+          border-right: 0;
+        }
+
+        .metric:nth-child(-n + 3) {
+          border-bottom: 1px solid var(--border-light);
+        }
+
+        .gallery {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 767px) {
+        :root {
+          --nav-height: 56px;
+        }
+
+        body {
+          font-size: 16px;
+        }
+
+        .nav-links {
+          display: none;
+        }
+
+        .menu-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .hero {
+          padding: 48px 0 64px;
+        }
+
+        h1 {
+          font-size: clamp(2.5rem, 13vw, 3.55rem);
+        }
+
+        .section {
+          padding: 64px 0;
+        }
+
+        .comparison,
+        .visual-improvements,
+        .notes-grid,
+        .next-actions,
+        .change-body {
+          grid-template-columns: 1fr;
+        }
+
+        .change-summary {
+          display: none;
+        }
+
+        .proof-row {
+          grid-template-columns: 1fr;
+          gap: 6px;
+        }
+      }
+
+      @media (min-width: 768px) {
+        .mobile-menu {
+          display: none;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .metrics,
+        .architecture {
+          grid-template-columns: 1fr;
+        }
+
+        .metric,
+        .metric:nth-child(3) {
+          border-right: 0;
+          border-bottom: 1px solid var(--border-light);
+        }
+
+        .metric:last-child {
+          border-bottom: 0;
+        }
+
+        .architecture-step:not(:last-child)::after {
+          top: auto;
+          right: 50%;
+          bottom: -16px;
+          transform: translateX(50%) rotate(90deg);
+        }
+
+        summary {
+          padding-left: 16px;
+        }
+
+        .status-line {
+          display: grid;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        *,
+        *::before,
+        *::after {
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="topbar" aria-label="主导航">
+      <div class="topbar-inner">
+        <a class="brand" href="#top">COMPOUND</a>
+        <div class="nav-links">
+          <a href="#architecture">架构</a>
+          <a href="#changes">优化</a>
+          <a href="#visual">视觉体验</a>
+          <a href="#proof">验证</a>
+          <a href="#next">下一步</a>
+        </div>
+        <button class="menu-button" type="button" aria-expanded="false" aria-controls="mobile-menu">
+          菜单
+        </button>
+      </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
+      <div class="mobile-menu-inner">
+        <a href="#architecture">架构</a>
+        <a href="#changes">优化</a>
+        <a href="#visual">视觉体验</a>
+        <a href="#proof">验证</a>
+        <a href="#next">下一步</a>
+      </div>
+    </div>
+
+    <main class="page" id="top">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Compound 深度优化报告</p>
+          <h1>从能用，到可信、稳定、好用</h1>
+          <p class="lead">
+            这次优化没有停在换颜色或调间距，而是同时修复同步一致性、安全边界、数据恢复、并发可靠性和真实使用体验。
+          </p>
+          <div class="status-line">
+            <span><strong>全部通过</strong> 远端完整质量门禁</span>
+            <span><code>main</code> 已推送</span>
+            <span>最终提交 <code>763ff28</code></span>
+          </div>
+        </div>
+        <figure class="hero-visual">
+          <img
+            src="reports/compound-optimization-20260718/global-shell-after.png"
+            alt="优化后的 Compound 桌面知识库首页，左侧有清晰导航和新增资料入口，右侧展示分类与知识卡片"
+            width="1280"
+            height="800"
+          />
+          <figcaption class="visual-caption">
+            优化后的桌面主界面。新增资料入口更明确，导航、分类和内容层级保持克制。
+          </figcaption>
+        </figure>
+      </header>
+
+      <section class="section" id="summary">
+        <h2>一句话结论</h2>
+        <div class="summary-panel">
+          <blockquote>
+            Compound
+            现在不仅能保存和浏览知识，也能在多设备、异常网络、并发任务和生产部署中保持一致与可恢复。
+          </blockquote>
+          <div class="summary-note">
+            <p>
+              用户看到的是更顺手的界面，系统内部得到的是一套更可靠的同步、安全、备份与验证底座。
+            </p>
+          </div>
+        </div>
+        <div class="metrics" aria-label="验证关键指标">
+          <div class="metric">
+            <span class="metric-value">396</span>
+            <span class="metric-label">单元测试通过</span>
+          </div>
+          <div class="metric">
+            <span class="metric-value">0</span>
+            <span class="metric-label">生产依赖漏洞</span>
+          </div>
+          <div class="metric">
+            <span class="metric-value">100</span>
+            <span class="metric-label">PWA 与无障碍评分</span>
+          </div>
+          <div class="metric">
+            <span class="metric-value">0</span>
+            <span class="metric-label">axe 严重问题</span>
+          </div>
+          <div class="metric">
+            <span class="metric-value">11:26</span>
+            <span class="metric-label">完整远端门禁耗时</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="why">
+        <h2>为什么这次优化重要</h2>
+        <p class="section-intro">
+          知识库最危险的问题通常不会立刻出现在界面上。它们会在换设备、网络中断、任务并发或服务重启后才暴露。
+        </p>
+        <div class="why-grid">
+          <article class="why-primary">
+            <h3>把隐蔽风险变成可验证的系统能力</h3>
+            <p>
+              过去依赖时间戳判断新旧数据，编辑和删除可能在另一台设备上消失。现在每次变化都有连续游标和删除记录，客户端能够明确知道应该更新什么、删除什么。
+            </p>
+            <p>
+              同样地，备份不再只是复制一个数据库文件，而是带完整性检查、校验和、安全回滚与自动恢复演练。
+            </p>
+          </article>
+          <aside class="why-secondary">
+            <h3>体验与可靠性是一件事</h3>
+            <p>
+              自动保存不会覆盖后输入的内容，弹层不会把键盘焦点丢在页面背后，移动端不会出现两个返回标题。可靠性最终会被用户感知为顺畅。
+            </p>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section" id="architecture">
+        <h2>架构怎样变得更稳</h2>
+        <p class="section-intro">
+          新链路以服务端 SQLite
+          为事实来源，用单调游标把变化有序送到每个浏览器，同时让后台任务和恢复流程拥有清晰边界。
+        </p>
+        <div class="architecture" aria-label="优化后的数据与任务架构">
+          <article class="architecture-step">
+            <span class="architecture-label">浏览器</span>
+            <h3>本地快速响应</h3>
+            <p>IndexedDB 先展示已有内容，随后按游标拉取增量变化。</p>
+          </article>
+          <article class="architecture-step">
+            <span class="architecture-label">同步协议</span>
+            <h3>有序合并变化</h3>
+            <p>更新、删除、分页与重置都由同一条变更日志驱动。</p>
+          </article>
+          <article class="architecture-step">
+            <span class="architecture-label">SQLite</span>
+            <h3>持久事实来源</h3>
+            <p>数据、限流、任务租约和同步游标统一持久化。</p>
+          </article>
+          <article class="architecture-step">
+            <span class="architecture-label">后台任务</span>
+            <h3>租约防止旧任务回写</h3>
+            <p>Worker 完成、失败和心跳都必须匹配当前租约版本。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="changes">
+        <h2>具体优化了什么</h2>
+        <p class="section-intro">
+          点击每一项可以查看优化前后的差异。主页面只保留结论，技术细节按需展开。
+        </p>
+        <div class="change-list">
+          <details open>
+            <summary>
+              <span>跨设备同步与删除一致性</span>
+              <span class="change-summary">时间戳合并改为游标和墓碑</span>
+            </summary>
+            <div class="change-body">
+              <div class="change-before">
+                <h4>过去</h4>
+                <p>主要依赖更新时间比较，删除没有稳定传播路径，分页期间还可能读到变化中的数据。</p>
+              </div>
+              <div class="change-after">
+                <h4>现在</h4>
+                <p>每次更新和删除写入连续变更日志，全量快照固定上界，旧游标失效时自动重新对齐。</p>
+              </div>
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              <span>安全边界与隐私</span>
+              <span class="change-summary">从参数校验深入到真实网络连接</span>
+            </summary>
+            <div class="change-body">
+              <div class="change-before">
+                <h4>过去</h4>
+                <p>
+                  自定义模型地址虽然检查域名，但 DNS
+                  解析和重定向阶段仍有绕过风险，错误日志也可能保留响应片段。
+                </p>
+              </div>
+              <div class="change-after">
+                <h4>现在</h4>
+                <p>
+                  实际连接使用公共 IP 校验，仅允许同源 307 或 308
+                  重定向，日志只记录长度、状态和错误类型。
+                </p>
+              </div>
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              <span>备份、恢复与保留策略</span>
+              <span class="change-summary">从手工复制到自动演练</span>
+            </summary>
+            <div class="change-body">
+              <div class="change-before">
+                <h4>过去</h4>
+                <p>
+                  数据库恢复缺少完整性、校验和、外键与回滚验证，出问题时恢复过程本身也可能带来风险。
+                </p>
+              </div>
+              <div class="change-after">
+                <h4>现在</h4>
+                <p>
+                  在线备份会运行 quick check 和 SHA256，恢复先创建安全备份，再原子替换并验证外键。
+                </p>
+              </div>
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              <span>并发任务与自动保存</span>
+              <span class="change-summary">旧结果不能覆盖新状态</span>
+            </summary>
+            <div class="change-body">
+              <div class="change-before">
+                <h4>过去</h4>
+                <p>
+                  较慢请求可能最后返回并覆盖新页面，资料保存中继续输入也可能被前一次保存结果清掉。
+                </p>
+              </div>
+              <div class="change-after">
+                <h4>现在</h4>
+                <p>
+                  详情请求使用目标代次保护，资料保存采用 latest wins 单飞队列，Worker
+                  使用租约版本栅栏。
+                </p>
+              </div>
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              <span>性能与启动顺序</span>
+              <span class="change-summary">减少首屏等待和不必要加载</span>
+            </summary>
+            <div class="change-body">
+              <div class="change-before">
+                <h4>过去</h4>
+                <p>
+                  示例数据可能先于云端同步写入，资料页一次读取全部记录，Sentry
+                  浏览器包即使未配置也进入首屏。
+                </p>
+              </div>
+              <div class="change-after">
+                <h4>现在</h4>
+                <p>
+                  先同步再决定是否播种，已有本地数据立即显示，列表按需读取，Sentry 仅在配置 DSN
+                  后动态加载。
+                </p>
+              </div>
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              <span>生产门禁与容器</span>
+              <span class="change-summary">失败不能被假分数掩盖</span>
+            </summary>
+            <div class="change-body">
+              <div class="change-before">
+                <h4>过去</h4>
+                <p>
+                  Lighthouse 运行错误可能被替代分数掩盖，Docker 只构建不启动，缺少真实健康检查。
+                </p>
+              </div>
+              <div class="change-after">
+                <h4>现在</h4>
+                <p>审计遇到运行错误、基线缺失或 flaky 直接失败，CI 真正启动镜像并请求健康接口。</p>
+              </div>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section class="section" id="visual">
+        <h2>可视化体验提升了什么</h2>
+        <p class="section-intro">
+          视觉调整保持 Compound
+          原有的暖色、纸张感和阅读密度，重点解决入口不清楚、样式闪烁、弹层失控和移动端重复结构。
+        </p>
+
+        <div class="comparison card-grid">
+          <figure>
+            <img
+              src="reports/product-hardening-library-desktop.png"
+              alt="较早版本的 Compound 桌面首页，侧栏中还没有持续可见的新增资料入口"
+              width="1280"
+              height="800"
+              loading="lazy"
+            />
+            <figcaption>
+              <strong>较早版本</strong>
+              新增资料入口依赖其他区域，核心动作不够显眼。
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="reports/compound-optimization-20260718/global-shell-after.png"
+              alt="最新版本的 Compound 桌面首页，侧栏新增资料按钮持续可见"
+              width="1280"
+              height="800"
+              loading="lazy"
+            />
+            <figcaption>
+              <strong>现在</strong>
+              桌面侧栏加入持续可见的新增资料按钮，颜色、触达面积和层级都经过验证。
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="visual-improvements">
+          <article class="visual-item">
+            <h3>首次进入资料页不再闪样式</h3>
+            <p>资料卡片样式移动到列表自己的 CSS，冷加载时不再依赖详情模块。</p>
+          </article>
+          <article class="visual-item">
+            <h3>移动端只保留一个返回头部</h3>
+            <p>详情覆盖层出现时隐藏重复主头部，阅读空间和返回路径更清楚。</p>
+          </article>
+          <article class="visual-item">
+            <h3>设置窗口更像桌面工具</h3>
+            <p>宽度和高度受到视口约束，标签支持方向键、Home 和 End 操作。</p>
+          </article>
+          <article class="visual-item">
+            <h3>弹层真正隔离焦点</h3>
+            <p>打开时聚焦可操作内容，背景进入 inert，关闭后焦点回到原按钮。</p>
+          </article>
+          <article class="visual-item">
+            <h3>分栏拖动兼容鼠标与触控</h3>
+            <p>切换到 Pointer Events，并提供方向键、Home、End 和分隔条语义。</p>
+          </article>
+          <article class="visual-item">
+            <h3>链接和图表更安全</h3>
+            <p>外链只接受 HTTP 与 HTTPS，Mermaid 使用严格模式并二次净化 SVG。</p>
+          </article>
+        </div>
+
+        <div class="gallery card-grid">
+          <figure class="desktop-shot">
+            <img
+              src="reports/compound-optimization-20260718/settings-after.png"
+              alt="优化后的 Compound 桌面设置弹窗，左侧为分类标签，右侧为通用设置"
+              width="1280"
+              height="800"
+              loading="lazy"
+            />
+            <figcaption>
+              <strong>设置弹窗</strong>
+              尺寸、焦点、标签语义和键盘操作完成统一。
+            </figcaption>
+          </figure>
+          <figure class="mobile-shot">
+            <img
+              src="reports/compound-optimization-20260718/source-detail-mobile-after.png"
+              alt="优化后的 Compound 手机资料详情，顶部只有一个返回入口，正文与关联概念清晰排列"
+              width="375"
+              height="667"
+              loading="lazy"
+            />
+            <figcaption>
+              <strong>手机资料详情</strong>
+              单一返回头部、稳定关联标签和安全来源链接。
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section" id="proof">
+        <h2>怎么证明不是只改了表面</h2>
+        <p class="section-intro">
+          本地完整检查与 GitHub 干净环境重复执行，最终候选还经过生产构建、Docker
+          冷构建和容器启动验证。
+        </p>
+        <div class="proof-layout">
+          <aside class="proof-callout">
+            <strong>全绿</strong>
+            <p>最终 GitHub Actions 用时 11 分 26 秒，所有步骤完成。</p>
+          </aside>
+          <div class="proof-list">
+            <div class="proof-row">
+              <strong>代码质量</strong>
+              <p>Prettier、ESLint、TypeScript、Knip、重复代码和技术债扫描全部通过。</p>
+            </div>
+            <div class="proof-row">
+              <strong>测试与覆盖率</strong>
+              <p>396 项单元测试通过，全量 Playwright E2E 通过且没有 flaky。</p>
+            </div>
+            <div class="proof-row">
+              <strong>视觉与无障碍</strong>
+              <p>PWA 100、Accessibility 100、Best Practices 96，axe 严重问题为 0。</p>
+            </div>
+            <div class="proof-row">
+              <strong>数据恢复</strong>
+              <p>SQLite 备份、校验、恢复和标记回读演练通过。</p>
+            </div>
+            <div class="proof-row">
+              <strong>生产运行</strong>
+              <p>
+                Next.js standalone 构建、Docker 镜像、容器启动和 <code>/api/health</code> 全部通过。
+              </p>
+            </div>
+            <div class="proof-row">
+              <strong>远端证据</strong>
+              <p>
+                <a href="https://github.com/xdesign678/compound/actions/runs/29604916415"
+                  >查看最终 GitHub Actions 运行记录</a
+                >
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="risks">
+        <h2>风险和注意事项</h2>
+        <div class="notes-grid">
+          <article class="note">
+            <h3>视觉基线按平台维护</h3>
+            <p>
+              本机与 GitHub Ubuntu 的中文字形不同，因此保留本地和 CI 两套基线。资料详情正文只对 Lora
+              栅格噪声使用 1.5% 阈值，其他界面仍为 1%。
+            </p>
+          </article>
+          <article class="note">
+            <h3>可选 Wiki 任务需要密钥</h3>
+            <p>
+              未配置 <code>FACTORY_API_KEY</code> 时，Droid Wiki
+              明确跳过并保持成功；配置后才执行真实 Wiki 生成。
+            </p>
+          </article>
+          <article class="note">
+            <h3>GitHub 官方 Action 有迁移提示</h3>
+            <p>
+              当前 v4 Action 被 GitHub 强制运行在 Node
+              24，质量门禁不受影响。后续可在官方稳定大版本发布后集中升级。
+            </p>
+          </article>
+          <article class="note">
+            <h3>快速通道是临时预览</h3>
+            <p>
+              本报告的 Cloudflare 快速通道没有长期在线保证。正式访问路径仍以推送后的生产站为准。
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="next">
+        <h2>下一步</h2>
+        <p class="section-intro">
+          这轮修复已经闭环。后续重点不是继续堆功能，而是观察真实使用数据并保持恢复与视觉门禁可重复。
+        </p>
+        <div class="next-actions">
+          <article class="next-action">
+            <h3>观察生产指标</h3>
+            <p>关注同步重置次数、Worker 租约冲突、SQLite 增长和容器重启。</p>
+          </article>
+          <article class="next-action">
+            <h3>定期执行恢复演练</h3>
+            <p>把备份可用性当成持续能力，而不是发生事故后才检查。</p>
+          </article>
+          <article class="next-action">
+            <h3>基于真实任务继续打磨</h3>
+            <p>优先处理用户完成任务时的阻力，避免为了视觉新鲜感重做稳定结构。</p>
+          </article>
+          <article class="next-action">
+            <h3>保持门禁失败即停</h3>
+            <p>不允许运行错误、缺失视觉基线或 flaky 测试被替代分数掩盖。</p>
+          </article>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <p>
+          报告生成于
+          2026-07-18。实现均为项目内自主编写，没有复制第三方业务代码。新增运行时依赖仅为安全网络连接使用的
+          <code>undici</code>。
+        </p>
+        <p>分支 <code>main</code>，最终优化提交 <code>763ff28</code>。</p>
+      </footer>
+    </main>
+
+    <script>
+      (() => {
+        const button = document.querySelector('.menu-button');
+        const menu = document.querySelector('#mobile-menu');
+        if (!(button instanceof HTMLButtonElement) || !(menu instanceof HTMLElement)) return;
+
+        const setOpen = (open) => {
+          button.setAttribute('aria-expanded', String(open));
+          button.textContent = open ? '关闭' : '菜单';
+          menu.classList.toggle('open', open);
+          menu.setAttribute('aria-hidden', String(!open));
+          menu.inert = !open;
+        };
+
+        button.addEventListener('click', () => {
+          setOpen(button.getAttribute('aria-expanded') !== 'true');
+        });
+
+        menu.querySelectorAll('a').forEach((link) => {
+          link.addEventListener('click', () => setOpen(false));
+        });
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' && button.getAttribute('aria-expanded') === 'true') {
+            setOpen(false);
+            button.focus();
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
