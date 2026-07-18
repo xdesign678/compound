@@ -11,11 +11,6 @@ import {
 import { getServerDb, repo } from '@/lib/server-db';
 import { requireAdmin } from '@/lib/server-auth';
 import { recompileSourceArtifactsAfterEdit } from '@/lib/wiki-compiler';
-import {
-  RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
-  SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
-} from '@/lib/prompts';
-import { getModelForTask } from '@/lib/model-history';
 import type { ActivityLog } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -136,27 +131,12 @@ export async function PATCH(req: Request) {
     trx();
 
     try {
-      const { queueAdvancedAnalysisJob, startAnalysisWorker } =
+      const { queueSourceEnhancementJobs, startAnalysisWorker } =
         await import('@/lib/analysis-worker');
-      for (const stage of ['embedding', 'summarize', 'relations'] as const) {
-        queueAdvancedAnalysisJob({
-          sourceId: nextSource.id,
-          sourcePath: nextSource.title,
-          stage,
-          model:
-            stage === 'summarize'
-              ? getModelForTask('source_summarize')
-              : stage === 'relations'
-                ? getModelForTask('relation_extract')
-                : null,
-          promptVersion:
-            stage === 'summarize'
-              ? SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION
-              : RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
-          priority: stage === 'embedding' ? 40 : stage === 'summarize' ? 20 : 15,
-          maxAttempts: stage === 'embedding' ? 3 : 2,
-        });
-      }
+      queueSourceEnhancementJobs({
+        sourceId: nextSource.id,
+        sourcePath: nextSource.title,
+      });
       startAnalysisWorker('source_edit');
     } catch (error) {
       logger.warn('data.sources_post_jobs_queue_failed', {

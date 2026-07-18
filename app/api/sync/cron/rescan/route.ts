@@ -22,7 +22,12 @@ async function run(req: Request, options: { allowAdmin: boolean }) {
   }
   if (denied) return denied;
   try {
-    const { jobId, existing } = startGithubSync({ triggerType: 'schedule', force: true });
+    // Scheduled safety scans should detect changes without re-running LLM work
+    // for every unchanged file. A force rebuild stays available as an explicit
+    // POST /api/sync/cron/rescan?force=true maintenance action.
+    const force =
+      options.allowAdmin && new URL(req.url).searchParams.get('force')?.toLowerCase() === 'true';
+    const { jobId, existing } = startGithubSync({ triggerType: 'schedule', force });
     return NextResponse.json({ jobId, existing: !!existing });
   } catch (err) {
     const requestId = req.headers.get('x-request-id') ?? undefined;
@@ -31,10 +36,11 @@ async function run(req: Request, options: { allowAdmin: boolean }) {
 }
 
 /**
- * Force a full GitHub re-scan. Designed to be invoked from a scheduler
+ * Incrementally re-scan GitHub. Designed to be invoked from a scheduler
  * (Vercel Cron, GitHub Actions, external uptime ping). Authenticates with
  * either `Authorization: Bearer ${CRON_SECRET}` or the standard admin
- * token. `GET` is reserved for cron-secret callers; admin-triggered runs use POST.
+ * token. `GET` is reserved for cron-secret callers; admin-triggered POST may
+ * opt into a full rebuild with `?force=true`.
  */
 export const GET = (req: Request) => run(req, { allowAdmin: false });
 /** See {@link GET}. POST variant for schedulers that prefer non-idempotent verbs. */

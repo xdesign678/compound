@@ -73,7 +73,15 @@ export interface PipelineStage {
 
 export interface ErrorGroup {
   fingerprint: string;
-  category: 'timeout' | 'github' | 'auth' | 'parse' | 'rate' | 'gateway' | 'unknown';
+  category:
+    | 'timeout'
+    | 'github'
+    | 'auth'
+    | 'parse'
+    | 'rate'
+    | 'gateway'
+    | 'enhancement'
+    | 'unknown';
   message: string;
   stage: string | null;
   count: number;
@@ -259,6 +267,7 @@ export const STAGE_TEXT: Record<string, string> = {
   fts: '全文',
   embedding: '向量',
   summarize: '摘要',
+  contextualize: '情境索引',
   qa_index: '问答索引',
   concepts: '概念',
   relations: '关系',

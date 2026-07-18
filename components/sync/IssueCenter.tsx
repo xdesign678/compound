@@ -18,6 +18,7 @@ const CATEGORY_LABEL: Record<ErrorGroup['category'], string> = {
   rate: '限流',
   gateway: 'LLM 网关异常',
   parse: '内部解析错误',
+  enhancement: '增强降级',
   unknown: '未识别',
 };
 

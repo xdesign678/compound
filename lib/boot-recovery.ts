@@ -11,7 +11,7 @@
  */
 import { logger } from './server-logger';
 import { repo } from './server-db';
-import { recoverStaleAnalysisJobs } from './analysis-worker';
+import { recoverStaleAnalysisJobs, startAnalysisWorker } from './analysis-worker';
 import { resumePendingRepairRuns } from './repair-worker';
 import { resumePendingSelectionWikiRuns } from './selection-wiki-worker';
 import { resumePendingLintRuns } from './lint-worker';
@@ -42,6 +42,15 @@ export function runBootRecovery(): void {
     const recovery = recoverStaleAnalysisJobs();
     if (recovery.jobs > 0 || recovery.items > 0) {
       logger.info('boot_recovery.analysis_recovered', recovery);
+    }
+  });
+  runStep('analysis_worker', () => {
+    const worker = startAnalysisWorker('boot-recovery');
+    if (worker.started) {
+      logger.info('boot_recovery.analysis_worker_started', {
+        activeWorkers: worker.activeWorkers,
+        queued: worker.queued,
+      });
     }
   });
   runStep('repair_runs', () => resumePendingRepairRuns());

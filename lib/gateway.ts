@@ -419,15 +419,14 @@ function pickFallbackModel(activeModel: string): string | null {
   return null;
 }
 
-function isAbortTimeoutError(error: unknown): boolean {
+function isGatewayTimeoutError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const text = `${error.name}|${error.message}`.toLowerCase();
   return (
     text.includes('timeouterror') ||
-    text.includes('operation was aborted') ||
-    text.includes('the user aborted') ||
-    error.name === 'TimeoutError' ||
-    error.name === 'AbortError'
+    text.includes('wall-clock budget') ||
+    text.includes('stream stalled') ||
+    error.name === 'TimeoutError'
   );
 }
 
@@ -481,7 +480,13 @@ function isTransientGatewayFailure(error: unknown): boolean {
     return error.status === 408 || error.status === 429 || error.status >= 500;
   }
   if (error instanceof CircuitBreakerOpenError) return false;
-  return error instanceof Error;
+  if (isGatewayTimeoutError(error)) return true;
+  if (!(error instanceof Error)) return false;
+  const text = `${error.name}|${error.message}`.toLowerCase();
+  return (
+    error instanceof TypeError ||
+    /fetch failed|networkerror|econnreset|econnrefused|enotfound|socket hang up/.test(text)
+  );
 }
 
 function circuitNameForGateway(url: string): string {
@@ -831,7 +836,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
         service: error.service,
         retryAfterMs: error.retryAfterMs,
       });
-    } else if (isAbortTimeoutError(error)) {
+    } else if (isGatewayTimeoutError(error)) {
       const consecutive = recordTimeoutForModel(requestedModel);
       recordModelRun({
         model,
@@ -856,6 +861,7 @@ export async function chat(opts: ChatOptions): Promise<string> {
   let content: string | null;
   let finishReason: string | null;
   let usage: Record<string, unknown>;
+  let reasoningLength = 0;
 
   if (wantStream) {
     content = streamedContent;
@@ -865,15 +871,42 @@ export async function chat(opts: ChatOptions): Promise<string> {
     // Body was already parsed inside breaker.execute(); use the stored data.
     const choice = (
       nonStreamParsedData as {
-        choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+        choices?: Array<{
+          message?: { content?: string; reasoning?: string; reasoning_content?: string };
+          finish_reason?: string;
+        }>;
       }
     )?.choices?.[0];
     content = choice?.message?.content ?? null;
+    reasoningLength = (choice?.message?.reasoning ?? choice?.message?.reasoning_content ?? '')
+      .length;
     finishReason = choice?.finish_reason ?? null;
     usage = ((nonStreamParsedData as { usage?: Record<string, unknown> })?.usage ?? {}) as Record<
       string,
       unknown
     >;
+  }
+
+  // Partial prose can still be useful to an interactive caller, but partial
+  // structured output is invalid by definition. Fail it explicitly so the
+  // analysis worker can retry with its larger token budget.
+  if (
+    opts.responseFormat === 'json_object' &&
+    finishReason === 'length' &&
+    typeof content === 'string' &&
+    content.length > 0
+  ) {
+    recordModelRun({
+      model,
+      task,
+      promptVersion,
+      latencyMs: Date.now() - startedAt,
+      error: 'finish_length',
+    });
+    throw new Error(
+      `Structured model output was truncated (finish_reason=length, content_length=${content.length}, ` +
+        `model=${model}). Increase max_tokens or use a JSON-stable model.`,
+    );
   }
 
   if (typeof content === 'string' && content.length > 0) {
@@ -891,6 +924,19 @@ export async function chat(opts: ChatOptions): Promise<string> {
   }
 
   // Diagnose why content is missing so the caller gets an actionable hint.
+  if (reasoningLength > 0) {
+    recordModelRun({
+      model,
+      task,
+      promptVersion,
+      latencyMs: Date.now() - startedAt,
+      error: 'reasoning_only',
+    });
+    throw new Error(
+      `Model emitted reasoning without content (reasoning_length=${reasoningLength}, ` +
+        `finish_reason=${finishReason ?? 'null'}, model=${model}). Increase max_tokens or use a JSON-stable model.`,
+    );
+  }
   if (finishReason === 'length') {
     recordModelRun({
       model,

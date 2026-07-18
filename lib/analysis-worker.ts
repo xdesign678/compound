@@ -9,7 +9,7 @@
 import { nanoid } from 'nanoid';
 import crypto from 'node:crypto';
 import { getServerDb, repo } from './server-db';
-import { ingestSourceToServerDb } from './server-ingest';
+import { contextualizeSourceChunks, ingestSourceToServerDb } from './server-ingest';
 import { syncObs, ensureSyncObservabilitySchema } from './sync-observability';
 import { embedSourceChunks } from './embedding';
 import { createReviewItem } from './review-queue';
@@ -17,6 +17,7 @@ import { chat, parseJSON } from './gateway';
 import {
   RELATION_EXTRACT_SYSTEM_PROMPT,
   RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
+  CONTEXTUALIZE_CHUNK_PROMPT_VERSION,
   SOURCE_SUMMARY_SYSTEM_PROMPT,
   SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
 } from './prompts';
@@ -31,6 +32,7 @@ export type AdvancedAnalysisStage =
   | 'fts'
   | 'embedding'
   | 'summarize'
+  | 'contextualize'
   | 'concepts'
   | 'relations'
   | 'qa_index';
@@ -128,6 +130,19 @@ let schemaDb: ReturnType<typeof getServerDb> | null = null;
 const activeWorkerCounts = new Map<string, number>();
 const cancelControllers = new Map<string, AbortController>();
 
+interface WorkerWakeTimer {
+  at: number;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+function workerWakeTimers(): Map<string, WorkerWakeTimer> {
+  const globalState = globalThis as unknown as {
+    __analysisWorkerWakeTimers?: Map<string, WorkerWakeTimer>;
+  };
+  globalState.__analysisWorkerWakeTimers ??= new Map();
+  return globalState.__analysisWorkerWakeTimers;
+}
+
 interface WorkerPoolConfig {
   name: string;
   stages: AdvancedAnalysisStage[];
@@ -149,7 +164,16 @@ const STAGE_WORKER_POOLS: WorkerPoolConfig[] = [
   },
   {
     name: 'post_ingest',
-    stages: ['embedding', 'summarize', 'relations', 'qa_index', 'chunk', 'fts', 'concepts'],
+    stages: [
+      'embedding',
+      'summarize',
+      'contextualize',
+      'relations',
+      'qa_index',
+      'chunk',
+      'fts',
+      'concepts',
+    ],
     maxWorkers: Math.max(
       1,
       Number(
@@ -460,6 +484,52 @@ function queuedJobCount(stages?: AdvancedAnalysisStage[]): number {
   );
 }
 
+function nextQueuedJobAt(stages?: AdvancedAnalysisStage[]): number | null {
+  const filter = stageWhereClause(stages);
+  const row = getServerDb()
+    .prepare(
+      `SELECT MIN(COALESCE(not_before_at, 0)) AS nextAt
+       FROM analysis_jobs
+       WHERE status = 'queued'${filter.clause}`,
+    )
+    .get(...filter.params) as { nextAt: number | null };
+  return row.nextAt == null ? null : Number(row.nextAt);
+}
+
+function schedulePoolWake(pool: WorkerPoolConfig): boolean {
+  let nextAt: number | null;
+  try {
+    nextAt = nextQueuedJobAt(pool.stages);
+  } catch {
+    return false;
+  }
+  if (nextAt == null) return false;
+
+  const timers = workerWakeTimers();
+  const existing = timers.get(pool.name);
+  if (existing && existing.at <= nextAt) return true;
+  if (existing) clearTimeout(existing.timer);
+
+  const at = Math.max(now(), nextAt);
+  const timer = setTimeout(
+    () => {
+      const current = timers.get(pool.name);
+      if (current?.timer === timer) timers.delete(pool.name);
+      startAnalysisWorker(`scheduled-wake:${pool.name}`);
+    },
+    Math.max(0, at - now()) + 10,
+  );
+  (timer as ReturnType<typeof setTimeout> & { unref?: () => void }).unref?.();
+  timers.set(pool.name, { at, timer });
+  return true;
+}
+
+export function clearAnalysisWorkerWakeTimersForTests(): void {
+  const timers = workerWakeTimers();
+  for (const entry of timers.values()) clearTimeout(entry.timer);
+  timers.clear();
+}
+
 function claimJobs(limit: number, stages?: AdvancedAnalysisStage[]): AnalysisJobRow[] {
   ensureAnalysisWorkerSchema();
   const db = getServerDb();
@@ -522,6 +592,12 @@ function classifyJobError(err: unknown): string {
   if (/abort|cancel/.test(lower)) return 'cancelled';
   if (/timeout|timed out|econnreset|network|fetch failed/.test(lower)) return 'transient';
   if (/\b(429|408|5\d\d)\b|rate limit/.test(lower)) return 'transient';
+  if (
+    /finish_reason=length|reasoning budget exhausted|reasoning without content|unexpected gateway response shape/.test(
+      lower,
+    )
+  )
+    return 'model_output';
   if (/not set|invalid api url|missing|缺少|schema/.test(lower)) return 'permanent';
   return 'unknown';
 }
@@ -766,12 +842,28 @@ function maybeFinalizeItemAfterStage(job: AnalysisJobRow): void {
   if (Number(terminal.count || 0) === 0) return;
 
   const failedCount = Number(failed.count || 0);
+  const enhancementWarning =
+    failedCount > 0 ? `增强分析部分失败：${failedCount} 个阶段可稍后重试` : null;
   syncObs.updateRunItem(job.item_id, {
-    status: failedCount > 0 ? 'failed' : 'succeeded',
+    // Core ingest has already committed the source and concepts. Enhancement
+    // failures must remain visible, but must not turn usable content into a
+    // false file-level sync failure.
+    status: 'succeeded',
     stage: 'complete',
-    error: failedCount > 0 ? `${failedCount} 个增强分析阶段失败` : null,
+    error: enhancementWarning,
     finished_at: now(),
   });
+  if (enhancementWarning) {
+    syncObs.recordEvent({
+      runId: job.run_id,
+      itemId: job.item_id,
+      level: 'warn',
+      stage: 'enhance',
+      path: job.source_path,
+      message: enhancementWarning,
+      meta: { event: 'analysis.enhancement_degraded', failedStages: failedCount },
+    });
+  }
   maybeFinishRun(job.run_id || null);
 }
 
@@ -1014,13 +1106,25 @@ export function maybeFinishRun(runId: string | null): void {
   }
 }
 
-function queuePostIngestJobs(input: {
-  runId: string;
-  itemId: string;
+export function queueSourceEnhancementJobs(input: {
+  runId?: string | null;
+  itemId?: string | null;
   sourceId: string;
-  sourceSha: string;
+  sourceSha?: string | null;
   sourcePath: string;
 }): void {
+  queueAdvancedAnalysisJob({
+    runId: input.runId,
+    itemId: input.itemId,
+    sourceId: input.sourceId,
+    sourceSha: input.sourceSha,
+    sourcePath: input.sourcePath,
+    stage: 'summarize',
+    model: getModelForTask('source_summarize'),
+    promptVersion: SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
+    priority: 50,
+    maxAttempts: 2,
+  });
   queueAdvancedAnalysisJob({
     runId: input.runId,
     itemId: input.itemId,
@@ -1037,10 +1141,10 @@ function queuePostIngestJobs(input: {
     sourceId: input.sourceId,
     sourceSha: input.sourceSha,
     sourcePath: input.sourcePath,
-    stage: 'summarize',
-    model: getModelForTask('source_summarize'),
-    promptVersion: SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
-    priority: 20,
+    stage: 'relations',
+    model: getModelForTask('relation_extract'),
+    promptVersion: RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
+    priority: 15,
     maxAttempts: 2,
   });
   queueAdvancedAnalysisJob({
@@ -1049,10 +1153,10 @@ function queuePostIngestJobs(input: {
     sourceId: input.sourceId,
     sourceSha: input.sourceSha,
     sourcePath: input.sourcePath,
-    stage: 'relations',
-    model: getModelForTask('relation_extract'),
-    promptVersion: RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
-    priority: 15,
+    stage: 'contextualize',
+    model: getModelForTask('contextualize-chunk'),
+    promptVersion: CONTEXTUALIZE_CHUNK_PROMPT_VERSION,
+    priority: 5,
     maxAttempts: 2,
   });
 }
@@ -1178,7 +1282,7 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
     path: payload.path,
     message: `基础入库完成，增强分析已排队：新增 ${result.newConceptIds.length}，更新 ${result.updatedConceptIds.length}，分块 ${compiler?.chunks ?? 0}`,
   });
-  queuePostIngestJobs({
+  queueSourceEnhancementJobs({
     runId: payload.runId,
     itemId: payload.itemId,
     sourceId: result.sourceId,
@@ -1202,6 +1306,25 @@ async function processEmbedding(job: AnalysisJobRow): Promise<void> {
   finishJob(job, 'succeeded');
 }
 
+async function processContextualize(job: AnalysisJobRow): Promise<void> {
+  const result = await contextualizeSourceChunks(job.source_id, {
+    model: job.model ?? undefined,
+    signal: currentRunSignal(job.run_id),
+  });
+  syncObs.recordEvent({
+    runId: job.run_id,
+    itemId: job.item_id,
+    level: result.updated < result.total ? 'warn' : 'success',
+    stage: 'contextualize',
+    path: job.source_path,
+    message: `情境索引完成：${result.updated} / ${result.total} chunks`,
+  });
+  if (result.updated < result.total) {
+    throw new Error(`contextualization incomplete (${result.updated}/${result.total})`);
+  }
+  finishJob(job, 'succeeded');
+}
+
 async function processSummarize(job: AnalysisJobRow): Promise<void> {
   if (process.env.COMPOUND_DISABLE_SOURCE_SUMMARY_WORKER === 'true') {
     finishJob(job, 'skipped', 'disabled by COMPOUND_DISABLE_SOURCE_SUMMARY_WORKER');
@@ -1220,7 +1343,9 @@ async function processSummarize(job: AnalysisJobRow): Promise<void> {
     ],
     responseFormat: 'json_object',
     temperature: 0.2,
-    maxTokens: 900,
+    // A retry must not repeat the exact token budget that just truncated.
+    maxTokens: 2000 + Math.max(0, job.attempts || 0) * 1000,
+    model: job.model ?? undefined,
     task: 'source_summarize',
     promptVersion: job.prompt_version ?? SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
     signal: currentRunSignal(job.run_id),
@@ -1356,7 +1481,10 @@ async function processRelations(job: AnalysisJobRow): Promise<void> {
     ],
     responseFormat: 'json_object',
     temperature: 0.2,
-    maxTokens: 1400,
+    // Relation JSON is the noisiest stage; expand the second-attempt budget
+    // instead of deterministically repeating a finish_length failure.
+    maxTokens: 2400 + Math.max(0, job.attempts || 0) * 1600,
+    model: job.model ?? undefined,
     task: 'relation_extract',
     promptVersion: job.prompt_version ?? RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
     signal: currentRunSignal(job.run_id),
@@ -1466,6 +1594,10 @@ async function processJob(job: AnalysisJobRow): Promise<void> {
       await withJobHeartbeat(job, () =>
         withBackgroundLlmBudget('summarize', job, () => processSummarize(job)),
       );
+    } else if (job.stage === 'contextualize') {
+      // Each batch/chunk acquires the contextualize budget internally. Wrapping
+      // the whole stage in the same budget would deadlock a concurrency-1 queue.
+      await withJobHeartbeat(job, () => processContextualize(job));
     } else if (job.stage === 'relations') {
       await withJobHeartbeat(job, () =>
         withBackgroundLlmBudget('relations', job, () => processRelations(job)),
@@ -1554,9 +1686,13 @@ export function startAnalysisWorker(
   const queued = pools.reduce((sum, pool) => sum + queuedJobCount(pool.stages), 0);
 
   if (queued === 0) {
+    let delayedWakeScheduled = false;
+    for (const pool of pools) {
+      delayedWakeScheduled = schedulePoolWake(pool) || delayedWakeScheduled;
+    }
     return {
       started: false,
-      reason: 'no_queue',
+      reason: delayedWakeScheduled ? 'delayed_queue' : 'no_queue',
       activeWorkers: activeWorkerCount(),
       queued,
       recovered: recovery.jobs + recovery.items,
@@ -1574,7 +1710,8 @@ export function startAnalysisWorker(
       capped += 1;
       continue;
     }
-    for (let i = 0; i < capacity; i += 1) {
+    const workersToStart = Math.min(capacity, poolQueued);
+    for (let i = 0; i < workersToStart; i += 1) {
       startWorkerLoop(pool, reason, poolQueued);
       started += 1;
     }
@@ -1590,6 +1727,11 @@ export function startAnalysisWorker(
 }
 
 function startWorkerLoop(pool: WorkerPoolConfig, reason: string, queued: number): void {
+  const scheduledWake = workerWakeTimers().get(pool.name);
+  if (scheduledWake) {
+    clearTimeout(scheduledWake.timer);
+    workerWakeTimers().delete(pool.name);
+  }
   activeWorkerCounts.set(pool.name, (activeWorkerCounts.get(pool.name) ?? 0) + 1);
   syncObs.recordEvent({
     stage: 'llm',
@@ -1617,6 +1759,7 @@ function startWorkerLoop(pool: WorkerPoolConfig, reason: string, queued: number)
       }
     } finally {
       activeWorkerCounts.set(pool.name, Math.max(0, (activeWorkerCounts.get(pool.name) ?? 1) - 1));
+      schedulePoolWake(pool);
       try {
         syncObs.recordEvent({
           stage: 'llm',

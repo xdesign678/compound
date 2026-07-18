@@ -135,7 +135,7 @@ export async function contextualizeChunkBatch(
           ],
           responseFormat: 'json_object',
           temperature: 0.1,
-          maxTokens: Math.max(700, chunks.length * MAX_PREFIX_TOKENS),
+          maxTokens: Math.max(2000, chunks.length * 300),
           llmConfig: input.llmConfig,
           model: input.contextualizeModel || process.env.COMPOUND_CONTEXTUALIZE_MODEL,
           signal: input.signal,

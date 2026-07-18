@@ -1676,7 +1676,8 @@
 }
 .ops-error-group.cat-github,
 .ops-error-group.cat-rate,
-.ops-error-group.cat-gateway {
+.ops-error-group.cat-gateway,
+.ops-error-group.cat-enhancement {
   border-left-color: var(--ops-state-warn);
 }
 .ops-error-group.cat-parse,
@@ -1728,7 +1729,8 @@
 }
 .ops-error-cat.cat-github,
 .ops-error-cat.cat-rate,
-.ops-error-cat.cat-gateway {
+.ops-error-cat.cat-gateway,
+.ops-error-cat.cat-enhancement {
   background: var(--ops-state-warn-soft);
   color: var(--ops-state-warn);
 }
@@ -3241,7 +3243,8 @@
 }
 
 .sync-v2-issue.cat-timeout,
-.sync-v2-issue.cat-auth {
+.sync-v2-issue.cat-auth,
+.sync-v2-issue.cat-enhancement {
   border-left: 3px solid var(--ops-state-warn);
 }
 .sync-v2-issue.cat-github,
@@ -3281,7 +3284,8 @@
   font-weight: 500;
 }
 .sync-v2-issue-tag.cat-timeout,
-.sync-v2-issue-tag.cat-auth {
+.sync-v2-issue-tag.cat-auth,
+.sync-v2-issue-tag.cat-enhancement {
   color: var(--ops-state-warn);
   background: var(--ops-state-warn-soft);
 }

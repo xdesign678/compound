@@ -37,6 +37,9 @@ appearing, `/sync` shows failures, or a sync run never completes.
    - `GITHUB_BRANCH` matches the source branch.
    - `GITHUB_WEBHOOK_SECRET` matches the GitHub webhook secret, if webhooks are
      enabled.
+6. In `/sync`, confirm the automation diagnostic no longer says the Webhook is
+   missing, then verify GitHub's delivery page and Compound's Webhook history
+   both show a successful `ping` or `push` delivery.
 
 ## Recovery
 
@@ -45,8 +48,9 @@ appearing, `/sync` shows failures, or a sync run never completes.
 2. Fix configuration before retrying. Repeated retries with a bad token will
    only create more failed rows.
 3. Start a new sync from `/sync`.
-4. If webhooks are broken but manual sync works, disable webhook assumptions and
-   use manual sync or cron rescan until the secret is corrected.
+4. If webhooks are broken but manual sync works, use the normal incremental cron
+   rescan until the secret is corrected. Reserve `POST ...?force=true` for an
+   intentional full rebuild; do not run it on every schedule.
 5. If GitHub returns 429, wait for the rate-limit window or reduce sync
    frequency before retrying.
 

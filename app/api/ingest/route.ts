@@ -11,17 +11,13 @@ import {
 } from '@/lib/request-guards';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
 import { logger } from '@/lib/server-logger';
-import {
-  RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
-  SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
-} from '@/lib/prompts';
-import { getModelForTask } from '@/lib/model-history';
 import type { IngestRequest } from '@/lib/types';
 
 export const runtime = 'nodejs';
-// The LLM gateway timeout is configurable and defaults to 120s; give the route
-// headroom for JSON parse, DB writes, and network latency.
-export const maxDuration = 150;
+// Manual ingest is a synchronous compatibility path. Keep its request budget
+// above the gateway's reasoning-model ceiling; background enhancements are
+// queued separately and do not consume this whole window.
+export const maxDuration = 300;
 
 const MAX_BODY_BYTES = 512_000;
 const MAX_RAW_CONTENT_CHARS = 100_000;
@@ -74,30 +70,16 @@ export const POST = withRequestTracing(async (req: Request) => {
       rawContent: body.source.rawContent,
       externalKey: body.source.externalKey,
       llmConfig,
+      signal: req.signal,
     });
 
     try {
-      const { queueAdvancedAnalysisJob, startAnalysisWorker } =
+      const { queueSourceEnhancementJobs, startAnalysisWorker } =
         await import('@/lib/analysis-worker');
-      for (const stage of ['embedding', 'summarize', 'relations'] as const) {
-        queueAdvancedAnalysisJob({
-          sourceId: result.sourceId,
-          sourcePath: result.source.title,
-          stage,
-          model:
-            stage === 'summarize'
-              ? getModelForTask('source_summarize')
-              : stage === 'relations'
-                ? getModelForTask('relation_extract')
-                : null,
-          promptVersion:
-            stage === 'summarize'
-              ? SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION
-              : RELATION_EXTRACT_SYSTEM_PROMPT_VERSION,
-          priority: stage === 'embedding' ? 40 : stage === 'summarize' ? 20 : 15,
-          maxAttempts: stage === 'embedding' ? 3 : 2,
-        });
-      }
+      queueSourceEnhancementJobs({
+        sourceId: result.sourceId,
+        sourcePath: result.source.title,
+      });
       startAnalysisWorker('manual_ingest');
     } catch (error) {
       logger.warn('ingest.post_jobs_queue_failed', {

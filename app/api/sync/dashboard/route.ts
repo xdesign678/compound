@@ -33,6 +33,12 @@ export const GET = withRequestTracing(async (req: Request) => {
         ...dashboard.coverage,
         ...getEmbeddingMetrics(),
         ...getReviewMetrics(),
+        webhookConfigured: Boolean(process.env.GITHUB_WEBHOOK_SECRET?.trim()),
+        cronConfigured: Boolean(process.env.CRON_SECRET?.trim()),
+        webhookDeliveriesReceived: dashboard.webhookDeliveryStats.reduce(
+          (sum, item) => sum + Number(item.count || 0),
+          0,
+        ),
       },
     };
     const story = deriveStory(merged);

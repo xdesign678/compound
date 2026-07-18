@@ -248,25 +248,6 @@ export async function ingestSourceToServerDb(
     });
   }
 
-  // Anthropic-style Contextual Retrieval: enrich each freshly-indexed chunk
-  // with a 50–100 字 situating prefix that is also indexed into chunk_fts.
-  // Runs out-of-band (after the main transaction) so failures here never
-  // jeopardize concept/source writes; controlled by COMPOUND_CONTEXTUAL_RETRIEVAL.
-  if (process.env.COMPOUND_CONTEXTUAL_RETRIEVAL !== 'off') {
-    try {
-      await runContextualizationForSource({
-        source,
-        llmConfig: input.llmConfig,
-        signal: input.signal,
-      });
-    } catch (error) {
-      logger.warn('ingest.contextualization_failed', {
-        sourceId: source.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
   return {
     sourceId: source.id,
     newConceptIds,
@@ -288,11 +269,34 @@ const CONTEXTUALIZATION_BATCH_SIZE = Math.max(
   Number(process.env.COMPOUND_CONTEXTUALIZATION_BATCH_SIZE || 12),
 );
 
+export interface SourceContextualizationResult {
+  total: number;
+  updated: number;
+}
+
+/**
+ * Enrich source chunks after the core source/concept transaction is already
+ * visible. This deliberately lives behind the analysis queue so contextual
+ * retrieval can improve search quality without delaying the user's summary.
+ */
+export async function contextualizeSourceChunks(
+  sourceId: string,
+  opts: { llmConfig?: LlmConfig; model?: string; signal?: AbortSignal } = {},
+): Promise<SourceContextualizationResult> {
+  if (process.env.COMPOUND_CONTEXTUAL_RETRIEVAL === 'off') {
+    return { total: 0, updated: 0 };
+  }
+  const source = repo.getSource(sourceId);
+  if (!source) throw new Error(`source not found: ${sourceId}`);
+  return runContextualizationForSource({ source, ...opts });
+}
+
 async function runContextualizationForSource(opts: {
   source: Source;
   llmConfig?: LlmConfig;
+  model?: string;
   signal?: AbortSignal;
-}): Promise<void> {
+}): Promise<SourceContextualizationResult> {
   const chunks = getServerDb()
     .prepare(
       `SELECT id, content FROM source_chunks
@@ -300,9 +304,9 @@ async function runContextualizationForSource(opts: {
        ORDER BY chunk_index ASC`,
     )
     .all(opts.source.id) as Array<{ id: string; content: string }>;
-  if (chunks.length === 0) return;
+  if (chunks.length === 0) return { total: 0, updated: 0 };
 
-  const updates: Array<{ chunkId: string; prefix: string }> = [];
+  const prefixesByChunk = new Map<string, string>();
   for (let start = 0; start < chunks.length; start += CONTEXTUALIZATION_BATCH_SIZE) {
     const batch = chunks.slice(start, start + CONTEXTUALIZATION_BATCH_SIZE);
     const prefixes = await contextualizeChunkBatch({
@@ -310,42 +314,46 @@ async function runContextualizationForSource(opts: {
       documentTitle: opts.source.title,
       chunks: batch,
       llmConfig: opts.llmConfig,
+      contextualizeModel: opts.model,
       signal: opts.signal,
     });
     for (const chunk of batch) {
       const prefix = prefixes.get(chunk.id);
-      if (prefix) updates.push({ chunkId: chunk.id, prefix });
+      if (prefix) prefixesByChunk.set(chunk.id, prefix);
     }
     if (prefixes.size !== batch.length) break;
   }
-  if (updates.length === chunks.length) {
-    wikiRepo.applyContextualPrefixes(updates);
-    return;
-  }
 
-  updates.length = 0;
+  const missingChunks = chunks.filter((chunk) => !prefixesByChunk.has(chunk.id));
   let cursor = 0;
   const worker = async () => {
-    while (cursor < chunks.length) {
+    while (cursor < missingChunks.length) {
       const idx = cursor;
       cursor += 1;
-      const chunk = chunks[idx];
+      const chunk = missingChunks[idx];
       const prefix = await contextualizeChunk({
         fullDocument: opts.source.rawContent,
         documentTitle: opts.source.title,
         chunk: chunk.content,
         llmConfig: opts.llmConfig,
+        contextualizeModel: opts.model,
         signal: opts.signal,
       });
       if (prefix) {
-        updates.push({ chunkId: chunk.id, prefix });
+        prefixesByChunk.set(chunk.id, prefix);
       }
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(CONTEXTUALIZATION_CONCURRENCY, chunks.length) }, () => worker()),
-  );
+  if (missingChunks.length > 0) {
+    await Promise.all(
+      Array.from({ length: Math.min(CONTEXTUALIZATION_CONCURRENCY, missingChunks.length) }, () =>
+        worker(),
+      ),
+    );
+  }
+  const updates = Array.from(prefixesByChunk, ([chunkId, prefix]) => ({ chunkId, prefix }));
   if (updates.length > 0) {
     wikiRepo.applyContextualPrefixes(updates);
   }
+  return { total: chunks.length, updated: updates.length };
 }

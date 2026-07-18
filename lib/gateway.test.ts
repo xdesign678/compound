@@ -495,3 +495,136 @@ test(
     assert.equal(fetchCalls, 3);
   },
 );
+
+test(
+  'model output truncation does not open the gateway circuit',
+  { concurrency: false },
+  async () => {
+    resetCircuitBreakersForTests();
+    let fetchCalls = 0;
+
+    await withEnv(
+      {
+        LLM_API_KEY: 'server-key',
+        LLM_API_URL: 'https://example.com/v1/chat/completions',
+        AI_GATEWAY_API_KEY: undefined,
+        COMPOUND_SKIP_DNS_GUARD: 'true',
+        COMPOUND_LLM_CIRCUIT_FAILURE_THRESHOLD: '2',
+      },
+      async () => {
+        const mockFetch: typeof fetch = async () => {
+          fetchCalls += 1;
+          return new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: { content: fetchCalls === 2 ? '{"items":[' : null },
+                  finish_reason: 'length',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        };
+
+        await withMockFetch(mockFetch, async () => {
+          for (let i = 0; i < 3; i += 1) {
+            await assert.rejects(
+              chat({
+                messages: [{ role: 'user', content: 'hi' }],
+                model: 'openai/gpt-4o-mini',
+                maxTokens: 10,
+                responseFormat: 'json_object',
+              }),
+              /budget exhausted|truncated|finish_reason=length/i,
+            );
+          }
+        });
+      },
+    );
+
+    assert.equal(fetchCalls, 3, 'every request reaches the provider instead of short-circuiting');
+  },
+);
+
+test('caller-style aborts do not open the gateway circuit', { concurrency: false }, async () => {
+  resetCircuitBreakersForTests();
+  let fetchCalls = 0;
+
+  await withEnv(
+    {
+      LLM_API_KEY: 'server-key',
+      LLM_API_URL: 'https://example.com/v1/chat/completions',
+      AI_GATEWAY_API_KEY: undefined,
+      COMPOUND_SKIP_DNS_GUARD: 'true',
+      COMPOUND_LLM_CIRCUIT_FAILURE_THRESHOLD: '2',
+    },
+    async () => {
+      const mockFetch: typeof fetch = async () => {
+        fetchCalls += 1;
+        if (fetchCalls <= 2) throw new DOMException('user cancelled', 'AbortError');
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      };
+
+      await withMockFetch(mockFetch, async () => {
+        await assert.rejects(
+          chat({ messages: [{ role: 'user', content: 'hi' }], maxTokens: 10 }),
+          /user cancelled|AbortError/i,
+        );
+        await assert.rejects(
+          chat({ messages: [{ role: 'user', content: 'hi' }], maxTokens: 10 }),
+          /user cancelled|AbortError/i,
+        );
+        assert.equal(
+          await chat({ messages: [{ role: 'user', content: 'hi' }], maxTokens: 10 }),
+          'ok',
+        );
+      });
+    },
+  );
+
+  assert.equal(fetchCalls, 3);
+});
+
+test('reports reasoning-only provider responses separately from generic shape errors', async () => {
+  resetCircuitBreakersForTests();
+  await withEnv(
+    {
+      LLM_API_KEY: 'server-key',
+      LLM_API_URL: 'https://example.com/v1/chat/completions',
+      AI_GATEWAY_API_KEY: undefined,
+      COMPOUND_SKIP_DNS_GUARD: 'true',
+    },
+    async () => {
+      await withMockFetch(
+        async () =>
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: { content: null, reasoning: 'internal reasoning consumed the budget' },
+                  finish_reason: null,
+                },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        async () => {
+          await assert.rejects(
+            chat({
+              messages: [{ role: 'user', content: 'hi' }],
+              model: 'openai/gpt-4o-mini',
+              maxTokens: 10,
+            }),
+            /reasoning without content.*increase max_tokens/i,
+          );
+        },
+      );
+    },
+  );
+});

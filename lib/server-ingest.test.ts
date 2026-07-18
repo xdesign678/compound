@@ -43,7 +43,7 @@ test(
     process.env.LLM_API_KEY = 'server-key';
     process.env.LLM_API_URL = 'https://api.example.com/v1/chat/completions';
     process.env.COMPOUND_SKIP_DNS_GUARD = 'true';
-    process.env.COMPOUND_CONTEXTUAL_RETRIEVAL = 'off';
+    process.env.COMPOUND_CONTEXTUAL_RETRIEVAL = 'on';
     process.env.COMPOUND_DISABLE_CATEGORY_WIKI_AUTO_WORKERS = 'true';
     closeServerDbGlobal();
 
@@ -59,7 +59,9 @@ test(
       rmSync(tempDir, { recursive: true, force: true });
     });
 
+    let fetchCalls = 0;
     const mockFetch: typeof fetch = async () => {
+      fetchCalls += 1;
       return new Response(
         JSON.stringify({
           choices: [
@@ -106,6 +108,7 @@ test(
       assert.equal(syncResult.concepts?.[0]?.id, result.newConceptIds[0]);
       assert.equal(syncResult.concepts?.[0]?.body, 'Alpha body');
       assert.equal(syncResult.activity?.id, result.activityId);
+      assert.equal(fetchCalls, 1, 'core ingest does not wait for contextualization calls');
 
       const { listCategoryWikiRuns } = await import('./category-wiki-worker');
       assert.equal(listCategoryWikiRuns('认知心理学', '社会认知', 5).length, 1);

@@ -67,7 +67,8 @@ Required for GitHub/Obsidian server sync:
 Optional sync/analysis controls:
 
 - `GITHUB_WEBHOOK_SECRET`: verifies `/api/sync/github/webhook` push events.
-- `CRON_SECRET`: allows scheduled full rescan through `/api/sync/cron/rescan`.
+- `CRON_SECRET`: allows scheduled incremental safety scans through `/api/sync/cron/rescan`; an authenticated `POST ...?force=true` is reserved for explicit full rebuilds.
+- `COMPOUND_BACKGROUND_LLM_*`: optional per-stage concurrency limits. Defaults keep ingest/summary at 2 and noisy enhancement stages at 1.
 - `COMPOUND_GITHUB_DELETE_MODE`: `soft` by default; set `hard` to remove local records when remote files disappear.
 - `COMPOUND_EMBEDDING_PROVIDER`: `local` by default; set `remote` only when an embedding endpoint is configured.
 - `COMPOUND_EMBEDDING_API_KEY`, `COMPOUND_EMBEDDING_API_URL`, `COMPOUND_EMBEDDING_MODEL`: optional remote embedding settings.
@@ -109,6 +110,7 @@ docker run --rm -p 3000:3000 \
 - **进程级崩溃守卫**：`instrumentation.ts` 注册 `unhandledRejection` / `uncaughtException`，未捕获异常不再拖垮整个进程
 - **Analysis Worker 循环 `.catch()`**：与其他 Worker 一致，循环内异常不再静默丢失
 - **启动时卡死任务自动恢复**：sync / analysis / repair 中处于 running 但已超时的任务，启动时自动标记为失败并重试
+- **延迟重试自动唤醒**：analysis 任务进入退避等待后由进程内定时器按 `not_before_at` 自行恢复，不依赖用户打开 `/sync`
 - **任务终态守卫**：`finishJob` / `failJob` / `failJobPermanently` 只更新 `running` 状态的任务，防止状态机紊乱
 - **毒丸任务死信路径**：反复失败的任务进入 dead-letter 而非无限重试
 - **原子化概念写入**：多步写入包裹在 SQLite 事务中，杜绝半成品数据

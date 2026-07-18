@@ -118,7 +118,12 @@ export class LlmBudgetQueue {
 
 function readConcurrency(name: LlmBudgetName, envName: string): number {
   const value = Number(process.env[envName]);
-  return Number.isFinite(value) && value > 0 ? Math.floor(value) : name === 'embedding' ? 2 : 1;
+  if (Number.isFinite(value) && value > 0) return Math.floor(value);
+  // Two-way concurrency is a deliberately conservative default for the core
+  // ingest and short summary stages. Relations/contextualization remain at 1
+  // because they have historically produced the most rate-limit/output noise.
+  if (name === 'github_ingest' || name === 'summarize' || name === 'embedding') return 2;
+  return 1;
 }
 
 export const llmBudgets: Record<LlmBudgetName, LlmBudgetQueue> = {

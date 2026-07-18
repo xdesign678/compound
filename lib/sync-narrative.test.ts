@@ -419,3 +419,20 @@ test('deriveDiagnostics surfaces background LLM budget queueing', () => {
   assert.equal(diags[0]?.severity, 'info');
   assert.match(diags[0]?.detail ?? '', /后台 LLM 并发预算排队/);
 });
+
+test('deriveDiagnostics reports missing GitHub webhook automation', () => {
+  const diags = deriveDiagnostics({
+    failedItems: [],
+    errorGroups: [],
+    itemSummary: { queued: 0, running: 0, succeeded: 5, failed: 0, skipped: 0, cancelled: 0 },
+    coverage: {
+      githubSources: 5,
+      webhookConfigured: false,
+      webhookDeliveriesReceived: 0,
+    },
+  });
+
+  assert.equal(diags[0]?.id, 'github-webhook-missing');
+  assert.equal(diags[0]?.severity, 'warning');
+  assert.match(diags[0]?.detail ?? '', /GITHUB_WEBHOOK_SECRET/);
+});

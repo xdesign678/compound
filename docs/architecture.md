@@ -61,12 +61,12 @@ flowchart LR
 
 ## 2. 进程与运行时
 
-| 进程 / 运行时      | 入口                                                                          | 说明                                                                                                                                       |
-| ------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Next.js Server     | `next start` (Dockerfile `CMD ["node", "server.js"]`)                         | 同时承载 SSR 页面与 `/api/**` 路由；建议容器化部署而非 serverless（后台 worker 需常驻）。                                                  |
-| Edge Middleware    | `middleware.ts`                                                               | 在请求进入 server 之前做 admin token 校验；匹配 `/api/:path*` 与所有非静态资源页面。                                                       |
-| Background workers | `lib/github-sync-runner.ts`, `lib/analysis-worker.ts`, `lib/repair-worker.ts` | 通过 `/api/sync/worker`、`/api/repair/run`、`/api/sync/cron/rescan` 等路由触发，状态写入 SQLite，UI 通过 `/sync` 与 `/review` 仪表盘观察。 |
-| Browser client     | `app/page.tsx` 等 RSC + Client Components                                     | 通过 Zustand 维护 UI 状态，通过 Dexie 在 IndexedDB 中缓存概念，离线/弱网下可读。                                                           |
+| 进程 / 运行时      | 入口                                                                          | 说明                                                                                                                                             |
+| ------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Next.js Server     | `next start` (Dockerfile `CMD ["node", "server.js"]`)                         | 同时承载 SSR 页面与 `/api/**` 路由；建议容器化部署而非 serverless（后台 worker 需常驻）。                                                        |
+| Edge Middleware    | `middleware.ts`                                                               | 在请求进入 server 之前做 admin token 校验；匹配 `/api/:path*` 与所有非静态资源页面。                                                             |
+| Background workers | `lib/github-sync-runner.ts`, `lib/analysis-worker.ts`, `lib/repair-worker.ts` | 通过同步/API 入口触发，状态写入 SQLite；analysis 延迟重试按 `not_before_at` 自动唤醒，进程重启时由 boot recovery 恢复，不依赖 `/sync` 页面常开。 |
+| Browser client     | `app/page.tsx` 等 RSC + Client Components                                     | 通过 Zustand 维护 UI 状态，通过 Dexie 在 IndexedDB 中缓存概念，离线/弱网下可读。                                                                 |
 
 ## 3. 关键依赖
 
@@ -78,7 +78,7 @@ flowchart LR
 | 远程 Embedding API（可选） | `lib/embedding.ts`                                                 | `COMPOUND_EMBEDDING_PROVIDER=remote` + `COMPOUND_EMBEDDING_API_URL/KEY/MODEL`            | 远程向量化；默认使用本地哈希向量，`COMPOUND_DISABLE_HYBRID_SEARCH=true` 可强制走 FTS。 |
 | GitHub Contents API        | `lib/github-sync-client.ts`, `lib/github-sync-runner.ts`           | `GITHUB_REPO`, `GITHUB_TOKEN` (fine-grained PAT, Contents: Read), `GITHUB_BRANCH`        | 拉取 Markdown 笔记仓库；`COMPOUND_SYNC_RATE_LIMIT_PER_MINUTE` 控制并发节奏。           |
 | GitHub Webhooks            | `app/api/sync/github/webhook`                                      | `GITHUB_WEBHOOK_SECRET` 校验签名                                                         | 接收 push 事件触发增量同步。                                                           |
-| Cron 调度（外部触发）      | `app/api/sync/cron/rescan`                                         | `CRON_SECRET` 头部鉴权                                                                   | 定时全量重扫，例如部署平台的定时任务。                                                 |
+| Cron 调度（外部触发）      | `app/api/sync/cron/rescan`                                         | `CRON_SECRET` 头部鉴权                                                                   | 默认定时增量安全扫描；仅显式 `POST ?force=true` 执行全量重算。                         |
 
 ### 3.2 内部库依赖
 
@@ -219,7 +219,7 @@ flowchart LR
 | `/api/sync/github/content`             | GET      | 拉取单文件                               |
 | `/api/sync/github/run`                 | POST     | 触发一次同步                             |
 | `/api/sync/github/webhook`             | POST     | 接收 GitHub push                         |
-| `/api/sync/cron/rescan`                | POST     | 定时全量重扫（需 `CRON_SECRET`）         |
+| `/api/sync/cron/rescan`                | GET/POST | 定时增量扫描；POST 可显式请求全量重算    |
 | `/api/sync/dashboard`                  | GET      | 仪表盘聚合数据                           |
 | `/api/sync/status`                     | GET      | 当前 run 状态                            |
 | `/api/sync/retry` / `/api/sync/cancel` | POST     | 重试 / 取消                              |

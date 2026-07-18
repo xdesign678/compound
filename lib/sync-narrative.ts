@@ -89,6 +89,7 @@ const STAGE_TO_PHASE: Record<string, PhaseKey> = {
   chunk: 'analyze',
   llm: 'analyze',
   summarize: 'analyze',
+  contextualize: 'analyze',
   concepts: 'analyze',
   relations: 'analyze',
   embedding: 'analyze',
@@ -455,6 +456,46 @@ export function deriveDiagnostics(input: {
   coverage?: Record<string, number | string | boolean>;
 }): SyncDiagnostic[] {
   const out: SyncDiagnostic[] = [];
+  const githubSources =
+    typeof input.coverage?.githubSources === 'number' ? input.coverage.githubSources : 0;
+  const webhookConfigured = input.coverage?.webhookConfigured;
+  const webhookDeliveries =
+    typeof input.coverage?.webhookDeliveriesReceived === 'number'
+      ? input.coverage.webhookDeliveriesReceived
+      : 0;
+  if (githubSources > 0 && webhookConfigured === false) {
+    out.push({
+      id: 'github-webhook-missing',
+      severity: 'warning',
+      title: 'GitHub 上传还不能即时触发同步',
+      detail:
+        '服务端没有配置 GITHUB_WEBHOOK_SECRET，目前只能依赖手动或定时扫描。配置 push Webhook 后，每次提交可直接走 Compare 增量同步。',
+      affectedCount: githubSources,
+      actions: [
+        { id: 'open-env', label: '查看环境变量', primary: true },
+        {
+          id: 'open-runbook',
+          label: '查看同步手册',
+          href: '/runbooks/github-sync-stuck.md',
+        },
+      ],
+    });
+  } else if (githubSources > 0 && webhookConfigured === true && webhookDeliveries === 0) {
+    out.push({
+      id: 'github-webhook-unverified',
+      severity: 'info',
+      title: 'Webhook 已配置，但还没有收到投递',
+      detail: '请在 GitHub 仓库发送一次 ping 或 push，并确认投递历史出现 processed 记录。',
+      affectedCount: 0,
+      actions: [
+        {
+          id: 'open-runbook',
+          label: '查看验证步骤',
+          href: '/runbooks/github-sync-stuck.md',
+        },
+      ],
+    });
+  }
   const budgetWaits =
     typeof input.coverage?.analysisBudgetWaitsLast10m === 'number'
       ? input.coverage.analysisBudgetWaitsLast10m

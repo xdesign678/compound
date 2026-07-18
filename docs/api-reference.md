@@ -292,7 +292,7 @@ Source: [`app/api/ingest/route.ts`](../app/api/ingest/route.ts)
 | ----------- | ------------------------------------------------------- |
 | Methods     | `POST`                                                  |
 | Runtime     | `nodejs`                                                |
-| maxDuration | 150                                                     |
+| maxDuration | 300                                                     |
 | Guards      | `admin-token`, `rate-limited`, `content-length-guarded` |
 
 #### POST
@@ -588,10 +588,11 @@ Source: [`app/api/sync/cron/rescan/route.ts`](../app/api/sync/cron/rescan/route.
 
 #### GET
 
-Force a full GitHub re-scan. Designed to be invoked from a scheduler
+Incrementally re-scan GitHub. Designed to be invoked from a scheduler
 (Vercel Cron, GitHub Actions, external uptime ping). Authenticates with
 either `Authorization: Bearer ${CRON_SECRET}` or the standard admin
-token. `GET` is reserved for cron-secret callers; admin-triggered runs use POST.
+token. `GET` is reserved for cron-secret callers; admin-triggered POST may
+opt into a full rebuild with `?force=true`.
 
 #### POST
 
@@ -601,12 +602,12 @@ See {@link GET}. POST variant for schedulers that prefer non-idempotent verbs.
 
 Source: [`app/api/sync/dashboard/route.ts`](../app/api/sync/dashboard/route.ts)
 
-| Field       | Value         |
-| ----------- | ------------- |
-| Methods     | `GET`         |
-| Runtime     | `nodejs`      |
-| maxDuration | 10            |
-| Guards      | `admin-token` |
+| Field       | Value                       |
+| ----------- | --------------------------- |
+| Methods     | `GET`                       |
+| Runtime     | `nodejs`                    |
+| maxDuration | 10                          |
+| Guards      | `admin-token`, `cron-token` |
 
 #### GET
 

@@ -8,6 +8,7 @@ export const maxDuration = 30;
 
 const REASON_MESSAGES: Record<string, string> = {
   no_queue: '没有待处理的分析任务，worker 未启动。',
+  delayed_queue: '任务正在退避等待，worker 会在可重试时间自动唤醒。',
   max_workers: '已经达到 worker 并发上限，新任务会自动排队。',
 };
 

@@ -43,6 +43,7 @@ export type AnalysisStage =
   | 'fts'
   | 'embedding'
   | 'summarize'
+  | 'contextualize'
   | 'concepts'
   | 'relations'
   | 'qa_index';
@@ -172,7 +173,15 @@ export interface PipelineStageRow {
 
 export interface ErrorGroupRow {
   fingerprint: string;
-  category: 'timeout' | 'github' | 'auth' | 'parse' | 'rate' | 'gateway' | 'unknown';
+  category:
+    | 'timeout'
+    | 'github'
+    | 'auth'
+    | 'parse'
+    | 'rate'
+    | 'gateway'
+    | 'enhancement'
+    | 'unknown';
   message: string;
   stage: string | null;
   count: number;
@@ -306,6 +315,7 @@ const PIPELINE_STAGES: Array<{ stage: string; label: string }> = [
   { stage: 'fts', label: '全文索引' },
   { stage: 'embedding', label: '向量' },
   { stage: 'summarize', label: '摘要' },
+  { stage: 'contextualize', label: '情境索引' },
   { stage: 'concepts', label: '概念' },
   { stage: 'relations', label: '关系' },
   { stage: 'qa_index', label: '问答索引' },
@@ -323,6 +333,13 @@ function classifyError(raw: string): {
   suggestion: string;
 } {
   const text = raw.toLowerCase();
+  if (/增强分析部分失败/.test(raw)) {
+    return {
+      category: 'enhancement',
+      fingerprint: 'enhancement-degraded',
+      suggestion: '资料与概念已经可用；可稍后只重试失败的增强阶段，不需要重新同步文件。',
+    };
+  }
   if (/llm call exceeded wall-clock|wall-clock budget/.test(text)) {
     return {
       category: 'timeout',
@@ -372,6 +389,18 @@ function classifyError(raw: string): {
       category: 'gateway',
       fingerprint: 'gateway',
       suggestion: 'LLM 网关近期连续失败，熔断器打开。等待自动恢复或检查上游。',
+    };
+  }
+  if (
+    /finish_reason=length|reasoning budget exhausted|reasoning without content|unexpected gateway response shape/.test(
+      text,
+    )
+  ) {
+    return {
+      category: 'parse',
+      fingerprint: 'model-output',
+      suggestion:
+        '模型输出被截断或没有正文。系统会扩大重试 token；持续出现时应为该阶段换用 JSON 更稳定的模型。',
     };
   }
   if (/payload is incomplete|invalid json|parse/.test(text)) {
@@ -1053,6 +1082,7 @@ export const syncObs = {
         `SELECT COALESCE(error, '未知错误') AS error, COUNT(*) AS count, MAX(updated_at) AS lastAt
          FROM sync_run_items
          WHERE status = 'failed'
+            OR (status = 'succeeded' AND error LIKE '增强分析部分失败%')
          GROUP BY COALESCE(error, '未知错误')
          ORDER BY count DESC, lastAt DESC
          LIMIT 20`,
@@ -1158,12 +1188,15 @@ export const syncObs = {
     const errorRowsStmt = runForDetails
       ? db.prepare(
           `SELECT id, path, error, stage, updated_at FROM sync_run_items
-            WHERE run_id = ? AND status = 'failed' AND error IS NOT NULL
+            WHERE run_id = ?
+              AND (status = 'failed' OR (status = 'succeeded' AND error LIKE '增强分析部分失败%'))
+              AND error IS NOT NULL
             ORDER BY updated_at DESC LIMIT 200`,
         )
       : db.prepare(
           `SELECT id, path, error, stage, updated_at FROM sync_run_items
-            WHERE status = 'failed' AND error IS NOT NULL
+            WHERE (status = 'failed' OR (status = 'succeeded' AND error LIKE '增强分析部分失败%'))
+              AND error IS NOT NULL
             ORDER BY updated_at DESC LIMIT 200`,
         );
     const errorRows = (

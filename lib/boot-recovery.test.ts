@@ -147,11 +147,12 @@ test(
       .run(STALE_AT);
 
     // Stale analysis job: running, lease expired, attempts < max_attempts.
+    // qa_index is deterministic so boot recovery can safely auto-drain it.
     ensureAnalysisWorkerSchema();
     getServerDb()
       .prepare(
         `INSERT INTO analysis_jobs (id, source_id, stage, stage_version, status, attempts, max_attempts, locked_at, started_at, updated_at)
-         VALUES ('aj-stuck-boot', 'src-boot', 'github_ingest', 'v1', 'running', 0, 3, ?, ?, ?)`,
+         VALUES ('aj-stuck-boot', 'src-boot', 'qa_index', 'v1', 'running', 0, 3, ?, ?, ?)`,
       )
       .run(STALE_AT, STALE_AT, STALE_AT);
 
@@ -160,10 +161,21 @@ test(
     const syncJob = repo.getSyncJob('job-stuck-boot');
     assert.equal(syncJob?.status, 'failed', 'stuck sync job marked failed');
 
-    const analysis = getServerDb()
-      .prepare(`SELECT status FROM analysis_jobs WHERE id = 'aj-stuck-boot'`)
-      .get() as { status: string };
-    assert.equal(analysis.status, 'queued', 'stale analysis job requeued');
+    const analysisDeadline = Date.now() + 10_000;
+    let analysisStatus = (
+      getServerDb()
+        .prepare(`SELECT status FROM analysis_jobs WHERE id = 'aj-stuck-boot'`)
+        .get() as { status: string }
+    ).status;
+    while (Date.now() < analysisDeadline && ['queued', 'running'].includes(analysisStatus)) {
+      await new Promise((r) => setTimeout(r, 25));
+      analysisStatus = (
+        getServerDb()
+          .prepare(`SELECT status FROM analysis_jobs WHERE id = 'aj-stuck-boot'`)
+          .get() as { status: string }
+      ).status;
+    }
+    assert.equal(analysisStatus, 'succeeded', 'stale analysis job is requeued and auto-drained');
 
     // The empty repair run is finalized asynchronously by the resumed loop.
     const deadline = Date.now() + 10_000;

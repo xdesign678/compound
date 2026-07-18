@@ -30,6 +30,16 @@ function setupTempDb() {
   };
 }
 
+async function withMockFetch<T>(mockFetch: typeof fetch, fn: () => Promise<T> | T): Promise<T> {
+  const previous = global.fetch;
+  global.fetch = mockFetch;
+  try {
+    return await fn();
+  } finally {
+    global.fetch = previous;
+  }
+}
+
 test('github ingest jobs with missing payload fail once and do not requeue', async (t) => {
   const env = setupTempDb();
   t.after(env.cleanup);
@@ -157,6 +167,168 @@ test('post-ingest jobs keep the file running until every enhancement stage is te
   assert.equal(doneItem.status, 'succeeded');
   assert.equal(doneItem.stage, 'complete');
   assert.ok(doneItem.finished_at);
+});
+
+test('enhancement failure keeps an ingested file usable and records a warning', async (t) => {
+  const env = setupTempDb();
+  const previousEnv = new Map<string, string | undefined>();
+  for (const key of ['LLM_API_KEY', 'LLM_API_URL', 'COMPOUND_SKIP_DNS_GUARD']) {
+    previousEnv.set(key, process.env[key]);
+  }
+  process.env.LLM_API_KEY = 'test-key';
+  process.env.LLM_API_URL = 'https://example.com/v1/chat/completions';
+  process.env.COMPOUND_SKIP_DNS_GUARD = 'true';
+  t.after(() => {
+    for (const [key, value] of previousEnv) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    env.cleanup();
+  });
+
+  const { getServerDb, repo } = await import('./server-db');
+  const { syncObs } = await import('./sync-observability');
+  const { queueAdvancedAnalysisJob, runAnalysisWorkerOnce } = await import('./analysis-worker');
+  const { resetCircuitBreakersForTests } = await import('./circuit-breaker');
+  resetCircuitBreakersForTests();
+
+  repo.insertSource({
+    id: 's-degraded',
+    title: 'Degraded enhancement',
+    type: 'file',
+    rawContent: '# Still usable',
+    ingestedAt: Date.now(),
+  });
+  syncObs.startRun({
+    id: 'sr-degraded',
+    kind: 'github',
+    triggerType: 'manual',
+    repo: 'demo/vault',
+    branch: 'main',
+  });
+  syncObs.upsertRunItem({
+    id: 'sri-degraded',
+    runId: 'sr-degraded',
+    path: 'notes/degraded.md',
+    changeType: 'create',
+    status: 'running',
+    stage: 'enhance',
+    sourceId: 's-degraded',
+  });
+  queueAdvancedAnalysisJob({
+    runId: 'sr-degraded',
+    itemId: 'sri-degraded',
+    sourceId: 's-degraded',
+    sourceSha: 'sha-degraded',
+    sourcePath: 'notes/degraded.md',
+    stage: 'summarize',
+    maxAttempts: 1,
+  });
+
+  await withMockFetch(
+    async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: 'not valid json' }, finish_reason: 'stop' }],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    () => runAnalysisWorkerOnce({ stages: ['summarize'] }),
+  );
+
+  const item = getServerDb()
+    .prepare(`SELECT status, stage, error FROM sync_run_items WHERE id = ?`)
+    .get('sri-degraded') as { status: string; stage: string; error: string | null };
+  const job = getServerDb()
+    .prepare(`SELECT status, dead_letter_at FROM analysis_jobs WHERE item_id = ?`)
+    .get('sri-degraded') as { status: string; dead_letter_at: number | null };
+  const warning = getServerDb()
+    .prepare(
+      `SELECT level, message
+       FROM sync_events
+       WHERE item_id = ? AND message LIKE '增强分析部分失败%'
+       ORDER BY at DESC
+       LIMIT 1`,
+    )
+    .get('sri-degraded') as { level: string; message: string };
+
+  assert.equal(job.status, 'failed');
+  assert.ok(job.dead_letter_at);
+  assert.equal(item.status, 'succeeded');
+  assert.equal(item.stage, 'complete');
+  assert.match(item.error ?? '', /增强分析部分失败/);
+  assert.equal(warning.level, 'warn');
+  assert.match(warning.message, /可稍后重试/);
+  const dashboard = syncObs.getDashboard();
+  assert.ok(dashboard.errorStats.some((entry) => /增强分析部分失败/.test(entry.error)));
+  assert.ok(dashboard.errorGroups.some((entry) => entry.category === 'enhancement'));
+});
+
+test('source enhancement queue prioritizes summary and defers contextualization', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { getServerDb } = await import('./server-db');
+  const { queueSourceEnhancementJobs } = await import('./analysis-worker');
+  queueSourceEnhancementJobs({
+    sourceId: 's-priority',
+    sourceSha: 'sha-priority',
+    sourcePath: 'notes/priority.md',
+  });
+
+  const jobs = getServerDb()
+    .prepare(`SELECT stage, priority FROM analysis_jobs WHERE source_id = ? ORDER BY priority DESC`)
+    .all('s-priority') as Array<{ stage: string; priority: number }>;
+
+  assert.deepEqual(jobs, [
+    { stage: 'summarize', priority: 50 },
+    { stage: 'embedding', priority: 40 },
+    { stage: 'relations', priority: 15 },
+    { stage: 'contextualize', priority: 5 },
+  ]);
+});
+
+test('a delayed retry wakes itself without a dashboard poll', { concurrency: false }, async (t) => {
+  const env = setupTempDb();
+  const { getServerDb, repo } = await import('./server-db');
+  const { clearAnalysisWorkerWakeTimersForTests, queueAdvancedAnalysisJob, startAnalysisWorker } =
+    await import('./analysis-worker');
+  t.after(() => {
+    clearAnalysisWorkerWakeTimersForTests();
+    env.cleanup();
+  });
+
+  repo.insertSource({
+    id: 's-delayed-wake',
+    title: 'Delayed wake',
+    type: 'file',
+    rawContent: '# Delayed wake',
+    ingestedAt: Date.now(),
+  });
+  const jobId = queueAdvancedAnalysisJob({
+    sourceId: 's-delayed-wake',
+    sourcePath: 'delayed.md',
+    stage: 'qa_index',
+  });
+  getServerDb()
+    .prepare(`UPDATE analysis_jobs SET not_before_at = ? WHERE id = ?`)
+    .run(Date.now() + 60, jobId);
+
+  const start = startAnalysisWorker('delayed-wake-test');
+  assert.equal(start.started, false);
+  assert.equal(start.reason, 'delayed_queue');
+
+  const deadline = Date.now() + 2_000;
+  let status = 'queued';
+  while (Date.now() < deadline && ['queued', 'running'].includes(status)) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    status = (
+      getServerDb().prepare(`SELECT status FROM analysis_jobs WHERE id = ?`).get(jobId) as {
+        status: string;
+      }
+    ).status;
+  }
+  assert.equal(status, 'succeeded');
 });
 
 test('same stage and sha can be queued again and skips by fingerprint cache', async (t) => {

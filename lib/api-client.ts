@@ -33,6 +33,7 @@ const CLIENT_CANDIDATE_LIMIT = 320;
 const QUERY_CANDIDATE_LIMIT = 50;
 const MIN_DIRECT_TITLE_MENTION_LENGTH = 2;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const INGEST_REQUEST_TIMEOUT_MS = 270_000;
 const ASK_STREAM_TIMEOUT_MS = 180_000;
 
 export class OfflineError extends Error {
@@ -201,11 +202,13 @@ async function postJSON<T>(
     retries?: number;
     write?: boolean;
     modelPurpose?: ModelPurpose;
+    timeoutMs?: number;
   },
 ): Promise<T> {
   if (options?.write) assertOnlineForWrite();
 
-  const signal = buildTimeoutSignal(options?.signal);
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const signal = buildTimeoutSignal(options?.signal, timeoutMs);
   const maxRetries = Math.min(options?.retries ?? 0, 3);
 
   const llmConfig = getLlmConfigForPurpose(options?.modelPurpose ?? 'wiki');
@@ -237,11 +240,15 @@ async function postJSON<T>(
         body: JSON.stringify(payload),
         signal,
       });
-    } catch {
+    } catch (error) {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         throw options?.write ? new OfflineError() : new Error('网络已断开，请检查网络连接后重试');
       }
-      lastError = new Error('网络连接失败');
+      lastError = signal.aborted
+        ? new Error(`请求超时：服务端在 ${Math.round(timeoutMs / 1000)} 秒内未完成处理`)
+        : error instanceof Error
+          ? error
+          : new Error('网络连接失败');
       // Network error — retry if allowed
       if (attempt < maxRetries) continue;
       throw lastError;
@@ -343,7 +350,10 @@ export async function ingestSource(input: {
   };
 
   // 3. Call API
-  const resp = await postJSON<PersistedIngestResponse>('/api/ingest', req, { write: true });
+  const resp = await postJSON<PersistedIngestResponse>('/api/ingest', req, {
+    write: true,
+    timeoutMs: INGEST_REQUEST_TIMEOUT_MS,
+  });
 
   // 4. Mirror the server-persisted rows into IndexedDB so the current browser
   // immediately shows the same IDs and content as other devices.

@@ -87,6 +87,18 @@ export function GithubSyncModal() {
   // overwriting the state of a newly started sync.
   const pollGenerationRef = useRef(0);
   const pulledAfterDoneRef = useRef(false);
+  const lastPulledDoneRef = useRef(0);
+  const snapshotPullRef = useRef<Promise<void> | null>(null);
+  const pendingSnapshotPullRef = useRef<{
+    generation: number;
+    doneCount: number;
+    force: boolean;
+  } | null>(null);
+  const activeSnapshotPullRef = useRef<{
+    generation: number;
+    doneCount: number;
+    force: boolean;
+  } | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
   useModalKeyboard(open, close);
@@ -111,6 +123,8 @@ export function GithubSyncModal() {
       setPollIssue(null);
       setJob(null);
       pulledAfterDoneRef.current = false;
+      lastPulledDoneRef.current = 0;
+      pendingSnapshotPullRef.current = null;
     } else {
       if (pollTimerRef.current) {
         clearTimeout(pollTimerRef.current);
@@ -125,62 +139,115 @@ export function GithubSyncModal() {
     };
   }, [open]);
 
-  const pollOnce = useCallback(async (jobId: string, consecutiveFailures = 0) => {
+  const queueSnapshotPull = useCallback((doneCount: number, force = false) => {
     const generation = pollGenerationRef.current;
-    try {
-      const res = await fetch(`/api/sync/status?jobId=${encodeURIComponent(jobId)}`, {
-        cache: 'no-store',
-        headers: withRequestId(getAdminAuthHeaders()),
-      });
-      if (generation !== pollGenerationRef.current) return;
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new PollHttpError(res.status, `状态查询失败 (${res.status}): ${text.slice(0, 200)}`);
-      }
-      const data = (await res.json()) as JobStatus;
-      if (generation !== pollGenerationRef.current) return;
-      setPollIssue(null);
-      setJob(data);
-      if (data.status === 'running') {
-        setPhase('running');
-        pollTimerRef.current = setTimeout(() => void pollOnce(jobId, 0), POLL_INTERVAL_MS);
-      } else if (data.status === 'done') {
-        setPhase('done');
-        // 任务成功后，自动把服务端新数据拉回本地 IndexedDB。
-        if (!pulledAfterDoneRef.current) {
-          pulledAfterDoneRef.current = true;
-          setPulling(true);
-          pullSnapshotFromCloud()
-            .catch((e) => console.warn('[cloud-sync] post-sync pull failed:', e))
-            .finally(() => setPulling(false));
+    const active = activeSnapshotPullRef.current;
+    const pending = pendingSnapshotPullRef.current;
+    const highestRequested = Math.max(
+      lastPulledDoneRef.current,
+      active?.generation === generation ? active.doneCount : 0,
+      pending?.generation === generation ? pending.doneCount : 0,
+    );
+    if (!force && doneCount <= highestRequested) return;
+
+    pendingSnapshotPullRef.current = {
+      generation,
+      doneCount:
+        pending?.generation === generation ? Math.max(pending.doneCount, doneCount) : doneCount,
+      force: force || (pending?.generation === generation && pending.force),
+    };
+    if (snapshotPullRef.current) return;
+
+    const drain = (async () => {
+      while (pendingSnapshotPullRef.current) {
+        const request = pendingSnapshotPullRef.current;
+        pendingSnapshotPullRef.current = null;
+        if (request.generation !== pollGenerationRef.current) continue;
+        if (!request.force && request.doneCount <= lastPulledDoneRef.current) continue;
+
+        activeSnapshotPullRef.current = request;
+        setPulling(true);
+        try {
+          await pullSnapshotFromCloud();
+          if (request.generation === pollGenerationRef.current) {
+            lastPulledDoneRef.current = Math.max(lastPulledDoneRef.current, request.doneCount);
+          }
+        } catch (error) {
+          console.warn('[cloud-sync] progressive sync pull failed:', error);
+        } finally {
+          if (activeSnapshotPullRef.current === request) activeSnapshotPullRef.current = null;
         }
-      } else {
-        setPhase('failed');
-        setError(data.error || '同步失败');
       }
-    } catch (e) {
-      if (generation !== pollGenerationRef.current) return;
-      const msg = e instanceof Error ? e.message : String(e);
-      const plan = getPollFailurePlan({
-        status: e instanceof PollHttpError ? e.status : undefined,
-        message: msg,
-        consecutiveFailures,
-      });
-
-      if (plan.shouldRetry) {
-        setPollIssue(plan.userMessage);
-        pollTimerRef.current = setTimeout(
-          () => void pollOnce(jobId, plan.nextFailureCount),
-          plan.retryDelayMs,
-        );
-        return;
-      }
-
-      setPollIssue(null);
-      setError(redactSensitiveText(msg));
-      setPhase('failed');
-    }
+      setPulling(false);
+    })();
+    snapshotPullRef.current = drain;
+    void drain.finally(() => {
+      if (snapshotPullRef.current === drain) snapshotPullRef.current = null;
+    });
   }, []);
+
+  const pollOnce = useCallback(
+    async (jobId: string, consecutiveFailures = 0) => {
+      const generation = pollGenerationRef.current;
+      try {
+        const res = await fetch(`/api/sync/status?jobId=${encodeURIComponent(jobId)}`, {
+          cache: 'no-store',
+          headers: withRequestId(getAdminAuthHeaders()),
+        });
+        if (generation !== pollGenerationRef.current) return;
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new PollHttpError(
+            res.status,
+            `状态查询失败 (${res.status}): ${text.slice(0, 200)}`,
+          );
+        }
+        const data = (await res.json()) as JobStatus;
+        if (generation !== pollGenerationRef.current) return;
+        setPollIssue(null);
+        setJob(data);
+        if (data.status === 'running') {
+          setPhase('running');
+          if (data.done > lastPulledDoneRef.current) {
+            queueSnapshotPull(data.done);
+          }
+          pollTimerRef.current = setTimeout(() => void pollOnce(jobId, 0), POLL_INTERVAL_MS);
+        } else if (data.status === 'done') {
+          setPhase('done');
+          // 任务成功后，自动把服务端新数据拉回本地 IndexedDB。
+          if (!pulledAfterDoneRef.current) {
+            pulledAfterDoneRef.current = true;
+            queueSnapshotPull(data.done, true);
+          }
+        } else {
+          setPhase('failed');
+          setError(data.error || '同步失败');
+        }
+      } catch (e) {
+        if (generation !== pollGenerationRef.current) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        const plan = getPollFailurePlan({
+          status: e instanceof PollHttpError ? e.status : undefined,
+          message: msg,
+          consecutiveFailures,
+        });
+
+        if (plan.shouldRetry) {
+          setPollIssue(plan.userMessage);
+          pollTimerRef.current = setTimeout(
+            () => void pollOnce(jobId, plan.nextFailureCount),
+            plan.retryDelayMs,
+          );
+          return;
+        }
+
+        setPollIssue(null);
+        setError(redactSensitiveText(msg));
+        setPhase('failed');
+      }
+    },
+    [queueSnapshotPull],
+  );
 
   const start = useCallback(async () => {
     const generation = pollGenerationRef.current;
