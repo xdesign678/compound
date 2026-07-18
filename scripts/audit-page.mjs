@@ -38,7 +38,13 @@ export const SURFACES = {
       });
     },
   },
-  sources: { url: '/', setup: (page) => page.getByRole('tab', { name: '资料' }).click() },
+  sources: {
+    url: '/',
+    setup: async (page) => {
+      await page.getByRole('tab', { name: '资料' }).click();
+      await page.waitForSelector('.source-card, .empty-state', { timeout: 30_000 });
+    },
+  },
   ask: { url: '/', setup: (page) => page.getByRole('tab', { name: '问答' }).click() },
   conceptDetail: {
     url: '/',
