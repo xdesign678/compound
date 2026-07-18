@@ -1,0 +1,1361 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="Compound GitHub 同步与 LLM 分析链路优化报告：根因、改动、体验提升、验证证据与上线注意事项。"
+    />
+    <title>Compound 同步链路优化验收报告 · 2026-07-18</title>
+    <script>
+      try {
+        const savedTheme = localStorage.getItem('compound-report-theme');
+        if (savedTheme === 'light' || savedTheme === 'dark') {
+          document.documentElement.dataset.theme = savedTheme;
+        }
+      } catch {}
+    </script>
+    <style>
+      :root {
+        --bg: #faf9f5;
+        --bg-subtle: #f2efe7;
+        --surface: #fffdf8;
+        --surface-strong: #f7f2e8;
+        --surface-success: #edf5ef;
+        --surface-warning: #f8efe0;
+        --surface-info: #edf2f3;
+        --ink: #1d1b17;
+        --ink-body: #403d36;
+        --ink-muted: #6f6a60;
+        --ink-faint: #716b61;
+        --clay: #a65338;
+        --clay-dark: #8f452e;
+        --forest: #3f7155;
+        --ochre: #875619;
+        --blue: #4e6d78;
+        --line: rgba(53, 47, 39, 0.12);
+        --line-strong: rgba(53, 47, 39, 0.2);
+        --nav-bg: rgba(250, 249, 245, 0.94);
+        --shadow-sm: 0 1px 3px rgba(47, 40, 31, 0.08);
+        --shadow-md: 0 14px 40px rgba(47, 40, 31, 0.09);
+        --radius-sm: 8px;
+        --radius-md: 13px;
+        --radius-lg: 20px;
+        --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", "Noto Sans SC", sans-serif;
+        --font-reading: Lora, Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif;
+        --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      :root[data-theme='dark'] {
+        --bg: #24231f;
+        --bg-subtle: #2c2a25;
+        --surface: #302e28;
+        --surface-strong: #38342c;
+        --surface-success: #29372e;
+        --surface-warning: #3b3225;
+        --surface-info: #293437;
+        --ink: #f3eee3;
+        --ink-body: #d7d0c3;
+        --ink-muted: #b5ac9e;
+        --ink-faint: #948b7d;
+        --clay: #df8a68;
+        --clay-dark: #f0a083;
+        --forest: #86b594;
+        --ochre: #d6a45f;
+        --blue: #91b0ba;
+        --line: rgba(240, 232, 217, 0.11);
+        --line-strong: rgba(240, 232, 217, 0.2);
+        --nav-bg: rgba(36, 35, 31, 0.94);
+        --shadow-sm: 0 1px 3px rgba(12, 11, 9, 0.24);
+        --shadow-md: 0 16px 42px rgba(12, 11, 9, 0.28);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) {
+          --bg: #24231f;
+          --bg-subtle: #2c2a25;
+          --surface: #302e28;
+          --surface-strong: #38342c;
+          --surface-success: #29372e;
+          --surface-warning: #3b3225;
+          --surface-info: #293437;
+          --ink: #f3eee3;
+          --ink-body: #d7d0c3;
+          --ink-muted: #b5ac9e;
+          --ink-faint: #948b7d;
+          --clay: #df8a68;
+          --clay-dark: #f0a083;
+          --forest: #86b594;
+          --ochre: #d6a45f;
+          --blue: #91b0ba;
+          --line: rgba(240, 232, 217, 0.11);
+          --line-strong: rgba(240, 232, 217, 0.2);
+          --nav-bg: rgba(36, 35, 31, 0.94);
+          --shadow-sm: 0 1px 3px rgba(12, 11, 9, 0.24);
+          --shadow-md: 0 16px 42px rgba(12, 11, 9, 0.28);
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+        background: var(--bg);
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink-body);
+        font-family: var(--font-reading);
+        font-size: 17px;
+        line-height: 1.74;
+        text-rendering: optimizeLegibility;
+      }
+
+      ::selection {
+        background: color-mix(in srgb, var(--clay) 24%, transparent);
+        color: var(--ink);
+      }
+
+      a {
+        color: inherit;
+        text-decoration-color: color-mix(in srgb, var(--clay) 62%, transparent);
+        text-underline-offset: 3px;
+      }
+
+      a:hover {
+        color: var(--clay-dark);
+      }
+
+      button,
+      a {
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      button:focus-visible,
+      a:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid color-mix(in srgb, var(--clay) 42%, transparent);
+        outline-offset: 3px;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        border-bottom: 1px solid var(--line);
+        background: var(--nav-bg);
+        backdrop-filter: blur(18px);
+      }
+
+      .topbar-inner {
+        display: flex;
+        align-items: center;
+        width: min(100% - 28px, 1120px);
+        min-height: 66px;
+        margin: 0 auto;
+        gap: 18px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: max-content;
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 14px;
+        font-weight: 760;
+        text-decoration: none;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 30px;
+        height: 30px;
+        place-items: center;
+        border: 1px solid color-mix(in srgb, var(--clay) 34%, transparent);
+        border-radius: 9px;
+        background: var(--surface-strong);
+        color: var(--clay);
+        font-size: 15px;
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        margin-left: auto;
+        gap: 3px;
+        font-family: var(--font-sans);
+      }
+
+      .nav-links a {
+        min-height: 44px;
+        padding: 10px 11px;
+        border-radius: 8px;
+        color: var(--ink-muted);
+        font-size: 13px;
+        font-weight: 650;
+        text-decoration: none;
+      }
+
+      .nav-links a:hover {
+        background: var(--bg-subtle);
+        color: var(--ink);
+      }
+
+      .icon-button {
+        display: inline-grid;
+        width: 44px;
+        height: 44px;
+        flex: 0 0 44px;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--surface);
+        color: var(--ink-muted);
+        cursor: pointer;
+        box-shadow: var(--shadow-sm);
+      }
+
+      .icon-button:hover {
+        border-color: var(--line-strong);
+        color: var(--ink);
+      }
+
+      .menu-toggle {
+        display: none;
+      }
+
+      .page {
+        width: min(100% - 32px, 1120px);
+        margin: 0 auto;
+        padding-bottom: max(72px, env(safe-area-inset-bottom));
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.55fr);
+        gap: clamp(26px, 5vw, 72px);
+        align-items: end;
+        padding: clamp(66px, 10vw, 126px) 0 58px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        margin: 0 0 18px;
+        color: var(--clay);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 780;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--forest);
+        content: '';
+        box-shadow: 0 0 0 5px color-mix(in srgb, var(--forest) 13%, transparent);
+      }
+
+      h1,
+      h2,
+      h3,
+      h4 {
+        color: var(--ink);
+        font-family: var(--font-sans);
+        line-height: 1.16;
+        letter-spacing: -0.022em;
+      }
+
+      h1 {
+        max-width: 820px;
+        margin: 0;
+        font-size: clamp(2.55rem, 7vw, 5.55rem);
+        font-weight: 760;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: clamp(1.8rem, 4vw, 2.75rem);
+        font-weight: 730;
+      }
+
+      h3 {
+        margin: 0 0 10px;
+        font-size: 1.18rem;
+        font-weight: 720;
+      }
+
+      h4 {
+        margin: 0 0 7px;
+        font-size: 0.98rem;
+        font-weight: 720;
+      }
+
+      p {
+        margin: 0 0 16px;
+      }
+
+      .lead {
+        max-width: 760px;
+        margin: 22px 0 0;
+        color: var(--ink-muted);
+        font-size: clamp(1.08rem, 2vw, 1.31rem);
+        line-height: 1.68;
+      }
+
+      .hero-meta {
+        display: grid;
+        gap: 15px;
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+        box-shadow: var(--shadow-md);
+        font-family: var(--font-sans);
+      }
+
+      .hero-meta-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--line);
+        color: var(--ink-muted);
+        font-size: 13px;
+      }
+
+      .hero-meta-row:last-child {
+        padding-bottom: 0;
+        border-bottom: 0;
+      }
+
+      .hero-meta-row strong {
+        color: var(--ink);
+        font-weight: 740;
+        text-align: right;
+      }
+
+      .section {
+        scroll-margin-top: 92px;
+        padding: clamp(66px, 9vw, 106px) 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .section-heading {
+        display: grid;
+        grid-template-columns: minmax(0, 0.52fr) minmax(0, 1fr);
+        gap: 38px;
+        align-items: start;
+        margin-bottom: 34px;
+      }
+
+      .section-kicker {
+        margin: 8px 0 0;
+        color: var(--clay);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 780;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .section-intro {
+        max-width: 700px;
+        color: var(--ink-muted);
+        font-size: 1.08rem;
+      }
+
+      .summary-box {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 24px;
+        align-items: center;
+        padding: clamp(24px, 4vw, 38px);
+        border: 1px solid color-mix(in srgb, var(--forest) 30%, var(--line));
+        border-radius: var(--radius-lg);
+        background: var(--surface-success);
+      }
+
+      .summary-box p {
+        max-width: 760px;
+        margin: 0;
+        color: var(--ink);
+        font-size: clamp(1.18rem, 2.6vw, 1.56rem);
+        line-height: 1.54;
+      }
+
+      .status-seal {
+        display: grid;
+        width: 116px;
+        height: 116px;
+        place-items: center;
+        border: 1px solid color-mix(in srgb, var(--forest) 34%, transparent);
+        border-radius: 50%;
+        background: var(--surface);
+        color: var(--forest);
+        font-family: var(--font-sans);
+        font-size: 15px;
+        font-weight: 780;
+        line-height: 1.25;
+        text-align: center;
+        box-shadow: var(--shadow-sm);
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 18px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 6px 11px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--surface);
+        color: var(--ink-muted);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 690;
+      }
+
+      .pill.success {
+        border-color: color-mix(in srgb, var(--forest) 30%, var(--line));
+        color: var(--forest);
+      }
+
+      .attribution-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .attribution-card,
+      .change-card,
+      .proof-card,
+      .risk-card {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .attribution-card {
+        padding: 22px;
+      }
+
+      .attribution-value {
+        margin-bottom: 12px;
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: clamp(2rem, 5vw, 3.35rem);
+        font-weight: 760;
+        line-height: 1;
+      }
+
+      .attribution-card p {
+        margin: 0;
+        color: var(--ink-muted);
+        font-size: 0.94rem;
+      }
+
+      .bar-track {
+        height: 7px;
+        margin: 18px 0 13px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: var(--bg-subtle);
+      }
+
+      .bar-fill {
+        width: var(--value);
+        height: 100%;
+        border-radius: inherit;
+        background: var(--bar-color, var(--clay));
+      }
+
+      .baseline-note {
+        margin-top: 20px;
+        padding: 18px 20px;
+        border-left: 4px solid var(--ochre);
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+        background: var(--surface-warning);
+        color: var(--ink-muted);
+        font-size: 0.94rem;
+      }
+
+      .flow-compare {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 34px;
+      }
+
+      .flow-panel {
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+      }
+
+      .flow-panel.after {
+        border-color: color-mix(in srgb, var(--forest) 30%, var(--line));
+        background: var(--surface-success);
+      }
+
+      .flow-label {
+        display: inline-flex;
+        align-items: center;
+        min-height: 29px;
+        margin-bottom: 17px;
+        padding: 4px 9px;
+        border-radius: 999px;
+        background: var(--bg-subtle);
+        color: var(--ink-muted);
+        font-family: var(--font-sans);
+        font-size: 11px;
+        font-weight: 780;
+        letter-spacing: 0.06em;
+      }
+
+      .flow {
+        display: grid;
+        gap: 10px;
+      }
+
+      .flow-step {
+        position: relative;
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 11px;
+        align-items: start;
+        padding: 11px 12px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface);
+        color: var(--ink-muted);
+        font-size: 0.91rem;
+      }
+
+      .flow-step + .flow-step::before {
+        position: absolute;
+        top: -11px;
+        left: 28px;
+        width: 1px;
+        height: 10px;
+        background: var(--line-strong);
+        content: '';
+      }
+
+      .step-number {
+        display: grid;
+        width: 30px;
+        height: 30px;
+        place-items: center;
+        border-radius: 9px;
+        background: var(--surface-strong);
+        color: var(--clay);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 780;
+      }
+
+      .flow-step strong {
+        display: block;
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 0.88rem;
+      }
+
+      .change-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .change-card {
+        padding: 22px;
+        transition:
+          transform 180ms ease,
+          opacity 180ms ease,
+          border-color 180ms ease;
+      }
+
+      .change-grid:has(.change-card:hover) .change-card:not(:hover) {
+        opacity: 0.68;
+      }
+
+      .change-card:hover {
+        transform: translateY(-2px);
+        border-color: var(--line-strong);
+      }
+
+      .change-index {
+        display: inline-flex;
+        margin-bottom: 16px;
+        color: var(--clay);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .change-card p {
+        margin: 0;
+        color: var(--ink-muted);
+        font-size: 0.96rem;
+      }
+
+      details {
+        margin-top: 16px;
+        border-top: 1px solid var(--line);
+      }
+
+      summary {
+        min-height: 44px;
+        padding: 12px 0 0;
+        color: var(--ink-muted);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .file-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 3px 0 2px;
+      }
+
+      code {
+        padding: 2px 6px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--bg-subtle);
+        color: var(--ink);
+        font-family: var(--font-mono);
+        font-size: 0.82em;
+        overflow-wrap: anywhere;
+      }
+
+      .proof-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .proof-card {
+        padding: 20px;
+      }
+
+      .proof-value {
+        margin: 2px 0 9px;
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: clamp(1.65rem, 4vw, 2.65rem);
+        font-weight: 760;
+        line-height: 1;
+      }
+
+      .proof-card p {
+        margin: 0;
+        color: var(--ink-muted);
+        font-size: 0.88rem;
+      }
+
+      .checklist {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+        margin-top: 22px;
+      }
+
+      .check {
+        display: grid;
+        grid-template-columns: 26px minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        min-height: 58px;
+        padding: 11px 13px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface);
+        color: var(--ink-muted);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+
+      .check-mark {
+        display: grid;
+        width: 24px;
+        height: 24px;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--surface-success);
+        color: var(--forest);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .commit-box {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        margin-top: 22px;
+        padding: 18px 20px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--surface-strong);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+
+      .commit-box strong {
+        display: block;
+        color: var(--ink);
+        font-size: 14px;
+      }
+
+      .button-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        padding: 9px 14px;
+        border: 1px solid color-mix(in srgb, var(--clay) 38%, var(--line));
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--clay-dark);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 720;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+
+      .button-link:hover {
+        background: var(--bg-subtle);
+      }
+
+      .risk-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .risk-card {
+        padding: 21px;
+      }
+
+      .risk-card.external {
+        border-color: color-mix(in srgb, var(--ochre) 36%, var(--line));
+        background: var(--surface-warning);
+      }
+
+      .risk-card p {
+        margin: 0;
+        color: var(--ink-muted);
+        font-size: 0.93rem;
+      }
+
+      .priority {
+        display: inline-flex;
+        min-height: 28px;
+        margin-bottom: 13px;
+        padding: 4px 9px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--ochre);
+        font-family: var(--font-sans);
+        font-size: 11px;
+        font-weight: 780;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        margin-top: 28px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+      }
+
+      table {
+        width: 100%;
+        min-width: 720px;
+        border-collapse: collapse;
+        font-family: var(--font-sans);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      th,
+      td {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--surface-strong);
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 760;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .footer {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 22px;
+        align-items: end;
+        padding: 34px 0 0;
+        color: var(--ink-faint);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .footer p {
+        margin: 0;
+      }
+
+      .footer-links {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 14px;
+      }
+
+      @media (max-width: 920px) {
+        .hero,
+        .section-heading {
+          grid-template-columns: 1fr;
+        }
+
+        .hero-meta {
+          max-width: 600px;
+        }
+
+        .proof-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .risk-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 767px) {
+        body {
+          font-size: 16.5px;
+        }
+
+        .topbar-inner {
+          position: relative;
+        }
+
+        .menu-toggle {
+          display: inline-grid;
+          margin-left: auto;
+        }
+
+        .nav-links {
+          position: absolute;
+          top: calc(100% + 1px);
+          right: 0;
+          left: 0;
+          display: none;
+          margin: 0;
+          padding: 10px;
+          border: 1px solid var(--line);
+          border-radius: 0 0 12px 12px;
+          background: var(--surface);
+          box-shadow: var(--shadow-md);
+        }
+
+        .nav-links.open {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .nav-links a {
+          display: flex;
+          align-items: center;
+        }
+
+        .page {
+          width: min(100% - 28px, 1120px);
+        }
+
+        .hero {
+          padding: 54px 0 44px;
+        }
+
+        .summary-box {
+          grid-template-columns: 1fr;
+        }
+
+        .status-seal {
+          width: 94px;
+          height: 94px;
+        }
+
+        .attribution-grid,
+        .flow-compare,
+        .change-grid,
+        .checklist {
+          grid-template-columns: 1fr;
+        }
+
+        .commit-box,
+        .footer {
+          align-items: stretch;
+          grid-template-columns: 1fr;
+        }
+
+        .footer-links {
+          justify-content: flex-start;
+        }
+      }
+
+      @media (max-width: 480px) {
+        h1 {
+          font-size: clamp(2.35rem, 14vw, 3.55rem);
+        }
+
+        .proof-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .nav-links.open {
+          grid-template-columns: 1fr;
+        }
+
+        .theme-button {
+          display: none;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        .change-card {
+          transition: none;
+        }
+
+        .change-card:hover {
+          transform: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="#top" aria-label="返回报告顶部">
+          <span class="brand-mark" aria-hidden="true">C</span>
+          <span>Compound · 同步优化报告</span>
+        </a>
+        <nav class="nav-links" id="report-nav" aria-label="报告章节">
+          <a href="#conclusion">结论</a>
+          <a href="#diagnosis">根因</a>
+          <a href="#architecture">架构</a>
+          <a href="#changes">改动</a>
+          <a href="#proof">验证</a>
+          <a href="#risks">注意事项</a>
+        </nav>
+        <button
+          class="icon-button menu-toggle"
+          id="menu-toggle"
+          type="button"
+          aria-expanded="false"
+          aria-controls="report-nav"
+          aria-label="展开报告导航"
+        >
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </button>
+        <button
+          class="icon-button theme-button"
+          id="theme-toggle"
+          type="button"
+          aria-label="切换明暗主题"
+          title="切换明暗主题"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.64 5.64l1.55 1.55M16.81 16.81l1.55 1.55M18.36 5.64l-1.55 1.55M7.19 16.81l-1.55 1.55" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            <circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.7" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="page" id="top">
+      <section class="hero" aria-labelledby="report-title">
+        <div>
+          <p class="eyebrow">2026-07-18 · 已完成并推送 main</p>
+          <h1 id="report-title">让同步先有结果，再做增强。</h1>
+          <p class="lead">
+            这次没有把问题简单归咎于模型，也没有迁移 GitHub。真正的处理方式是重排整条链路：
+            基础内容优先可见，耗时增强后台运行，失败可降级，重试会自行醒来。
+          </p>
+        </div>
+        <div class="hero-meta" aria-label="交付摘要">
+          <div class="hero-meta-row"><span>优化提交</span><strong>cb1aa42</strong></div>
+          <div class="hero-meta-row"><span>自动化测试</span><strong>403 / 403 通过</strong></div>
+          <div class="hero-meta-row"><span>生产构建</span><strong>48 个路由通过</strong></div>
+          <div class="hero-meta-row"><span>存储结论</span><strong>继续使用 GitHub</strong></div>
+        </div>
+      </section>
+
+      <section class="section" id="conclusion">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Outcome</p>
+            <h2>一句话结论</h2>
+          </div>
+          <p class="section-intro">
+            主要瓶颈确实在流程设计，其次才是 LLM 响应速度；GitHub 只是可靠的文件来源，不是总结慢和频繁报错的主因。
+          </p>
+        </div>
+        <div class="summary-box">
+          <div>
+            <p>
+              同步已经从“所有阶段串行结束后才看见结果”，改成“每完成一个文件就渐进可见；摘要、关系、向量和情境索引按优先级后台补齐”。
+            </p>
+            <div class="pill-row" aria-label="完成状态">
+              <span class="pill success">核心改动已完成</span>
+              <span class="pill success">全部门禁通过</span>
+              <span class="pill success">已推送 main</span>
+              <span class="pill">GitHub 保留</span>
+            </div>
+          </div>
+          <div class="status-seal" aria-label="验收通过">验收<br />通过</div>
+        </div>
+      </section>
+
+      <section class="section" id="diagnosis">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Root cause</p>
+            <h2>根因如何合并判断</h2>
+          </div>
+          <p class="section-intro">
+            两份意见的核心并不冲突。合并后的判断是：流程决定了排队时长和错误体感，模型决定了单次调用下限，GitHub 拉取本身很快。
+          </p>
+        </div>
+
+        <div class="attribution-grid">
+          <article class="attribution-card">
+            <div class="attribution-value">60%</div>
+            <h3>同步流程</h3>
+            <div class="bar-track" aria-hidden="true"><div class="bar-fill" style="--value: 60%; --bar-color: var(--clay)"></div></div>
+            <p>单车道、增强阶段阻塞首屏、延迟任务缺少自动唤醒，以及前后端超时口径不一致。</p>
+          </article>
+          <article class="attribution-card">
+            <div class="attribution-value">30%</div>
+            <h3>LLM 模型</h3>
+            <div class="bar-track" aria-hidden="true"><div class="bar-fill" style="--value: 30%; --bar-color: var(--ochre)"></div></div>
+            <p>90 天诊断样本中单次调用平均约 18 秒，概念摄入平均约 30 秒；输出截断会造成重试。</p>
+          </article>
+          <article class="attribution-card">
+            <div class="attribution-value">10%</div>
+            <h3>GitHub / 传输</h3>
+            <div class="bar-track" aria-hidden="true"><div class="bar-fill" style="--value: 10%; --bar-color: var(--blue)"></div></div>
+            <p>1107 个文件的目录扫描诊断约 2.2 秒；它不是几小时队列和 <code>finish_length</code> 的来源。</p>
+          </article>
+        </div>
+
+        <div class="baseline-note">
+          <strong>诊断基线，不是优化后的成绩：</strong>
+          历史样本包含 4038 次 LLM 调用；曾出现 251 个文件约 2 小时、929 个文件约 13.4 小时的运行。
+          这些数据用于定位旧链路瓶颈，优化后的真实 p50 / p95 需要在新版本部署后重新采样，报告不做虚假提速承诺。
+        </div>
+      </section>
+
+      <section class="section" id="architecture">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Architecture</p>
+            <h2>架构从串行等待变成分层交付</h2>
+          </div>
+          <p class="section-intro">
+            最重要的变化不是“把并发数字调大”，而是重新定义什么叫完成：资料和概念写入后即可使用，增强分析不再绑架核心结果。
+          </p>
+        </div>
+
+        <div class="flow-compare" aria-label="优化前后流程对比">
+          <article class="flow-panel">
+            <span class="flow-label">优化前 · 一条长链</span>
+            <div class="flow">
+              <div class="flow-step"><span class="step-number">1</span><span><strong>GitHub 拉取文件</strong>文件进入统一队列。</span></div>
+              <div class="flow-step"><span class="step-number">2</span><span><strong>单并发 LLM 摄入</strong>大量文件排成一列。</span></div>
+              <div class="flow-step"><span class="step-number">3</span><span><strong>同步等待情境与关系</strong>增强任务拖住用户可见结果。</span></div>
+              <div class="flow-step"><span class="step-number">4</span><span><strong>整批结束后刷新</strong>中间产物已经存在，前端却看不到。</span></div>
+              <div class="flow-step"><span class="step-number">5</span><span><strong>失败显示为整文件失败</strong>甚至可能只是非关键增强失败。</span></div>
+            </div>
+          </article>
+
+          <article class="flow-panel after">
+            <span class="flow-label">优化后 · 核心优先</span>
+            <div class="flow">
+              <div class="flow-step"><span class="step-number">1</span><span><strong>Webhook / 定时 / 手动触发</strong>只扫描真实变化，GitHub 继续做源文件库。</span></div>
+              <div class="flow-step"><span class="step-number">2</span><span><strong>核心摄入安全并发 2</strong>资料、概念、分块先写入 SQLite。</span></div>
+              <div class="flow-step"><span class="step-number">3</span><span><strong>完成一个就同步一个</strong>浏览器按变更游标拉增量快照。</span></div>
+              <div class="flow-step"><span class="step-number">4</span><span><strong>增强任务分级排队</strong>摘要 50、向量 40、关系 15、情境 5。</span></div>
+              <div class="flow-step"><span class="step-number">5</span><span><strong>失败可降级、重试自唤醒</strong>核心内容仍可用，问题中心保留告警。</span></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="changes">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Implementation</p>
+            <h2>具体优化了什么</h2>
+          </div>
+          <p class="section-intro">
+            改动覆盖请求时限、队列、模型输出、调度、前端反馈和运维可观测性。每一项都围绕“更早看到结果、少报假错、失败后能恢复”。
+          </p>
+        </div>
+
+        <div class="change-grid">
+          <article class="change-card">
+            <span class="change-index">01 · 首次结果</span>
+            <h3>把情境索引移出核心摄入</h3>
+            <p>资料、概念与基础分块提交后立即返回；耗时的情境前缀改由低优先级后台任务完成，不再阻塞用户看到总结。</p>
+            <details><summary>查看技术落点</summary><div class="file-list"><code>lib/server-ingest.ts</code><code>lib/analysis-worker.ts</code></div></details>
+          </article>
+
+          <article class="change-card">
+            <span class="change-index">02 · 并发策略</span>
+            <h3>从全局单车道改为分阶段限流</h3>
+            <p>核心摄入、摘要、向量默认并发 2；关系与情境维持 1。这样先获得可感知收益，同时避免一次拉到 4 造成 429 或 SQLite 争用。</p>
+            <details><summary>查看技术落点</summary><div class="file-list"><code>lib/llm-budgets.ts</code><code>.env.example</code></div></details>
+          </article>
+
+          <article class="change-card">
+            <span class="change-index">03 · 模型输出</span>
+            <h3>截断不再被当成成功</h3>
+            <p>结构化 JSON 若以 <code>finish_reason=length</code> 结束会明确失败并扩容重试；只有推理、没有正文的返回也会单独诊断。</p>
+            <details><summary>查看技术落点</summary><div class="file-list"><code>lib/gateway.ts</code><code>lib/gateway.test.ts</code></div></details>
+          </article>
+
+          <article class="change-card">
+            <span class="change-index">04 · Token 预算</span>
+            <h3>重试会真正改变条件</h3>
+            <p>摘要从 2000 token 起步，关系从 2400 起步；第二次尝试继续扩大，而不是用同一个 1400 token 上限重复失败。</p>
+            <details><summary>查看技术落点</summary><div class="file-list"><code>lib/analysis-worker.ts</code><code>lib/contextual-chunk.ts</code></div></details>
+          </article>
+
+          <article class="change-card">
+            <span class="change-index">05 · 超时口径</span>
+            <h3>前端不再 30 秒先报错</h3>
+            <p>手动入库前端等待 270 秒，服务端上限 300 秒并传递取消信号。长文档不会出现“页面说失败、服务端其实还在跑”的假失败。</p>
+            <details><summary>查看技术落点</summary><div class="file-list"><code>lib/api-client.ts</code><code>app/api/ingest/route.ts</code></div></details>
+          </article>
+
+          <article class="change-card">
+            <span class="change-index">06 · 自动恢复</span>
+            <h3>延迟重试不再依赖打开页面</h3>
+            <p>worker 会按 <code>not_before_at</code> 设置定时唤醒；进程重启时，boot recovery 会回收孤儿任务并立即启动处理。</p>
+            <details><summary>查看技术落点</summary><div class="file-list"><code>lib/analysis-worker.ts</code><code>lib/boot-recovery.ts</code></div></details>
+          </article>
+
+          <article class="change-card">
+            <span class="change-index">07 · 前端体验</span>
+            <h3>完成一个文件，就看到一个文件</h3>
+            <p>同步弹窗观察完成数并拉取增量快照；请求会合并、串行化并防止旧弹窗生命周期覆盖新状态，不会制造刷新风暴。</p>
+            <details><summary>查看技术落点</summary><div class="file-list"><code>components/GithubSyncModal.tsx</code><code>lib/cloud-sync.ts</code></div></details>
+          </article>
+
+          <article class="change-card">
+            <span class="change-index">08 · 错误语义</span>
+            <h3>增强失败不再等于文件失败</h3>
+            <p>核心内容已写入时，摘要或关系失败会标为“增强降级”；资料仍可使用，问题中心保留明确告警和重试建议。</p>
+            <details><summary>查看技术落点</summary><div class="file-list"><code>lib/sync-observability.ts</code><code>components/sync/IssueCenter.tsx</code></div></details>
+          </article>
+
+          <article class="change-card">
+            <span class="change-index">09 · 熔断保护</span>
+            <h3>模型格式错不会拖垮全线</h3>
+            <p>熔断器只统计真实网络、超时、429 和 5xx；输出截断、解析问题与用户取消不再被算成上游整体故障。</p>
+            <details><summary>查看技术落点</summary><div class="file-list"><code>lib/gateway.ts</code><code>lib/circuit-breaker.ts</code></div></details>
+          </article>
+
+          <article class="change-card">
+            <span class="change-index">10 · 触发机制</span>
+            <h3>定时扫描默认只处理变化</h3>
+            <p>定时任务不再默认强制重算所有文件；Webhook 与 Cron 配置状态进入同步诊断，缺失或从未投递会直接提示。</p>
+            <details><summary>查看技术落点</summary><div class="file-list"><code>app/api/sync/cron/rescan/route.ts</code><code>lib/sync-narrative.ts</code></div></details>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="proof">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Evidence</p>
+            <h2>怎么证明已经通过</h2>
+          </div>
+          <p class="section-intro">
+            验收不是只看“能编译”。这次同时跑了行为测试、静态约束、文档一致性、无用代码扫描与真实 Next.js 生产构建。
+          </p>
+        </div>
+
+        <div class="proof-grid">
+          <article class="proof-card"><div class="proof-value">403</div><h3>测试通过</h3><p>11 个测试套件，0 失败、0 跳过。</p></article>
+          <article class="proof-card"><div class="proof-value">48</div><h3>路由构建</h3><p>所有静态与动态路由均生成成功。</p></article>
+          <article class="proof-card"><div class="proof-value">17.7s</div><h3>编译阶段</h3><p>最终构建缓存命中后的编译耗时。</p></article>
+          <article class="proof-card"><div class="proof-value">6.07MB</div><h3>静态产物</h3><p><code>.next/static</code> 最终体积。</p></article>
+        </div>
+
+        <div class="checklist" aria-label="验证清单">
+          <div class="check"><span class="check-mark">✓</span><span><code>npm test</code> · 403 / 403</span></div>
+          <div class="check"><span class="check-mark">✓</span><span><code>npm run typecheck</code></span></div>
+          <div class="check"><span class="check-mark">✓</span><span><code>npm run lint -- --max-warnings=0</code></span></div>
+          <div class="check"><span class="check-mark">✓</span><span><code>npm run format:check</code></span></div>
+          <div class="check"><span class="check-mark">✓</span><span><code>npm run docs:api:check</code> · 43 routes</span></div>
+          <div class="check"><span class="check-mark">✓</span><span><code>npm run knip</code></span></div>
+          <div class="check"><span class="check-mark">✓</span><span><code>npm run build:measure</code> · 1m 15.9s</span></div>
+          <div class="check"><span class="check-mark">✓</span><span>延迟任务无需页面轮询即可自动唤醒</span></div>
+        </div>
+
+        <div class="commit-box">
+          <div>
+            <strong>优化代码已推送到 main</strong>
+            <span>提交 <code>cb1aa42</code> · 未纳入用户原有的 <code>tmp/</code> 工作区改动</span>
+          </div>
+          <a class="button-link" href="https://github.com/xdesign678/compound/commit/cb1aa42" target="_blank" rel="noreferrer">查看提交</a>
+        </div>
+      </section>
+
+      <section class="section" id="risks">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Operational notes</p>
+            <h2>仍需注意什么</h2>
+          </div>
+          <p class="section-intro">
+            代码层已经完成，但有两类结果不能靠本地测试伪造：外部平台配置是否存在，以及新版本在真实负载下的 p50 / p95。
+          </p>
+        </div>
+
+        <div class="risk-grid">
+          <article class="risk-card external">
+            <span class="priority">上线后优先核对</span>
+            <h3>GitHub Webhook 是外部配置</h3>
+            <p>仓库端点、签名校验和诊断都已就绪；仍需在 Zeabur 配置 <code>GITHUB_WEBHOOK_SECRET</code>，并在 GitHub 仓库确认 push 投递成功。</p>
+          </article>
+          <article class="risk-card">
+            <span class="priority">持续观察</span>
+            <h3>并发采用保守默认值</h3>
+            <p>核心并发从 1 提到 2，而不是直接设为 4。若 429、SQLite busy 和失败率稳定，再按阶段逐级提高。</p>
+          </article>
+          <article class="risk-card">
+            <span class="priority">数据说明</span>
+            <h3>历史耗时不可当作新成绩</h3>
+            <p>旧运行数据用于根因判断。部署后建议采集至少一轮 100+ 文件同步，再比较首个结果时间、总耗时与失败率。</p>
+          </article>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>上线观察项</th><th>建议口径</th><th>判断标准</th><th>动作</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>首个文件可见时间</td><td>从触发同步到浏览器出现首条新资料</td><td>应显著早于整批完成</td><td>若仍等待整批，检查增量快照游标</td></tr>
+              <tr><td>LLM 等待与 429</td><td>按阶段观察队列等待、429 和网关超时</td><td>吞吐提升且错误率不抬升</td><td>只调整对应阶段并发</td></tr>
+              <tr><td>模型输出失败</td><td><code>finish_length</code>、<code>reasoning_only</code></td><td>重试后大部分恢复</td><td>持续失败则替换 JSON 更稳定的模型</td></tr>
+              <tr><td>Webhook 投递</td><td>配置状态与 processed 记录</td><td>push 后出现增量运行</td><td>检查 secret、Payload URL 与 GitHub Delivery</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="next">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Decision</p>
+            <h2>关于 GitHub 的最终决定</h2>
+          </div>
+          <p class="section-intro">
+            不迁移。GitHub 继续负责版本化原文，SQLite 继续负责运行状态、概念、摘要和索引。问题出在处理流水线，不在文件存放位置。
+          </p>
+        </div>
+        <div class="summary-box">
+          <div>
+            <p>保留 GitHub 的版本历史、Obsidian 兼容性和审计能力；通过 Webhook + 增量 Compare 缩短触发路径，而不是换一个存储再重写整套同步逻辑。</p>
+            <div class="pill-row"><span class="pill success">原文：GitHub</span><span class="pill success">运行态：SQLite</span><span class="pill success">浏览器镜像：IndexedDB</span></div>
+          </div>
+          <a class="button-link" href="/sync">打开同步中心</a>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <p>
+          Compound 同步链路优化验收报告 · 生成于 2026-07-18。页面不包含密钥或生产数据明细；所有性能结论均区分历史基线与优化后待观测指标。
+        </p>
+        <div class="footer-links"><a href="#top">回到顶部</a><a href="/">返回 Compound</a></div>
+      </footer>
+    </main>
+
+    <script>
+      const root = document.documentElement;
+      const themeButton = document.getElementById('theme-toggle');
+      const menuButton = document.getElementById('menu-toggle');
+      const nav = document.getElementById('report-nav');
+
+      themeButton?.addEventListener('click', () => {
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const currentDark = root.dataset.theme ? root.dataset.theme === 'dark' : systemDark;
+        const next = currentDark ? 'light' : 'dark';
+        root.dataset.theme = next;
+        try {
+          localStorage.setItem('compound-report-theme', next);
+        } catch {}
+      });
+
+      menuButton?.addEventListener('click', () => {
+        const open = nav?.classList.toggle('open') ?? false;
+        menuButton.setAttribute('aria-expanded', String(open));
+        menuButton.setAttribute('aria-label', open ? '收起报告导航' : '展开报告导航');
+      });
+
+      nav?.querySelectorAll('a').forEach((link) => {
+        link.addEventListener('click', () => {
+          nav.classList.remove('open');
+          menuButton?.setAttribute('aria-expanded', 'false');
+        });
+      });
+    </script>
+  </body>
+</html>
