@@ -105,9 +105,9 @@ async function main() {
 
   const insertSource = db.prepare(\`
     INSERT OR REPLACE INTO sources
-      (id, title, type, author, url, raw_content, ingested_at, external_key)
+      (id, title, type, author, url, raw_content, ingested_at, updated_at, external_key)
     VALUES
-      (@id, @title, 'markdown', NULL, NULL, @raw_content, @ingested_at, @external_key)
+      (@id, @title, 'markdown', NULL, NULL, @raw_content, @ingested_at, @updated_at, @external_key)
   \`);
   const insertConcept = db.prepare(\`
     INSERT OR REPLACE INTO concepts
@@ -133,6 +133,7 @@ async function main() {
         title: 'Benchmark Source ' + i,
         raw_content: bodyFor(i),
         ingested_at: now - i,
+        updated_at: now - i,
         external_key: 'perf:' + i,
       });
     }
