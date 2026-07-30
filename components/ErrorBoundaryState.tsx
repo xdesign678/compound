@@ -208,9 +208,14 @@ export function ErrorBoundaryState({ error, reset, sentryEventId }: ErrorBoundar
   };
 
   const handleCopy = async () => {
-    await navigator.clipboard?.writeText(errorId);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
+    // 非安全上下文/权限拒绝时 clipboard 会抛错，降级为选中文本让用户手动复制
+    try {
+      await navigator.clipboard?.writeText(errorId);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
   };
 
   return (

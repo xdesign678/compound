@@ -60,10 +60,6 @@ export function Toast() {
   useLocale();
   const primaryToast = useAppStore((s) => s.toast);
   const toastQueue = useAppStore((s) => s.toastQueue);
-  const isOnline = useAppStore((s) => s.isOnline);
-  const pausedCount = useAppStore(
-    (s) => s.tasks.filter((task) => task.status === 'paused-offline').length,
-  );
   const hideToast = useAppStore((s) => s.hideToast);
 
   const dismissQueueItem = (id: number) => {
@@ -77,20 +73,6 @@ export function Toast() {
 
   return (
     <div className="toast-container">
-      {!isOnline && (
-        <div
-          className="toast visible toast-error"
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          <span className="toast-text">
-            {pausedCount > 0
-              ? t('toast.offlineWithTasks', { count: pausedCount })
-              : t('toast.offline')}
-          </span>
-        </div>
-      )}
       {/* Additional stacked toasts */}
       {additionalToasts.map((t) => (
         <ToastSlot key={t.id} toast={t} onDismiss={() => dismissQueueItem(t.id)} />

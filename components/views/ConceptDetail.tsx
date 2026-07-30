@@ -195,14 +195,18 @@ export function ConceptDetail({ id }: { id: string }) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const versionDialogRef = useRef<HTMLDivElement>(null);
   const deleteDialogRef = useRef<HTMLDivElement>(null);
+  const tocDialogRef = useRef<HTMLDivElement>(null);
   // 点击 popover 时浏览器会清除外部选区 -> selectionchange 触发 -> popover 被卸载 ->
   // onClick 无法触发。用一个短暂的抑制窗口，让 click 先落地。
   const suppressDismissRef = useRef(false);
   const selectionInProgressRef = useRef(false);
 
-  const concept = useLiveQuery(async () => getDb().concepts.get(id), [id]);
+  // null 哨兵区分「加载中」与「不存在」，避免打开存在的概念先闪一帧「未找到概念」
+  const concept = useLiveQuery(async () => (await getDb().concepts.get(id)) ?? null, [id]);
   useFocusTrap(versionDialogRef, versionDialog.open);
   useFocusTrap(deleteDialogRef, showDeleteConfirm);
+  // 目录弹窗与来源页对齐：焦点圈定 + 关闭后焦点回收
+  useFocusTrap(tocDialogRef, tocOpen);
   const sources = useLiveQuery(async () => {
     if (!concept) return [];
     const items = await getDb().sources.bulkGet(concept.sources);
@@ -587,6 +591,14 @@ export function ConceptDetail({ id }: { id: string }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [closeVersionDialog, showDeleteConfirm, versionDialog.open]);
 
+  if (concept === undefined) {
+    return (
+      <div className="empty-state" role="status" aria-live="polite">
+        加载中…
+      </div>
+    );
+  }
+
   if (!concept) {
     return (
       <div className="empty-state" role="status">
@@ -642,9 +654,9 @@ export function ConceptDetail({ id }: { id: string }) {
           {isFresh ? '刚更新 · ' : '更新于 '}
           {formatRelativeTime(concept.updatedAt)}
         </span>
-        <span>·</span>
+        <span aria-hidden="true">·</span>
         <span>{concept.sources.length} 份资料</span>
-        <span>·</span>
+        <span aria-hidden="true">·</span>
         <span>{concept.related.length} 个链接</span>
         <span>·</span>
         <span>v{concept.version}</span>
@@ -689,7 +701,7 @@ export function ConceptDetail({ id }: { id: string }) {
 
       {sources && sources.length > 0 && (
         <div className="detail-section">
-          <h3>基于资料</h3>
+          <h2 className="detail-section-title">基于资料</h2>
           {sources.map((s) => (
             <button
               key={s!.id}
@@ -714,7 +726,7 @@ export function ConceptDetail({ id }: { id: string }) {
 
       {related && related.length > 0 && (
         <div className="detail-section">
-          <h3>相关概念</h3>
+          <h2 className="detail-section-title">相关概念</h2>
           <div className="related-grid">
             {related.map((r) => (
               <button
@@ -731,7 +743,7 @@ export function ConceptDetail({ id }: { id: string }) {
       )}
 
       <div className="detail-section">
-        <h3>AI 编辑记录</h3>
+        <h2 className="detail-section-title">AI 编辑记录</h2>
         {canInspectVersion ? (
           <button
             className="edit-log-item edit-log-button"
@@ -872,7 +884,12 @@ export function ConceptDetail({ id }: { id: string }) {
             aria-labelledby={tocTitleId}
             onClick={closeToc}
           >
-            <div className="modal source-toc-dialog" onClick={(event) => event.stopPropagation()}>
+            <div
+              ref={tocDialogRef}
+              className="modal source-toc-dialog"
+              tabIndex={-1}
+              onClick={(event) => event.stopPropagation()}
+            >
               <div className="modal-handle" />
               <div className="settings-hero source-toc-head">
                 <div>
@@ -916,29 +933,14 @@ export function ConceptDetail({ id }: { id: string }) {
         )}
 
       {/* Action buttons */}
-      <div
-        className="detail-section"
-        style={{
-          display: 'flex',
-          gap: 10,
-          paddingTop: 16,
-          borderTop: '1px solid var(--border-subtle)',
-        }}
-      >
-        <button
-          className="modal-btn"
-          type="button"
-          disabled={flagging}
-          onClick={handleFlagConcept}
-          style={{ flex: 1, width: 'auto', padding: '10px 16px', fontSize: 14 }}
-        >
-          {flagging ? '标记中...' : '⚠ 标记有误'}
+      <div className="detail-section detail-actions">
+        <button className="modal-btn" type="button" disabled={flagging} onClick={handleFlagConcept}>
+          {flagging ? '标记中…' : '标记有误'}
         </button>
         <button
           className="modal-btn danger"
           type="button"
           onClick={() => setShowDeleteConfirm(true)}
-          style={{ flex: 1, width: 'auto', padding: '10px 16px', fontSize: 14 }}
         >
           删除概念
         </button>
@@ -962,23 +964,21 @@ export function ConceptDetail({ id }: { id: string }) {
             <p id="delete-confirm-desc" className="modal-desc">
               确定要删除「{concept.title}」吗？此操作不可撤销。
             </p>
-            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+            <div className="detail-dialog-actions">
               <button
                 className="modal-btn"
                 type="button"
                 onClick={() => setShowDeleteConfirm(false)}
-                style={{ flex: 1 }}
               >
                 取消
               </button>
               <button
-                className="modal-btn danger"
+                className="modal-btn danger-confirm"
                 type="button"
                 disabled={deleting}
                 onClick={handleDeleteConcept}
-                style={{ flex: 1 }}
               >
-                {deleting ? '删除中...' : '确认删除'}
+                {deleting ? '删除中…' : '确认删除'}
               </button>
             </div>
           </div>

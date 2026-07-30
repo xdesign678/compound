@@ -1,5 +1,9 @@
 /* Source list cards belong to the list view so first navigation does not
    depend on the lazily loaded detail chunk. */
+.source-search-panel {
+  margin-bottom: 18px;
+}
+
 .source-card {
   background: var(--bg-card);
   border: 1px solid var(--border-light);
@@ -8,6 +12,8 @@
   margin-bottom: var(--space-md);
   cursor: pointer;
   content-visibility: auto;
+  /* 变高卡片配估值高度，避免滚动条跳动与滚动恢复错位 */
+  contain-intrinsic-size: auto 120px;
   box-shadow: none;
   transition:
     box-shadow var(--motion-duration-base) var(--motion-ease-standard),

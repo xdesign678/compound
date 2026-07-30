@@ -17,14 +17,12 @@
   padding: 6px 14px;
   font-size: var(--text-xs);
   white-space: nowrap;
+  /* 抵消 .modal-btn.primary 自带的 margin-bottom:8px，banner 内垂直居中 */
+  margin-bottom: 0;
 }
 
 .library-search-panel {
   margin: 0 16px 10px;
-}
-
-.source-search-panel {
-  margin-bottom: 18px;
 }
 
 .library-filter-stack {
@@ -49,7 +47,7 @@
 
 .library-filter-section-secondary {
   padding: 14px 16px 16px;
-  border-top: 1px solid rgba(226, 146, 106, 0.12);
+  border-top: 1px solid rgb(var(--brand-clay-rgb) / 0.12);
   background: var(--bg-card);
 }
 
@@ -87,7 +85,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   border: 1px solid var(--border-light);
   background: var(--bg-card);
   color: var(--text-secondary);
@@ -106,7 +104,7 @@
 
 .library-primary-scroll-btn:not(:disabled):hover {
   color: var(--brand-clay);
-  border-color: rgba(226, 146, 106, 0.24);
+  border-color: rgb(var(--brand-clay-rgb) / 0.24);
   transform: translateY(-1px);
 }
 
@@ -162,14 +160,14 @@
 }
 
 .library-primary-card.active {
-  border-color: rgba(226, 146, 106, 0.62);
+  border-color: rgb(var(--brand-clay-rgb) / 0.62);
   background: var(--bg-card);
   box-shadow: var(--shadow-sm);
 }
 
 .library-primary-card:focus-visible {
-  border-color: rgba(226, 146, 106, 0.62);
-  box-shadow: 0 0 0 3px rgba(226, 146, 106, 0.12);
+  border-color: rgb(var(--brand-clay-rgb) / 0.62);
+  box-shadow: 0 0 0 3px rgb(var(--brand-clay-rgb) / 0.12);
 }
 
 .library-primary-card-icon {
@@ -178,7 +176,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  color: rgba(70, 68, 64, 0.88);
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -202,7 +200,7 @@
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   font-weight: 600;
-  color: rgba(70, 68, 64, 0.68);
+  color: var(--text-secondary);
 }
 
 .library-primary-card.active .library-primary-card-count {
@@ -269,20 +267,20 @@
 }
 
 .library-secondary-chip:hover {
-  border-color: rgba(226, 146, 106, 0.26);
+  border-color: rgb(var(--brand-clay-rgb) / 0.26);
   color: var(--text-primary);
 }
 
 .library-secondary-chip.active {
-  border-color: rgba(226, 146, 106, 0.46);
-  background: rgba(255, 250, 246, 0.98);
+  border-color: rgb(var(--brand-clay-rgb) / 0.46);
+  background: color-mix(in srgb, var(--brand-clay) 10%, var(--bg-card));
   color: var(--brand-clay-text);
-  box-shadow: 0 8px 18px rgba(226, 146, 106, 0.12);
+  box-shadow: 0 8px 18px rgb(var(--brand-clay-rgb) / 0.12);
 }
 
 .library-secondary-chip:focus-visible {
-  border-color: rgba(226, 146, 106, 0.46);
-  box-shadow: 0 0 0 3px rgba(226, 146, 106, 0.12);
+  border-color: rgb(var(--brand-clay-rgb) / 0.46);
+  box-shadow: 0 0 0 3px rgb(var(--brand-clay-rgb) / 0.12);
 }
 
 .library-secondary-chip-icon {
@@ -291,7 +289,7 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  color: rgba(95, 87, 78, 0.56);
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -311,7 +309,7 @@
   font-family: var(--font-sans);
   font-size: var(--text-xs);
   font-weight: 600;
-  color: rgba(95, 87, 78, 0.56);
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -329,13 +327,13 @@
 .library-secondary-chip-arrow {
   width: 14px;
   height: 14px;
-  color: rgba(95, 87, 78, 0.35);
+  color: var(--text-tertiary);
   flex-shrink: 0;
   transition: transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 .library-secondary-chip.active .library-secondary-chip-arrow {
-  color: rgba(226, 146, 106, 0.55);
+  color: rgb(var(--brand-clay-rgb) / 0.55);
   transform: rotate(90deg);
 }
 
@@ -470,7 +468,7 @@
 
   .library-primary-card-title {
     min-height: 26px;
-    font-size: 12.5px;
+    font-size: var(--text-xs);
   }
 
   .library-primary-card-count {
@@ -490,7 +488,7 @@
     /* 44px minimum touch target (Apple HIG) — was 34px. */
     min-height: 44px;
     padding: 0 12px;
-    font-size: 12.5px;
+    font-size: var(--text-xs);
     border-radius: var(--radius-full);
     gap: var(--space-xs);
   }
@@ -540,13 +538,13 @@
 }
 
 .library-grid .concept-card .title {
-  font-size: 15.5px;
+  font-size: var(--text-base);
   font-weight: 650;
   margin-bottom: 6px;
 }
 
 .library-grid .concept-card .summary {
-  font-size: 14.5px;
+  font-size: var(--text-base);
   line-height: 1.6;
   color: var(--text-secondary);
   margin-bottom: var(--space-md);
@@ -568,7 +566,7 @@
   background: var(--bg-muted);
   border: 1px solid rgba(0, 0, 0, 0.05);
   font-family: var(--font-sans);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   line-height: 1.4;
   color: var(--text-secondary);
   letter-spacing: 0;
@@ -576,7 +574,7 @@
 }
 
 .library-grid .concept-card .meta {
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
   gap: var(--space-xs);
 }
@@ -642,3 +640,80 @@
 }
 
 /* Category Wiki Card (in library grid) */
+.category-wiki-card {
+  grid-column: 1 / -1;
+  background: linear-gradient(
+    135deg,
+    var(--bg-primary) 0%,
+    color-mix(in srgb, var(--color-brand) 8%, var(--bg-primary)) 100%
+  );
+  border: 1.5px solid color-mix(in srgb, var(--color-brand) 20%, var(--border-light));
+}
+
+.category-wiki-card:hover {
+  border-color: color-mix(in srgb, var(--color-brand) 40%, var(--border-light));
+}
+
+.category-wiki-card.active {
+  border-color: var(--color-brand);
+  background: linear-gradient(
+    135deg,
+    var(--bg-primary) 0%,
+    color-mix(in srgb, var(--color-brand) 12%, var(--bg-primary)) 100%
+  );
+}
+
+.category-wiki-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.category-wiki-card-icon {
+  color: var(--color-brand);
+  display: flex;
+  align-items: center;
+}
+
+.category-wiki-card-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.category-wiki-card-status {
+  font-size: var(--text-xs);
+}
+
+.category-wiki-card-status--pending {
+  color: var(--text-tertiary);
+}
+
+.category-wiki-card-status--ready {
+  color: var(--color-success);
+}
+
+.category-wiki-card-status--stale {
+  color: var(--color-warning);
+}
+
+/* 焦点环去重：卡片/芯片自绘 box-shadow 环，去掉全局 outline（同特异性后加载覆盖） */
+.library-primary-card:focus-visible,
+.library-secondary-chip:focus-visible {
+  outline: none;
+}
+
+/* 触控目标补齐（自动归类按钮 / 分类滚动按钮 / 清除筛选） */
+@media (pointer: coarse) {
+  .library-categorize-banner .library-categorize-btn {
+    min-height: 44px;
+  }
+  .library-primary-scroll-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .filter-indicator-clear {
+    min-height: 44px;
+    padding: 6px 14px;
+  }
+}

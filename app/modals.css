@@ -14,46 +14,6 @@
 .settings-modal .modal-handle {
   margin-bottom: 14px;
 }
-.settings-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-lg);
-  padding: 0 6px 14px;
-}
-.settings-hero h3 {
-  font-size: 22px;
-  margin-bottom: 5px;
-  color: var(--text-primary);
-}
-.settings-hero p {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  line-height: 1.55;
-  color: var(--text-secondary);
-}
-.settings-kicker {
-  margin-bottom: 5px;
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0;
-  color: var(--text-primary);
-}
-.settings-close-btn {
-  flex: 0 0 auto;
-  border: 1px solid var(--border-light);
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border-radius: var(--radius-full);
-  padding: 7px 12px;
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  cursor: pointer;
-}
 .modal p.modal-desc {
   font-family: var(--font-reading);
   font-size: 14px;
@@ -136,7 +96,7 @@
   padding: 14px;
   background: var(--bg-card);
   border: 1px solid var(--border-light);
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   cursor: pointer;
   transition:
     background var(--motion-duration-fast) var(--motion-ease-standard),
@@ -209,7 +169,7 @@
   width: 100%;
   background: var(--bg-card);
   border: 1px solid var(--border-default);
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   padding: 10px 12px;
   font-size: var(--text-base);
   font-family: var(--font-sans);
@@ -462,19 +422,19 @@
   line-height: 1.45;
 }
 .settings-status-success {
-  border-color: rgba(217, 119, 87, 0.24);
-  background: var(--brand-clay-soft);
-  color: var(--brand-clay-text);
+  border-color: color-mix(in srgb, var(--color-success) 30%, transparent);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+  color: var(--color-success);
 }
 .settings-status-warning {
-  border-color: rgba(217, 119, 87, 0.28);
-  background: rgba(217, 119, 87, 0.08);
-  color: var(--brand-clay-text);
+  border-color: color-mix(in srgb, var(--color-warning) 34%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+  color: var(--color-warning);
 }
 .settings-status-danger {
-  border-color: rgba(217, 119, 87, 0.34);
-  background: rgba(217, 119, 87, 0.08);
-  color: var(--brand-clay);
+  border-color: color-mix(in srgb, var(--color-error) 34%, transparent);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  color: var(--color-error);
 }
 .settings-status-info {
   border-color: rgba(104, 112, 126, 0.24);
@@ -686,17 +646,8 @@
   margin-top: 2px;
 }
 
-/* Page transition animations */
-@keyframes tabFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+/* Page transition animations — tabFadeIn / slideInRight 与 .tab-view 已移至
+   globals.css（首屏急切渲染需要），此处仅保留本文件内使用的 slideUpIn。 */
 @keyframes slideUpIn {
   from {
     opacity: 0;
@@ -706,60 +657,6 @@
     opacity: 1;
     transform: translateY(0);
   }
-}
-@keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(28px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-.tab-view {
-  animation: tabFadeIn var(--motion-duration-base) var(--motion-ease-emphasized) forwards;
-}
-.detail-view {
-  animation: slideInRight var(--motion-duration-slow) var(--motion-ease-emphasized) forwards;
-}
-
-/* Mobile detail overlay — full-screen layer on top of the list view.
-   The list stays mounted (display:none) so its scroll position is preserved. */
-.mobile-detail-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  background: var(--bg-primary);
-  display: flex;
-  flex-direction: column;
-  transform: translateZ(0);
-  will-change: transform;
-  animation: slideInRight var(--motion-duration-slow) var(--motion-ease-emphasized) forwards;
-}
-.mobile-detail-header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  padding: 6px 20px;
-  min-height: auto;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-default);
-}
-.mobile-detail-header .back-btn {
-  position: relative;
-  z-index: 2;
-}
-.mobile-detail-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
-  touch-action: pan-y;
 }
 
 /* Settings responsive layout */
@@ -854,87 +751,36 @@
   }
 }
 
-/* Loading skeleton */
-@keyframes shimmer {
-  0% {
-    background-position: -300% 0;
-  }
-  100% {
-    background-position: 300% 0;
-  }
-}
-.loading-skeleton {
-  padding: var(--space-xl);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.loading-copy {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-  margin-bottom: 6px;
-  color: var(--text-secondary);
-  font-family: var(--font-sans);
-}
-.loading-copy span {
-  color: var(--brand-clay);
-  font-size: 11px;
-  font-weight: 650;
-}
-.loading-copy strong {
-  color: var(--text-primary);
-  font-size: var(--text-base);
-  font-weight: 650;
-  line-height: 1.45;
-}
-.skeleton {
-  border-radius: var(--radius-md);
-  background: linear-gradient(
-    90deg,
-    var(--bg-secondary) 25%,
-    var(--bg-hover) 50%,
-    var(--bg-secondary) 75%
-  );
-  background-size: 300% 100%;
-  animation: shimmer 1.6s ease-in-out infinite;
-}
-.skeleton-header {
-  height: 20px;
-  width: 45%;
-  border-radius: var(--radius-sm);
-  margin-bottom: 6px;
-}
-.skeleton-card {
-  height: 78px;
-}
-/* Skeleton variants per view */
-.skeleton-sources .skeleton-card {
-  height: 60px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-  padding: var(--space-md) var(--space-lg);
-}
-.skeleton-sources .skeleton-card::before {
-  content: '';
-  display: block;
-  height: 14px;
-  width: 55%;
-  border-radius: var(--radius-sm);
-  background: inherit;
-}
-.skeleton-sources .skeleton-card::after {
-  content: '';
-  display: block;
-  height: 10px;
-  width: 30%;
-  border-radius: var(--radius-sm);
-  background: inherit;
-  opacity: 0.6;
-}
+/* Loading skeleton 基础样式已移至 globals.css（首屏骨架需要急切加载） */
 
 /* Note Editor — full-screen WYSIWYG Markdown editor */
+/* 工具栏按钮样式（原在 source-detail.css，NoteEditor 宿主只有 IngestModal，
+   应随本文件加载；NoteEditor 自身不 import CSS） */
+.note-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+  font-family: var(--font-sans);
+}
+.note-editor-toolbar button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.note-editor-toolbar button:hover {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
 .note-editor-overlay {
   position: absolute;
   inset: 0;
@@ -1313,7 +1159,7 @@
   border: 1px solid var(--border, #e5e1d8);
   background: transparent;
   color: var(--ink, #1a1a18);
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   cursor: pointer;
   transition:
     background var(--motion-duration-fast) var(--motion-ease-standard),
@@ -1449,7 +1295,7 @@
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  padding: 18px 18px 20px;
+  padding: 18px 18px calc(20px + var(--safe-bottom));
   gap: 14px;
   background: var(--bg-primary);
   border: 1px solid var(--border-light);
@@ -1592,7 +1438,7 @@
 .gh-sync-badge,
 .gh-sync-mini-stats {
   padding: 6px 10px;
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   border: 1px solid var(--border-light);
   background: var(--bg-muted);
   font-family: var(--font-sans);
@@ -1652,8 +1498,8 @@
 }
 
 .gh-sync-stage-item.done .gh-sync-stage-dot {
-  background: #6f9d71;
-  border-color: #6f9d71;
+  background: var(--color-success);
+  border-color: var(--color-success);
 }
 
 .gh-sync-stage-item.current .gh-sync-stage-dot {
@@ -1677,7 +1523,7 @@
   padding: 14px 16px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-light);
-  background: #fcfbf8;
+  background: var(--bg-secondary);
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -1732,7 +1578,7 @@
   padding: 12px 12px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-light);
-  background: #fcfbf8;
+  background: var(--bg-secondary);
 }
 
 .gh-sync-timeline-dot {
@@ -1741,15 +1587,15 @@
   margin-top: 7px;
   border-radius: var(--radius-full);
   flex-shrink: 0;
-  background: #c4beb0;
+  background: var(--text-tertiary);
 }
 
 .gh-sync-timeline-item.success .gh-sync-timeline-dot {
-  background: #6f9d71;
+  background: var(--color-success);
 }
 
 .gh-sync-timeline-item.failed .gh-sync-timeline-dot {
-  background: #c26f63;
+  background: var(--color-error);
 }
 
 .gh-sync-timeline-body {
@@ -1838,7 +1684,7 @@
 .btn-primary,
 .btn-ghost {
   padding: 10px 16px;
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   font-size: 14px;
   font-family: var(--font-sans);
   font-weight: 500;
@@ -1923,7 +1769,7 @@
   background: rgba(194, 111, 99, 0.06);
   padding: var(--space-lg);
   font-size: var(--text-sm);
-  color: #9f4e43;
+  color: var(--color-error);
 }
 
 .gh-sync-error pre {
@@ -1939,7 +1785,7 @@
 .gh-sync-error-main {
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  color: #9f4e43;
+  color: var(--color-error);
   margin: 0 0 6px;
   line-height: 1.5;
 }
@@ -1949,7 +1795,7 @@
 .gh-sync-error-toggle {
   background: none;
   border: none;
-  color: #9f4e43;
+  color: var(--color-error);
   font-family: var(--font-sans);
   font-size: var(--text-xs);
   cursor: pointer;
@@ -2016,7 +1862,7 @@
 @media (max-width: 640px) {
   .gh-sync-modal {
     max-height: 92vh;
-    padding: 14px 14px 16px;
+    padding: 14px 14px calc(16px + var(--safe-bottom));
   }
   .gh-sync-stage-list {
     grid-template-columns: 1fr 1fr;
@@ -2218,7 +2064,7 @@
   .settings-modal .settings-segmented button {
     min-height: 36px;
     border: none;
-    border-radius: 7.5px;
+    border-radius: var(--radius-control);
     padding: 0 14px;
     background: transparent;
     color: var(--text-primary);
@@ -2292,7 +2138,7 @@
 
   /* Presets */
   .settings-modal .settings-preset {
-    border-radius: 7.5px;
+    border-radius: var(--radius-control);
     min-height: 32px;
     font-size: var(--text-xs);
   }
@@ -2338,12 +2184,10 @@
     color: var(--text-primary);
   }
   .settings-modal .settings-mobile-tabs .settings-segmented button.active {
-    background: #111111;
-    color: #ffffff;
+    background: var(--text-primary);
+    color: var(--bg-primary);
     font-weight: 750;
-    box-shadow:
-      0 2px 8px rgba(0, 0, 0, 0.18),
-      0 0 0 1px rgba(0, 0, 0, 0.22);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   }
   .settings-modal .settings-main {
     flex: 1;

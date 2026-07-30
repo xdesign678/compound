@@ -2,7 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { STATUS_TEXT, badgeTone, fmtDate, type Dashboard, type SyncEvent } from './types';
+import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
+import {
+  STATUS_TEXT,
+  STAGE_TEXT,
+  badgeTone,
+  fmtDate,
+  fmtRelative,
+  type Dashboard,
+  type SyncEvent,
+} from './types';
 import FileTable from './FileTable';
 import PipelineStrip from './PipelineStrip';
 import Sparkline from './Sparkline';
@@ -44,13 +53,22 @@ export default function AdvancedDrawer({
 }: Props) {
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const openerRef = useRef<HTMLElement | null>(null);
+  const drawerRef = useRef<HTMLElement | null>(null);
   const [opsTab, setOpsTab] = useState<'dlq' | 'webhooks'>('dlq');
+  // aria-modal 抽屉需要焦点圈定，否则 Tab 会逃逸到背景页面
+  useFocusTrap(drawerRef, open);
   useEffect(() => {
     if (!open) return;
     openerRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const originalOverflow = document.body.style.overflow;
+    // 锁滚动时补偿滚动条宽度，避免居中的页面横向跳动 ~15px
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    const originalPaddingRight = document.body.style.paddingRight;
     document.body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
     closeRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -62,6 +80,7 @@ export default function AdvancedDrawer({
     return () => {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = originalOverflow;
+      document.body.style.paddingRight = originalPaddingRight;
       openerRef.current?.focus();
     };
   }, [open, onClose]);
@@ -82,11 +101,13 @@ export default function AdvancedDrawer({
   return (
     <div className="sync-v2-drawer-backdrop" onClick={onClose}>
       <aside
+        ref={drawerRef}
         className="sync-v2-drawer"
         role="dialog"
         aria-modal="true"
         aria-labelledby="sync-v2-drawer-title"
         aria-describedby="sync-v2-drawer-desc"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <header className="sync-v2-drawer-head">
@@ -220,7 +241,7 @@ export default function AdvancedDrawer({
                   <div className="sync-v2-drawer-actions">
                     {Object.entries(dlq.byStage).map(([stage, count]) => (
                       <span key={stage} className="sync-v2-badge tone-bad">
-                        {stage} · {count}
+                        {STAGE_TEXT[stage] || stage} · {count}
                       </span>
                     ))}
                   </div>
@@ -230,8 +251,12 @@ export default function AdvancedDrawer({
                     {dlq.recent.map((job) => (
                       <li key={job.id} className="sync-v2-event tone-bad">
                         <div className="sync-v2-event-head">
-                          <span className="sync-v2-badge tone-bad">{job.stage}</span>
-                          <span className="sync-v2-event-when">{fmtDate(job.dead_letter_at)}</span>
+                          <span className="sync-v2-badge tone-bad">
+                            {STAGE_TEXT[job.stage] || job.stage}
+                          </span>
+                          <span className="sync-v2-event-when" title={fmtDate(job.dead_letter_at)}>
+                            {fmtRelative(job.dead_letter_at)}
+                          </span>
                         </div>
                         {job.source_path ? (
                           <code className="sync-v2-event-path">{job.source_path}</code>
@@ -308,13 +333,7 @@ export default function AdvancedDrawer({
 
           <section className="sync-v2-drawer-section" aria-label="完整文件表">
             <h3>完整文件表</h3>
-            <FileTable
-              items={items}
-              stageFilter={null}
-              onClearStageFilter={() => undefined}
-              busy={busy}
-              onRetryItem={onRetryItem}
-            />
+            <FileTable items={items} busy={busy} onRetryItem={onRetryItem} />
           </section>
 
           <section className="sync-v2-drawer-section" aria-label="事件流">
@@ -342,8 +361,14 @@ function EventRow({ event }: { event: SyncEvent }) {
         <span className={`sync-v2-badge tone-${badgeTone(event.level)}`}>
           {STATUS_TEXT[event.level] || event.level}
         </span>
-        {event.stage ? <span className="sync-v2-badge tone-neutral">{event.stage}</span> : null}
-        <span className="sync-v2-event-when">{fmtDate(event.at)}</span>
+        {event.stage ? (
+          <span className="sync-v2-badge tone-neutral">
+            {STAGE_TEXT[event.stage] || event.stage}
+          </span>
+        ) : null}
+        <span className="sync-v2-event-when" title={fmtDate(event.at)}>
+          {fmtRelative(event.at)}
+        </span>
       </div>
       {event.path ? <code className="sync-v2-event-path">{event.path}</code> : null}
       <p>{event.message}</p>

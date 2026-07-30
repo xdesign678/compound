@@ -2,10 +2,11 @@
 /* Loaded lazily with the corresponding component. */
 
 /* Library mode — detail modal overlay (desktop only) */
+/* z-index 专用层：高于 modal、低于命令面板（修复 Cmd+K 被详情浮层压住） */
 .library-detail-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-command-palette);
+  z-index: var(--z-detail-overlay);
   background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: flex-start;
@@ -13,8 +14,8 @@
   opacity: 0;
   pointer-events: none;
   transition:
-    opacity 280ms var(--motion-ease-standard),
-    background 280ms var(--motion-ease-standard);
+    opacity var(--motion-duration-slow) var(--motion-ease-standard),
+    background var(--motion-duration-slow) var(--motion-ease-standard);
 }
 
 .library-detail-overlay.is-open {
@@ -35,8 +36,8 @@
   transform: translateX(48px) scale(0.97);
   will-change: transform, opacity;
   transition:
-    transform 400ms var(--motion-ease-emphasized),
-    opacity 300ms var(--motion-ease-standard),
+    transform var(--motion-duration-slow) var(--motion-ease-emphasized),
+    opacity var(--motion-duration-slow) var(--motion-ease-standard),
     box-shadow var(--motion-duration-base) var(--motion-ease-standard);
 }
 
@@ -64,7 +65,7 @@
   z-index: 10;
   width: 32px;
   height: 32px;
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   background: var(--bg-muted);
   border: 1px solid var(--border-light);
   color: var(--text-secondary);
@@ -83,4 +84,12 @@
   background: var(--bg-hover);
   color: var(--text-primary);
   transform: translateY(-1px);
+}
+
+/* 移动端复用同一关闭按钮（Ask 详情浮层），触控目标补齐 44px */
+@media (pointer: coarse) {
+  .library-detail-modal-close {
+    width: 44px;
+    height: 44px;
+  }
 }

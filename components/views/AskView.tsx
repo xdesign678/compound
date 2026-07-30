@@ -39,6 +39,9 @@ export function AskView() {
         setPickerSearch={askState.setPickerSearch}
         pickerResults={askState.pickerResults}
         inlineResults={askState.inlineResults}
+        inlineHighlight={askState.inlineHighlight}
+        setInlineHighlight={askState.setInlineHighlight}
+        dismissInlinePanel={askState.dismissInlinePanel}
         modelMenuOpen={askState.modelMenuOpen}
         setModelMenuOpen={askState.setModelMenuOpen}
         llmConfig={askState.llmConfig}

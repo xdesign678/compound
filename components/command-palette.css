@@ -5,6 +5,8 @@
 .cmd-overlay {
   position: fixed;
   inset: 0;
+  /* Lift above the soft keyboard so the dialog stays visible (same as .modal-overlay) */
+  bottom: var(--ask-kb-offset, 0px);
   z-index: var(--z-command-palette);
   background: rgba(0, 0, 0, 0.4);
   display: flex;

@@ -34,12 +34,28 @@ import type {
 } from '@/lib/types';
 import { SOURCE_TYPE_LABELS } from '@/lib/constants';
 
-/** LRU cache for @-mention lookups */
-const mentionQueryCache = new LRUMap<string, unknown[]>(50);
+/** LRU cache for @-mention lookups（带 TTL：新建/更新的概念需要在约 1 分钟后可被 @ 到） */
+const MENTION_CACHE_TTL_MS = 60_000;
+const mentionQueryCache = new LRUMap<string, { at: number; items: unknown[] }>(50);
+
+function getCachedMentions(key: string): unknown[] | undefined {
+  const entry = mentionQueryCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() - entry.at > MENTION_CACHE_TTL_MS) {
+    mentionQueryCache.delete(key);
+    return undefined;
+  }
+  return entry.items;
+}
 
 function detectInlineMention(text: string, caret: number): InlineMention | null {
   const beforeCaret = text.slice(0, caret);
-  const match = beforeCaret.match(/(?:^|\s)@([^\s@]*)$/);
+  // 触发边界：行首/空白/标点/中日韩文字。中文书写不加空格（「解释一下@概念」），
+  // 原先的 (?:^|\s) 边界在最典型的中文输入方式下永远触发不了；
+  // 拉丁字母前不放行，避免邮箱地址误触发。
+  const match = beforeCaret.match(
+    /(?:^|[\s\p{P}\p{S}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}])@([^\s@]*)$/u,
+  );
   if (!match) return null;
   const query = match[1] ?? '';
   return {
@@ -101,7 +117,7 @@ async function lookupMentions(
   const cacheKey = `${kind}:${query}`;
 
   if (kind === 'concept') {
-    let concepts = mentionQueryCache.get(cacheKey) as Concept[] | undefined;
+    let concepts = getCachedMentions(cacheKey) as Concept[] | undefined;
     if (!concepts) {
       concepts = query
         ? await db.concepts
@@ -114,7 +130,7 @@ async function lookupMentions(
             .reverse()
             .limit(limit * 2)
             .toArray();
-      mentionQueryCache.set(cacheKey, concepts);
+      mentionQueryCache.set(cacheKey, { at: Date.now(), items: concepts });
     }
 
     concepts = concepts
@@ -132,7 +148,7 @@ async function lookupMentions(
     }));
   }
 
-  let sources = mentionQueryCache.get(cacheKey) as Source[] | undefined;
+  let sources = getCachedMentions(cacheKey) as Source[] | undefined;
   if (!sources) {
     sources = query
       ? await db.sources
@@ -145,7 +161,7 @@ async function lookupMentions(
           .reverse()
           .limit(limit * 2)
           .toArray();
-    mentionQueryCache.set(cacheKey, sources);
+    mentionQueryCache.set(cacheKey, { at: Date.now(), items: sources });
   }
 
   sources = sources
@@ -181,6 +197,9 @@ export function useAskState() {
   const [pickerSearch, setPickerSearch] = useState('');
   const [pickerResults, setPickerResults] = useState<MentionItem[]>([]);
   const [inlineResults, setInlineResults] = useState<MentionItem[]>([]);
+  const [inlineHighlight, setInlineHighlight] = useState(0);
+  // Escape 关闭内联 @ 面板（inlineMention 是从 input+caret 派生的，关闭只能靠抑制位）
+  const [inlineDismissed, setInlineDismissed] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
   const [customModels, setCustomModels] = useState<string[]>([]);
@@ -259,6 +278,7 @@ export function useAskState() {
       if (event.key === 'Escape') {
         setReferencePickerOpen(false);
         setModelMenuOpen(false);
+        setInlineDismissed(true);
       }
     }
 
@@ -280,6 +300,16 @@ export function useAskState() {
     () => detectInlineMention(input, caretPosition),
     [input, caretPosition],
   );
+
+  // 输入/光标变化说明用户在继续打字，解除 Escape 抑制；@ 片段消失时同理复位
+  useEffect(() => {
+    setInlineDismissed(false);
+  }, [input, caretPosition]);
+
+  // 结果集变化时高亮回到第一项
+  useEffect(() => {
+    setInlineHighlight(0);
+  }, [inlineResults]);
 
   const modelOptions = useMemo<ModelOption[]>(() => {
     const customModel = llmConfig.model?.trim();
@@ -318,7 +348,10 @@ export function useAskState() {
     return modelOptions.find((item) => item.value === current)?.label ?? compactModelName(current);
   }, [llmConfig.model, modelOptions]);
 
-  const showInlinePanel = !!inlineMention && !referencePickerOpen && !modelMenuOpen;
+  const showInlinePanel =
+    !!inlineMention && !inlineDismissed && !referencePickerOpen && !modelMenuOpen;
+
+  const dismissInlinePanel = useCallback(() => setInlineDismissed(true), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -409,7 +442,8 @@ export function useAskState() {
       setPickerSearch('');
       setReferencePickerOpen(false);
       setModelMenuOpen(false);
-      autoResize();
+      // 等清空后的 DOM 渲染完再测量高度，否则多行输入发出后输入框保持展开
+      requestAnimationFrame(() => autoResize());
       setLoading(true);
       setStreamingText('');
       setLiveStages([]);
@@ -456,6 +490,10 @@ export function useAskState() {
       }
 
       try {
+        // 离线预检：直接给出准确文案，而不是等请求超时后报网关错误
+        if (!navigator.onLine) {
+          throw new Error('当前处于离线状态，请恢复网络后重试');
+        }
         const resp = await askWikiStream(
           finalText,
           [...recentHistory, { role: 'user', text: finalText }],
@@ -653,6 +691,9 @@ export function useAskState() {
     setPickerSearch,
     pickerResults,
     inlineResults,
+    inlineHighlight,
+    setInlineHighlight,
+    dismissInlinePanel,
     modelMenuOpen,
     setModelMenuOpen,
     llmConfig,

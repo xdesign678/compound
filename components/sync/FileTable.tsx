@@ -13,8 +13,6 @@ import {
 interface Props {
   items: SyncItem[];
   /** Optional pre-filter coming from the pipeline strip click. */
-  stageFilter: string | null;
-  onClearStageFilter: () => void;
   onRetryItem: (itemId: string) => void;
   busy?: boolean;
 }
@@ -57,13 +55,7 @@ function rowTone(item: SyncItem): string {
   return 'neutral';
 }
 
-export default function FileTable({
-  items,
-  stageFilter,
-  onClearStageFilter,
-  onRetryItem,
-  busy,
-}: Props) {
+export default function FileTable({ items, onRetryItem, busy }: Props) {
   const [activeStatus, setActiveStatus] = useState<'all' | SyncItemStatus>('all');
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -78,7 +70,6 @@ export default function FileTable({
     const q = query.trim().toLowerCase();
     return items
       .filter((it) => activeStatus === 'all' || it.status === activeStatus)
-      .filter((it) => !stageFilter || it.stage === stageFilter || it.stage === 'llm')
       .filter((it) => !q || it.path.toLowerCase().includes(q))
       .sort((a, b) => {
         const sa = STATUS_ORDER[a.status] ?? 9;
@@ -88,7 +79,7 @@ export default function FileTable({
         const db = durationOf(b) ?? 0;
         return db - da;
       });
-  }, [items, activeStatus, stageFilter, query]);
+  }, [items, activeStatus, query]);
 
   return (
     <div className="ops-file-panel">
@@ -118,17 +109,6 @@ export default function FileTable({
             placeholder="按路径过滤…"
             aria-label="按路径过滤文件"
           />
-          {stageFilter ? (
-            <button
-              type="button"
-              className="ops-chip active"
-              onClick={onClearStageFilter}
-              title="点击清除阶段过滤"
-            >
-              阶段：{STAGE_TEXT[stageFilter] || stageFilter}
-              <span>×</span>
-            </button>
-          ) : null}
         </div>
       </div>
 

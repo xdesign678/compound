@@ -54,7 +54,11 @@ export function AskMessageList({
   return (
     <div className="ask-messages" ref={messagesRef}>
       <div className="ask-stream">
-        {history && history.length === 0 && !loading ? (
+        {history === undefined ? (
+          <div className="ask-history-loading" role="status" aria-live="polite">
+            加载对话记录…
+          </div>
+        ) : history.length === 0 && !loading ? (
           <AskEmptyState
             conceptCount={conceptCount ?? 0}
             suggestions={suggestions}
@@ -106,18 +110,13 @@ export function AskMessageList({
                           通常是模型 API
                           或服务端配置暂时不可用。你可以检查设置里的模型配置，或者稍后重新提问。
                         </p>
-                        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                        <div className="ask-failure-actions">
                           {userQuestion && (
                             <button
                               type="button"
-                              className="ask-reset-btn"
+                              className="ask-failure-primary"
                               disabled={loading}
                               onClick={() => void onSendSuggestion(userQuestion)}
-                              style={{
-                                background: 'var(--accent, #c96442)',
-                                color: '#fff',
-                                border: 'none',
-                              }}
                             >
                               重新提问
                             </button>
@@ -131,17 +130,8 @@ export function AskMessageList({
                           </button>
                         </div>
                         {failureDetail && (
-                          <details style={{ marginTop: 10 }}>
-                            <summary
-                              style={{
-                                cursor: 'pointer',
-                                fontSize: 12,
-                                color: 'var(--text-muted, #9c9a93)',
-                                userSelect: 'none',
-                              }}
-                            >
-                              查看详情
-                            </summary>
+                          <details className="ask-failure-details">
+                            <summary className="ask-failure-summary">查看详情</summary>
                             <pre className="ask-failure-detail">{failureDetail}</pre>
                           </details>
                         )}
@@ -154,13 +144,13 @@ export function AskMessageList({
                           className="prose-answer"
                         />
                         {message.faithfulness?.level === 'low' && (
-                          <div className="msg-sources" role="note">
-                            <div className="ms-label">证据支撑较弱</div>
-                            <div>
-                              本回答基于检索证据的支撑较弱（score=
-                              {message.faithfulness.score.toFixed(1)}
-                              ），建议结合资料原文再判断。
-                            </div>
+                          <div
+                            className="msg-sources ask-low-confidence"
+                            role="note"
+                            title={`检索置信度评分 ${message.faithfulness.score.toFixed(1)}`}
+                          >
+                            <div className="ms-label">匹配度偏低</div>
+                            <div>本回答的检索依据不够充分，建议结合资料原文再判断。</div>
                           </div>
                         )}
                       </>
@@ -216,6 +206,7 @@ export function AskMessageList({
                               className="msg-follow-up-q"
                               onClick={() => void onSendSuggestion(q)}
                               type="button"
+                              disabled={loading}
                             >
                               {q}
                             </button>
@@ -277,7 +268,8 @@ function CitedList({ ids, onClick }: { ids: string[]; onClick: (id: string) => v
 
 function isAskFailureMessage(text: string) {
   const normalized = text.trim();
-  return normalized.includes('问答失败') || normalized.includes('/api/query failed');
+  // 用结构化标记/固定前缀判定，避免正常回答中引用「问答失败」一词被误判
+  return normalized.startsWith('**问答失败**') || normalized.includes('<!-- error-detail:');
 }
 
 function getAskFailureDetail(text: string) {

@@ -22,26 +22,45 @@ let toastId = 0;
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
 
-  const push = useCallback((tone: ToastTone, text: string, detail?: string) => {
-    toastId += 1;
-    const id = toastId;
-    setToasts((prev) => [...prev, { id, tone, text, detail }]);
-    window.setTimeout(
-      () => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
-      },
-      tone === 'error' ? 8000 : 4500,
-    );
+  const dismiss = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  const push = useCallback(
+    (tone: ToastTone, text: string, detail?: string) => {
+      toastId += 1;
+      const id = toastId;
+      setToasts((prev) => [...prev, { id, tone, text, detail }]);
+      window.setTimeout(
+        () => {
+          dismiss(id);
+        },
+        tone === 'error' ? 8000 : 4500,
+      );
+    },
+    [dismiss],
+  );
 
   return (
     <ToastContext.Provider value={{ push }}>
       {children}
-      <div className="ops-toasts" role="status" aria-live="polite">
+      <div className="ops-toasts">
         {toasts.map((t) => (
-          <div key={t.id} className={`ops-toast tone-${t.tone}`}>
+          <div
+            key={t.id}
+            className={`ops-toast tone-${t.tone}`}
+            role={t.tone === 'error' ? 'alert' : 'status'}
+          >
             <strong>{t.text}</strong>
             {t.detail ? <span>{t.detail}</span> : null}
+            <button
+              type="button"
+              className="ops-toast-close"
+              onClick={() => dismiss(t.id)}
+              aria-label="关闭提示"
+            >
+              ×
+            </button>
           </div>
         ))}
       </div>

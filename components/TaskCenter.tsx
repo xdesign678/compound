@@ -1,7 +1,7 @@
 'use client';
 
 import './task-center.css';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore, type TaskItem, type TaskStatus, type TaskKind } from '@/lib/store';
 import { isOfflineError } from '@/lib/api-client';
 import { Icon } from './Icons';
@@ -55,7 +55,34 @@ export function TaskCenter() {
   const activeCount = tasks.filter((t) =>
     ['queued', 'running', 'paused-offline'].includes(t.status),
   ).length;
+  const failedCount = tasks.filter((t) => t.status === 'error').length;
   const hasTasks = tasks.length > 0;
+
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // 打开期间 trigger 不渲染，焦点移进面板（关闭按钮），否则会掉到 body
+  useEffect(() => {
+    if (open) closeButtonRef.current?.focus();
+  }, [open]);
+
+  const closePanel = useCallback(() => {
+    toggleTaskCenter();
+    // trigger 随关闭重新挂载，下一帧把焦点还给它
+    requestAnimationFrame(() => triggerRef.current?.focus());
+  }, [toggleTaskCenter]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closePanel();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, closePanel]);
 
   const handleRetry = async (task: TaskItem) => {
     if (!task.retry) return;
@@ -81,11 +108,13 @@ export function TaskCenter() {
       {/* Floating trigger button */}
       {hasTasks && !open && (
         <button
+          ref={triggerRef}
           type="button"
           className="tc-trigger"
           onClick={toggleTaskCenter}
           aria-label={`任务中心 · ${activeCount > 0 ? `${activeCount} 个未完成` : '全部完成'}`}
           aria-haspopup="dialog"
+          aria-expanded={open}
         >
           {activeCount > 0 ? (
             <span className="tc-trigger-indicator" aria-hidden="true" />
@@ -102,12 +131,12 @@ export function TaskCenter() {
 
       {/* Panel */}
       {open && (
-        <section
-          className="tc-panel"
-          role="region"
-          aria-labelledby="task-center-title"
-          aria-live="polite"
-        >
+        <section className="tc-panel" role="dialog" aria-labelledby="task-center-title">
+          {/* live 区收窄到状态摘要，避免任务列表每次变动都整面板重读 */}
+          <p className="tc-visually-hidden" role="status" aria-live="polite">
+            {activeCount > 0 ? `${activeCount} 个任务未完成` : '没有未完成的任务'}
+            {failedCount > 0 ? `，${failedCount} 个失败` : ''}
+          </p>
           <div className="tc-header">
             <h4 className="tc-title" id="task-center-title">
               任务中心
@@ -119,9 +148,10 @@ export function TaskCenter() {
                 </button>
               )}
               <button
+                ref={closeButtonRef}
                 type="button"
                 className="tc-header-btn tc-close-btn"
-                onClick={toggleTaskCenter}
+                onClick={closePanel}
                 aria-label="关闭任务中心"
               >
                 <span aria-hidden="true">✕</span>

@@ -381,18 +381,13 @@ export function IngestModal() {
                     onChange={(e) => setContent(e.target.value)}
                   />
                 </div>
-                {error && (
-                  <div className="ingest-error-banner" role="alert" aria-live="assertive">
-                    {error}
-                  </div>
-                )}
                 <button
                   className="modal-btn primary"
                   type="button"
                   disabled={!title.trim() || !content.trim() || submitting || !isOnline}
                   onClick={() => handleSubmit('link')}
                 >
-                  {!isOnline ? '离线中，无法提交' : submitting ? '编译中...' : '送入 AI 编译'}
+                  {!isOnline ? '离线中，无法提交' : submitting ? '编译中…' : '送入 AI 编译'}
                 </button>
                 <button
                   className="modal-btn"

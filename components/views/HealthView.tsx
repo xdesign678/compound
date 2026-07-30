@@ -124,6 +124,33 @@ export function HealthView() {
   const conceptCount = useLiveQuery(() => getDb().concepts.count(), []);
   const sourceCount = useLiveQuery(() => getDb().sources.count(), []);
 
+  // 兜底补全标题：lint 结果里引用了但 titleMap 缺失的 conceptId（例如 lint 完成后
+  // 又有新入口写入 findings），避免 chip 直接显示 c-x7f3k9ab 这样的原始 ID
+  const allFindingsRef = useMemo(
+    () => lintFindings.flatMap((finding) => finding.conceptIds ?? []),
+    [lintFindings],
+  );
+  useEffect(() => {
+    const missing = allFindingsRef.filter((id) => !conceptTitleMap.has(id));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    void getDb()
+      .concepts.bulkGet(missing)
+      .then((rows) => {
+        if (cancelled) return;
+        setConceptTitleMap((prev) => {
+          const next = new Map(prev);
+          rows.forEach((row) => {
+            if (row) next.set(row.id, row.title);
+          });
+          return next;
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [allFindingsRef, conceptTitleMap]);
+
   const allFindings = useMemo<Finding[]>(() => {
     const apiFindings: Finding[] = lintFindings.map((finding) => ({
       type: finding.type as Finding['type'],
@@ -624,10 +651,11 @@ export function HealthView() {
                       <div className="finding-top-actions">
                         {fixable ? (
                           <button
+                            type="button"
                             className="finding-action-btn primary"
                             disabled={fixing || repairStarting}
                             onClick={() => void triggerRepair([finding])}
-                            aria-label={`修复${findingLabel(finding.type)}问题`}
+                            aria-label={`修复${findingLabel(finding.type)}问题：${finding.message}`}
                           >
                             修复
                           </button>

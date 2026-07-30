@@ -73,18 +73,24 @@ export function TabBar({ variant = 'bottom' }: TabBarProps) {
 
   const [first, second, ...rest] = TABS;
 
+  // DOM 顺序即视觉顺序（前两个 tab、＋、后两个 tab），保证键盘焦点顺序正确（WCAG 2.4.3）
   return (
     <nav className="tabbar" aria-label={t('tab.navLabel')}>
       <div role="tablist" aria-orientation="horizontal" className="tabbar-tabs">
         {renderTab(first)}
         {renderTab(second)}
+        <button
+          type="button"
+          className="tab-add"
+          aria-label={t('tab.addSource')}
+          onClick={openModal}
+        >
+          <span className="tab-add-btn" aria-hidden="true">
+            <Icon.Plus />
+          </span>
+        </button>
         {rest.map(renderTab)}
       </div>
-      <button type="button" className="tab-add" aria-label={t('tab.addSource')} onClick={openModal}>
-        <span className="tab-add-btn" aria-hidden="true">
-          <Icon.Plus />
-        </span>
-      </button>
     </nav>
   );
 }

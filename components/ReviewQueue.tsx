@@ -333,7 +333,8 @@ export default function ReviewQueue() {
           <div className="ops-kicker">Compound Ops</div>
           <h1>审核队列</h1>
           <p>
-            系统遇到不太放心的自动化变更（大批量入库、低置信度抽取、同步冲突等）时，会先丢到这里等你拍板。
+            系统遇到不太放心的自动化变更（大批量入库、低置信度抽取、同步冲突等）时，会先丢到这里等你拍板。卡片聚焦时可用快捷键：A
+            批准 / R 拒绝 / S 标记已解决。
           </p>
         </div>
         <div className="ops-actions">
@@ -369,40 +370,9 @@ export default function ReviewQueue() {
       </header>
 
       {error ? (
-        <div
-          role="alert"
-          style={{
-            display: 'flex',
-            gap: 16,
-            padding: '20px 24px',
-            borderRadius: 10,
-            background: 'var(--ops-state-error-soft, #fef2f2)',
-            border: '1px solid var(--ops-state-error, #dc2626)',
-            borderLeftWidth: 4,
-            fontFamily: 'var(--font-reading, Lora, serif)',
-            lineHeight: 1.6,
-          }}
-        >
-          <div style={{ fontSize: 24, flexShrink: 0 }} aria-hidden="true">
-            {error.includes('401') || error.toLowerCase().includes('unauthorized')
-              ? '🔒'
-              : error.includes('403')
-                ? '🚫'
-                : error.includes('500')
-                  ? '💥'
-                  : error.toLowerCase().includes('离线') || error.toLowerCase().includes('offline')
-                    ? '📡'
-                    : '⚠️'}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-            <h3
-              style={{
-                margin: 0,
-                fontSize: 16,
-                fontWeight: 600,
-                color: 'var(--text-primary, #141413)',
-              }}
-            >
+        <div role="alert" className="sync-v2-error">
+          <div className="sync-v2-error-body">
+            <h3 className="sync-v2-error-title">
               {error.includes('401') || error.toLowerCase().includes('unauthorized')
                 ? '需要认证'
                 : error.includes('403')
@@ -411,10 +381,8 @@ export default function ReviewQueue() {
                     ? '服务器出了点问题'
                     : '加载审核队列失败'}
             </h3>
-            <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary, #5e5d59)' }}>
-              {friendlyErrorMessage(error)}
-            </p>
-            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <p className="sync-v2-error-copy">{friendlyErrorMessage(error)}</p>
+            <div className="sync-v2-error-actions">
               <button type="button" className="ops-btn" onClick={() => void load()}>
                 重试
               </button>
@@ -422,21 +390,9 @@ export default function ReviewQueue() {
                 返回首页
               </Link>
             </div>
-            <details style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted, #9c9a93)' }}>
-              <summary style={{ cursor: 'pointer', userSelect: 'none' }}>技术详情</summary>
-              <pre
-                style={{
-                  margin: '8px 0 0',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all',
-                  fontSize: 11,
-                  background: 'var(--bg-secondary, #f5f5f0)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                }}
-              >
-                {error}
-              </pre>
+            <details className="sync-v2-error-details">
+              <summary>技术详情</summary>
+              <pre>{error}</pre>
             </details>
           </div>
         </div>
@@ -476,7 +432,7 @@ export default function ReviewQueue() {
             <article
               key={i}
               className="review-card"
-              style={{ opacity: 0.5, animation: 'pulse 1.5s ease-in-out infinite' }}
+              style={{ opacity: 0.5, animation: 'review-pulse 1.5s ease-in-out infinite' }}
             >
               <div className="review-card-head">
                 <span
@@ -529,11 +485,6 @@ export default function ReviewQueue() {
               </div>
             </article>
           ))}
-          <style
-            dangerouslySetInnerHTML={{
-              __html: `@keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 0.3; } }`,
-            }}
-          />
         </section>
       ) : (
         <section className="review-list" aria-label="审核决策卡片">
@@ -554,6 +505,7 @@ export default function ReviewQueue() {
                 tabIndex={0}
                 aria-labelledby={headlineId}
                 aria-describedby={descId}
+                aria-keyshortcuts="a r s"
                 onKeyDown={(event) => handleCardKeyDown(event, item)}
               >
                 <div className="review-card-head">

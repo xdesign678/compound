@@ -232,7 +232,7 @@ export function ModelTab() {
     });
     if (wikiModel === model) setWikiModel(DEFAULT_LLM_MODEL);
     if (askModel === model) setAskModel(DEFAULT_LLM_MODEL);
-    setLlmStatus({ tone: 'info', text: '已从当前浏览器移除这个自定义模型。' });
+    setLlmStatus({ tone: 'info', text: '已删除这个自定义模型。' });
   }
 
   async function removePresetModel(model: string) {
@@ -541,7 +541,7 @@ export function ModelTab() {
           disabled={usageLoading}
           aria-busy={usageLoading}
         >
-          {usageLoading ? '刷新中...' : '刷新'}
+          {usageLoading ? '刷新中…' : '刷新'}
         </button>
       </div>
       <StatusNotice message={usageStatus} />

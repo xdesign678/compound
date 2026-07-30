@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
 import { withRequestId } from '@/lib/trace-client';
-import { friendlyErrorMessage } from '@/lib/store';
+import { friendlyErrorMessage, useAppStore } from '@/lib/store';
 import HeroStatus from './sync/HeroStatus';
 import PhaseTimeline from './sync/PhaseTimeline';
 import ActiveFilesList from './sync/ActiveFilesList';
@@ -93,13 +93,24 @@ function DashboardInner() {
   }, [load, paused, dashboard?.activeRun?.status]);
 
   // Auto-pause polling when the tab is hidden to avoid wasted requests.
+  // 区分自动暂停与手动暂停：只有自动暂停的才在回到前台时恢复；
+  // 之前只要切到后台就永久暂停且主界面无提示，仪表盘静默冻结。
+  const autoPausedRef = useRef(false);
   useEffect(() => {
     const onVisibility = () => {
-      if (document.hidden) setPaused(true);
+      if (document.hidden) {
+        if (!paused) {
+          autoPausedRef.current = true;
+          setPaused(true);
+        }
+      } else if (autoPausedRef.current) {
+        autoPausedRef.current = false;
+        setPaused(false);
+      }
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, []);
+  }, [paused]);
 
   const story = dashboard?.story ?? null;
   const run = dashboard?.activeRun ?? dashboard?.latestRuns?.[0] ?? null;
@@ -186,7 +197,9 @@ function DashboardInner() {
             '切换主模型',
             '在 Settings 选一个更快的主模型；gateway 会按 COMPOUND_LLM_FALLBACK_MODELS 列表顺序自动轮询，连续撞墙的模型会被自动跳过。',
           );
-          router.push('/settings');
+          // 设置是主页的抽屉（不存在 /settings 路由），回主页后通过 store 打开
+          useAppStore.getState().openSettings();
+          router.push('/');
           return;
         case 'open-env':
           toast.push(
@@ -217,6 +230,16 @@ function DashboardInner() {
           <span className="sync-v2-kicker">Compound · 同步控制台</span>
         </div>
         <div className="sync-v2-topnav-right">
+          {paused && (
+            <button
+              type="button"
+              className="sync-v2-btn sync-v2-btn-ghost sync-v2-paused-chip"
+              onClick={() => setPaused(false)}
+              title="轮询已暂停（页面曾切到后台），点击恢复实时刷新"
+            >
+              已暂停轮询 · 点击恢复
+            </button>
+          )}
           <button
             type="button"
             className="sync-v2-btn sync-v2-btn-ghost"
@@ -233,38 +256,9 @@ function DashboardInner() {
       </div>
 
       {loadError ? (
-        <div
-          role="alert"
-          style={{
-            display: 'flex',
-            gap: 16,
-            padding: '20px 24px',
-            borderRadius: 10,
-            background: 'var(--ops-state-error-soft, #fef2f2)',
-            border: '1px solid var(--ops-state-error, #dc2626)',
-            borderLeftWidth: 4,
-            fontFamily: 'var(--font-reading, Lora, serif)',
-            lineHeight: 1.6,
-          }}
-        >
-          <div style={{ fontSize: 24, flexShrink: 0 }} aria-hidden="true">
-            {loadError.includes('401') || loadError.toLowerCase().includes('unauthorized')
-              ? '🔒'
-              : loadError.includes('403')
-                ? '🚫'
-                : loadError.includes('500')
-                  ? '💥'
-                  : '⚠️'}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-            <h3
-              style={{
-                margin: 0,
-                fontSize: 16,
-                fontWeight: 600,
-                color: 'var(--text-primary, #141413)',
-              }}
-            >
+        <div role="alert" className="sync-v2-error">
+          <div className="sync-v2-error-body">
+            <h3 className="sync-v2-error-title">
               {loadError.includes('401') || loadError.toLowerCase().includes('unauthorized')
                 ? '需要认证'
                 : loadError.includes('403')
@@ -273,10 +267,8 @@ function DashboardInner() {
                     ? '服务器出了点问题'
                     : '无法加载同步面板'}
             </h3>
-            <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary, #5e5d59)' }}>
-              {friendlyErrorMessage(loadError)}
-            </p>
-            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <p className="sync-v2-error-copy">{friendlyErrorMessage(loadError)}</p>
+            <div className="sync-v2-error-actions">
               <button type="button" className="sync-v2-btn" onClick={() => void load()}>
                 重试
               </button>
@@ -284,60 +276,23 @@ function DashboardInner() {
                 返回首页
               </Link>
             </div>
-            <details style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted, #9c9a93)' }}>
-              <summary style={{ cursor: 'pointer', userSelect: 'none' }}>技术详情</summary>
-              <pre
-                style={{
-                  margin: '8px 0 0',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all',
-                  fontSize: 11,
-                  background: 'var(--bg-secondary, #f5f5f0)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                }}
-              >
-                {loadError}
-              </pre>
+            <details className="sync-v2-error-details">
+              <summary>技术详情</summary>
+              <pre>{loadError}</pre>
             </details>
           </div>
         </div>
       ) : null}
 
       {!dashboard && !loadError ? (
-        <div
-          role="status"
-          aria-live="polite"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            padding: '64px 24px',
-            gap: 16,
-          }}
-        >
-          <div
-            aria-hidden="true"
-            style={{
-              width: 32,
-              height: 32,
-              border: '3px solid var(--border-muted, #e0ddd8)',
-              borderTopColor: 'var(--text-primary, #141413)',
-              borderRadius: '50%',
-              animation: 'sync-spin 0.8s linear infinite',
-            }}
-          />
-          <p style={{ fontSize: 15, color: 'var(--text-secondary, #5e5d59)' }}>加载同步状态…</p>
-          <style
-            dangerouslySetInnerHTML={{
-              __html: `@keyframes sync-spin { to { transform: rotate(360deg); } }`,
-            }}
-          />
+        <div role="status" aria-live="polite" className="sync-v2-loading">
+          <div aria-hidden="true" className="sync-v2-loading-spinner" />
+          <p>加载同步状态…</p>
         </div>
       ) : null}
 
       {stalled ? (
-        <div className="sync-v2-alert sync-v2-alert-warn">
+        <div className="sync-v2-alert sync-v2-alert-warn" role="status">
           运行已停滞 {fmtDuration(stalledFor)}。点「立即同步」唤醒 worker，或检查上游 LLM 服务。
         </div>
       ) : null}

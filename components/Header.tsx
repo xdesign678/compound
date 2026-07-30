@@ -45,17 +45,25 @@ function OverflowMenu({
   onGithubSync,
   onObsidianImport,
   onSettings,
+  triggerRef,
 }: {
   open: boolean;
   onClose: () => void;
   onGithubSync: () => void;
   onObsidianImport: () => void;
   onSettings: () => void;
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   useLocale();
   const menuRef = useRef<HTMLDivElement>(null);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const itemCount = 4;
+
+  // 菜单关闭（Escape / 选中）后菜单项会被卸载，焦点要还给触发按钮，否则会掉到 body
+  const closeAndRestoreFocus = useCallback(() => {
+    onClose();
+    triggerRef.current?.focus({ preventScroll: true });
+  }, [onClose, triggerRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -74,7 +82,7 @@ function OverflowMenu({
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        closeAndRestoreFocus();
         return;
       }
       if (e.key === 'ArrowDown') {
@@ -87,10 +95,20 @@ function OverflowMenu({
         setFocusedIndex((i) => (i - 1 + itemCount) % itemCount);
         return;
       }
+      if (e.key === 'Home') {
+        e.preventDefault();
+        setFocusedIndex(0);
+        return;
+      }
+      if (e.key === 'End') {
+        e.preventDefault();
+        setFocusedIndex(itemCount - 1);
+        return;
+      }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [open, onClose]);
+  }, [open, closeAndRestoreFocus]);
 
   useEffect(() => {
     if (!open || focusedIndex < 0) return;
@@ -114,7 +132,7 @@ function OverflowMenu({
         role="menuitem"
         tabIndex={-1}
         onClick={() => {
-          onClose();
+          closeAndRestoreFocus();
           onGithubSync();
         }}
       >
@@ -128,7 +146,7 @@ function OverflowMenu({
         role="menuitem"
         tabIndex={-1}
         href="/sync"
-        onClick={onClose}
+        onClick={closeAndRestoreFocus}
       >
         <span aria-hidden="true">
           <Icon.Activity />
@@ -141,7 +159,7 @@ function OverflowMenu({
         role="menuitem"
         tabIndex={-1}
         onClick={() => {
-          onClose();
+          closeAndRestoreFocus();
           onObsidianImport();
         }}
       >
@@ -156,7 +174,7 @@ function OverflowMenu({
         role="menuitem"
         tabIndex={-1}
         onClick={() => {
-          onClose();
+          closeAndRestoreFocus();
           onSettings();
         }}
       >
@@ -181,6 +199,7 @@ export function Header(props: HeaderProps) {
 
   const [overflowOpen, setOverflowOpen] = useState(false);
   const closeOverflow = useCallback(() => setOverflowOpen(false), []);
+  const overflowTriggerRef = useRef<HTMLButtonElement>(null);
 
   const handleOpenSourceToc = () => {
     window.dispatchEvent(new CustomEvent('compound:open-source-toc'));
@@ -283,6 +302,7 @@ export function Header(props: HeaderProps) {
         {/* Mobile: single overflow menu */}
         <div className="header-mobile-overflow">
           <button
+            ref={overflowTriggerRef}
             type="button"
             className={`icon-btn${overflowOpen ? ' is-active' : ''}`}
             onClick={() => setOverflowOpen((v) => !v)}
@@ -301,6 +321,7 @@ export function Header(props: HeaderProps) {
             onGithubSync={openGithubSync}
             onObsidianImport={openObsidianImport}
             onSettings={openSettings}
+            triggerRef={overflowTriggerRef}
           />
         </div>
       </div>

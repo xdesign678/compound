@@ -4,9 +4,6 @@ import { type PipelineStage } from './types';
 
 interface Props {
   stages: PipelineStage[];
-  /** Called when a stage cell is clicked — used to filter the file table. */
-  onSelect?: (stage: string) => void;
-  selected?: string | null;
 }
 
 function describeStage(s: PipelineStage): { tone: string; main: string; detail: string } {
@@ -37,20 +34,16 @@ function describeStage(s: PipelineStage): { tone: string; main: string; detail: 
   return { tone: 'done', main: '完成', detail: `成功 ${s.succeeded}` };
 }
 
-export default function PipelineStrip({ stages, onSelect, selected }: Props) {
+export default function PipelineStrip({ stages }: Props) {
   return (
     <div className="ops-pipeline" role="list" aria-label="分析流水线">
       {stages.map((stage, i) => {
         const view = describeStage(stage);
-        const isSelected = selected === stage.stage;
-        const Tag = onSelect ? 'button' : 'div';
         return (
-          <Tag
+          <div
             key={stage.stage}
-            type={onSelect ? 'button' : undefined}
             role="listitem"
-            className={`ops-pipeline-step tone-${view.tone}${isSelected ? ' selected' : ''}`}
-            onClick={onSelect ? () => onSelect(stage.stage) : undefined}
+            className={`ops-pipeline-step tone-${view.tone}`}
             title={`${stage.label}\n成功 ${stage.succeeded} · 失败 ${stage.failed} · 运行 ${stage.running} · 排队 ${stage.queued} · 跳过 ${stage.skipped} · 取消 ${stage.cancelled}`}
           >
             <span className="ops-pipeline-step-body">
@@ -83,7 +76,7 @@ export default function PipelineStrip({ stages, onSelect, selected }: Props) {
                 </>
               ) : null}
             </span>
-          </Tag>
+          </div>
         );
       })}
     </div>

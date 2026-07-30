@@ -42,7 +42,7 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
   async function handleLint() {
     setLintLoading(true);
     setLintResult(null);
-    showToast('AI 正在体检 Wiki...', true);
+    showToast('AI 正在体检 Wiki…', true);
     try {
       const res = await lintWiki();
       setLintResult(res);
@@ -140,7 +140,7 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
           disabled={lintLoading}
           aria-busy={lintLoading}
         >
-          {lintLoading ? '体检中...' : '运行 Lint'}
+          {lintLoading ? '体检中…' : '运行 Lint'}
         </button>
       </div>
 
@@ -254,7 +254,7 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
             onClick={loadSeed}
             disabled={dataAction !== null}
           >
-            {dataAction === 'seed' ? '载入中...' : '确认载入'}
+            {dataAction === 'seed' ? '载入中…' : '确认载入'}
           </button>
           <button
             className="modal-btn"
@@ -268,8 +268,8 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
       ) : confirming === 'clear' ? (
         <div
           className="settings-confirm-block settings-confirm-danger"
-          role="alert"
-          aria-live="assertive"
+          role="group"
+          aria-label="确认清空所有数据"
         >
           <p className="modal-desc">
             <strong>确认清空所有数据。</strong>
@@ -281,7 +281,7 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
             onClick={clearAll}
             disabled={dataAction !== null}
           >
-            {dataAction === 'clear' ? '清空中...' : '确认清空'}
+            {dataAction === 'clear' ? '清空中…' : '确认清空'}
           </button>
           <button
             className="modal-btn"
@@ -295,8 +295,8 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
       ) : confirming === 'sample' ? (
         <div
           className="settings-confirm-block settings-confirm-danger"
-          role="alert"
-          aria-live="assertive"
+          role="group"
+          aria-label="确认清除示例数据"
         >
           <p className="modal-desc">
             <strong>确认清除示例数据。</strong>
@@ -308,7 +308,7 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
             onClick={clearSample}
             disabled={dataAction !== null}
           >
-            {dataAction === 'sample' ? '清除中...' : '确认清除'}
+            {dataAction === 'sample' ? '清除中…' : '确认清除'}
           </button>
           <button
             className="modal-btn"

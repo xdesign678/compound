@@ -1,5 +1,6 @@
 .offline-page {
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg-primary, #faf9f5);
   color: var(--text-primary, #141413);
   display: grid;

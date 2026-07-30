@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { fmtDate, type ErrorGroup } from './types';
+import { fmtDate, fmtRelative, type ErrorGroup } from './types';
 
 interface Props {
   groups: ErrorGroup[];
@@ -56,7 +56,9 @@ export default function IssueCenter({
                     {CATEGORY_LABEL[group.category]}
                   </span>
                   <strong>{group.count} 个文件</strong>
-                  <span className="sync-v2-issue-when">最近 {fmtDate(group.lastAt)}</span>
+                  <span className="sync-v2-issue-when" title={fmtDate(group.lastAt)}>
+                    最近 {fmtRelative(group.lastAt)}
+                  </span>
                   {group.stage ? <span className="sync-v2-issue-stage">{group.stage}</span> : null}
                 </div>
                 <div className="sync-v2-issue-actions">
@@ -65,8 +67,9 @@ export default function IssueCenter({
                     className="sync-v2-btn sync-v2-btn-tiny"
                     disabled={busy}
                     onClick={onRetryAll}
+                    title="当前重试接口按整个运行粒度执行，会重试该运行内全部失败文件"
                   >
-                    重试这一类
+                    重试全部失败
                   </button>
                   <button
                     type="button"

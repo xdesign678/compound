@@ -66,11 +66,12 @@ export default function HeroStatus({
   if (runtimeMs != null) meta.push(`运行 ${fmtDuration(runtimeMs)}`);
 
   return (
-    <section className={`sync-v2-hero ${TONE_CLASS[tone] ?? ''}`} aria-live="polite">
+    <section className={`sync-v2-hero ${TONE_CLASS[tone] ?? ''}`}>
       <div className="sync-v2-hero-body">
         <span className={`sync-v2-hero-pulse tone-${tone}`} aria-hidden="true" />
         <div className="sync-v2-hero-text">
-          <h1>{headline}</h1>
+          {/* live 区只保留状态切换才变的标题；2s 轮询刷新的运行时长不参与播报 */}
+          <h1 aria-live="polite">{headline}</h1>
           <p>{subline}</p>
           {meta.length > 0 ? <small>{meta.join(' · ')}</small> : null}
         </div>
@@ -86,7 +87,7 @@ export default function HeroStatus({
           >
             {primaryLabel}
           </button>
-        ) : (
+        ) : nextAction === 'cancel' ? null : (
           <button
             type="button"
             className={`sync-v2-btn sync-v2-btn-primary${busy ? ' is-loading' : ''}`}

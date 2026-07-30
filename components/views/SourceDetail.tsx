@@ -92,7 +92,9 @@ export function SourceDetail({ id }: { id: string }) {
   const saveInFlightRef = useRef(false);
   const queuedSaveRef = useRef<string | null>(null);
 
-  const source = useLiveQuery(async () => getDb().sources.get(id), [id]);
+  // null 哨兵区分「加载中」与「不存在」：useLiveQuery 首次 resolve 前返回 undefined，
+  // 直接判 !source 会让存在的条目也先闪一帧「未找到资料」
+  const source = useLiveQuery(async () => (await getDb().sources.get(id)) ?? null, [id]);
   const generated = useLiveQuery(
     async () => getDb().concepts.where('sources').equals(id).toArray(),
     [id],
@@ -353,11 +355,14 @@ export function SourceDetail({ id }: { id: string }) {
         return;
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'b') {
+        // 未在编辑任何块时不要拦截浏览器默认行为
+        if (!activeBlockIdRef.current) return;
         event.preventDefault();
         applyMarkdownCommand('bold');
         return;
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'i') {
+        if (!activeBlockIdRef.current) return;
         event.preventDefault();
         applyMarkdownCommand('italic');
       }
@@ -417,6 +422,14 @@ export function SourceDetail({ id }: { id: string }) {
 
   const tags = useMemo(() => extractFrontmatterTags(blocks), [blocks]);
   const currentMarkdown = useMemo(() => joinBlocksToMarkdown(blocks), [blocks]);
+
+  if (source === undefined) {
+    return (
+      <div className="empty-state" role="status" aria-live="polite">
+        加载中…
+      </div>
+    );
+  }
 
   if (!source) {
     return (

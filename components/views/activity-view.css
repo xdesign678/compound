@@ -109,6 +109,7 @@
 }
 .activity-subtabs .subtab {
   flex: 1;
+  min-height: 44px;
   padding: 8px 0;
   font-size: var(--text-sm);
   font-weight: 500;
@@ -194,13 +195,13 @@
 }
 .filter-chip {
   padding: 5px 12px;
-  min-height: 36px;
+  min-height: 40px;
   display: inline-flex;
   align-items: center;
   font-size: var(--text-xs);
   font-weight: 500;
   color: var(--text-secondary);
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   background: var(--bg-secondary);
   transition:
     background var(--motion-duration-fast) var(--motion-ease-standard),
@@ -361,8 +362,8 @@
   color: var(--brand-clay);
 }
 .finding-item.type-duplicate .finding-icon {
-  background: rgba(47, 106, 71, 0.12);
-  color: var(--color-success);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
 }
 .finding-body {
   flex: 1;
@@ -415,7 +416,8 @@
 .concept-chip {
   font-size: var(--text-2xs);
   padding: var(--space-2xs) var(--space-sm);
-  min-height: 32px;
+  /* 直接给到 40px：原先的 ::before 扩展热区会被自己的 overflow:hidden 裁掉 */
+  min-height: 40px;
   border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--brand-clay);
@@ -427,11 +429,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 160px;
-}
-.concept-chip::before {
-  content: '';
-  position: absolute;
-  inset: -6px -4px;
 }
 .concept-chip:hover {
   background: var(--brand-clay-soft);
@@ -456,7 +453,7 @@
   font-weight: 500;
   color: var(--text-on-button);
   background: var(--bg-button);
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   transition:
     background var(--motion-duration-fast) var(--motion-ease-standard),
     border-color var(--motion-duration-fast) var(--motion-ease-standard),

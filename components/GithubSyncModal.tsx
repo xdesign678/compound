@@ -58,6 +58,9 @@ class PollHttpError extends Error {
   }
 }
 
+/** starting 阶段的 Escape 关闭占位：与 overlay 点击、× 按钮一样被 canClose 拦截 */
+function ignoreClose() {}
+
 function redactSensitiveText(text: string): string {
   return SECRET_REDACTION_PATTERNS.reduce(
     (current, pattern) =>
@@ -101,7 +104,8 @@ export function GithubSyncModal() {
   } | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  useModalKeyboard(open, close);
+  const canClose = phase !== 'starting';
+  useModalKeyboard(open, canClose ? close : ignoreClose);
   useFocusTrap(modalRef, open);
 
   useEffect(() => {
@@ -296,7 +300,6 @@ export function GithubSyncModal() {
     }
   }, []);
 
-  const canClose = phase !== 'starting';
   const progressPct =
     job && job.total > 0 ? Math.round(((job.done + job.failed) / job.total) * 100) : 0;
   const stageItems = buildSyncStageItems({ phase, pulling, job });

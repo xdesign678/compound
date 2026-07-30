@@ -11,9 +11,13 @@ import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
 import { pickReviewConcepts, markReviewed } from '@/lib/review-picks';
 import { resolveRecapGestureAxis, type RecapGestureAxis } from '@/lib/recap-gesture-lock';
 import { DESKTOP_LAYOUT_MIN_WIDTH } from '@/lib/responsive';
+import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 import { Icon } from '../Icons';
 import { Prose } from '../Prose';
 import type { Concept } from '@/lib/types';
+/* 桌面端 peek 抽屉复用 .library-detail-* 类，/recap 是独立路由，
+   必须显式引入，否则直达/刷新后抽屉无样式。 */
+import './library-detail.css';
 
 const ConceptDetail = dynamic(
   () => import('./ConceptDetail').then((m) => ({ default: m.ConceptDetail })),
@@ -43,6 +47,9 @@ export function RecapView() {
   const [peekConceptId, setPeekConceptId] = useState<string | null>(null);
   const [peekVisible, setPeekVisible] = useState(false);
   const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // aria-modal 的 peek 抽屉需要焦点圈定（此前 Tab 可逃逸到背景卡片）
+  const peekModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(peekModalRef, !!peekConceptId);
 
   const cardRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -459,6 +466,19 @@ export function RecapView() {
   if (!mounted || !allConcepts) {
     return (
       <div className="recap-root" role="status" aria-live="polite" aria-busy="true">
+        <header className="recap-header">
+          <button
+            type="button"
+            className="recap-back-btn"
+            onClick={() => router.push('/')}
+            aria-label="返回"
+          >
+            <Icon.Back />
+          </button>
+          <span className="recap-header-title" role="heading" aria-level={1}>
+            今日复盘
+          </span>
+        </header>
         <div className="recap-state-screen">
           <p className="recap-state-body">加载中…</p>
         </div>
@@ -473,7 +493,7 @@ export function RecapView() {
           <button
             type="button"
             className="recap-back-btn"
-            onClick={() => router.back()}
+            onClick={() => router.push('/')}
             aria-label="返回"
           >
             <Icon.Back />
@@ -630,6 +650,8 @@ export function RecapView() {
             role="dialog"
             aria-modal="true"
             aria-label="概念详情"
+            ref={peekModalRef}
+            tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
           >
             <button

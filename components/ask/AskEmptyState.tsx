@@ -21,11 +21,9 @@ export function AskEmptyState({
       <p>
         答案从已综合的概念页中提取，带引用。好的回答可以归档为新页面。
         {conceptCount === 0 && (
-          <>
-            <br />
-            <br />
+          <span className="ask-empty-wiki-hint">
             <strong>Wiki 当前为空</strong>，请先添加一些资料。
-          </>
+          </span>
         )}
       </p>
       {suggestions.length > 0 && (

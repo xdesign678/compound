@@ -1,7 +1,7 @@
 'use client';
 
 import { createPortal } from 'react-dom';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { LlmConfig } from '../../lib/types';
 import { Icon, SourceTypeIcon } from '../Icons';
@@ -21,6 +21,9 @@ export function AskComposer({
   setPickerSearch,
   pickerResults,
   inlineResults,
+  inlineHighlight,
+  setInlineHighlight,
+  dismissInlinePanel,
   modelMenuOpen,
   setModelMenuOpen,
   llmConfig,
@@ -52,6 +55,9 @@ export function AskComposer({
   setPickerSearch: Dispatch<SetStateAction<string>>;
   pickerResults: MentionItem[];
   inlineResults: MentionItem[];
+  inlineHighlight: number;
+  setInlineHighlight: Dispatch<SetStateAction<number>>;
+  dismissInlinePanel: () => void;
   modelMenuOpen: boolean;
   setModelMenuOpen: Dispatch<SetStateAction<boolean>>;
   llmConfig: LlmConfig;
@@ -80,6 +86,24 @@ export function AskComposer({
     };
   }, []);
 
+  // 弹层关闭后把焦点还给对应的触发按钮（Escape/背板点击关闭时焦点会掉到 body）
+  const referenceBtnRef = useRef<HTMLButtonElement>(null);
+  const modelBtnRef = useRef<HTMLButtonElement>(null);
+  const prevPickerOpen = useRef(false);
+  const prevModelOpen = useRef(false);
+  useEffect(() => {
+    if (prevPickerOpen.current && !referencePickerOpen) {
+      referenceBtnRef.current?.focus({ preventScroll: true });
+    }
+    prevPickerOpen.current = referencePickerOpen;
+  }, [referencePickerOpen]);
+  useEffect(() => {
+    if (prevModelOpen.current && !modelMenuOpen) {
+      modelBtnRef.current?.focus({ preventScroll: true });
+    }
+    prevModelOpen.current = modelMenuOpen;
+  }, [modelMenuOpen]);
+
   return (
     <div className="ask-input-bar">
       <div className="ask-input-inner">
@@ -95,7 +119,7 @@ export function AskComposer({
                   className={`ask-mention-chip ${item.kind === 'source' ? 'is-source' : ''}`}
                   onClick={() => onRemoveMention(item)}
                   type="button"
-                  title="移除引用"
+                  aria-label={`移除引用 ${item.title}`}
                 >
                   <span className="ask-mention-chip-kind">
                     {item.kind === 'concept' ? '@概念' : '@文件'}
@@ -137,10 +161,11 @@ export function AskComposer({
 
           {showInlinePanel && (
             <div className="ask-flyout ask-inline-flyout">
-              <div className="ask-inline-tip">输入 `@` 可以直接搜索概念或文件</div>
+              <div className="ask-inline-tip">输入 `@` 可以直接搜索概念或文件，↑↓ 选择</div>
               <MentionResults
                 items={inlineResults}
                 emptyLabel="没有找到可引用内容"
+                highlightIndex={inlineHighlight}
                 onSelect={(item) => onSelectMention(item, 'inline')}
               />
             </div>
@@ -169,7 +194,22 @@ export function AskComposer({
               setCaretPosition((event.target as HTMLTextAreaElement).selectionStart)
             }
             onKeyDown={(event) => {
-              const preferredMention = showInlinePanel ? inlineResults[0] : null;
+              // IME 组合输入期间（中文输入法选字）不响应 Enter/Backspace 快捷键，
+              // 否则拼音候选窗按 Enter 上屏会把未打完的句子直接发出去
+              if (event.nativeEvent.isComposing) return;
+              const preferredMention = showInlinePanel ? inlineResults[inlineHighlight] : null;
+              if (showInlinePanel && event.key === 'ArrowDown') {
+                event.preventDefault();
+                setInlineHighlight((i) => (i + 1) % Math.max(inlineResults.length, 1));
+                return;
+              }
+              if (showInlinePanel && event.key === 'ArrowUp') {
+                event.preventDefault();
+                setInlineHighlight(
+                  (i) => (i - 1 + inlineResults.length) % Math.max(inlineResults.length, 1),
+                );
+                return;
+              }
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
                 if (preferredMention) {
@@ -187,6 +227,10 @@ export function AskComposer({
               }
 
               if (event.key === 'Escape') {
+                if (showInlinePanel) {
+                  dismissInlinePanel();
+                  return;
+                }
                 setReferencePickerOpen(false);
                 setModelMenuOpen(false);
               }
@@ -197,20 +241,26 @@ export function AskComposer({
           <div className="ask-composer-toolbar">
             <div className="ask-composer-actions">
               <button
+                ref={referenceBtnRef}
                 className={`ask-tool-btn${referencePickerOpen ? ' active' : ''}`}
                 onClick={onToggleReferencePicker}
                 type="button"
+                aria-expanded={referencePickerOpen}
+                aria-haspopup="dialog"
               >
                 <span className="ask-tool-btn-leading">@</span>
                 <span>引用概念</span>
               </button>
               <button
+                ref={modelBtnRef}
                 className={`ask-tool-btn ask-model-btn${modelMenuOpen ? ' active' : ''}`}
                 onClick={() => {
                   setReferencePickerOpen(false);
                   setModelMenuOpen((prev) => !prev);
                 }}
                 type="button"
+                aria-expanded={modelMenuOpen}
+                aria-haspopup="dialog"
               >
                 <span>模型 · {currentModelLabel}</span>
               </button>
@@ -313,6 +363,13 @@ function ModelSelector({
   onClose: () => void;
   onSelectModel: (model: string) => void;
 }) {
+  // 打开时把焦点移到当前选中项：对话框 portal 在 body 末尾，
+  // 不把焦点拉进来的话键盘用户要 Tab 穿越整个页面
+  const activeOptionRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const id = window.setTimeout(() => activeOptionRef.current?.focus(), 20);
+    return () => window.clearTimeout(id);
+  }, []);
   return (
     <>
       <div className="ask-flyout-backdrop" onClick={onClose} aria-hidden="true" />
@@ -324,6 +381,7 @@ function ModelSelector({
             return (
               <button
                 key={item.value}
+                ref={active ? activeOptionRef : undefined}
                 className={`ask-model-option${active ? ' active' : ''}`}
                 onClick={() => onSelectModel(item.value)}
                 type="button"
@@ -346,10 +404,12 @@ function ModelSelector({
 function MentionResults({
   items,
   emptyLabel,
+  highlightIndex,
   onSelect,
 }: {
   items: MentionItem[];
   emptyLabel: string;
+  highlightIndex?: number;
   onSelect: (item: MentionItem) => void;
 }) {
   if (items.length === 0) {
@@ -362,14 +422,30 @@ function MentionResults({
 
   const conceptItems = items.filter((item) => item.kind === 'concept');
   const sourceItems = items.filter((item) => item.kind === 'source');
+  const keyboardNav = typeof highlightIndex === 'number';
+  // 高亮索引按扁平 items 顺序（概念组在前、资料组在后，与 inlineResults 一致）
+  const flatIndexOf = (item: MentionItem) =>
+    items.findIndex((entry) => entry.id === item.id && entry.kind === item.kind);
+  const activeId = keyboardNav
+    ? `mention-option-${items[highlightIndex % items.length]?.kind}-${items[highlightIndex % items.length]?.id}`
+    : undefined;
 
   return (
-    <div className="ask-reference-list">
+    <div
+      className="ask-reference-list"
+      role={keyboardNav ? 'listbox' : undefined}
+      aria-activedescendant={activeId}
+    >
       {conceptItems.length > 0 && (
         <div className="ask-reference-group">
           <div className="ask-reference-group-label">概念页</div>
           {conceptItems.map((item) => (
-            <MentionRow key={`${item.kind}-${item.id}`} item={item} onSelect={onSelect} />
+            <MentionRow
+              key={`${item.kind}-${item.id}`}
+              item={item}
+              onSelect={onSelect}
+              active={keyboardNav && flatIndexOf(item) === highlightIndex}
+            />
           ))}
         </div>
       )}
@@ -378,7 +454,12 @@ function MentionResults({
         <div className="ask-reference-group">
           <div className="ask-reference-group-label">资料文件</div>
           {sourceItems.map((item) => (
-            <MentionRow key={`${item.kind}-${item.id}`} item={item} onSelect={onSelect} />
+            <MentionRow
+              key={`${item.kind}-${item.id}`}
+              item={item}
+              onSelect={onSelect}
+              active={keyboardNav && flatIndexOf(item) === highlightIndex}
+            />
           ))}
         </div>
       )}
@@ -389,12 +470,26 @@ function MentionResults({
 function MentionRow({
   item,
   onSelect,
+  active = false,
 }: {
   item: MentionItem;
   onSelect: (item: MentionItem) => void;
+  active?: boolean;
 }) {
+  const rowRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (active) rowRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
   return (
-    <button className="ask-reference-item" onClick={() => onSelect(item)} type="button">
+    <button
+      ref={rowRef}
+      id={`mention-option-${item.kind}-${item.id}`}
+      className={`ask-reference-item${active ? ' active' : ''}`}
+      onClick={() => onSelect(item)}
+      type="button"
+      role="option"
+      aria-selected={active}
+    >
       <span className="ask-reference-item-icon">
         {item.kind === 'concept' ? <Icon.Wiki /> : <SourceTypeIcon type={item.type ?? 'file'} />}
       </span>

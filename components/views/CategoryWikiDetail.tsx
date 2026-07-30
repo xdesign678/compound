@@ -104,7 +104,8 @@ function renderMarkdownWithWikilinks(md: string, conceptTitleMap: Map<string, st
   result = result.replace(/\[\[([^\]]+)\]\]/g, (_match, title: string) => {
     const conceptId = conceptTitleMap.get(title.trim());
     if (conceptId) {
-      return `<a data-wikilink="${conceptId}" class="wikilink">${title}</a>`;
+      // role/tabindex 与 lib/format.ts 的 wikilink 渲染保持一致（键盘可达）
+      return `<span data-wikilink="${conceptId}" class="wikilink" role="link" tabindex="0">${title}</span>`;
     }
     return `<span class="wikilink wikilink--broken">${title}</span>`;
   });
@@ -219,7 +220,7 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
       const sanitized = dpMod
         ? dpMod.sanitize(raw, {
             ADD_TAGS: ['span'],
-            ADD_ATTR: ['data-wikilink', 'id'],
+            ADD_ATTR: ['data-wikilink', 'id', 'role', 'tabindex'],
           })
         : escapeHTML(raw);
       if (!cancelled) setHtmlContent(sanitized);
@@ -261,6 +262,9 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
     setRunStatus(null);
     setError(null);
     setHistoryOpen(false);
+    // 切换分类时清空旧正文/TOC，避免标题已是 B 而正文还是 A 的残留
+    setWiki(null);
+    setHtmlContent('');
     fetchWiki();
     fetchRuns();
   }, [fetchWiki, fetchRuns]);
@@ -337,17 +341,31 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
   useEffect(() => {
     if (!contentRef.current) return;
     const container = contentRef.current;
+    const openLink = (target: HTMLElement | null) => {
+      const el = target?.closest('[data-wikilink]');
+      if (!el) return;
+      const conceptId = (el as HTMLElement).getAttribute('data-wikilink');
+      if (conceptId) openConcept(conceptId);
+    };
     const handleClick = (e: MouseEvent) => {
-      const target = (e.target as HTMLElement).closest('[data-wikilink]');
-      if (!target) return;
-      const conceptId = (target as HTMLElement).getAttribute('data-wikilink');
-      if (conceptId) {
-        e.preventDefault();
-        openConcept(conceptId);
-      }
+      if (!(e.target as HTMLElement).closest('[data-wikilink]')) return;
+      e.preventDefault();
+      openLink(e.target as HTMLElement);
+    };
+    // 键盘可达：wikilink 渲染为 role="link" tabindex="0"，Enter/Space 也要能打开
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-wikilink]')) return;
+      e.preventDefault();
+      openLink(target);
     };
     container.addEventListener('click', handleClick);
-    return () => container.removeEventListener('click', handleClick);
+    container.addEventListener('keydown', handleKeydown);
+    return () => {
+      container.removeEventListener('click', handleClick);
+      container.removeEventListener('keydown', handleKeydown);
+    };
   }, [openConcept]);
 
   useEffect(() => {
@@ -408,7 +426,12 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
             <>
               <span>·</span>
               <span>{formatRelativeTime(wiki.generatedAt)}生成</span>
-              {wiki.stale && <span className="category-wiki-detail-stale">内容有更新</span>}
+              {wiki.stale && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="category-wiki-detail-stale">内容有更新</span>
+                </>
+              )}
             </>
           )}
         </div>
@@ -533,7 +556,7 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
                     onClick={handleGenerate}
                     disabled={isGenerating}
                   >
-                    {isGenerating ? '生成中...' : '✨ 手动重新生成'}
+                    {isGenerating ? '生成中…' : '手动重新生成'}
                   </button>
                 </div>
               )}

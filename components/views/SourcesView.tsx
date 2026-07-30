@@ -1,7 +1,7 @@
 'use client';
 
 import './sources.css';
-import { useMemo, useCallback, useRef, useLayoutEffect } from 'react';
+import { useMemo, useCallback, useRef, useLayoutEffect, useDeferredValue } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
@@ -21,7 +21,9 @@ export function SourcesView() {
   const visibleCount = useAppStore((s) => s.sourcesState.visibleCount);
   const query = useAppStore((s) => s.sourcesState.query);
   const setSourcesState = useAppStore((s) => s.setSourcesState);
-  const normalizedQuery = query.trim().toLowerCase();
+  // 输入防抖：来源量大时每次击键全表 filter 会掉帧
+  const deferredQuery = useDeferredValue(query);
+  const normalizedQuery = deferredQuery.trim().toLowerCase();
 
   const setQuery = useCallback(
     (value: string) => setSourcesState({ query: value, visibleCount: PAGE_SIZE }),
@@ -139,7 +141,7 @@ export function SourcesView() {
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索标题、作者或来源..."
+                placeholder="搜索标题、作者或来源…"
                 aria-label="搜索资料"
                 autoComplete="off"
               />
@@ -159,7 +161,10 @@ export function SourcesView() {
           <>
             {totalMatches === 0 && (
               <div className="empty-state empty-state-compact" role="status" aria-live="polite">
-                没有匹配的资料
+                <p>没有匹配的资料</p>
+                <button type="button" className="modal-btn" onClick={() => setQuery('')}>
+                  清空搜索
+                </button>
               </div>
             )}
             {filteredSources.map((source) => (
@@ -180,27 +185,35 @@ export function SourcesView() {
                     <SourceTypeIcon type={source.type} />
                     {SOURCE_TYPE_LABELS[source.type]}
                   </span>
-                  <span>·</span>
+                  <span aria-hidden="true">·</span>
                   <span>{conceptCountBySource?.get(source.id) ?? 0} 个概念</span>
-                  <span>·</span>
+                  <span aria-hidden="true">·</span>
                   <span>{formatRelativeTime(source.ingestedAt)}</span>
                 </div>
               </button>
             ))}
-            <div className="list-end-hint">
-              <span>
-                已显示 {filteredSources.length} / {totalMatches} 份资料
-              </span>
-            </div>
-            {filteredSources.length < totalMatches && (
-              <button
-                className="modal-btn"
-                type="button"
-                onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
-              >
-                加载更多
-              </button>
-            )}
+            {/* 与 LibraryView 一致的互斥结构：有更多时 hint 与按钮并排收在卡片下方，
+                避免按钮被 30vh 的 list-end-hint 空白埋住 */}
+            {filteredSources.length < totalMatches ? (
+              <div className="list-load-more">
+                <span className="list-load-more-hint">
+                  已显示 {filteredSources.length} / {totalMatches} 份资料
+                </span>
+                <button
+                  className="modal-btn"
+                  type="button"
+                  onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+                >
+                  加载更多
+                </button>
+              </div>
+            ) : totalMatches > 0 ? (
+              <div className="list-end-hint">
+                <span>
+                  已显示 {filteredSources.length} / {totalMatches} 份资料
+                </span>
+              </div>
+            ) : null}
           </>
         )}
       </div>

@@ -253,6 +253,9 @@ export const STATUS_TEXT: Record<string, string> = {
   cancelled: '已取消',
   succeeded: '成功',
   skipped: '跳过',
+  info: '信息',
+  warn: '警告',
+  error: '错误',
 };
 
 export const STAGE_TEXT: Record<string, string> = {
@@ -277,6 +280,21 @@ export const STAGE_TEXT: Record<string, string> = {
 
 export function fmtDate(value?: number | null): string {
   return value ? new Date(value).toLocaleString() : '-';
+}
+
+/** 相对时间（3 分钟前/2 小时前），适合事件流、最近失败时间等小字场景 */
+export function fmtRelative(value?: number | null): string {
+  if (!value) return '-';
+  const diff = Date.now() - value;
+  if (diff < 0) return '刚刚';
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return '刚刚';
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} 天前`;
+  return new Date(value).toLocaleDateString();
 }
 
 export function fmtDuration(ms: number | null | undefined): string {

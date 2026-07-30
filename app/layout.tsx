@@ -161,7 +161,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       document.documentElement.style.setProperty('--prose-font-size', fsMap[fs] + 'px');
     }
     var lh = localStorage.getItem('compound_line_height');
-    var lhMap = {compact:1.5,standard:1.7,relaxed:1.9};
+    // 必须与 lib/store/ui-slice.ts 的 LINE_HEIGHT_MAP 保持一致（唯一来源）
+    var lhMap = {compact:1.5,snug:1.65,standard:1.75,relaxed:1.85,loose:2.0};
     if (lh && lhMap[lh]) {
       document.documentElement.style.setProperty('--prose-line-height', String(lhMap[lh]));
     }

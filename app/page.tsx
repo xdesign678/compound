@@ -10,6 +10,7 @@ import { DESKTOP_LAYOUT_MIN_WIDTH, isDesktopWidth } from '@/lib/responsive';
 
 import { Header } from '@/components/Header';
 import { TabBar } from '@/components/TabBar';
+import { ListTree } from 'lucide-react';
 import { useKeyboardShortcuts } from '@/lib/hooks/useKeyboardShortcuts';
 import { useOnlineStatus } from '@/lib/hooks/useOnlineStatus';
 import { useResizable } from '@/lib/hooks/useResizable';
@@ -254,7 +255,6 @@ export default function Page() {
   const renderGithubSync = useDelayedUnmount(githubSyncOpen);
   const openObsidianImport = useAppStore((s) => s.openObsidianImport);
   const openGithubSync = useAppStore((s) => s.openGithubSync);
-  const showFab = !detail && (tab === 'wiki' || tab === 'sources');
   const inLibraryMode = tab === 'wiki' && homeStyle === 'library';
   const usesDetailOverlay = inLibraryMode || tab === 'ask';
   const shouldShowDesktopDetail =
@@ -389,8 +389,8 @@ export default function Page() {
   if (isDesktop) {
     return (
       <div className="app-shell desktop-shell">
-        <CommandPalette />
         <OfflineBanner />
+        <CommandPalette />
 
         <div className="desktop-frame">
           <aside className="desktop-sidebar">
@@ -521,8 +521,8 @@ export default function Page() {
 
   return (
     <div className="app-shell">
-      <CommandPalette />
       <OfflineBanner />
+      <CommandPalette />
       <SwipeBack />
       <PullToRefresh
         onRefresh={async () => {
@@ -564,15 +564,29 @@ export default function Page() {
               </span>
               <span>返回</span>
             </button>
+            {/* 目录入口：两个详情组件都监听这个事件，主阅读流程此前没有入口 */}
+            <button
+              type="button"
+              className="icon-btn mobile-detail-toc-btn"
+              aria-label="打开目录"
+              title="打开目录"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent(
+                    detail.type === 'concept'
+                      ? 'compound:open-concept-toc'
+                      : 'compound:open-source-toc',
+                  ),
+                )
+              }
+            >
+              <span aria-hidden="true">
+                <ListTree />
+              </span>
+            </button>
           </header>
           <div className="mobile-detail-scroll">{renderDetail()}</div>
         </div>
-      )}
-
-      {showFab && ready && (
-        <button className="fab" onClick={openModal} aria-label="添加资料">
-          <Icon.Plus />
-        </button>
       )}
 
       {tab === 'ask' && libraryOverlayDetail && (

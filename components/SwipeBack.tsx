@@ -23,13 +23,23 @@ export function SwipeBack() {
   const detail = useAppStore((s) => s.detail);
   const modalOpen = useAppStore((s) => s.modalOpen);
   const settingsOpen = useAppStore((s) => s.settingsOpen);
+  const obsidianImportOpen = useAppStore((s) => s.obsidianImportOpen);
+  const githubSyncOpen = useAppStore((s) => s.githubSyncOpen);
+  const commandPaletteOpen = useAppStore((s) => s.commandPaletteOpen);
 
   const startRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const indicatorRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef(0);
   const hasHapticRef = useRef(false);
 
-  const canSwipe = detail && !modalOpen && !settingsOpen;
+  // 详情之上叠了任何弹层时都不响应边缘滑动返回，避免误关详情
+  const canSwipe =
+    detail &&
+    !modalOpen &&
+    !settingsOpen &&
+    !obsidianImportOpen &&
+    !githubSyncOpen &&
+    !commandPaletteOpen;
 
   const updateIndicator = useCallback((progress: number) => {
     const el = indicatorRef.current;

@@ -1,7 +1,13 @@
+/* 设计 token 与 app/globals.css 双向同步：新增/修改/删除 token
+   时必须同时更新两个文件，保持 :root 与 .dark 的 token 集合一致。 */
 :root {
   --brand-clay: #d97757;
+  --brand-clay-rgb: 217 119 87;
   --brand-clay-text: #7d3522;
   --brand-clay-soft: rgba(217, 119, 87, 0.12);
+  --color-brand: var(--brand-clay);
+  --color-brand-strong: var(--brand-clay-text);
+  --text-on-clay: #141413;
   --bg-primary: #faf9f5;
   --bg-secondary: #f9f9f7;
   --bg-hover: #f5f4f0;
@@ -51,6 +57,7 @@
   --z-modal: 60;
   --z-task-center: 70;
   --z-toast: 80;
+  --z-detail-overlay: 120;
   --z-command-palette: 200;
   --z-tooltip: 260;
 
@@ -67,6 +74,7 @@
   --leading-body: 1.7;
   --leading-relaxed: 1.82;
 
+  --space-3xs: 2px;
   --space-2xs: 4px;
   --space-xs: 6px;
   --space-sm: 8px;
@@ -76,6 +84,12 @@
   --space-2xl: 24px;
   --space-3xl: 32px;
   --space-4xl: 44px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
+  --radius-control: 7.5px;
 
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
@@ -100,6 +114,7 @@
   --text-tertiary: #9a9a94;
   --brand-clay-text: #f0a183;
   --text-on-button: #1a1a18;
+  --text-on-clay: #1a1a18;
 
   --border-light: rgba(236, 233, 225, 0.08);
   --border-default: rgba(236, 233, 225, 0.12);

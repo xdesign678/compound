@@ -1,7 +1,12 @@
+/* 设计 token 与 app/globals-critical.css 双向同步：新增/修改/删除 token
+   时必须同时更新两个文件，保持 :root 与 .dark 的 token 集合一致。 */
 :root {
   --brand-clay: #d97757;
+  --brand-clay-rgb: 217 119 87;
   --brand-clay-text: #7d3522;
   --brand-clay-soft: rgba(217, 119, 87, 0.12);
+  --color-brand: var(--brand-clay);
+  --color-brand-strong: var(--brand-clay-text);
   --text-on-clay: #141413;
   --bg-primary: #faf9f5;
   --bg-secondary: #f9f9f7;
@@ -42,11 +47,17 @@
   --motion-duration-fast: 180ms;
   --motion-duration-base: 240ms;
   --motion-duration-slow: 320ms;
+  --motion-fast: 180ms;
+  --motion-base: 240ms;
+  --motion-slow: 320ms;
   --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --motion-ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --z-modal: 60;
   --z-task-center: 70;
   --z-toast: 80;
+  --z-detail-overlay: 120;
   --z-command-palette: 200;
   --z-tooltip: 260;
 
@@ -81,6 +92,8 @@
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-full: 999px;
+  /* 控件级圆角（按钮/输入框/chip 的 7.5px 历史值，统一引用） */
+  --radius-control: 7.5px;
 
   /* Safe area (unified reference for all safe-area-inset usages) */
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -122,6 +135,14 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* 全局盒模型：组件不再各自补 box-sizing（此前约 15 处组件级自救声明）。
+   若某组件在 content-box 时代依赖 width+padding 叠加，需要单独核查。 */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 :is(
   a,
   button,
@@ -142,10 +163,11 @@
   box-shadow: 0 0 0 4px var(--brand-clay-soft);
 }
 
-/* Prevent iOS Safari from zooming when focusing inputs on mobile.
+/* Prevent iOS Safari from zooming when focusing inputs on touch devices
+   (covers iPad portrait too, not just ≤767px phones).
    !important so later component stylesheets (e.g. .ask-flyout-search input,
    .settings-field input) cannot re-shrink a focusable field below 16px. */
-@media (max-width: 767px) {
+@media (pointer: coarse) {
   input:not([type]),
   input[type='text'],
   input[type='search'],
@@ -190,7 +212,7 @@ button {
   border: none;
   cursor: pointer;
   color: inherit;
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   transition:
     background var(--motion-duration-fast) var(--motion-ease-standard),
     border-color var(--motion-duration-fast) var(--motion-ease-standard),
@@ -228,9 +250,6 @@ button {
   flex-shrink: 0;
   position: relative;
   z-index: 10;
-}
-.dark .header {
-  background: var(--bg-primary);
 }
 .header-copy {
   min-width: 0;
@@ -289,7 +308,7 @@ button {
   min-height: 44px;
   width: 44px;
   height: 44px;
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -432,6 +451,23 @@ button {
 .app-main::-webkit-scrollbar {
   width: 0;
 }
+/* 桌面端恢复细滚动条：长列表需要位置指示与可拖拽轨道 */
+@media (hover: hover) and (pointer: fine) {
+  .app-main {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-default) transparent;
+  }
+  .app-main::-webkit-scrollbar {
+    width: 6px;
+  }
+  .app-main::-webkit-scrollbar-thumb {
+    background: var(--border-default);
+    border-radius: var(--radius-full);
+  }
+  .app-main::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
 
 /* Tab bar — part of flex layout, always at bottom */
 .tabbar {
@@ -445,25 +481,6 @@ button {
 /* tablist wrapper: display contents so children participate in parent flex */
 .tabbar-tabs {
   display: contents;
-}
-/* Visual ordering: first two tabs, then "+", then the rest */
-.tabbar-tabs > :nth-child(1) {
-  order: 1;
-}
-.tabbar-tabs > :nth-child(2) {
-  order: 2;
-}
-.tab-add {
-  order: 3;
-}
-.tabbar-tabs > :nth-child(3) {
-  order: 4;
-}
-.tabbar-tabs > :nth-child(4) {
-  order: 5;
-}
-.dark .tabbar {
-  background: var(--bg-primary);
 }
 .tab-item {
   flex: 1;
@@ -535,7 +552,7 @@ button {
   justify-content: flex-start;
   gap: var(--space-md);
   padding: 12px 14px;
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   color: var(--text-secondary);
   transition:
     background var(--motion-duration-fast) var(--motion-ease-standard),
@@ -613,7 +630,7 @@ button {
   bottom: calc(72px + var(--safe-bottom));
   width: 52px;
   height: 52px;
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   background: var(--bg-button);
   color: var(--text-on-button);
   display: flex;
@@ -660,9 +677,6 @@ button {
     border-color var(--motion-duration-fast) var(--motion-ease-standard),
     background var(--motion-duration-fast) var(--motion-ease-standard);
   transform-origin: top right;
-}
-.dark .search-bar {
-  background: var(--bg-primary);
 }
 .search-bar.scrolled {
   border-color: var(--border-section);
@@ -712,33 +726,7 @@ button {
   }
 }
 
-/* Header search-collapsed icon button: tucks right next to the GitHub icon.
-   Collapsed state has width 0 and a negative margin that cancels the flex gap,
-   so the icons don't shift when it hides. */
-.header-search-btn {
-  order: 0;
-  flex: 0 0 auto;
-  width: 0 !important;
-  padding: 0 !important;
-  margin-right: -4px !important;
-  opacity: 0;
-  transform: translate3d(10px, 0, 0) scale(0.9);
-  pointer-events: none;
-  overflow: hidden;
-  will-change: width, transform, opacity;
-  transition:
-    width 240ms var(--motion-ease-emphasized),
-    margin 240ms var(--motion-ease-emphasized),
-    opacity 160ms var(--motion-ease-standard) 40ms,
-    transform 240ms var(--motion-ease-emphasized);
-}
-.header-search-btn.is-visible {
-  width: 44px !important;
-  margin-right: 0 !important;
-  opacity: 1;
-  transform: translateX(0) scale(1);
-  pointer-events: auto;
-}
+/* .header-search-btn 死代码已删除（无使用方；Header 用的是 header-mobile-search-btn） */
 .search-label {
   display: block;
   font-family: var(--font-sans);
@@ -755,7 +743,7 @@ button {
   width: 100%;
   background: var(--bg-card);
   border: 1px solid var(--border-default);
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   padding: 12px 16px 12px 40px;
   font-size: var(--text-base);
   font-family: var(--font-sans);
@@ -808,7 +796,7 @@ button {
   color: var(--text-secondary);
   max-width: 30rem;
 }
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .search-bar {
     padding: 12px 16px 12px;
   }
@@ -816,7 +804,7 @@ button {
     padding: 14px 16px 12px;
   }
   .view-lead-copy {
-    font-size: 14.5px;
+    font-size: var(--text-base);
     line-height: 1.6;
   }
 }
@@ -864,6 +852,8 @@ button {
   border-radius: var(--radius-md);
   padding: 18px;
   content-visibility: auto;
+  /* 变高卡片配估值高度，避免视口外卡片塌陷导致滚动条跳动/滚动恢复错位 */
+  contain-intrinsic-size: auto 140px;
   box-shadow: none;
   transition:
     box-shadow var(--motion-duration-base) var(--motion-ease-standard),
@@ -952,9 +942,8 @@ button {
 .list-end-hint span {
   font-family: var(--font-sans);
   font-size: var(--text-xs);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   letter-spacing: 0.02em;
-  opacity: 0.6;
 }
 
 /* Load-more footer — keeps the count + button stacked right below the cards
@@ -1137,7 +1126,7 @@ button {
   width: 100%;
   padding: var(--space-md);
   background: var(--bg-muted);
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   font-family: var(--font-sans);
   font-size: var(--text-base);
   color: var(--text-primary);
@@ -1158,7 +1147,7 @@ button {
 .modal-btn.primary {
   background: var(--bg-button);
   color: var(--text-on-button);
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   font-weight: 400;
   margin-bottom: var(--space-sm);
 }
@@ -1183,10 +1172,11 @@ button {
 }
 .modal-btn.danger-confirm {
   background: var(--brand-clay);
-  color: var(--text-on-button);
+  color: var(--text-on-clay);
 }
 .modal-btn.danger-confirm:hover {
   background: var(--brand-clay-text);
+  color: var(--text-on-button);
 }
 
 /* Ask tab height */
@@ -1194,12 +1184,9 @@ button {
   height: 100%;
 }
 
-/* Tablet breakpoint: 768px–1023px — icon-only sidebar, no bottom tabbar */
+/* Tablet breakpoint: 768px–1023px — 桌面分支 ≥1024px 才渲染，
+   此区间继续使用底部 TabBar（不要再隐藏，否则平板没有任何导航）。 */
 @media (min-width: 768px) and (max-width: 1023px) {
-  .tabbar {
-    display: none;
-  }
-
   .desktop-sidebar {
     display: flex;
     flex-direction: column;
@@ -1264,6 +1251,282 @@ button {
   .desktop-sidebar-btn span {
     display: none;
   }
+}
+
+/* === 共享结构样式（必须随首屏加载）===
+   以下规则被急切渲染的 UI（首屏骨架、tab 切换动画、移动端详情覆盖层、
+   共享弹窗头部、列表容器 padding）使用，不能放在懒加载 chunk 的 CSS 里，
+   否则首次导航到对应页面时会出现无样式内容。 */
+
+/* Page transition animations */
+@keyframes tabFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.tab-view {
+  animation: tabFadeIn var(--motion-duration-base) var(--motion-ease-emphasized) forwards;
+}
+
+/* Mobile detail overlay — full-screen layer on top of the list view.
+   The list stays mounted (display:none) so its scroll position is preserved. */
+.mobile-detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  transform: translateZ(0);
+  will-change: transform;
+  animation: slideInRight var(--motion-duration-slow) var(--motion-ease-emphasized) forwards;
+}
+.mobile-detail-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  padding: 6px 20px;
+  min-height: auto;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-default);
+}
+.mobile-detail-header .back-btn {
+  position: relative;
+  z-index: 2;
+}
+.mobile-detail-toc-btn {
+  margin-left: auto;
+}
+.mobile-detail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+}
+
+/* 共享弹窗头部（SettingsDrawer 与 SourceDetail/ConceptDetail 的目录弹窗） */
+.settings-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  padding: 0 6px 14px;
+}
+.settings-hero h3 {
+  font-size: 22px;
+  margin-bottom: 5px;
+  color: var(--text-primary);
+}
+.settings-hero p {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.settings-kicker {
+  margin-bottom: 5px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--text-primary);
+}
+.settings-close-btn {
+  flex: 0 0 auto;
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-radius: var(--radius-full);
+  padding: 7px 12px;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Loading skeleton（首屏与各列表加载态共用） */
+@keyframes shimmer {
+  0% {
+    background-position: -300% 0;
+  }
+  100% {
+    background-position: 300% 0;
+  }
+}
+.loading-skeleton {
+  padding: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.loading-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+}
+.loading-copy span {
+  color: var(--brand-clay);
+  font-size: 11px;
+  font-weight: 650;
+}
+.loading-copy strong {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: 650;
+  line-height: 1.45;
+}
+.skeleton {
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    90deg,
+    var(--bg-secondary) 25%,
+    var(--bg-hover) 50%,
+    var(--bg-secondary) 75%
+  );
+  background-size: 300% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+.skeleton-header {
+  height: 20px;
+  width: 45%;
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+}
+.skeleton-card {
+  height: 78px;
+}
+/* Skeleton variants per view */
+.skeleton-sources .skeleton-card {
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  padding: var(--space-md) var(--space-lg);
+}
+.skeleton-sources .skeleton-card::before {
+  content: '';
+  display: block;
+  height: 14px;
+  width: 55%;
+  border-radius: var(--radius-sm);
+  background: inherit;
+}
+.skeleton-sources .skeleton-card::after {
+  content: '';
+  display: block;
+  height: 10px;
+  width: 30%;
+  border-radius: var(--radius-sm);
+  background: inherit;
+  opacity: 0.6;
+}
+
+/* 列表/详情视图容器基础留白（桌面端在 ≥1024px 媒体查询中覆盖） */
+.view-padding {
+  padding: 10px 20px 100px;
+}
+@media (max-width: 767px) {
+  .view-padding {
+    padding: 8px 14px 88px;
+  }
+}
+
+/* 404 页面（app/not-found.tsx） */
+.not-found {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 48px 24px;
+  font-family: var(--font-reading);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  text-align: center;
+}
+.not-found-code {
+  font-size: 64px;
+  line-height: 1;
+  margin-bottom: 16px;
+  opacity: 0.8;
+}
+.not-found-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  letter-spacing: -0.01em;
+}
+.not-found-desc {
+  font-size: 15px;
+  color: var(--text-secondary);
+  max-width: 400px;
+  line-height: 1.7;
+  margin: 0 0 32px;
+}
+.not-found-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.not-found-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.not-found-btn-primary {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+}
+.not-found-btn-primary:hover {
+  background: var(--brand-clay-text);
+  color: var(--text-on-button);
+}
+.not-found-btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+}
+.not-found-btn-secondary:hover {
+  border-color: var(--brand-clay);
+}
+.not-found-footer {
+  margin-top: 48px;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 @media (min-width: 1024px) {
@@ -1354,6 +1617,7 @@ button {
 
   .desktop-sidebar-add:hover {
     background: var(--brand-clay-text);
+    color: var(--text-on-button);
   }
 
   .desktop-sidebar-add:active {
@@ -1371,7 +1635,7 @@ button {
     align-items: center;
     gap: 10px;
     padding: 10px 14px;
-    border-radius: 7.5px;
+    border-radius: var(--radius-control);
     background: var(--bg-muted);
     color: var(--text-primary);
     font-weight: 500;
@@ -1459,12 +1723,12 @@ button {
   }
 
   .desktop-divider:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--brand-clay);
     outline-offset: 2px;
   }
 
   .desktop-divider:active {
-    background: var(--border-active, var(--accent));
+    background: var(--brand-clay);
   }
 
   .desktop-primary-panel,
@@ -1854,47 +2118,6 @@ h3 {
     max-width: 140px;
   }
 
-  /* 浮层遮罩：手机端点击空白处关闭，并覆盖 tab bar */
-  .ask-flyout-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
-    z-index: var(--z-modal);
-    animation: askBackdropIn 180ms var(--motion-ease-standard);
-  }
-
-  /* 浮层：手机端改为底部弹出面板，盖住 composer 与 tab bar */
-  .ask-flyout {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: var(--ask-kb-offset, 0px);
-    top: auto;
-    transform: none;
-    width: 100%;
-    max-width: 100%;
-    max-height: 75dvh;
-    padding: 14px 14px calc(18px + var(--safe-bottom));
-    border-radius: 16px 16px 0 0;
-    border: 1px solid var(--border-light);
-    border-bottom: none;
-    box-shadow: 0 -10px 32px rgba(20, 20, 19, 0.18);
-    overflow-y: auto;
-    z-index: var(--z-modal);
-    animation: askSheetIn 220ms var(--motion-ease-emphasized);
-  }
-
-  /* 输入法唤起时吸附到 composer 上方 */
-  .ask-flyout.ask-inline-flyout {
-    bottom: calc(72px + var(--safe-bottom) + var(--ask-kb-offset, 0px));
-    max-height: 60vh;
-    padding: 14px 14px;
-    border-radius: 12px 12px 0 0;
-    box-shadow: 0 -10px 24px rgba(20, 20, 19, 0.12);
-    z-index: 40;
-  }
-
   .ask-model-flyout,
   .ask-reference-flyout {
     width: 100%;
@@ -1902,33 +2125,8 @@ h3 {
     right: 0;
   }
 
-  .ask-flyout-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .ask-flyout::before {
-    content: '';
-    display: block;
-    width: 36px;
-    height: 4px;
-    border-radius: var(--radius-full);
-    background: var(--border-default);
-    margin: -4px auto 10px;
-  }
-
   .ask-flyout-search {
     padding: 9px 11px;
-  }
-
-  .ask-segmented {
-    width: 100%;
-    justify-content: stretch;
-  }
-
-  .ask-segmented-btn {
-    flex: 1;
   }
 
   .ask-reference-item {

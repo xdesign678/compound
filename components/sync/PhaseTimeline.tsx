@@ -54,6 +54,7 @@ export default function PhaseTimeline({ phases }: Props) {
                   <span
                     className="sync-v2-phase-bar"
                     role="progressbar"
+                    aria-label={`${phase.label}进度`}
                     aria-valuenow={percent}
                     aria-valuemin={0}
                     aria-valuemax={100}
@@ -63,7 +64,7 @@ export default function PhaseTimeline({ phases }: Props) {
                 ) : null}
               </span>
               <span className="sync-v2-phase-disclosure" aria-hidden="true">
-                {isOpen ? '−' : '+'}
+                {isOpen ? '▾' : '▸'}
               </span>
             </button>
             {isOpen ? <RawStages phase={phase} /> : null}

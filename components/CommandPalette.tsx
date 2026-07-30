@@ -6,6 +6,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { useAppStore, type TabId } from '@/lib/store';
 import { scoreCommandMatch } from '@/lib/utils';
+import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 import { Icon } from './Icons';
 
 interface CommandItem {
@@ -106,6 +107,9 @@ export function CommandPalette() {
   const [showHelp, setShowHelp] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useFocusTrap(dialogRef, open);
 
   const concepts = useLiveQuery(
     async () => {
@@ -331,9 +335,11 @@ export function CommandPalette() {
     <div className="cmd-overlay" onClick={handleClose}>
       <div
         className="cmd-dialog"
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="命令面板"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="cmd-input-row">

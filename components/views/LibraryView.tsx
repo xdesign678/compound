@@ -369,8 +369,11 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
 
   if (!concepts) {
     return (
-      <div className="empty-state" role="status" aria-live="polite">
-        加载中...
+      <div className="skeleton-sources" role="status" aria-label="正在加载知识库" aria-busy="true">
+        <div className="skeleton skeleton-header" />
+        <div className="skeleton skeleton-card" />
+        <div className="skeleton skeleton-card" style={{ opacity: 0.7 }} />
+        <div className="skeleton skeleton-card" style={{ opacity: 0.4 }} />
       </div>
     );
   }
@@ -422,7 +425,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
               <span className="recap-entry-count">{unreviewedCount} 个待回顾</span>
             </span>
             <span className="recap-entry-action">
-              <Icon.Send />
+              <ChevronRight size={18} aria-hidden="true" />
             </span>
           </button>
         </div>
@@ -607,7 +610,9 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
             )}
           </div>
 
-          <div className="library-filter-status">{filterLabel}</div>
+          <div className="library-filter-status" role="status" aria-live="polite">
+            {filterLabel}
+          </div>
 
           {selectedPrimary && deferredQuery.trim() && (
             <div className="filter-indicator">

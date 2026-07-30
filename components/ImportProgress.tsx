@@ -47,7 +47,7 @@ export function ImportProgress({
           <div className="import-progress-stage">{stage}</div>
         </div>
         {running && onCancel && (
-          <button className="modal-btn import-progress-action" onClick={onCancel}>
+          <button className="modal-btn import-progress-action" type="button" onClick={onCancel}>
             取消
           </button>
         )}
@@ -74,18 +74,23 @@ export function ImportProgress({
           <div className="import-progress-error-text">{error.slice(0, 180)}</div>
           <div className="import-progress-actions">
             {onRetry && (
-              <button className="modal-btn primary import-progress-action" onClick={onRetry}>
+              <button
+                className="modal-btn primary import-progress-action"
+                type="button"
+                onClick={onRetry}
+              >
                 重试
               </button>
             )}
             <button
               className="modal-btn import-progress-action"
+              type="button"
               onClick={() => void navigator.clipboard?.writeText(error)}
             >
               复制日志
             </button>
             {onClose && (
-              <button className="modal-btn import-progress-action" onClick={onClose}>
+              <button className="modal-btn import-progress-action" type="button" onClick={onClose}>
                 关闭
               </button>
             )}

@@ -205,6 +205,19 @@
   font-size: 16px;
   line-height: 1;
 }
+/* 视觉隐藏但对辅助技术可见（状态摘要 live 区） */
+.tc-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 .tc-list {
   overflow-y: auto;
   flex: 1;

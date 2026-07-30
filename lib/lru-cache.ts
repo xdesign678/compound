@@ -41,6 +41,10 @@ export class LRUMap<K, V> {
     return this._map.has(key);
   }
 
+  delete(key: K): boolean {
+    return this._map.delete(key);
+  }
+
   get size(): number {
     return this._map.size;
   }

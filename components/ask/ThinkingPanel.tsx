@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Icon } from '../Icons';
 import type { AskMessageStage, AskStageKey } from '../../lib/types';
 
@@ -84,9 +84,10 @@ export function ThinkingPanel({
     rows[0];
 
   return (
-    <div className="thinking-panel" aria-live="polite">
+    <div className="thinking-panel">
       <div className="thinking-panel-header">
-        <span className="thinking-panel-title">
+        {/* live 区收窄到当前步骤名：管线频繁更新时整面板播报会刷屏 */}
+        <span className="thinking-panel-title" aria-live="polite">
           <span className="thinking-panel-spinner" aria-hidden />
           {current?.label ?? 'Wiki 思考中'}
         </span>
@@ -135,6 +136,7 @@ export function ThinkingPanel({
  */
 export function ThinkingTrace({ stages }: { stages: AskMessageStage[] }) {
   const [open, setOpen] = useState(false);
+  const listId = useId();
   const rows = buildRows(stages);
   const doneCount = rows.filter((r) => r.state === 'done').length;
   const totalMs = rows.reduce((acc, r) => acc + (r.durationMs ?? 0), 0);
@@ -146,6 +148,7 @@ export function ThinkingTrace({ stages }: { stages: AskMessageStage[] }) {
         className="thinking-trace-toggle"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        aria-controls={open ? listId : undefined}
       >
         <span className={`thinking-trace-caret${open ? ' is-open' : ''}`} aria-hidden>
           ▾
@@ -155,7 +158,7 @@ export function ThinkingTrace({ stages }: { stages: AskMessageStage[] }) {
         </span>
       </button>
       {open && (
-        <ol className="thinking-step-list thinking-step-list-collapsed" role="list">
+        <ol className="thinking-step-list thinking-step-list-collapsed" role="list" id={listId}>
           {rows.map((row) => (
             <li key={row.key} className={`thinking-step thinking-step-${row.state}`}>
               <span className="thinking-step-marker" aria-hidden>

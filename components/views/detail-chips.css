@@ -6,7 +6,7 @@
   overflow-wrap: anywhere;
   word-break: break-word;
   border: 1px solid var(--border-light);
-  border-radius: 7.5px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-primary);
   font-family: var(--font-sans);

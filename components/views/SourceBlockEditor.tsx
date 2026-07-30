@@ -128,12 +128,22 @@ function BlockItem({
     <div
       className={`source-block${isActive ? ' is-editing' : ''}`}
       role="group"
-      aria-label={block.type === 'heading' ? '标题块' : '内容块'}
+      aria-label={block.type === 'heading' ? '标题块，回车进入编辑' : '内容块，回车进入编辑'}
       onClick={handleClick}
+      onKeyDown={(e) => {
+        // 键盘可达：渲染态聚焦后 Enter/Space 进入编辑（点击路径的链接/标签排除在这里不需要，
+        // 键盘事件目标就是容器本身）
+        if (!editable || isActive) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onEnterEdit(block);
+        }
+      }}
+      tabIndex={editable && !isActive ? 0 : undefined}
       id={block.type === 'heading' ? block.id : undefined}
     >
       <div
-        className="source-block-render prose"
+        className="source-block-render"
         dangerouslySetInnerHTML={{ __html: html }}
         style={{ display: isActive ? 'none' : undefined }}
       />

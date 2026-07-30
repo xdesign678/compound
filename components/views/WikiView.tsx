@@ -69,7 +69,6 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   const openConcept = useAppStore((s) => s.openConcept);
   const freshIds = useAppStore((s) => s.freshConceptIds);
   const detail = useAppStore((s) => s.detail);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
@@ -83,7 +82,7 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
     useAppStore.getState().setWikiState({ scrollTop });
   }, []);
 
-  const { scrolled } = useScrollSpy({ scrollRootSelector, onScroll: handleWikiScroll });
+  useScrollSpy({ scrollRootSelector, onScroll: handleWikiScroll });
 
   // IntersectionObserver-based scroll anchor — replaces per-frame
   // querySelectorAll + getBoundingClientRect forced reflows.
@@ -166,7 +165,8 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
     getUnreviewedCountFromDb().then(setUnreviewedCount);
   }, [totalConceptCount]);
 
-  const concepts = serverConcepts ?? localConcepts;
+  // 服务端返回 0 条时回退本地结果，否则本地明明有匹配也显示「没有匹配的概念」
+  const concepts = serverConcepts && serverConcepts.length > 0 ? serverConcepts : localConcepts;
 
   // Re-observe cards when the concept list changes (new data, pagination, etc.)
   useEffect(() => {
@@ -242,8 +242,8 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
       )}
       {!hasMatches ? (
         !hasAnyConcepts ? (
-          <div className="empty-state empty-state-spacious">
-            <div className="es-icon">
+          <div className="empty-state empty-state-spacious" role="status" aria-live="polite">
+            <div className="es-icon" aria-hidden="true">
               <Icon.Sparkle />
             </div>
             <h3>Wiki 还是空的</h3>
@@ -297,19 +297,27 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
               </div>
             </>
           )}
-          <div className="list-end-hint">
-            <span>
-              {serverSearchLoading ? '服务端检索中 · ' : ''}已显示 {concepts.length} /{' '}
-              {totalVisibleMatches} 个概念 · 点击 + 添加更多知识
-            </span>
-          </div>
-          {concepts.length < totalVisibleMatches && (
-            <button
-              className="modal-btn"
-              onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
-            >
-              加载更多
-            </button>
+          {concepts.length < totalVisibleMatches ? (
+            <div className="list-load-more">
+              <span className="list-load-more-hint">
+                {serverSearchLoading ? '服务端检索中 · ' : ''}已显示 {concepts.length} /{' '}
+                {totalVisibleMatches} 个概念
+              </span>
+              <button
+                className="modal-btn"
+                type="button"
+                onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+              >
+                加载更多
+              </button>
+            </div>
+          ) : (
+            <div className="list-end-hint">
+              <span>
+                {serverSearchLoading ? '服务端检索中 · ' : ''}已显示 {concepts.length} /{' '}
+                {totalVisibleMatches} 个概念 · 点击 + 添加更多知识
+              </span>
+            </div>
           )}
         </>
       )}
