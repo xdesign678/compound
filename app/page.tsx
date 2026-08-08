@@ -621,6 +621,28 @@ export default function Page() {
 
             {shouldShowDesktopDetail && (
               <aside className="desktop-detail-panel">
+                {/* 目录入口：与移动端 overlay 同一个事件，分类 Wiki 详情没有目录抽屉，不显示 */}
+                {detail && detail.type !== 'category-wiki' && (
+                  <button
+                    type="button"
+                    className="icon-btn desktop-detail-toc-btn"
+                    aria-label="打开目录"
+                    title="打开目录"
+                    onClick={() =>
+                      window.dispatchEvent(
+                        new CustomEvent(
+                          detail.type === 'concept'
+                            ? 'compound:open-concept-toc'
+                            : 'compound:open-source-toc',
+                        ),
+                      )
+                    }
+                  >
+                    <span aria-hidden="true">
+                      <ListTree />
+                    </span>
+                  </button>
+                )}
                 <div className="desktop-detail-scroll">
                   {detail ? renderDetail() : renderDesktopDetailEmpty()}
                 </div>
@@ -648,6 +670,28 @@ export default function Page() {
               <button className="library-detail-modal-close" onClick={back} aria-label="关闭">
                 ✕
               </button>
+              {/* 目录入口：概念/资料详情组件监听事件并自渲染抽屉；分类 Wiki 无目录抽屉 */}
+              {libraryOverlayDetail.type !== 'category-wiki' && (
+                <button
+                  type="button"
+                  className="icon-btn library-detail-modal-toc"
+                  aria-label="打开目录"
+                  title="打开目录"
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent(
+                        libraryOverlayDetail.type === 'concept'
+                          ? 'compound:open-concept-toc'
+                          : 'compound:open-source-toc',
+                      ),
+                    )
+                  }
+                >
+                  <span aria-hidden="true">
+                    <ListTree />
+                  </span>
+                </button>
+              )}
               <div className="library-detail-modal-scroll">
                 {renderDetail(libraryOverlayDetail)}
               </div>

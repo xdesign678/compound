@@ -86,6 +86,26 @@
   transform: translateY(-1px);
 }
 
+/* 目录入口：与关闭按钮同风格，排在其左侧 */
+.library-detail-modal-toc {
+  position: absolute;
+  top: 14px;
+  right: 56px;
+  z-index: 10;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-control);
+  background: var(--bg-muted);
+}
+
+@media (pointer: coarse) {
+  .library-detail-modal-toc {
+    width: 44px;
+    height: 44px;
+    right: 68px;
+  }
+}
+
 /* 移动端复用同一关闭按钮（Ask 详情浮层），触控目标补齐 44px */
 @media (pointer: coarse) {
   .library-detail-modal-close {

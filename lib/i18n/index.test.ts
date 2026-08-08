@@ -14,7 +14,7 @@ test('t returns zh-CN by default and interpolates params', () => {
 
 test('t returns migrated English copy when locale is en', () => {
   useAppStore.setState({ locale: 'en' });
-  assert.equal(t('tab.sources'), 'Sources');
+  assert.equal(t('header.sources.title'), 'Sources');
   assert.equal(
     t('toast.offlineWithTasks', { count: 2 }),
     'Offline. Writes are paused · 2 tasks waiting',

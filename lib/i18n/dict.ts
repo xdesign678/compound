@@ -20,8 +20,6 @@ export type I18nKey =
   | 'header.obsidianImport'
   | 'header.settings'
   | 'header.more'
-  | 'tab.wiki'
-  | 'tab.sources'
   | 'tab.ask'
   | 'tab.activity'
   | 'tab.navLabel'
@@ -159,8 +157,6 @@ export const I18N_DICT: Record<I18nKey, Record<Locale, string>> = {
   'header.obsidianImport': { 'zh-CN': '从 Obsidian 批量导入', en: 'Import from Obsidian' },
   'header.settings': { 'zh-CN': '设置', en: 'Settings' },
   'header.more': { 'zh-CN': '更多操作', en: 'More actions' },
-  'tab.wiki': { 'zh-CN': 'Wiki', en: 'Wiki' },
-  'tab.sources': { 'zh-CN': '资料', en: 'Sources' },
   'tab.ask': { 'zh-CN': '问答', en: 'Ask' },
   'tab.activity': { 'zh-CN': '活动', en: 'Activity' },
   'tab.navLabel': { 'zh-CN': '主导航', en: 'Main navigation' },

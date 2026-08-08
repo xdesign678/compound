@@ -1737,6 +1737,13 @@ button {
     touch-action: none;
   }
 
+  /* 视觉保持 4px 线条，透明伪元素把鼠标热区扩到约 10px */
+  .desktop-divider::after {
+    content: '';
+    position: absolute;
+    inset: 0 -3px;
+  }
+
   .desktop-divider:hover,
   .desktop-divider:focus-visible {
     background: var(--border-section);
@@ -1780,6 +1787,14 @@ button {
 
   .desktop-detail-panel {
     background: var(--bg-primary);
+  }
+
+  /* 桌面详情面板的目录入口：概念/资料详情组件监听事件并自渲染抽屉 */
+  .desktop-detail-toc-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: var(--z-sticky);
   }
 
   .desktop-fab {
