@@ -35,6 +35,9 @@ interface LibraryViewProps {
   scrollRootSelector?: string;
 }
 
+// 与 lib/review-picks.ts 的 TARGET_COUNT 保持一致：复盘 deck 最多取这么多张
+const RECAP_DECK_TARGET = 8;
+
 const PAGE_SIZE = 60;
 
 interface CategoryTree {
@@ -409,20 +412,29 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
         </div>
       )}
 
-      {unreviewedCount > 0 && (
+      {/* 搜索/筛选激活时隐藏今日复盘入口，避免稀释空态与筛选引导 */}
+      {unreviewedCount > 0 && !selectedPrimary && !deferredQuery.trim() && (
         <div className="recap-entry-list recap-entry-list-library">
           <button
             className="concept-card recap-entry-card"
             onClick={() => router.push('/recap')}
             type="button"
-            aria-label={`今日复盘，共 ${unreviewedCount} 个概念待回顾`}
+            aria-label={
+              unreviewedCount > RECAP_DECK_TARGET
+                ? `今日复盘，本次 ${RECAP_DECK_TARGET} 张，共 ${unreviewedCount} 个概念待回顾`
+                : `今日复盘，共 ${unreviewedCount} 个概念待回顾`
+            }
           >
             <span className="recap-entry-main">
               <span className="recap-entry-title">
                 <Icon.Sparkle />
                 今日复盘
               </span>
-              <span className="recap-entry-count">{unreviewedCount} 个待回顾</span>
+              <span className="recap-entry-count">
+                {unreviewedCount > RECAP_DECK_TARGET
+                  ? `本次 ${RECAP_DECK_TARGET} / 共 ${unreviewedCount} 待回顾`
+                  : `${unreviewedCount} 个待回顾`}
+              </span>
             </span>
             <span className="recap-entry-action">
               <ChevronRight size={18} aria-hidden="true" />
@@ -556,12 +568,6 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                         {currentPrimaryNode.count}
                       </span>
                     </span>
-                    <ChevronRight
-                      size={14}
-                      strokeWidth={2}
-                      className="library-secondary-chip-arrow"
-                      aria-hidden="true"
-                    />
                   </button>
                   {visibleSecondaries.map((sec) => (
                     <button
@@ -577,12 +583,6 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                         <span className="library-secondary-chip-label">{sec.name}</span>
                         <span className="library-secondary-chip-count">{sec.count}</span>
                       </span>
-                      <ChevronRight
-                        size={14}
-                        strokeWidth={2}
-                        className="library-secondary-chip-arrow"
-                        aria-hidden="true"
-                      />
                     </button>
                   ))}
                   {hasMoreSecondaries && (
@@ -643,7 +643,7 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
           {filtered.length === 0 ? (
             <div className="empty-state" role="status">
               <p>没有匹配的概念</p>
-              <button className="modal-btn" type="button" onClick={clearFilters}>
+              <button className="modal-btn list-footer-btn" type="button" onClick={clearFilters}>
                 清空筛选
               </button>
             </div>
@@ -679,19 +679,19 @@ export function LibraryView({ scrollRootSelector = '.app-main' }: LibraryViewPro
                   </span>
                   <button
                     type="button"
-                    className="modal-btn"
+                    className="modal-btn list-footer-btn"
                     onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
                   >
                     加载更多
                   </button>
                 </div>
-              ) : (
+              ) : filtered.length > PAGE_SIZE ? (
                 <div className="list-end-hint">
                   <span>
                     已显示 {visibleConcepts.length} / {filtered.length} 个概念
                   </span>
                 </div>
-              )}
+              ) : null}
             </>
           )}
         </>

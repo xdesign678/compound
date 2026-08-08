@@ -23,3 +23,25 @@ test('formatConceptBodyForDisplay 保留已有 markdown 段落结构', () => {
 
   assert.equal(formatConceptBodyForDisplay(markdown), markdown);
 });
+
+test('formatConceptBodyForDisplay 修正紧邻中文/引号的裸 ** 强调', () => {
+  const body =
+    'LLM Wiki 可以看作**"由 AI 执行的 Zettelkasten"**——人类负责想和策划,AI 负责链接和维护。';
+
+  const formatted = formatConceptBodyForDisplay(body);
+
+  assert.equal(
+    formatted,
+    'LLM Wiki 可以看作"**由 AI 执行的 Zettelkasten**"——人类负责想和策划,AI 负责链接和维护。',
+  );
+});
+
+test('formatConceptBodyForDisplay 兼容中文弯引号与书名号', () => {
+  assert.equal(formatConceptBodyForDisplay('核心是**“原子化笔记”**——'), '核心是“**原子化笔记**”——');
+  assert.equal(formatConceptBodyForDisplay('读**《卡片笔记法》**后'), '读《**卡片笔记法**》后');
+});
+
+test('formatConceptBodyForDisplay 不动合法的引号强调写法', () => {
+  const body = '他说"**重点**"结束。';
+  assert.equal(formatConceptBodyForDisplay(body), body);
+});

@@ -25,7 +25,8 @@
 }
 .cmd-dialog {
   width: min(560px, calc(100vw - 32px));
-  max-height: min(420px, 60vh);
+  /* 420px 会在帮助视图截断 9 行快捷键，适当加高 */
+  max-height: min(560px, 72vh);
   background: var(--bg-primary);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
@@ -194,4 +195,13 @@
 .cmd-footer-btn:hover {
   background: var(--bg-hover);
   color: var(--text-secondary);
+}
+
+/* 移动端精简：隐藏结果摘要、Esc 徽标与页脚快捷键提示 */
+@media (max-width: 767px) {
+  .cmd-item-sub,
+  .cmd-esc,
+  .cmd-footer {
+    display: none;
+  }
 }

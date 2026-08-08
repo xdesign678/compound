@@ -26,7 +26,7 @@
 .ask-reset-btn {
   font-family: var(--font-sans);
   font-size: var(--text-xs);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   padding: 4px 0;
 }
 .ask-reset-btn:hover {
@@ -76,6 +76,15 @@
 .ask-empty {
   padding: var(--space-4xl) var(--space-xl);
   text-align: center;
+}
+/* 空态在消息区内垂直居中：auto margin 均分剩余空间，内容超出时自动归零、顶部仍可滚到 */
+.ask-stream:has(> .ask-empty) {
+  display: flex;
+  flex-direction: column;
+}
+.ask-stream > .ask-empty {
+  margin-top: auto;
+  margin-bottom: auto;
 }
 .ask-empty-kicker {
   font-family: var(--font-sans);
@@ -223,7 +232,7 @@
 .ask-failure-summary {
   cursor: pointer;
   font-size: var(--text-xs);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   user-select: none;
 }
 .ask-low-confidence {
@@ -362,7 +371,7 @@
   transition: opacity 200ms ease;
 }
 .thinking-step-pending {
-  opacity: 0.42;
+  opacity: 0.6;
 }
 .thinking-step-done {
   opacity: 0.88;
@@ -808,8 +817,12 @@
   max-height: min(70vh, 560px);
   overflow-y: auto;
 }
-.ask-flyout-backdrop {
-  display: none;
+/* 桌面端无遮罩；<1024px 的遮罩样式在 globals.css（同特异性但本文件后加载，
+   不能在这里裸写 display:none，否则会把移动断点的 display:block 盖掉） */
+@media (min-width: 1024px) {
+  .ask-flyout-backdrop {
+    display: none;
+  }
 }
 .ask-reference-flyout,
 .ask-inline-flyout {
@@ -1043,6 +1056,12 @@
 .ask-textarea::placeholder {
   color: var(--text-tertiary);
 }
+/* 焦点态由 .ask-composer-card:focus-within 的圆角光晕表达，
+   豁免全局 :focus-visible 的直角 outline/光晕，避免双焦点环 */
+.ask-textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
 .ask-composer-toolbar {
   margin-top: var(--space-md);
   display: flex;
@@ -1179,8 +1198,10 @@
     padding-left: var(--space-2xl);
     padding-right: var(--space-2xl);
   }
-  .ask-empty {
-    padding-top: 64px;
+  /* 桌面 shell 左侧有 260px 侧栏 + 18px 间距（globals .desktop-frame），
+     内容列中心比视口中心右偏一半；弹层改为锚定内容列而不是视口 */
+  .ask-flyout {
+    left: calc(50% + (260px + 18px) / 2);
   }
   .suggested-questions {
     max-width: 560px;
@@ -1231,6 +1252,16 @@
   .ask-composer-card .ask-send-btn {
     width: 44px !important;
     height: 44px !important;
+  }
+
+  /* 工具按钮触控高度 34px → 44px；工具行强制单行（本文件后加载，
+     需覆盖上方基础规则的 flex-wrap: wrap），避免折行撑高输入卡 */
+  .ask-composer-actions {
+    flex-wrap: nowrap;
+  }
+
+  .ask-tool-btn {
+    min-height: 44px;
   }
 
   .msg-follow-up-q:disabled {

@@ -488,11 +488,9 @@ export function HealthView() {
     } catch (err) {
       setLintRunning(false);
       const message = err instanceof Error ? err.message : '未知错误';
-      setLintBanner({
-        tone: 'error',
-        title: '深度检查启动失败',
-        details: message,
-      });
+      // 与启动修复失败一致走 error toast（带重试），避免内联 banner 无重试无关闭
+      setLintBanner(null);
+      showErrorToast(`深度检查启动失败：${message.slice(0, 120)}`, () => runLint());
     }
   }, [lintRunning, setLintBanner, setLintRunning, showErrorToast]);
 

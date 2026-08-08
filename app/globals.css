@@ -20,7 +20,9 @@
   --text-primary: #141413;
   --text-body: rgba(20, 20, 19, 0.85);
   --text-secondary: #5e5d59;
-  --text-tertiary: #9a9890;
+  /* #73726c 在 --bg-primary 上对比度 4.58:1（WCAG AA 正文达标；审计建议的
+     #75746e 实测仅 4.45:1，故再深一档）。暗色主题同名 token 保持 #9a9a94。 */
+  --text-tertiary: #73726c;
   --text-on-button: #faf9f5;
   --ink-soft: var(--text-tertiary);
   --ink: var(--text-primary);
@@ -47,13 +49,15 @@
   --motion-duration-fast: 180ms;
   --motion-duration-base: 240ms;
   --motion-duration-slow: 320ms;
-  --motion-fast: 180ms;
-  --motion-base: 240ms;
+  /* --motion-slow 仍被 components/toast.css 引用而保留；--motion-fast/--motion-base、
+     --ease-out/--ease-in-out 全仓无引用，已清理 */
   --motion-slow: 320ms;
   --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --motion-ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-out: cubic-bezier(0.2, 0, 0, 1);
-  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --z-sticky: 5;
+  --z-header: 10;
+  --z-fab: 20;
+  --z-tabbar: 40;
   --z-modal: 60;
   --z-task-center: 70;
   --z-toast: 80;
@@ -143,7 +147,9 @@
   box-sizing: border-box;
 }
 
-:is(
+/* :where() 把整条选择器特异性降为 0-1-0（仅 :focus-visible 本身），
+   避免压过无边框编辑器等组件级 focus 样式；视觉效果不变。 */
+:where(
   a,
   button,
   input,
@@ -249,7 +255,7 @@ button {
   min-height: 60px;
   flex-shrink: 0;
   position: relative;
-  z-index: 10;
+  z-index: var(--z-header);
 }
 .header-copy {
   min-width: 0;
@@ -266,7 +272,7 @@ button {
 }
 .header-kicker {
   font-family: var(--font-sans);
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   line-height: 1.2;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -282,7 +288,7 @@ button {
 }
 .header-subtitle {
   font-family: var(--font-reading);
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.45;
   color: var(--text-secondary);
   margin-top: 3px;
@@ -293,7 +299,7 @@ button {
 }
 .detail-header {
   position: relative;
-  z-index: 60;
+  z-index: var(--z-modal);
   padding: 6px 20px;
   min-height: auto;
 }
@@ -476,7 +482,7 @@ button {
   border-top: 1px solid var(--border-section);
   padding: 6px 4px calc(6px + var(--safe-bottom));
   flex-shrink: 0;
-  z-index: 40;
+  z-index: var(--z-tabbar);
 }
 /* tablist wrapper: display contents so children participate in parent flex */
 .tabbar-tabs {
@@ -513,7 +519,7 @@ button {
 }
 .tab-item span {
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   letter-spacing: 0.01em;
 }
@@ -637,7 +643,7 @@ button {
   align-items: center;
   justify-content: center;
   box-shadow: var(--shadow-md);
-  z-index: 20;
+  z-index: var(--z-fab);
   font-weight: 400;
   transition:
     background var(--motion-duration-fast) var(--motion-ease-standard),
@@ -670,7 +676,7 @@ button {
   top: 0;
   background: var(--bg-primary);
   padding: 14px 20px 14px;
-  z-index: 5;
+  z-index: var(--z-sticky);
   border-bottom: 1px solid transparent;
   box-sizing: border-box;
   transition:
@@ -690,7 +696,7 @@ button {
   grid-template-rows: 1fr;
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: var(--z-sticky);
   background: var(--bg-primary);
   will-change: grid-template-rows;
   transition: grid-template-rows 320ms var(--motion-ease-emphasized);
@@ -931,13 +937,13 @@ button {
   vertical-align: middle;
 }
 
-/* End-of-list hint — fills blank space below cards */
+/* End-of-list hint — 列表收尾留白（不再用 min-height 撑高，
+   避免短列表把提示推到首屏之外） */
 .list-end-hint {
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 48px 20px 88px;
-  min-height: 30vh;
 }
 .list-end-hint span {
   font-family: var(--font-sans);
@@ -946,9 +952,7 @@ button {
   letter-spacing: 0.02em;
 }
 
-/* Load-more footer — keeps the count + button stacked right below the cards
-   instead of letting `.list-end-hint`'s min-height push the button to the
-   bottom of the viewport. */
+/* Load-more footer — keeps the count + button stacked right below the cards. */
 .list-load-more {
   display: flex;
   flex-direction: column;
@@ -961,7 +965,6 @@ button {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
   letter-spacing: 0.02em;
-  opacity: 0.6;
 }
 
 /* Empty state / first-run */
@@ -1048,7 +1051,7 @@ button {
   gap: var(--space-xs);
   min-width: 0;
   font-family: var(--font-sans);
-  font-size: 14.5px;
+  font-size: var(--text-base);
   font-weight: 650;
   color: var(--text-primary);
   white-space: nowrap;
@@ -1087,7 +1090,7 @@ button {
     color: var(--text-primary);
   }
 
-  :is(
+  :where(
     a,
     button,
     input,
@@ -1390,7 +1393,7 @@ button {
   font-family: var(--font-sans);
 }
 .loading-copy span {
-  color: var(--brand-clay);
+  color: var(--brand-clay-text);
   font-size: 11px;
   font-weight: 650;
 }
@@ -1418,11 +1421,20 @@ button {
   margin-bottom: 6px;
 }
 .skeleton-card {
-  height: 78px;
+  /* 与真实卡片估值一致（concept-card contain-intrinsic-size: auto 140px，
+     source-card 约 120–140px），避免加载完成瞬间列表高度跳动 */
+  height: 140px;
 }
 /* Skeleton variants per view */
+.skeleton-sources {
+  /* 容器留白与真实列表 .view-padding 一致，消除加载完成瞬间的水平跳动 */
+  padding: 10px 20px 100px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
 .skeleton-sources .skeleton-card {
-  height: 60px;
+  height: 140px;
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
@@ -1444,6 +1456,14 @@ button {
   border-radius: var(--radius-sm);
   background: inherit;
   opacity: 0.6;
+}
+@media (max-width: 767px) {
+  /* 与 .view-padding 的移动端水平留白一致 */
+  .loading-skeleton,
+  .skeleton-sources {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
 }
 
 /* 列表/详情视图容器基础留白（桌面端在 ≥1024px 媒体查询中覆盖） */
@@ -1809,7 +1829,8 @@ button {
   .section-heading,
   .concept-list,
   .view-lead,
-  .view-padding {
+  .view-padding,
+  .skeleton-sources {
     padding-left: var(--space-2xl);
     padding-right: var(--space-2xl);
   }
@@ -1833,7 +1854,6 @@ button {
 
   .list-end-hint {
     padding-bottom: 48px;
-    min-height: 22vh;
   }
 }
 
@@ -1874,11 +1894,14 @@ h3 {
   line-height: 1.3;
 }
 
-/* Sibling dimming for lists */
-.concept-list:has(.concept-card:hover) .concept-card:not(:hover),
-.source-list:has(.source-card:hover) .source-card:not(:hover) {
-  opacity: 0.6;
-  transition: opacity 300ms ease;
+/* Sibling dimming for lists — 只在可 hover 的设备启用，
+   避免触屏点按后 :hover 滞留导致其他卡片一直半透明 */
+@media (hover: hover) {
+  .concept-list:has(.concept-card:hover) .concept-card:not(:hover),
+  .source-list:has(.source-card:hover) .source-card:not(:hover) {
+    opacity: 0.6;
+    transition: opacity 300ms ease;
+  }
 }
 
 /* Card-type elements: shared flat style */
@@ -1943,7 +1966,7 @@ h3 {
 
   .msg-ai-label {
     margin-bottom: 6px;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
   }
 
   .msg-sources {
@@ -1954,7 +1977,7 @@ h3 {
   .save-as-page {
     margin-top: 10px;
     padding: 7px 10px;
-    font-size: 11.5px;
+    font-size: var(--text-xs);
   }
   .msg-answer-actions .save-as-page {
     margin-top: 0;
@@ -1983,7 +2006,7 @@ h3 {
   }
 
   .ask-empty p {
-    font-size: 14.5px;
+    font-size: var(--text-base);
     line-height: 1.65;
     margin-bottom: 18px;
   }
@@ -1994,7 +2017,7 @@ h3 {
 
   .suggested-q {
     padding: 7px 13px;
-    font-size: 13.5px;
+    font-size: var(--text-sm);
     line-height: 1.5;
   }
 
@@ -2109,7 +2132,7 @@ h3 {
 
   .ask-mention-chip {
     padding: var(--space-2xs) var(--space-sm);
-    font-size: 11.5px;
+    font-size: var(--text-xs);
     border-radius: 7.5px !important;
     gap: var(--space-xs);
   }
@@ -2177,7 +2200,7 @@ h3 {
     padding: 14px 14px;
     border-radius: 12px 12px 0 0;
     box-shadow: 0 -10px 24px rgba(20, 20, 19, 0.12);
-    z-index: 40;
+    z-index: var(--z-tabbar);
   }
 
   .ask-model-flyout,

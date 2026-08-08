@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, type TabId } from '@/lib/store';
 import { DESKTOP_LAYOUT_MIN_WIDTH, isDesktopWidth } from '@/lib/responsive';
 
 import { Header } from '@/components/Header';
@@ -117,6 +117,12 @@ const CategoryWikiDetail = dynamic(
 const DESKTOP_MEDIA_QUERY = `(min-width: ${DESKTOP_LAYOUT_MIN_WIDTH}px)`;
 const LIBRARY_DETAIL_TRANSITION_MS = 320;
 const MODAL_EXIT_DURATION_MS = 320;
+const SCROLL_RESTORE_INTERVAL_MS = 50;
+const SCROLL_RESTORE_MAX_ATTEMPTS = 30;
+const SCROLL_RESTORE_CONFIRM_WINDOW_MS = 600;
+
+// page 本身会被 SSR，layout effect 需要在服务端降级为 useEffect
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 function useDelayedUnmount(isOpen: boolean, delayMs = MODAL_EXIT_DURATION_MS): boolean {
   const [shouldRender, setShouldRender] = useState(isOpen);
@@ -156,6 +162,10 @@ export default function Page() {
   const libraryDetailDialogRef = useRef<HTMLDivElement>(null);
   const mobileDetailDialogRef = useRef<HTMLDivElement>(null);
   const mobileAskDialogRef = useRef<HTMLDivElement>(null);
+  const appMainRef = useRef<HTMLElement>(null);
+  const tabScrollPositionsRef = useRef<Partial<Record<TabId, number>>>({});
+  const currentTabRef = useRef(tab);
+  const restoreTargetRef = useRef(0);
   useEffect(() => {
     setMounted(true);
     hydrateHomeStyle();
@@ -309,6 +319,82 @@ export default function Page() {
     }
   }, [detail, usesDetailOverlay, libraryOverlayDetail]);
 
+  // 移动端按 tab 记住 .app-main 滚动位置：视图靠 key={tab} 重挂载，新视图先以
+  // 矮内容挂载会把 scrollTop 钳到中间位置。切走时持续记录，切回后等内容撑高再恢复。
+  //
+  // 时序上有个坑：DOM 替换后浏览器钳制 scrollTop 触发的 scroll 事件是异步派发的，
+  // 会晚于 passive effect 的清理/安装，把钳制值错记到旧 tab 名下、或盖掉新 tab 的
+  // 恢复目标。因此在布局阶段（提交后、scroll 事件派发前）同步快照当前 tab 与恢复
+  // 目标，滚动监听用常驻 + ref 读当前 tab 的方式规避这两个竞态。
+  useIsomorphicLayoutEffect(() => {
+    currentTabRef.current = tab;
+    restoreTargetRef.current = tabScrollPositionsRef.current[tab] ?? 0;
+  }, [tab]);
+
+  // mounted 前渲染的是骨架分支（main 无 ref），依赖里带上 mounted 才能在真实
+  // 滚动容器挂载后补上监听。
+  useEffect(() => {
+    const mainEl = appMainRef.current;
+    if (!mainEl) return;
+    const saveScroll = () => {
+      tabScrollPositionsRef.current[currentTabRef.current] = mainEl.scrollTop;
+    };
+    mainEl.addEventListener('scroll', saveScroll, { passive: true });
+    return () => mainEl.removeEventListener('scroll', saveScroll);
+  }, [isDesktop, mounted]);
+
+  useEffect(() => {
+    const mainEl = appMainRef.current;
+    if (!mainEl) return;
+    const target = restoreTargetRef.current;
+    let cancelled = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let confirmTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const restoreScroll = () => {
+      if (cancelled) return;
+      // 视图内容（动态 chunk + live query）可能尚未撑高容器，等它足够高再写
+      // scrollTop，否则会被再次钳制；用户一旦主动滚动就放弃恢复。
+      if (
+        mainEl.scrollHeight - mainEl.clientHeight < target &&
+        attempts < SCROLL_RESTORE_MAX_ATTEMPTS
+      ) {
+        attempts += 1;
+        timer = setTimeout(restoreScroll, SCROLL_RESTORE_INTERVAL_MS);
+        return;
+      }
+      mainEl.scrollTop = target;
+      // 个别视图挂载后还会做一次自己的滚动恢复（如 WikiView 的锚点定位），时机不定；
+      // 在短窗口内反复校正漂移，确保最终停在切走时的位置。用户滚动会立即取消整个恢复。
+      const deadline = Date.now() + SCROLL_RESTORE_CONFIRM_WINDOW_MS;
+      const confirmScroll = () => {
+        if (cancelled || Date.now() > deadline) return;
+        if (mainEl.scrollTop !== target) {
+          mainEl.scrollTop = target;
+        }
+        confirmTimer = setTimeout(confirmScroll, SCROLL_RESTORE_INTERVAL_MS);
+      };
+      confirmTimer = setTimeout(confirmScroll, SCROLL_RESTORE_INTERVAL_MS);
+    };
+
+    const cancelOnUserScroll = () => {
+      cancelled = true;
+    };
+
+    const frame = requestAnimationFrame(() => requestAnimationFrame(restoreScroll));
+    mainEl.addEventListener('wheel', cancelOnUserScroll, { passive: true });
+    mainEl.addEventListener('touchstart', cancelOnUserScroll, { passive: true });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+      if (timer) clearTimeout(timer);
+      if (confirmTimer) clearTimeout(confirmTimer);
+      mainEl.removeEventListener('wheel', cancelOnUserScroll);
+      mainEl.removeEventListener('touchstart', cancelOnUserScroll);
+    };
+  }, [tab]);
+
   const skeletonContent = (
     <div className="loading-skeleton" aria-label="正在加载..." aria-busy="true">
       <div className="loading-copy">
@@ -322,6 +408,12 @@ export default function Page() {
       <div className="skeleton skeleton-card" style={{ opacity: 0.4 }} />
     </div>
   );
+
+  function detailAriaLabel(target: NonNullable<typeof detail>) {
+    if (target.type === 'concept') return '概念详情';
+    if (target.type === 'category-wiki') return '分类 Wiki 详情';
+    return '资料详情';
+  }
 
   function renderDetail(target = detail) {
     if (!target) return null;
@@ -381,7 +473,61 @@ export default function Page() {
   if (!mounted) {
     return (
       <div className="app-shell">
+        {/* 与真实 Header/TabBar 同尺寸的占位轮廓，消除首屏底部栏 pop-in */}
+        <header className="header" aria-hidden="true">
+          <div className="header-copy">
+            <div className="skeleton" style={{ width: 56, height: 10, marginBottom: 4 }} />
+            <div className="skeleton" style={{ width: 96, height: 20, marginBottom: 4 }} />
+            <div className="skeleton" style={{ width: 150, height: 11 }} />
+          </div>
+          <div className="header-actions">
+            <div
+              className="skeleton"
+              style={{ width: 44, height: 44, borderRadius: 'var(--radius-control)' }}
+            />
+            <div
+              className="skeleton"
+              style={{ width: 44, height: 44, borderRadius: 'var(--radius-control)' }}
+            />
+          </div>
+        </header>
         <main className="app-main">{skeletonContent}</main>
+        <nav className="tabbar" aria-hidden="true">
+          <div className="tab-item">
+            <span
+              className="skeleton"
+              style={{ width: 22, height: 22, borderRadius: 'var(--radius-full)' }}
+            />
+            <span className="skeleton" style={{ width: 30, height: 10 }} />
+          </div>
+          <div className="tab-item">
+            <span
+              className="skeleton"
+              style={{ width: 22, height: 22, borderRadius: 'var(--radius-full)' }}
+            />
+            <span className="skeleton" style={{ width: 30, height: 10 }} />
+          </div>
+          <div className="tab-add">
+            <span
+              className="skeleton"
+              style={{ width: 40, height: 40, borderRadius: 'var(--radius-full)' }}
+            />
+          </div>
+          <div className="tab-item">
+            <span
+              className="skeleton"
+              style={{ width: 22, height: 22, borderRadius: 'var(--radius-full)' }}
+            />
+            <span className="skeleton" style={{ width: 30, height: 10 }} />
+          </div>
+          <div className="tab-item">
+            <span
+              className="skeleton"
+              style={{ width: 22, height: 22, borderRadius: 'var(--radius-full)' }}
+            />
+            <span className="skeleton" style={{ width: 30, height: 10 }} />
+          </div>
+        </nav>
       </div>
     );
   }
@@ -396,7 +542,7 @@ export default function Page() {
           <aside className="desktop-sidebar">
             <div className="desktop-brand">
               <div className="desktop-brand-kicker">Compound</div>
-              <div className="desktop-brand-title">知识库</div>
+              <div className="desktop-brand-title">{t('header.wiki.title')}</div>
               <div className="desktop-brand-meta">{desktopSummary}</div>
             </div>
 
@@ -496,7 +642,7 @@ export default function Page() {
               role="dialog"
               aria-modal="true"
               tabIndex={-1}
-              aria-label={libraryOverlayDetail.type === 'concept' ? '概念详情' : '资料详情'}
+              aria-label={detailAriaLabel(libraryOverlayDetail)}
               onClick={(e) => e.stopPropagation()}
             >
               <button className="library-detail-modal-close" onClick={back} aria-label="关闭">
@@ -535,7 +681,7 @@ export default function Page() {
         <Header conceptCount={conceptCount ?? 0} sourceCount={sourceCount ?? 0} loading={!ready} />
       )}
 
-      <main className="app-main">
+      <main className="app-main" ref={appMainRef}>
         <div
           key={tab}
           id={`tabpanel-${tab}`}
@@ -555,7 +701,7 @@ export default function Page() {
           role="dialog"
           aria-modal="true"
           tabIndex={-1}
-          aria-label={detail.type === 'concept' ? '概念详情' : '资料详情'}
+          aria-label={detailAriaLabel(detail)}
         >
           <header className="mobile-detail-header">
             <button type="button" className="back-btn" onClick={back}>
@@ -564,26 +710,28 @@ export default function Page() {
               </span>
               <span>返回</span>
             </button>
-            {/* 目录入口：两个详情组件都监听这个事件，主阅读流程此前没有入口 */}
-            <button
-              type="button"
-              className="icon-btn mobile-detail-toc-btn"
-              aria-label="打开目录"
-              title="打开目录"
-              onClick={() =>
-                window.dispatchEvent(
-                  new CustomEvent(
-                    detail.type === 'concept'
-                      ? 'compound:open-concept-toc'
-                      : 'compound:open-source-toc',
-                  ),
-                )
-              }
-            >
-              <span aria-hidden="true">
-                <ListTree />
-              </span>
-            </button>
+            {/* 目录入口：概念/资料详情组件监听这个事件；分类 Wiki 详情没有目录抽屉，不显示入口 */}
+            {detail.type !== 'category-wiki' && (
+              <button
+                type="button"
+                className="icon-btn mobile-detail-toc-btn"
+                aria-label="打开目录"
+                title="打开目录"
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent(
+                      detail.type === 'concept'
+                        ? 'compound:open-concept-toc'
+                        : 'compound:open-source-toc',
+                    ),
+                  )
+                }
+              >
+                <span aria-hidden="true">
+                  <ListTree />
+                </span>
+              </button>
+            )}
           </header>
           <div className="mobile-detail-scroll">{renderDetail()}</div>
         </div>
@@ -601,7 +749,7 @@ export default function Page() {
             role="dialog"
             aria-modal="true"
             tabIndex={-1}
-            aria-label={libraryOverlayDetail.type === 'concept' ? '概念详情' : '资料详情'}
+            aria-label={detailAriaLabel(libraryOverlayDetail)}
             onClick={(e) => e.stopPropagation()}
           >
             <button className="library-detail-modal-close" onClick={back} aria-label="关闭">

@@ -223,6 +223,12 @@ function DashboardInner() {
     [router, runAction, run?.id, toast],
   );
 
+  const isAuthError = loadError.includes('401') || loadError.toLowerCase().includes('unauthorized');
+  // 首次加载就失败（没有任何数据）时只显示错误卡：此时 HeroStatus / 空态
+  // 列表里的 CTA 点了也只会再次失败，与错误语义自相矛盾。已有数据时的
+  // 轮询失败仍保留旧数据，仅顶部出错误卡。
+  const showBlockingError = Boolean(loadError) && !dashboard;
+
   return (
     <main className="sync-v2-page">
       <div className="sync-v2-topnav">
@@ -259,7 +265,7 @@ function DashboardInner() {
         <div role="alert" className="sync-v2-error">
           <div className="sync-v2-error-body">
             <h3 className="sync-v2-error-title">
-              {loadError.includes('401') || loadError.toLowerCase().includes('unauthorized')
+              {isAuthError
                 ? '需要认证'
                 : loadError.includes('403')
                   ? '权限不足'
@@ -267,7 +273,11 @@ function DashboardInner() {
                     ? '服务器出了点问题'
                     : '无法加载同步面板'}
             </h3>
-            <p className="sync-v2-error-copy">{friendlyErrorMessage(loadError)}</p>
+            <p className="sync-v2-error-copy">
+              {isAuthError
+                ? '访问保护认证失败。请回到主页，在「设置 → 模型 → 访问保护」中重新保存 Admin Token，然后回到本页重试。'
+                : friendlyErrorMessage(loadError)}
+            </p>
             <div className="sync-v2-error-actions">
               <button type="button" className="sync-v2-btn" onClick={() => void load()}>
                 重试
@@ -291,51 +301,56 @@ function DashboardInner() {
         </div>
       ) : null}
 
-      {stalled ? (
-        <div className="sync-v2-alert sync-v2-alert-warn" role="status">
-          运行已停滞 {fmtDuration(stalledFor)}。点「立即同步」唤醒 worker，或检查上游 LLM 服务。
-        </div>
+      {!showBlockingError ? (
+        <>
+          {stalled ? (
+            <div className="sync-v2-alert sync-v2-alert-warn" role="status">
+              运行已停滞 {fmtDuration(stalledFor)}。点「立即同步」唤醒 worker，或检查上游 LLM 服务。
+            </div>
+          ) : null}
+
+          <SyncDiagnosticsBanner
+            diagnostics={story?.diagnostics ?? []}
+            busy={Boolean(busy)}
+            onAction={handleDiagnosticAction}
+          />
+
+          <HeroStatus
+            story={story}
+            run={run}
+            busy={Boolean(busy)}
+            reviewOpen={reviewOpen}
+            onPrimary={handlePrimary}
+            onCancel={handleCancel}
+            onOpenReview={handleOpenReview}
+          />
+
+          <PhaseTimeline phases={phases} />
+
+          <ActiveFilesList
+            items={dashboard?.activeItems ?? []}
+            hasRunHistory={(dashboard?.latestRuns?.length ?? 0) > 0}
+            busy={Boolean(busy)}
+            onRetryItem={handleRetryItem}
+            onOpenAdvanced={() => setDrawerOpen(true)}
+          />
+
+          <IssueCenter
+            groups={errorGroups}
+            busy={Boolean(busy)}
+            onRetryAll={handleRetryAll}
+            onRetryItem={handleRetryItem}
+            onOpenAdvanced={() => setDrawerOpen(true)}
+          />
+
+          <HealthLine
+            health={health}
+            reviewOpen={reviewOpen}
+            deadLetters={deadLetters}
+            onOpenReview={handleOpenReview}
+          />
+        </>
       ) : null}
-
-      <SyncDiagnosticsBanner
-        diagnostics={story?.diagnostics ?? []}
-        busy={Boolean(busy)}
-        onAction={handleDiagnosticAction}
-      />
-
-      <HeroStatus
-        story={story}
-        run={run}
-        busy={Boolean(busy)}
-        reviewOpen={reviewOpen}
-        onPrimary={handlePrimary}
-        onCancel={handleCancel}
-        onOpenReview={handleOpenReview}
-      />
-
-      <PhaseTimeline phases={phases} />
-
-      <ActiveFilesList
-        items={dashboard?.activeItems ?? []}
-        busy={Boolean(busy)}
-        onRetryItem={handleRetryItem}
-        onOpenAdvanced={() => setDrawerOpen(true)}
-      />
-
-      <IssueCenter
-        groups={errorGroups}
-        busy={Boolean(busy)}
-        onRetryAll={handleRetryAll}
-        onRetryItem={handleRetryItem}
-        onOpenAdvanced={() => setDrawerOpen(true)}
-      />
-
-      <HealthLine
-        health={health}
-        reviewOpen={reviewOpen}
-        deadLetters={deadLetters}
-        onOpenReview={handleOpenReview}
-      />
 
       <AdvancedDrawer
         open={drawerOpen}

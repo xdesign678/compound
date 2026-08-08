@@ -3,12 +3,15 @@
 import './offline-banner.css';
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/lib/store';
+import { t, useLocale } from '@/lib/i18n';
 
 const DISMISSED_KEY = 'compound:offline-banner-dismissed';
 
 export function OfflineBanner() {
+  useLocale();
   const isOnline = useAppStore((s) => s.isOnline);
   const [dismissed, setDismissed] = useState(false);
+  const active = !isOnline && !dismissed;
 
   useEffect(() => {
     // Reset dismissed state when coming back online
@@ -27,7 +30,15 @@ export function OfflineBanner() {
     }
   }, [isOnline]);
 
-  if (isOnline || dismissed) return null;
+  // banner 固定定位，占位通过根类名驱动（--offline-banner-height 推高 app-shell、叠加 toast top）
+  useEffect(() => {
+    document.documentElement.classList.toggle('has-offline-banner', active);
+    return () => {
+      document.documentElement.classList.remove('has-offline-banner');
+    };
+  }, [active]);
+
+  if (!active) return null;
 
   const handleDismiss = () => {
     setDismissed(true);
@@ -38,13 +49,13 @@ export function OfflineBanner() {
 
   return (
     <div className="offline-banner" role="alert" aria-live="assertive">
-      <span className="offline-banner-text">离线模式 · 仅本地查看</span>
-      <span className="offline-banner-hint">写入操作（摄入 / 修复 / 归类）已暂停</span>
+      <span className="offline-banner-text">{t('offlineBanner.text')}</span>
+      <span className="offline-banner-hint">{t('offlineBanner.hint')}</span>
       <button
         type="button"
         className="offline-banner-close"
         onClick={handleDismiss}
-        aria-label="关闭离线提示"
+        aria-label={t('offlineBanner.close')}
       >
         ✕
       </button>

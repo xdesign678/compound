@@ -375,11 +375,15 @@ export function SourceDetail({ id }: { id: string }) {
     if (!tocOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        // 全局快捷键钩子的 window 监听注册更早（冒泡阶段先触发），这里必须用
+        // capture 阶段抢先 preventDefault，全局钩子看到 defaultPrevented 才会放行，
+        // 否则按一次 Esc 会把详情页一起关掉。
+        event.preventDefault();
         closeToc();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [closeToc, tocOpen]);
 
   useEffect(() => {

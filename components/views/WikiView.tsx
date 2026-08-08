@@ -27,6 +27,8 @@ interface WikiViewProps {
 }
 
 const PAGE_SIZE = 60;
+// 与 lib/review-picks.ts 的 TARGET_COUNT 保持一致：复盘 deck 最多取这么多张
+const RECAP_DECK_TARGET = 8;
 
 const WikiCard = memo(function WikiCard({
   concept,
@@ -205,8 +207,11 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
 
   if (!concepts) {
     return (
-      <div className="empty-state" role="status" aria-live="polite">
-        加载中...
+      <div className="skeleton-sources" role="status" aria-label="正在加载知识库" aria-busy="true">
+        <div className="skeleton skeleton-header" />
+        <div className="skeleton skeleton-card" />
+        <div className="skeleton skeleton-card" style={{ opacity: 0.7 }} />
+        <div className="skeleton skeleton-card" style={{ opacity: 0.4 }} />
       </div>
     );
   }
@@ -216,23 +221,55 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
     ? serverConcepts.length
     : (totalMatches ?? concepts.length);
   const hasMatches = totalVisibleMatches > 0 || serverSearchLoading;
+  const recapDeckCount = Math.min(unreviewedCount, RECAP_DECK_TARGET);
 
   return (
     <>
-      {unreviewedCount > 0 && (
+      {hasAnyConcepts && (
+        <div className="concept-list" style={{ marginBottom: 'var(--space-md)' }}>
+          <div>
+            <label className="search-label" htmlFor="wiki-search-input">
+              搜索概念
+            </label>
+            <div className="search-wrap">
+              <Icon.Search />
+              <input
+                id="wiki-search-input"
+                className="search-input"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="搜索概念标题或摘要..."
+                aria-label="搜索概念"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      {/* 搜索激活时隐藏今日复盘入口，避免稀释空态与搜索引导 */}
+      {unreviewedCount > 0 && !deferredQuery.trim() && (
         <div className="concept-list recap-entry-list">
           <button
             className="concept-card recap-entry-card"
             onClick={() => router.push('/recap')}
             type="button"
-            aria-label={`今日复盘，共 ${unreviewedCount} 个概念待回顾`}
+            aria-label={
+              unreviewedCount > RECAP_DECK_TARGET
+                ? `今日复盘，本次 ${recapDeckCount} 张，共 ${unreviewedCount} 个概念待回顾`
+                : `今日复盘，共 ${unreviewedCount} 个概念待回顾`
+            }
           >
             <span className="recap-entry-main">
               <span className="recap-entry-title">
                 <Icon.Sparkle />
                 今日复盘
               </span>
-              <span className="recap-entry-count">{unreviewedCount} 个待回顾</span>
+              <span className="recap-entry-count">
+                {unreviewedCount > RECAP_DECK_TARGET
+                  ? `本次 ${recapDeckCount} / 共 ${unreviewedCount} 待回顾`
+                  : `${unreviewedCount} 个待回顾`}
+              </span>
             </span>
             <span className="recap-entry-action">
               <Icon.Send />

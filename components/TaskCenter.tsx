@@ -2,7 +2,13 @@
 
 import './task-center.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAppStore, type TaskItem, type TaskStatus, type TaskKind } from '@/lib/store';
+import {
+  useAppStore,
+  friendlyErrorMessage,
+  type TaskItem,
+  type TaskStatus,
+  type TaskKind,
+} from '@/lib/store';
 import { isOfflineError } from '@/lib/api-client';
 import { Icon } from './Icons';
 
@@ -98,7 +104,7 @@ export function TaskCenter() {
       updateTask(task.id, {
         status: isOfflineError(err) ? 'paused-offline' : 'error',
         finishedAt: isOfflineError(err) ? undefined : Date.now(),
-        error: isOfflineError(err) ? '离线暂停，联网后可重试。' : msg.slice(0, 160),
+        error: isOfflineError(err) ? '离线暂停，联网后可重试。' : friendlyErrorMessage(msg),
       });
     }
   };
@@ -154,7 +160,7 @@ export function TaskCenter() {
                 onClick={closePanel}
                 aria-label="关闭任务中心"
               >
-                <span aria-hidden="true">✕</span>
+                <span aria-hidden="true">×</span>
               </button>
             </div>
           </div>

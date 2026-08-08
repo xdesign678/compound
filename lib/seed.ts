@@ -235,7 +235,7 @@ Memex 80 年来未被真正兑现的原因是[关联维护成本太高](concept:
 
 它的问题和 [Memex](concept:c-seed-7) 类似:维护成本太高。大多数人买了漂亮的卡片盒,写了 50 张卡,然后放弃。
 
-LLM Wiki 可以看作**"由 AI 执行的 Zettelkasten"**——人类负责想和策划,AI 负责链接和维护。`,
+LLM Wiki 可以看作"**由 AI 执行的 Zettelkasten**"——人类负责想和策划,AI 负责链接和维护。`,
     sources: ['s-seed-5'],
     related: ['c-seed-5', 'c-seed-7'],
     createdAt: now - 10 * DAY,

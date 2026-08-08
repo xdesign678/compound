@@ -237,7 +237,7 @@ export function IngestModal() {
   return (
     <div className={`modal-overlay${visible ? ' visible' : ''}`} onClick={handleClose}>
       <div
-        className="modal"
+        className="modal ingest-modal"
         ref={modalRef}
         role="dialog"
         aria-modal="true"
@@ -305,11 +305,15 @@ export function IngestModal() {
             {confirmClose ? (
               <div className="ingest-confirm-close" role="alert" aria-live="assertive">
                 <p className="modal-desc">已填写的内容将丢失，确认关闭？</p>
-                <button className="modal-btn primary" type="button" onClick={handleConfirmClose}>
-                  确认
-                </button>
-                <button className="modal-btn" type="button" onClick={() => setConfirmClose(false)}>
+                <button
+                  className="modal-btn primary"
+                  type="button"
+                  onClick={() => setConfirmClose(false)}
+                >
                   继续编辑
+                </button>
+                <button className="modal-btn danger" type="button" onClick={handleConfirmClose}>
+                  确认
                 </button>
               </div>
             ) : (
@@ -381,22 +385,24 @@ export function IngestModal() {
                     onChange={(e) => setContent(e.target.value)}
                   />
                 </div>
-                <button
-                  className="modal-btn primary"
-                  type="button"
-                  disabled={!title.trim() || !content.trim() || submitting || !isOnline}
-                  onClick={() => handleSubmit('link')}
-                >
-                  {!isOnline ? '离线中，无法提交' : submitting ? '编译中…' : '送入 AI 编译'}
-                </button>
-                <button
-                  className="modal-btn"
-                  type="button"
-                  disabled={submitting}
-                  onClick={() => setStep('choose')}
-                >
-                  返回
-                </button>
+                <div className="ingest-form-actions">
+                  <button
+                    className="modal-btn primary"
+                    type="button"
+                    disabled={!title.trim() || !content.trim() || submitting || !isOnline}
+                    onClick={() => handleSubmit('link')}
+                  >
+                    {!isOnline ? '离线中，无法提交' : submitting ? '编译中…' : '送入 AI 编译'}
+                  </button>
+                  <button
+                    className="modal-btn"
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => setStep('choose')}
+                  >
+                    返回
+                  </button>
+                </div>
               </>
             )}
           </>

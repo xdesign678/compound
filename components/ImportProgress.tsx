@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 export type ImportKind = 'ingest' | 'obsidian' | 'github';
 
 export interface RecentImportEntry {
@@ -38,6 +40,7 @@ export function ImportProgress({
 }: ImportProgressProps) {
   const boundedProgress =
     typeof progress === 'number' ? Math.min(100, Math.max(0, Math.round(progress))) : undefined;
+  const [copied, setCopied] = useState(false);
 
   return (
     <section className="import-progress" aria-live="polite">
@@ -71,7 +74,9 @@ export function ImportProgress({
 
       {error && (
         <div className="import-progress-error">
-          <div className="import-progress-error-text">{error.slice(0, 180)}</div>
+          <div className="import-progress-error-text" style={{ color: 'var(--color-error)' }}>
+            {error.slice(0, 180)}
+          </div>
           <div className="import-progress-actions">
             {onRetry && (
               <button
@@ -85,9 +90,13 @@ export function ImportProgress({
             <button
               className="modal-btn import-progress-action"
               type="button"
-              onClick={() => void navigator.clipboard?.writeText(error)}
+              onClick={() => {
+                void navigator.clipboard?.writeText(error);
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 2000);
+              }}
             >
-              复制日志
+              {copied ? '已复制' : '复制日志'}
             </button>
             {onClose && (
               <button className="modal-btn import-progress-action" type="button" onClick={onClose}>

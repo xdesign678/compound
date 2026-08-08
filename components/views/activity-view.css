@@ -195,7 +195,7 @@
 }
 .filter-chip {
   padding: 5px 12px;
-  min-height: 40px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   font-size: var(--text-xs);
@@ -386,7 +386,7 @@
 .finding-action-btn {
   font-size: var(--text-2xs);
   font-weight: 500;
-  color: var(--brand-clay);
+  color: var(--brand-clay-text);
   padding: 6px 10px;
   min-height: 44px;
   display: inline-flex;
@@ -416,11 +416,11 @@
 .concept-chip {
   font-size: var(--text-2xs);
   padding: var(--space-2xs) var(--space-sm);
-  /* 直接给到 40px：原先的 ::before 扩展热区会被自己的 overflow:hidden 裁掉 */
-  min-height: 40px;
+  /* 直接给到 44px：原先的 ::before 扩展热区会被自己的 overflow:hidden 裁掉 */
+  min-height: 44px;
   border-radius: var(--radius-sm);
   background: var(--bg-secondary);
-  color: var(--brand-clay);
+  color: var(--brand-clay-text);
   font-weight: 500;
   cursor: pointer;
   position: relative;
@@ -486,11 +486,17 @@
   color: var(--text-tertiary);
 }
 .lint-btn.secondary {
-  color: var(--brand-clay);
+  color: var(--brand-clay-text);
   background: var(--brand-clay-soft);
 }
 .lint-btn.secondary:hover:not(:disabled) {
   background: rgba(217, 119, 87, 0.2);
+}
+/* 禁用态改中性灰：clay 浅底 + opacity .6 有效对比 <2:1 近乎隐形 */
+.lint-btn.secondary:disabled {
+  color: var(--text-secondary);
+  background: var(--bg-muted);
+  opacity: 1;
 }
 .finding-top-actions {
   display: inline-flex;

@@ -40,7 +40,6 @@ export default function Sparkline({ data, width = 120, height = 28 }: Props) {
               width={Math.max(2, barWidth)}
               height={failedHeight}
               fill="currentColor"
-              fillOpacity={0.2}
               className="ops-sparkline-failed"
             />
             <rect

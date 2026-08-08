@@ -96,11 +96,8 @@
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
-.prose table {
-  display: block;
-  max-width: 100%;
-  overflow-x: auto;
-}
+/* .prose table 基础规则已移至 detail-chips.css（三个详情页共同加载），
+   避免直接打开 Wiki 页时表格样式缺失。 */
 .concept-body-shell {
   max-width: 640px;
   margin: 0 auto;

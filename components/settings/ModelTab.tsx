@@ -17,6 +17,7 @@ import {
 } from '@/lib/llm-config';
 import { DEFAULT_LLM_MODEL } from '@/lib/model-defaults';
 import { clearAdminToken, getAdminToken, saveAdminToken } from '@/lib/admin-auth-client';
+import { t, useLocale, type Locale } from '@/lib/i18n';
 import type { LlmConfig } from '@/lib/types';
 import { Icon } from '../Icons';
 
@@ -63,8 +64,8 @@ function formatUsd(value: number): string {
   return `$${value.toFixed(2)}`;
 }
 
-function formatCompactNumber(value: number): string {
-  return new Intl.NumberFormat('zh-CN', { notation: 'compact' }).format(value);
+function formatCompactNumber(value: number, locale: Locale): string {
+  return new Intl.NumberFormat(locale, { notation: 'compact' }).format(value);
 }
 
 function StatusNotice({ message }: { message: StatusMessage | null }) {
@@ -82,6 +83,7 @@ function StatusNotice({ message }: { message: StatusMessage | null }) {
 }
 
 export function ModelTab() {
+  const { locale } = useLocale();
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({});
   const [wikiModel, setWikiModel] = useState(DEFAULT_LLM_MODEL);
   const [askModel, setAskModel] = useState(DEFAULT_LLM_MODEL);
@@ -91,6 +93,7 @@ export function ModelTab() {
   const [llmRemember, setLlmRememberChoice] = useState(isLlmRemembered());
   const [llmSaved, setLlmSaved] = useState(false);
   const [llmStatus, setLlmStatus] = useState<StatusMessage | null>(null);
+  const [confirmingLlmReset, setConfirmingLlmReset] = useState(false);
   const [adminToken, setAdminToken] = useState('');
   const [adminSaved, setAdminSaved] = useState(false);
   const [adminStatus, setAdminStatus] = useState<StatusMessage | null>(null);
@@ -148,7 +151,7 @@ export function ModelTab() {
       setUsage(null);
       setUsageStatus({
         tone: 'warning',
-        text: '无法读取模型运行记录。请确认访问保护已登录，或稍后重试。',
+        text: t('settings.usage.statusFailed'),
       });
     } finally {
       setUsageLoading(false);
@@ -173,7 +176,7 @@ export function ModelTab() {
     if (nextConfig.apiUrl && !nextConfig.apiKey) {
       setLlmStatus({
         tone: 'danger',
-        text: '自定义 API URL 需要同时填写 API Key，否则请求会被阻止。',
+        text: t('settings.llm.statusApiUrlNeedsKey'),
       });
       return;
     }
@@ -199,13 +202,13 @@ export function ModelTab() {
       setLlmStatus({
         tone: 'success',
         text: llmRemember
-          ? '模型配置已保存。API Key 会保存在当前浏览器。'
-          : '模型配置已保存。关闭浏览器后会清除 API Key。',
+          ? t('settings.llm.statusSavedRemembered')
+          : t('settings.llm.statusSavedSession'),
       });
     } catch {
       setLlmStatus({
         tone: 'warning',
-        text: '本地配置已保存，但服务端模型列表同步失败。稍后可重试保存。',
+        text: t('settings.llm.statusSyncFailed'),
       });
     }
     setLlmSaved(true);
@@ -232,7 +235,7 @@ export function ModelTab() {
     });
     if (wikiModel === model) setWikiModel(DEFAULT_LLM_MODEL);
     if (askModel === model) setAskModel(DEFAULT_LLM_MODEL);
-    setLlmStatus({ tone: 'info', text: '已删除这个自定义模型。' });
+    setLlmStatus({ tone: 'info', text: t('settings.llm.statusCustomRemoved') });
   }
 
   async function removePresetModel(model: string) {
@@ -259,7 +262,7 @@ export function ModelTab() {
     saveLlmConfig(nextConfig);
     if (wikiModel === model) setWikiModel(DEFAULT_LLM_MODEL);
     if (askModel === model) setAskModel(DEFAULT_LLM_MODEL);
-    setLlmStatus({ tone: 'info', text: '已隐藏该预设模型。可重新输入模型名再保存。' });
+    setLlmStatus({ tone: 'info', text: t('settings.llm.statusPresetHidden') });
   }
 
   function renderModelSelector(input: {
@@ -285,7 +288,11 @@ export function ModelTab() {
           <span className="settings-field-hint">{input.desc}</span>
         </label>
 
-        <div className="settings-preset-row" role="list" aria-label={`${input.title}可选模型`}>
+        <div
+          className="settings-preset-row"
+          role="list"
+          aria-label={t('settings.llm.presetListAria', { title: input.title })}
+        >
           {PRESET_MODELS.map((item) => item.value)
             .filter((model) => !hiddenPresetModels.includes(model))
             .map((model) => (
@@ -298,7 +305,7 @@ export function ModelTab() {
                 <button
                   type="button"
                   aria-pressed={input.value === model}
-                  aria-label={`选择模型 ${modelLabel(model)}`}
+                  aria-label={t('settings.llm.selectModel', { model: modelLabel(model) })}
                   onClick={() => input.onChange(model)}
                 >
                   {modelLabel(model)}
@@ -307,8 +314,8 @@ export function ModelTab() {
                   <button
                     type="button"
                     className="settings-model-chip-delete"
-                    aria-label={`删除模型 ${modelLabel(model)}`}
-                    title="删除"
+                    aria-label={t('settings.llm.deleteModel', { model: modelLabel(model) })}
+                    title={t('settings.llm.delete')}
                     onClick={() => void removePresetModel(model)}
                   >
                     ×
@@ -326,7 +333,7 @@ export function ModelTab() {
               <button
                 type="button"
                 aria-pressed={input.value === model}
-                aria-label={`选择模型 ${modelLabel(model)}`}
+                aria-label={t('settings.llm.selectModel', { model: modelLabel(model) })}
                 onClick={() => input.onChange(model)}
               >
                 {modelLabel(model)}
@@ -334,8 +341,8 @@ export function ModelTab() {
               <button
                 type="button"
                 className="settings-model-chip-delete"
-                aria-label={`删除模型 ${modelLabel(model)}`}
-                title="删除"
+                aria-label={t('settings.llm.deleteModel', { model: modelLabel(model) })}
+                title={t('settings.llm.delete')}
                 onClick={() => void removeCustomModel(model)}
               >
                 ×
@@ -354,11 +361,11 @@ export function ModelTab() {
       setAdminSaved(true);
       setAdminStatus({
         tone: 'success',
-        text: '访问保护已登录；同源请求会自动使用服务端 httpOnly Cookie。',
+        text: t('settings.admin.statusSaved'),
       });
       safeTimeout(() => setAdminSaved(false), 2000);
     } catch (err) {
-      const message = err instanceof Error ? err.message : '访问保护登录失败';
+      const message = err instanceof Error ? err.message : t('settings.admin.statusFailed');
       setAdminSaved(false);
       setAdminStatus({ tone: 'danger', text: message });
     }
@@ -368,8 +375,33 @@ export function ModelTab() {
     await clearAdminToken();
     setAdminToken('');
     setAdminSaved(true);
-    setAdminStatus({ tone: 'success', text: '已退出访问保护，并清理旧版本地访问密钥。' });
+    setAdminStatus({ tone: 'success', text: t('settings.admin.statusCleared') });
     safeTimeout(() => setAdminSaved(false), 2000);
+  }
+
+  async function resetLlmToDefault() {
+    setConfirmingLlmReset(false);
+    clearLlmConfig();
+    setWikiModel(DEFAULT_LLM_MODEL);
+    setAskModel(DEFAULT_LLM_MODEL);
+    setLlmConfig({
+      apiKey: undefined,
+      apiUrl: undefined,
+      model: DEFAULT_LLM_MODEL,
+      askModel: DEFAULT_LLM_MODEL,
+      wikiModel: DEFAULT_LLM_MODEL,
+    });
+    const settings = await saveSelectedModelsOnServer({
+      wikiModel: DEFAULT_LLM_MODEL,
+      askModel: DEFAULT_LLM_MODEL,
+    }).catch(() => null);
+    if (settings) {
+      setCustomModels(settings.models);
+      setHiddenPresetModels(settings.hiddenPresetModels);
+    }
+    setLlmSaved(true);
+    setLlmStatus({ tone: 'success', text: t('settings.llm.statusResetDone') });
+    safeTimeout(() => setLlmSaved(false), 2000);
   }
 
   return (
@@ -380,25 +412,23 @@ export function ModelTab() {
           <Icon.Sparkle />
         </div>
         <div>
-          <div className="settings-card-title">LLM 配置</div>
-          <div className="settings-card-desc">
-            Wiki 生成和搜索问答可以分别设置模型；默认使用 DeepSeek V4 Flash。
-          </div>
+          <div className="settings-card-title">{t('settings.llm.title')}</div>
+          <div className="settings-card-desc">{t('settings.llm.desc')}</div>
         </div>
       </div>
 
       <div className="settings-fields" aria-describedby="settings-model-credential-note">
         {renderModelSelector({
-          title: 'Wiki 生成模型',
-          desc: '用于 GitHub 文档同步、概念抽取、摘要和关系整理。',
+          title: t('settings.llm.wikiModel'),
+          desc: t('settings.llm.wikiModelDesc'),
           value: wikiModel,
           onChange: setWikiModel,
           inputId: 'settings-wiki-model',
         })}
 
         {renderModelSelector({
-          title: '搜索问答模型',
-          desc: '用于 Ask 页搜索问答、检索改写和答案生成。',
+          title: t('settings.llm.askModel'),
+          desc: t('settings.llm.askModelDesc'),
           value: askModel,
           onChange: setAskModel,
           inputId: 'settings-ask-model',
@@ -411,12 +441,14 @@ export function ModelTab() {
             aria-expanded={llmAdvancedExpanded}
             onClick={() => setLlmAdvancedExpanded((value) => !value)}
           >
-            <span>高级配置</span>
-            <span>{llmAdvancedExpanded ? '收起' : '展开'}</span>
+            <span>{t('settings.llm.advanced')}</span>
+            <span>
+              {llmAdvancedExpanded ? t('settings.llm.collapse') : t('settings.llm.expand')}
+            </span>
           </button>
 
           {!llmAdvancedExpanded && (
-            <div className="settings-inline-note">API Key 与 API URL 默认跟随服务端配置。</div>
+            <div className="settings-inline-note">{t('settings.llm.advancedNote')}</div>
           )}
 
           {llmAdvancedExpanded && (
@@ -425,7 +457,7 @@ export function ModelTab() {
                 <span>API Key</span>
                 <input
                   type="password"
-                  placeholder="sk-… 或 OpenRouter key"
+                  placeholder={t('settings.llm.apiKeyPlaceholder')}
                   value={llmConfig.apiKey || ''}
                   autoComplete="off"
                   aria-describedby="settings-model-credential-note"
@@ -435,7 +467,7 @@ export function ModelTab() {
 
               <label className="settings-field">
                 <span>
-                  API URL <em>可选</em>
+                  API URL <em>{t('settings.llm.optional')}</em>
                 </span>
                 <input
                   type="text"
@@ -447,7 +479,7 @@ export function ModelTab() {
                   onChange={(e) => setLlmConfig((c) => ({ ...c, apiUrl: e.target.value }))}
                 />
                 <span id="settings-model-api-url-note" className="settings-field-hint">
-                  自定义 URL 只允许公开 HTTPS 地址，并且必须配套 API Key。
+                  {t('settings.llm.apiUrlHint')}
                 </span>
               </label>
             </>
@@ -459,37 +491,42 @@ export function ModelTab() {
           type="button"
           onClick={() => void saveLlm()}
         >
-          {llmSaved ? '已保存 ✓' : '保存配置'}
+          {llmSaved ? t('settings.llm.saved') : t('settings.llm.save')}
         </button>
-        <button
-          className="modal-btn danger settings-secondary-action"
-          type="button"
-          onClick={async () => {
-            clearLlmConfig();
-            setWikiModel(DEFAULT_LLM_MODEL);
-            setAskModel(DEFAULT_LLM_MODEL);
-            setLlmConfig({
-              apiKey: undefined,
-              apiUrl: undefined,
-              model: DEFAULT_LLM_MODEL,
-              askModel: DEFAULT_LLM_MODEL,
-              wikiModel: DEFAULT_LLM_MODEL,
-            });
-            const settings = await saveSelectedModelsOnServer({
-              wikiModel: DEFAULT_LLM_MODEL,
-              askModel: DEFAULT_LLM_MODEL,
-            }).catch(() => null);
-            if (settings) {
-              setCustomModels(settings.models);
-              setHiddenPresetModels(settings.hiddenPresetModels);
-            }
-            setLlmSaved(true);
-            setLlmStatus({ tone: 'success', text: '已恢复默认模型，并清除当前浏览器凭据。' });
-            safeTimeout(() => setLlmSaved(false), 2000);
-          }}
-        >
-          恢复默认模型并清除凭据
-        </button>
+        {confirmingLlmReset ? (
+          <div
+            className="settings-confirm-block settings-confirm-danger"
+            role="group"
+            aria-label={t('settings.llm.resetConfirmTitle')}
+          >
+            <p className="modal-desc">
+              <strong>{t('settings.llm.resetConfirmTitle')}</strong>
+              {t('settings.llm.resetConfirmDesc')}
+            </p>
+            <button
+              className="modal-btn primary danger-confirm"
+              type="button"
+              onClick={() => void resetLlmToDefault()}
+            >
+              {t('settings.llm.resetConfirmAction')}
+            </button>
+            <button
+              className="modal-btn"
+              type="button"
+              onClick={() => setConfirmingLlmReset(false)}
+            >
+              {t('settings.llm.cancel')}
+            </button>
+          </div>
+        ) : (
+          <button
+            className="modal-btn danger settings-secondary-action"
+            type="button"
+            onClick={() => setConfirmingLlmReset(true)}
+          >
+            {t('settings.llm.reset')}
+          </button>
+        )}
         <label className="settings-field-row settings-field-row-help">
           <input
             type="checkbox"
@@ -498,10 +535,10 @@ export function ModelTab() {
               setLlmRememberChoice(e.target.checked);
             }}
           />
-          记住凭据（否则关闭浏览器后清除）
+          {t('settings.llm.remember')}
         </label>
         <div id="settings-model-credential-note" className="settings-inline-note">
-          默认走服务端配置；只有填写 API Key 时，当前浏览器才会保存覆盖凭据。
+          {t('settings.llm.credentialNote')}
         </div>
         <StatusNotice message={llmStatus} />
       </div>
@@ -514,8 +551,8 @@ export function ModelTab() {
           <Icon.Sparkle />
         </div>
         <div>
-          <div className="settings-card-title">模型运行记忆</div>
-          <div className="settings-card-desc">近 14 天模型成本、token 和失败调用。</div>
+          <div className="settings-card-title">{t('settings.usage.title')}</div>
+          <div className="settings-card-desc">{t('settings.usage.desc')}</div>
         </div>
       </div>
 
@@ -523,15 +560,22 @@ export function ModelTab() {
         <div>
           <div className="settings-tool-title">
             {usage
-              ? `${usage.totals.runs} 次调用 · ${formatUsd(usage.totals.costUsd)}`
-              : '暂无调用记录'}
+              ? t('settings.usage.summary', {
+                  runs: usage.totals.runs,
+                  cost: formatUsd(usage.totals.costUsd),
+                })
+              : t('settings.usage.empty')}
           </div>
           <div className="settings-card-desc">
             {usage
-              ? `${formatCompactNumber(usage.totals.inputTokens + usage.totals.outputTokens)} tokens · 平均 ${
-                  usage.totals.avgLatencyMs ? Math.round(usage.totals.avgLatencyMs) : 0
-                }ms`
-              : '等待服务端产生 model_runs 记录'}
+              ? t('settings.usage.tokens', {
+                  tokens: formatCompactNumber(
+                    usage.totals.inputTokens + usage.totals.outputTokens,
+                    locale,
+                  ),
+                  latency: usage.totals.avgLatencyMs ? Math.round(usage.totals.avgLatencyMs) : 0,
+                })
+              : t('settings.usage.waiting')}
           </div>
         </div>
         <button
@@ -541,25 +585,32 @@ export function ModelTab() {
           disabled={usageLoading}
           aria-busy={usageLoading}
         >
-          {usageLoading ? '刷新中…' : '刷新'}
+          {usageLoading ? t('settings.usage.refreshing') : t('settings.usage.refresh')}
         </button>
       </div>
       <StatusNotice message={usageStatus} />
 
       {usage && usage.byModel.length > 0 && (
-        <div className="settings-lint-results" role="list" aria-label="模型运行记录">
+        <div
+          className="settings-lint-results"
+          role="list"
+          aria-label={t('settings.usage.listAria')}
+        >
           {usage.byModel.slice(0, 4).map((item) => (
             <div key={item.model} className="settings-lint-finding" role="listitem">
               <div className="settings-lint-finding-type">{formatUsd(item.costUsd)}</div>
               <div className="settings-lint-finding-msg">
-                {modelLabel(item.model)} · {item.runs} 次 ·{' '}
-                {formatCompactNumber(item.inputTokens + item.outputTokens)} tokens
+                {t('settings.usage.item', {
+                  model: modelLabel(item.model),
+                  runs: item.runs,
+                  tokens: formatCompactNumber(item.inputTokens + item.outputTokens, locale),
+                })}
               </div>
             </div>
           ))}
           {usage.recentFailures.length > 0 && (
             <div className="settings-lint-finding last" role="listitem">
-              <div className="settings-lint-finding-type">失败</div>
+              <div className="settings-lint-finding-type">{t('settings.usage.failure')}</div>
               <div className="settings-lint-finding-msg">
                 {usage.recentFailures[0].task} · {modelLabel(usage.recentFailures[0].model)}
               </div>
@@ -576,10 +627,8 @@ export function ModelTab() {
           <Icon.Settings />
         </div>
         <div>
-          <div className="settings-card-title">访问保护</div>
-          <div className="settings-card-desc">
-            访问保护由服务端 Cookie 处理；这里可清理旧版浏览器凭据。
-          </div>
+          <div className="settings-card-title">{t('settings.admin.title')}</div>
+          <div className="settings-card-desc">{t('settings.admin.desc')}</div>
         </div>
       </div>
 
@@ -588,27 +637,27 @@ export function ModelTab() {
           <span>Admin Token</span>
           <input
             type="password"
-            placeholder="与服务端 ADMIN_TOKEN 保持一致"
+            placeholder={t('settings.admin.placeholder')}
             value={adminToken}
             autoComplete="off"
             aria-describedby="settings-admin-token-note"
             onChange={(e) => setAdminToken(e.target.value)}
           />
           <span id="settings-admin-token-note" className="settings-field-hint">
-            访问保护由服务端 Cookie 处理，不会把 Admin Token 写入本地存储。
+            {t('settings.admin.hint')}
           </span>
         </label>
 
         <div className="settings-action-row">
           <button className="modal-btn primary" type="button" onClick={() => void saveAdmin()}>
-            {adminSaved ? '已保存 ✓' : '保存访问密钥'}
+            {adminSaved ? t('settings.llm.saved') : t('settings.admin.save')}
           </button>
           <button
             className="modal-btn settings-secondary-action"
             type="button"
             onClick={() => void clearAdmin()}
           >
-            清除
+            {t('settings.admin.clear')}
           </button>
         </div>
         <StatusNotice message={adminStatus} />

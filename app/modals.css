@@ -8,6 +8,10 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0)), var(--bg-primary);
   padding: 10px 14px calc(18px + var(--safe-bottom));
 }
+/* 白色渐变仅适用于浅色主题；暗色下整体泛灰，直接用纯色底 */
+.dark .settings-modal {
+  background: var(--bg-primary);
+}
 .settings-modal:focus {
   outline: none;
 }
@@ -189,6 +193,21 @@
   box-shadow: 0 0 0 2px rgba(94, 93, 89, 0.15);
 }
 
+/* 操作区吸附在弹窗底部：矮视口（如 1280×800）下主按钮不被折到屏外 */
+.ingest-form-actions {
+  position: sticky;
+  /* 与 .modal 的底部 padding 对齐，保持视觉上的原位吸附 */
+  bottom: calc(24px + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-top: var(--space-sm);
+  background: var(--bg-primary);
+}
+.ingest-form-actions .modal-btn {
+  margin: 0;
+}
+
 .settings-section {
   padding: 0 20px 40px;
 }
@@ -307,7 +326,7 @@
   padding: 10px;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.56);
+  background: var(--bg-card);
 }
 .settings-preset-row {
   display: flex;
@@ -606,9 +625,11 @@
   cursor: pointer;
 }
 .settings-segmented button.active {
-  background: var(--bg-card);
-  color: var(--text-primary);
-  box-shadow: 0 1px 2px rgba(20, 20, 18, 0.08);
+  /* 与桌面端、移动页签一致：反色激活态，暗色下也清晰可辨 */
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 .settings-data-section {
   margin-top: var(--space-2xs);
@@ -1033,8 +1054,9 @@
     transform: translateY(0) scale(1);
   }
 
+  /* 桌面端统一隐藏拖拽把手（与设置弹窗一致），把手只用于移动端底部 sheet */
   .modal-handle {
-    margin-bottom: var(--space-lg);
+    display: none;
   }
 
   /* Settings modal override: near-fullscreen */
@@ -2152,15 +2174,21 @@
     max-height: 88vh;
     max-height: 88dvh;
     box-sizing: border-box;
-    overflow-x: hidden;
-    overflow-y: auto;
+    /* sheet 本身不滚动：表头 + 页签常驻，只让面板区滚动 */
+    overflow: hidden;
     max-width: 100%;
   }
   .settings-modal .settings-sidebar {
     display: none;
   }
+  .settings-modal .settings-layout {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
   .settings-modal .settings-mobile-tabs {
     display: block;
+    flex-shrink: 0;
     margin-bottom: 18px;
   }
   .settings-modal .settings-mobile-tabs .settings-segmented {
@@ -2191,8 +2219,16 @@
   }
   .settings-modal .settings-main {
     flex: 1;
-    overflow-y: auto;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .settings-modal .settings-panel {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
   }
   .settings-modal .settings-tool-row {
     display: flex;

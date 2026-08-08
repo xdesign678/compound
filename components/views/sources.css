@@ -4,6 +4,14 @@
   margin-bottom: 18px;
 }
 
+/* 覆盖全局 .modal-btn 的 width:100%：列表空态/加载更多按钮收敛为内容宽度并居中 */
+.list-footer-btn {
+  width: auto;
+  min-width: 200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .source-card {
   background: var(--bg-card);
   border: 1px solid var(--border-light);

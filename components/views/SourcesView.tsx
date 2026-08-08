@@ -80,6 +80,7 @@ export function SourcesView() {
     const allConcepts = await db.concepts
       .where('sources')
       .anyOf(sources.map((source) => source.id))
+      .distinct()
       .toArray();
     const map = new Map<string, number>();
     for (const concept of allConcepts) {
@@ -162,7 +163,11 @@ export function SourcesView() {
             {totalMatches === 0 && (
               <div className="empty-state empty-state-compact" role="status" aria-live="polite">
                 <p>没有匹配的资料</p>
-                <button type="button" className="modal-btn" onClick={() => setQuery('')}>
+                <button
+                  type="button"
+                  className="modal-btn list-footer-btn"
+                  onClick={() => setQuery('')}
+                >
                   清空搜索
                 </button>
               </div>
@@ -200,14 +205,14 @@ export function SourcesView() {
                   已显示 {filteredSources.length} / {totalMatches} 份资料
                 </span>
                 <button
-                  className="modal-btn"
+                  className="modal-btn list-footer-btn"
                   type="button"
                   onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
                 >
                   加载更多
                 </button>
               </div>
-            ) : totalMatches > 0 ? (
+            ) : totalMatches > PAGE_SIZE ? (
               <div className="list-end-hint">
                 <span>
                   已显示 {filteredSources.length} / {totalMatches} 份资料

@@ -1,26 +1,47 @@
 /* Offline Banner */
-/* 文档流内元素（app-shell 第一个子元素），出现时把后续内容往下推 */
+/* 固定定位，不占文档流；占位高度通过 :root 变量 --offline-banner-height 预留，
+   html.has-offline-banner 时 app-shell 整体下移、toast top 同步叠加，避免布局抖动 */
+:root {
+  --offline-banner-height: 0px;
+}
+.has-offline-banner {
+  --offline-banner-height: 36px;
+}
 .offline-banner {
-  position: relative; /* 供关闭按钮绝对定位 */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40; /* 高于 header(10)，低于 modal(60)/toast(80) */
+  height: 36px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-lg);
+  padding: 0 var(--space-lg);
   /* 右侧给 44px 关闭按钮留位，避免文案被压住 */
   padding-right: calc(12px + 44px + var(--space-sm));
-  flex-shrink: 0;
   background: var(--color-warning);
   color: #1a1a18;
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   animation: offline-slide-in var(--motion-duration-base) var(--motion-ease-emphasized);
 }
+/* banner 进出时整体平滑下移/回位，避免硬跳 */
+.app-shell {
+  transition: top var(--motion-duration-base) var(--motion-ease-standard);
+}
+.has-offline-banner .app-shell {
+  top: var(--offline-banner-height);
+}
 .offline-banner-text {
   font-weight: 600;
+  white-space: nowrap;
 }
 .offline-banner-hint {
   opacity: 0.8;
+  white-space: nowrap;
 }
 .offline-banner-close {
   position: absolute;
@@ -47,6 +68,12 @@
 .offline-banner-close:hover {
   opacity: 1;
   background: rgba(0, 0, 0, 0.1);
+}
+/* 窄屏隐藏副文案，保证单行 36px 高度成立 */
+@media (max-width: 520px) {
+  .offline-banner-hint {
+    display: none;
+  }
 }
 @keyframes offline-slide-in {
   from {

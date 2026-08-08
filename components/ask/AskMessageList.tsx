@@ -161,37 +161,39 @@ export function AskMessageList({
                         <CitedList ids={message.citedConcepts} onClick={onOpenConcept} />
                       </div>
                     )}
-                    <div className="msg-answer-actions">
-                      {!failedAnswer &&
-                        message.citedConcepts &&
-                        message.citedConcepts.length > 0 &&
-                        (message.savedAsConceptId ? (
-                          <button className="save-as-page" disabled type="button">
-                            <Icon.Save />
-                            已归档为 Wiki 页面
-                          </button>
-                        ) : (
-                          <button
-                            className="save-as-page"
-                            disabled={archiving === message.id}
-                            onClick={() => void onArchive(message, userQuestion)}
-                            type="button"
-                          >
-                            <Icon.Save />
-                            {archiving === message.id ? '归档中...' : '归档为新页面'}
-                          </button>
-                        ))}
-                      <button
-                        className="save-as-page"
-                        type="button"
-                        onClick={() => void onRestart()}
-                        disabled={loading}
-                        aria-label="开始新对话"
-                      >
-                        <Icon.Plus />
-                        <span>新对话</span>
-                      </button>
-                    </div>
+                    {!failedAnswer && (
+                      <div className="msg-answer-actions">
+                        {message.citedConcepts &&
+                          message.citedConcepts.length > 0 &&
+                          (message.savedAsConceptId ? (
+                            <button className="save-as-page" disabled type="button">
+                              <Icon.Save />
+                              已归档为 Wiki 页面
+                            </button>
+                          ) : (
+                            <button
+                              className="save-as-page"
+                              disabled={archiving === message.id}
+                              onClick={() => void onArchive(message, userQuestion)}
+                              type="button"
+                            >
+                              <Icon.Save />
+                              {archiving === message.id ? '归档中...' : '归档为新页面'}
+                            </button>
+                          ))}
+                        {/* 失败卡内已有「重新提问＋新对话」，失败态不重复渲染底部新对话按钮 */}
+                        <button
+                          className="save-as-page"
+                          type="button"
+                          onClick={() => void onRestart()}
+                          disabled={loading}
+                          aria-label="开始新对话"
+                        >
+                          <Icon.Plus />
+                          <span>新对话</span>
+                        </button>
+                      </div>
+                    )}
                     {!failedAnswer &&
                       message.suggestedQuestions &&
                       message.suggestedQuestions.length > 0 && (

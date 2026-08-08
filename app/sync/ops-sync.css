@@ -1199,15 +1199,18 @@
 /*
  * Module-scoped tokens. We deliberately avoid mutating :root so the rest of
  * the app keeps its current palette; everything below scopes through .ops-page
- * or the /sync root .sync-v2-page (with matching .dark overrides). Status
- * colors are warmed up to sit comfortably inside the cream surface — no
- * saturated red/green. The *-text variants are deepened for small text so
- * 11–12px badges/pills meet AA contrast.
+ * or the /sync root .sync-v2-page (with matching .dark overrides). .ops-toasts
+ * is included because it renders outside .sync-v2-page (sibling of <main>) but
+ * still needs these tokens — otherwise dark-mode toasts fall back to the light
+ * surface. Status colors are warmed up to sit comfortably inside the cream
+ * surface — no saturated red/green. The *-text variants are deepened for small
+ * text so 11–12px badges/pills meet AA contrast.
  */
-:is(.ops-page, .sync-v2-page) {
+:is(.ops-page, .sync-v2-page, .ops-toasts) {
   --ops-surface: #fefdfb;
   --ops-surface-soft: #f5f3ec;
   --ops-state-success: #5a856a;
+  --ops-state-success-text: #477052;
   --ops-state-success-soft: rgba(90, 133, 106, 0.12);
   --ops-state-error: #b85b44;
   --ops-state-error-soft: rgba(184, 91, 68, 0.1);
@@ -1225,10 +1228,11 @@
   --ops-radius-panel: 12px;
 }
 
-.dark :is(.ops-page, .sync-v2-page) {
+.dark :is(.ops-page, .sync-v2-page, .ops-toasts) {
   --ops-surface: #2a2a27;
   --ops-surface-soft: #232320;
   --ops-state-success: #7aab87;
+  --ops-state-success-text: #7aab87;
   --ops-state-success-soft: rgba(122, 171, 135, 0.16);
   --ops-state-error: #d4826a;
   --ops-state-error-soft: rgba(212, 130, 106, 0.14);
@@ -1402,7 +1406,9 @@
   cursor: default;
 }
 
-.ops-pipeline-step:hover:not(:disabled) {
+/* Only interactive (button) steps get the hover lift; PipelineStrip renders
+   non-interactive listitem cards, where the lift + shadow reads as clickable. */
+.ops-pipeline-step:not([role='listitem']):hover:not(:disabled) {
   border-color: var(--border-default);
   background: var(--bg-hover);
   transform: translateY(-1px);
@@ -2017,13 +2023,18 @@
   word-break: break-word;
 }
 
-/* Sparkline — warm clay accent, not saturated green */
+/* Sparkline — done bars use the success green, failed bars solid error red
+   (fill="currentColor" resolves against each bar's own class color). */
 .ops-sparkline {
   display: block;
   margin-top: var(--space-sm);
   color: var(--ops-state-info);
   border-radius: var(--ops-radius-tag);
   overflow: visible;
+}
+
+.ops-sparkline-done {
+  color: var(--ops-state-success);
 }
 
 .ops-sparkline-failed {
@@ -2146,10 +2157,11 @@
 
 .ops-toast-close {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 24px;
-  height: 24px;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2261,6 +2273,13 @@
 
   .ops-topbar {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* The page-scoped rule .ops-page .ops-topbar{align-items:center} (0,2,0)
+     beats the plain .ops-topbar rule above even inside this breakpoint, which
+     shrank .ops-actions to content width on phones — reset it here. */
+  .ops-page .ops-topbar {
     align-items: stretch;
   }
 
@@ -3027,7 +3046,7 @@
 }
 .sync-v2-phase-status.tone-done {
   background: var(--ops-state-success-soft);
-  color: var(--ops-state-success);
+  color: var(--ops-state-success-text);
   border-color: var(--ops-state-success);
 }
 .sync-v2-phase-status.tone-failed {
@@ -3121,7 +3140,7 @@
   color: var(--text-secondary);
 }
 .sync-v2-phase-detail-counts em.good {
-  color: var(--ops-state-success);
+  color: var(--ops-state-success-text);
 }
 .sync-v2-phase-detail-counts em.warn {
   color: var(--ops-state-warn-text);
@@ -3452,7 +3471,7 @@
   letter-spacing: 0.01em;
 }
 .sync-v2-health-score.tone-healthy {
-  color: var(--ops-state-success);
+  color: var(--ops-state-success-text);
   background: var(--ops-state-success-soft);
 }
 .sync-v2-health-score.tone-warning {
@@ -3485,7 +3504,7 @@
   font-family: var(--font-sans);
 }
 .sync-v2-health-chip.tone-good {
-  color: var(--ops-state-success);
+  color: var(--ops-state-success-text);
   border-color: var(--ops-state-success-soft);
 }
 .sync-v2-health-chip.tone-warn {
@@ -3518,7 +3537,7 @@
   border: 1px solid var(--border-section);
 }
 .sync-v2-badge.tone-good {
-  color: var(--ops-state-success);
+  color: var(--ops-state-success-text);
   background: var(--ops-state-success-soft);
   border-color: var(--ops-state-success-soft);
 }
@@ -3596,6 +3615,17 @@
   padding: 20px 28px;
   border-bottom: 1px solid var(--border-section);
   background: var(--bg-card, #fefdfb);
+}
+
+/* Mobile: the title/description column may shrink (and wrap) so the close
+   button keeps its natural one-line width instead of going vertical. */
+.sync-v2-drawer-head > div {
+  min-width: 0;
+}
+
+.sync-v2-drawer-head .sync-v2-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .sync-v2-drawer-head h2 {
@@ -3989,30 +4019,6 @@
   border-radius: var(--radius-sm);
 }
 
-/* ---------- Polling paused chip (top nav) ---------- */
-.sync-v2-pause-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: var(--ops-radius-pill);
-  border: 1px solid color-mix(in srgb, var(--ops-state-warn) 45%, var(--border-default));
-  background: var(--ops-state-warn-soft);
-  color: var(--ops-state-warn-text);
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background var(--motion-duration-fast) var(--motion-ease-standard),
-    border-color var(--motion-duration-fast) var(--motion-ease-standard);
-}
-
-.sync-v2-pause-chip:hover {
-  border-color: var(--ops-state-warn);
-}
-
 /* Review queue skeleton shimmer — renamed from the generic `pulse` so it
    never collides with the ask view's keyframes. */
 @keyframes review-pulse {
@@ -4034,99 +4040,8 @@
   text-align: center;
 }
 
-/* 加载/认证错误卡（替换原内联样式 + emoji 图标，亮暗两态走 ops token） */
-.sync-v2-error {
-  display: flex;
-  gap: var(--space-lg);
-  padding: 20px 24px;
-  border-radius: var(--ops-radius-panel);
-  background: var(--ops-state-error-soft);
-  border: 1px solid var(--ops-state-error);
-  border-left-width: 4px;
-  line-height: 1.6;
-}
-.sync-v2-error-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  flex: 1;
-}
-.sync-v2-error-title {
-  margin: 0;
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.sync-v2-error-copy {
-  margin: 0;
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-.sync-v2-error-actions {
-  display: flex;
-  gap: var(--space-sm);
-  margin-top: 4px;
-}
-.sync-v2-error-details {
-  margin-top: 4px;
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-.sync-v2-error-details summary {
-  cursor: pointer;
-  user-select: none;
-}
-.sync-v2-error-details pre {
-  margin: 8px 0 0;
-  white-space: pre-wrap;
-  word-break: break-all;
-  font-size: var(--text-2xs);
-  background: var(--ops-surface-soft);
-  padding: 8px 12px;
-  border-radius: var(--ops-radius-card);
-}
-
 /* 轮询暂停提示 chip（可见的恢复入口） */
 .sync-v2-paused-chip {
   border-style: dashed;
   color: var(--ops-state-warn-text);
-}
-
-/* sync toast 关闭按钮 */
-.ops-toast {
-  position: relative;
-  padding-right: 36px;
-}
-.ops-toast-close {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: inherit;
-  opacity: 0.6;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 14px;
-}
-.ops-toast-close:hover {
-  opacity: 1;
-  background: rgba(0, 0, 0, 0.08);
-}
-
-/* review 骨架屏呼吸动画（原运行时内联注入全局 @keyframes pulse，会与 ask 视图同名动画互相覆盖） */
-@keyframes review-pulse {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 0.3;
-  }
 }

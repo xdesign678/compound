@@ -47,12 +47,16 @@ export const ERROR_MESSAGES: Record<string, string> = {
   '502': '服务暂时不可用，请稍后重试或检查网络',
   '503': '服务暂时不可用，请稍后重试',
   '429': '请求过于频繁，请稍后再试',
-  '401': '访问保护认证失败，请在设置里重新保存 Admin Token',
+  '401': '访问保护认证已失效，请返回首页重新认证',
+  Unauthorized: '访问保护认证已失效，请返回首页重新认证',
   '403': '访问被拒绝，请检查认证信息',
   '500': '服务器内部错误，请稍后重试',
   TIMEOUT: '请求超时，请检查网络后重试',
   OFFLINE: '网络已断开，请检查连接后重试',
   NETWORK: '网络连接失败，请检查网络设置',
+  'Failed to fetch': '网络连接失败，请检查网络设置',
+  NetworkError: '网络连接失败，请检查网络设置',
+  abort: '请求被中断，请稍后重试',
   INGEST_FAIL: '摄入失败，请检查资料内容或重试',
   LINT_FAIL: '体检失败，请稍后重试',
   QUERY_FAIL: '问答失败，请稍后重试',
@@ -270,15 +274,21 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => (
       id,
     };
     set((s) => {
-      const recent = s.toastQueue.find(
+      // Drop lingering loading entries so a spinner toast never outlives the error.
+      const queueWithoutLoading = s.toastQueue.filter((t) => !t.loading);
+      const recent = queueWithoutLoading.find(
         (t) => t.text === friendlyText && Date.now() - t.id < TOAST_DEDUPE_MS,
       );
-      if (recent) return s;
-      const queue = [entry, ...s.toastQueue].slice(0, MAX_TOAST_QUEUE);
+      if (recent) return { toastQueue: queueWithoutLoading };
+      const queue = [entry, ...queueWithoutLoading].slice(0, MAX_TOAST_QUEUE);
       return { toast: entry, toastQueue: queue };
     });
   },
-  hideToast: () => set((s) => ({ toast: { ...s.toast, visible: false } })),
+  hideToast: () =>
+    set((s) => ({
+      toast: { ...s.toast, visible: false },
+      toastQueue: s.toastQueue.filter((t) => !t.loading),
+    })),
   markFresh: (ids: string[]) =>
     set((s) => {
       const next = { ...s.freshConceptIds };

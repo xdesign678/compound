@@ -19,8 +19,21 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
   }, [error]);
 
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
       <body>
+        {/* 与 app/layout.tsx 的主题探测保持一致：全局错误页不走 layout，需要自行补 .dark 类 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+  try {
+    var theme = localStorage.getItem('compound_theme');
+    if (theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+  } catch(e) {}
+`,
+          }}
+        />
         <ErrorBoundaryState error={error} sentryEventId={sentryEventId} />
       </body>
     </html>

@@ -1,7 +1,8 @@
 /* Toast */
 .toast-container {
   position: fixed;
-  top: 70px;
+  /* 离线 banner 出现时（html.has-offline-banner）随占位变量下移，避免压住标题区 */
+  top: calc(70px + var(--offline-banner-height, 0px));
   left: 50%;
   transform: translateX(-50%);
   z-index: var(--z-toast);
@@ -10,6 +11,7 @@
   align-items: center;
   gap: var(--space-sm);
   pointer-events: none;
+  transition: top var(--motion-duration-base) var(--motion-ease-standard);
 }
 .toast {
   position: relative;
@@ -37,6 +39,10 @@
 .toast.visible {
   opacity: 1;
   transform: translateY(0);
+}
+/* 收起中的 toast 不再响应点击 */
+.toast:not(.visible) {
+  pointer-events: none;
 }
 .toast .spinner {
   width: 14px;
@@ -77,6 +83,13 @@
 }
 .toast-close:hover {
   color: rgba(250, 249, 245, 1);
+}
+/* 深色模式下普通 toast 是浅色底，关闭按钮改用深色（错误 toast 固定深色底，不受影响） */
+.dark .toast:not(.toast-error) .toast-close {
+  color: rgba(20, 20, 19, 0.6);
+}
+.dark .toast:not(.toast-error) .toast-close:hover {
+  color: rgba(20, 20, 19, 1);
 }
 .toast-retry {
   background: rgba(250, 249, 245, 0.12);

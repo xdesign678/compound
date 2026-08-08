@@ -330,11 +330,15 @@ export function ConceptDetail({ id }: { id: string }) {
     if (!tocOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        // 全局快捷键钩子的 window 监听注册更早（冒泡阶段先触发），这里必须用
+        // capture 阶段抢先 preventDefault，全局钩子看到 defaultPrevented 才会放行，
+        // 否则按一次 Esc 会把详情页一起关掉。
+        event.preventDefault();
         closeToc();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [closeToc, tocOpen]);
 
   useEffect(() => {
@@ -499,6 +503,37 @@ export function ConceptDetail({ id }: { id: string }) {
     };
   }, [dismissSelectionPopover]);
 
+  // 浮窗首次定位用的是估计尺寸（POPOVER_ESTIMATED_*），与真实尺寸有偏差时会
+  // 遮挡选区后的正文。挂载后量取真实尺寸，用同一套定位逻辑二次校正。
+  useEffect(() => {
+    if (!selectionPopover.visible) return;
+    const popover = popoverRef.current;
+    const shell = bodyShellRef.current;
+    if (!popover || !shell) return;
+    const actual = popover.getBoundingClientRect();
+    if (
+      Math.abs(actual.width - POPOVER_ESTIMATED_WIDTH) < 1 &&
+      Math.abs(actual.height - POPOVER_ESTIMATED_HEIGHT) < 1
+    ) {
+      return;
+    }
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+    const anchorRect = getSelectionAnchorRect(sel, sel.getRangeAt(0), shell);
+    if (!anchorRect) return;
+    const { top, left } = computeSelectionPopoverPosition({
+      anchorRect,
+      viewport: {
+        width: window.visualViewport?.width ?? window.innerWidth,
+        height: getVisibleViewportBottom(window),
+      },
+      popover: { width: actual.width, height: actual.height },
+    });
+    setSelectionPopover((state) =>
+      state.visible && (state.top !== top || state.left !== left) ? { ...state, top, left } : state,
+    );
+  }, [selectionPopover.visible, selectionPopover.text]);
+
   const handleCreateFromSelection = useCallback(async () => {
     if (creatingFromSelection) return;
     const text = selectionPopover.text.trim();
@@ -581,14 +616,18 @@ export function ConceptDetail({ id }: { id: string }) {
     if (!versionDialog.open && !showDeleteConfirm) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      // 全局快捷键钩子的 window 监听注册更早（冒泡阶段先触发），这里必须用
+      // capture 阶段抢先 preventDefault，全局钩子看到 defaultPrevented 才会放行，
+      // 否则按一次 Esc 会把详情页一起关掉。
+      event.preventDefault();
       if (showDeleteConfirm) {
         setShowDeleteConfirm(false);
       } else {
         closeVersionDialog();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [closeVersionDialog, showDeleteConfirm, versionDialog.open]);
 
   if (concept === undefined) {

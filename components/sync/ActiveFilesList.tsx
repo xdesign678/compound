@@ -5,6 +5,7 @@ import { STAGE_TEXT, STATUS_TEXT, badgeTone, fmtDuration, type SyncItem } from '
 
 interface Props {
   items: SyncItem[];
+  hasRunHistory: boolean;
   busy: boolean;
   onRetryItem: (itemId: string) => void;
   onOpenAdvanced: () => void;
@@ -24,7 +25,13 @@ function durationOf(item: SyncItem): number | null {
  * now: running + failed. Everything else is one click away in the
  * advanced drawer.
  */
-export default function ActiveFilesList({ items, busy, onRetryItem, onOpenAdvanced }: Props) {
+export default function ActiveFilesList({
+  items,
+  hasRunHistory,
+  busy,
+  onRetryItem,
+  onOpenAdvanced,
+}: Props) {
   const [showAll, setShowAll] = useState(false);
 
   const filtered = useMemo(() => {
@@ -42,13 +49,17 @@ export default function ActiveFilesList({ items, busy, onRetryItem, onOpenAdvanc
     return (
       <section className="sync-v2-files sync-v2-files-empty" aria-label="活跃文件">
         <h2>没有正在处理或失败的文件</h2>
-        <p>
-          所有任务都已完成。需要查看历史可点
-          <button type="button" className="sync-v2-link" onClick={onOpenAdvanced}>
-            高级抽屉
-          </button>
-          查看完整文件表。
-        </p>
+        {hasRunHistory ? (
+          <p>
+            所有任务都已完成。需要查看历史可点
+            <button type="button" className="sync-v2-link" onClick={onOpenAdvanced}>
+              高级抽屉
+            </button>
+            查看完整文件表。
+          </p>
+        ) : (
+          <p>尚未同步过。运行一次同步后，正在处理与失败的文件会显示在这里。</p>
+        )}
       </section>
     );
   }

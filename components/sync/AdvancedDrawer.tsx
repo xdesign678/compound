@@ -285,9 +285,9 @@ export default function AdvancedDrawer({
                       </li>
                     ))}
                   </ul>
-                ) : (
-                  <p className="sync-v2-empty">暂无死信任务。</p>
-                )}
+                ) : dlqCount > 0 ? (
+                  <p className="sync-v2-empty">暂无死信任务明细。</p>
+                ) : null}
               </div>
             ) : deliveries.length > 0 ? (
               <div

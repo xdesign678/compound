@@ -252,6 +252,7 @@ export const STATUS_TEXT: Record<string, string> = {
   failed: '失败',
   cancelled: '已取消',
   succeeded: '成功',
+  success: '成功',
   skipped: '跳过',
   info: '信息',
   warn: '警告',

@@ -26,7 +26,11 @@ export function GeneralTab() {
           <div className="settings-tool-title">{t('settings.language.title')}</div>
           <div className="settings-card-desc">{t('settings.language.desc')}</div>
         </div>
-        <div className="settings-segmented" role="radiogroup" aria-label="界面语言">
+        <div
+          className="settings-segmented"
+          role="radiogroup"
+          aria-label={t('settings.language.aria')}
+        >
           {(['zh-CN', 'en'] as Locale[]).map((item) => (
             <button
               key={item}
@@ -44,13 +48,13 @@ export function GeneralTab() {
 
       <div className="settings-tool-row settings-tool-row-flat">
         <div>
-          <div className="settings-tool-title">颜色模式</div>
-          <div className="settings-card-desc">浅色、深色或跟随系统</div>
+          <div className="settings-tool-title">{t('settings.colorMode.title')}</div>
+          <div className="settings-card-desc">{t('settings.colorMode.desc')}</div>
         </div>
         <div
           className="settings-segmented settings-segmented-three"
           role="radiogroup"
-          aria-label="颜色模式"
+          aria-label={t('settings.colorMode.title')}
         >
           {(['light', 'dark', 'system'] as ColorMode[]).map((mode) => (
             <button
@@ -61,7 +65,11 @@ export function GeneralTab() {
               className={colorMode === mode ? 'active' : ''}
               onClick={() => setColorMode(mode)}
             >
-              {mode === 'light' ? '浅色' : mode === 'dark' ? '深色' : '系统'}
+              {mode === 'light'
+                ? t('settings.colorMode.light')
+                : mode === 'dark'
+                  ? t('settings.colorMode.dark')
+                  : t('settings.colorMode.system')}
             </button>
           ))}
         </div>
@@ -69,26 +77,30 @@ export function GeneralTab() {
 
       <div className="settings-tool-row settings-tool-row-flat">
         <div>
-          <div className="settings-tool-title">正文字号</div>
-          <div className="settings-card-desc">调整 Wiki 和资料详情页阅读字号</div>
+          <div className="settings-tool-title">{t('settings.fontSize.title')}</div>
+          <div className="settings-card-desc">{t('settings.fontSize.desc')}</div>
         </div>
         <FontSizeSelector />
       </div>
 
       <div className="settings-tool-row settings-tool-row-flat">
         <div>
-          <div className="settings-tool-title">行间距</div>
-          <div className="settings-card-desc">调整详情页正文行间距</div>
+          <div className="settings-tool-title">{t('settings.lineHeight.title')}</div>
+          <div className="settings-card-desc">{t('settings.lineHeight.desc')}</div>
         </div>
         <LineHeightSelector />
       </div>
 
       <div className="settings-tool-row settings-tool-row-flat">
         <div>
-          <div className="settings-tool-title">首页样式</div>
-          <div className="settings-card-desc">动态流或分类知识库</div>
+          <div className="settings-tool-title">{t('settings.homeStyle.title')}</div>
+          <div className="settings-card-desc">{t('settings.homeStyle.desc')}</div>
         </div>
-        <div className="settings-segmented" role="radiogroup" aria-label="首页样式">
+        <div
+          className="settings-segmented"
+          role="radiogroup"
+          aria-label={t('settings.homeStyle.title')}
+        >
           <button
             type="button"
             role="radio"
@@ -96,7 +108,7 @@ export function GeneralTab() {
             className={homeStyle === 'feed' ? 'active' : ''}
             onClick={() => setHomeStyle('feed')}
           >
-            动态流
+            {t('settings.homeStyle.feed')}
           </button>
           <button
             type="button"
@@ -105,19 +117,25 @@ export function GeneralTab() {
             className={homeStyle === 'library' ? 'active' : ''}
             onClick={() => setHomeStyle('library')}
           >
-            知识库
+            {t('settings.homeStyle.library')}
           </button>
         </div>
       </div>
 
       <div className="settings-tool-row settings-tool-row-flat">
         <div>
-          <div className="settings-tool-title">Markdown 换行</div>
+          <div className="settings-tool-title">{t('settings.markdownBreaks.title')}</div>
           <div className="settings-card-desc">
-            {breaksEnabled ? '宽松模式：单个换行即分段' : '严格模式：需空行才能分段'}
+            {breaksEnabled
+              ? t('settings.markdownBreaks.descLoose')
+              : t('settings.markdownBreaks.descStrict')}
           </div>
         </div>
-        <div className="settings-segmented" role="radiogroup" aria-label="Markdown 换行模式">
+        <div
+          className="settings-segmented"
+          role="radiogroup"
+          aria-label={t('settings.markdownBreaks.title')}
+        >
           <button
             type="button"
             role="radio"
@@ -128,7 +146,7 @@ export function GeneralTab() {
               setBreaksEnabled(false);
             }}
           >
-            严格
+            {t('settings.markdownBreaks.strict')}
           </button>
           <button
             type="button"
@@ -140,7 +158,7 @@ export function GeneralTab() {
               setBreaksEnabled(true);
             }}
           >
-            宽松
+            {t('settings.markdownBreaks.loose')}
           </button>
         </div>
       </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Clipboard, Home, RotateCcw } from 'lucide-react';
 
 const ERROR_BOUNDARY_STYLES = `
@@ -128,47 +128,46 @@ const ERROR_BOUNDARY_STYLES = `
     outline-offset: 3px;
     box-shadow: 0 0 0 4px rgba(217, 119, 87, 0.12);
   }
-  @media (prefers-color-scheme: dark) {
-    .error-boundary-shell {
-      background: #1a1a18;
-      color: #ece9e1;
-    }
-    .error-boundary-mark {
-      color: #f0a183;
-      background: rgba(217, 119, 87, 0.14);
-      border-color: rgba(217, 119, 87, 0.28);
-    }
-    .error-boundary-kicker {
-      color: #f0a183;
-    }
-    .error-boundary-copy {
-      color: rgba(236, 233, 225, 0.85);
-    }
-    .error-boundary-status {
-      background: #232320;
-      border-color: rgba(236, 233, 225, 0.12);
-      color: #9b9b95;
-    }
-    .error-boundary-status strong {
-      color: #ece9e1;
-    }
-    .error-boundary-primary {
-      border-color: #ece9e1;
-      background: #ece9e1;
-      color: #1a1a18;
-    }
-    .error-boundary-primary:hover {
-      background: #f0a183;
-      border-color: #f0a183;
-    }
-    .error-boundary-secondary {
-      border-color: rgba(236, 233, 225, 0.12);
-      color: #ece9e1;
-    }
-    .error-boundary-secondary:hover {
-      background: #2a2a27;
-      border-color: rgba(240, 161, 131, 0.36);
-    }
+  /* 跟随应用主题：html.dark 由 layout 注入（global-error 页也内联了同样的探测脚本） */
+  .dark .error-boundary-shell {
+    background: #1a1a18;
+    color: #ece9e1;
+  }
+  .dark .error-boundary-mark {
+    color: #f0a183;
+    background: rgba(217, 119, 87, 0.14);
+    border-color: rgba(217, 119, 87, 0.28);
+  }
+  .dark .error-boundary-kicker {
+    color: #f0a183;
+  }
+  .dark .error-boundary-copy {
+    color: rgba(236, 233, 225, 0.85);
+  }
+  .dark .error-boundary-status {
+    background: #232320;
+    border-color: rgba(236, 233, 225, 0.12);
+    color: #9b9b95;
+  }
+  .dark .error-boundary-status strong {
+    color: #ece9e1;
+  }
+  .dark .error-boundary-primary {
+    border-color: #ece9e1;
+    background: #ece9e1;
+    color: #1a1a18;
+  }
+  .dark .error-boundary-primary:hover {
+    background: #f0a183;
+    border-color: #f0a183;
+  }
+  .dark .error-boundary-secondary {
+    border-color: rgba(236, 233, 225, 0.12);
+    color: #ece9e1;
+  }
+  .dark .error-boundary-secondary:hover {
+    background: #2a2a27;
+    border-color: rgba(240, 161, 131, 0.36);
   }
   @media (max-width: 520px) {
     .error-boundary-shell {
@@ -193,6 +192,8 @@ interface ErrorBoundaryStateProps {
 
 export function ErrorBoundaryState({ error, reset, sentryEventId }: ErrorBoundaryStateProps) {
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+  const errorIdRef = useRef<HTMLSpanElement>(null);
   const errorId = useMemo(
     () => error.digest || sentryEventId || 'local-error',
     [error, sentryEventId],
@@ -208,13 +209,23 @@ export function ErrorBoundaryState({ error, reset, sentryEventId }: ErrorBoundar
   };
 
   const handleCopy = async () => {
-    // 非安全上下文/权限拒绝时 clipboard 会抛错，降级为选中文本让用户手动复制
+    // 非安全上下文/权限拒绝时 clipboard 不可用或抛错，降级为选中错误 ID 让用户手动复制
     try {
-      await navigator.clipboard?.writeText(errorId);
+      if (!navigator.clipboard) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(errorId);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
-      setCopied(false);
+      setCopyFailed(true);
+      const node = errorIdRef.current;
+      if (node) {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
+      window.setTimeout(() => setCopyFailed(false), 2400);
     }
   };
 
@@ -237,7 +248,9 @@ export function ErrorBoundaryState({ error, reset, sentryEventId }: ErrorBoundar
 
           <div className="error-boundary-status" aria-live="polite">
             {sentryStatus}
-            <strong>错误 ID：{errorId}</strong>
+            <strong>
+              错误 ID：<span ref={errorIdRef}>{errorId}</span>
+            </strong>
           </div>
 
           <div className="error-boundary-actions">
@@ -260,7 +273,7 @@ export function ErrorBoundaryState({ error, reset, sentryEventId }: ErrorBoundar
               onClick={() => void handleCopy()}
             >
               <Clipboard size={16} aria-hidden="true" />
-              {copied ? '已复制' : '复制错误 ID'}
+              {copied ? '已复制' : copyFailed ? '复制失败，请手动复制' : '复制错误 ID'}
             </button>
           </div>
         </section>

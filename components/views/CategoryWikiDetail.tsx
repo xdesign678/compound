@@ -1,6 +1,7 @@
 'use client';
 
 import './category-wiki-detail.css';
+import './detail-chips.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { loadMarked, loadDOMPurify, escapeHTML } from '@/lib/format';
 import { useAppStore } from '@/lib/store';
@@ -130,7 +131,10 @@ async function loadMermaid() {
         startOnLoad: false,
         theme: 'default',
         securityLevel: 'strict',
-        flowchart: { htmlLabels: false },
+        // mermaid v11 起 flowchart.htmlLabels 已废弃；顶层 htmlLabels:false 强制
+        // 节点标签渲染为 SVG <text>，否则默认走 foreignObject，会被 DOMPurify
+        // 的 FORBID_TAGS 剥掉，图里只剩没有文字的空框。
+        htmlLabels: false,
       });
       return mod;
     })
@@ -181,7 +185,6 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
   const [runs, setRuns] = useState<CategoryWikiRunSummary[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
-  const mermaidRenderedRef = useRef(false);
   const autoTriggeredRef = useRef(false);
   const targetKey = `${primary}\u0000${secondary}`;
   const activeTargetRef = useRef(targetKey);
@@ -257,7 +260,6 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
 
   useEffect(() => {
     autoTriggeredRef.current = false;
-    mermaidRenderedRef.current = false;
     setRunId(null);
     setRunStatus(null);
     setError(null);
@@ -304,7 +306,6 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
         if (status.status === 'done') {
           setRunId(null);
           setRunStatus(null);
-          mermaidRenderedRef.current = false;
           await fetchWiki();
           fetchRuns();
           return;
@@ -329,13 +330,33 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
   }, [runId, fetchWiki, fetchRuns]);
 
   useEffect(() => {
-    if (!htmlContent || !contentRef.current || mermaidRenderedRef.current) return;
+    if (!htmlContent || !contentRef.current) return;
     const container = contentRef.current;
-    requestAnimationFrame(() => {
-      renderMermaidBlocks(container).then(() => {
-        mermaidRenderedRef.current = true;
+    // __html 包装对象每次渲染都是新引用，组件任意 state 变化（如打开"更新记录"）
+    // 都会让 React 整棵重灌 innerHTML，已插入的 SVG 随之被清掉。因此监听容器
+    // 子树变化：只要里面还有未渲染的 mermaid 代码块就渲染；渲染过的块已被
+    // .mermaid-chart 替换，天然幂等且可恢复。
+    let rendering = false;
+    let dirty = false;
+    const maybeRender = () => {
+      if (!container.querySelector('code.language-mermaid')) return;
+      if (rendering) {
+        dirty = true;
+        return;
+      }
+      rendering = true;
+      void renderMermaidBlocks(container).finally(() => {
+        rendering = false;
+        if (dirty) {
+          dirty = false;
+          maybeRender();
+        }
       });
-    });
+    };
+    maybeRender();
+    const mutationObserver = new MutationObserver(maybeRender);
+    mutationObserver.observe(container, { childList: true });
+    return () => mutationObserver.disconnect();
   }, [htmlContent]);
 
   useEffect(() => {
@@ -369,24 +390,38 @@ export function CategoryWikiDetail({ primary, secondary }: CategoryWikiDetailPro
   }, [openConcept]);
 
   useEffect(() => {
-    if (!contentRef.current || toc.length === 0) return;
+    // 锚点 <span id="..."> 由正文 html 异步填充；且 __html 包装对象每次都是新
+    // 引用，组件任意 state 变化（包括此处的 setActiveTocId 自身）都会让 React
+    // 整棵重灌 innerHTML，已观察的 span 变成游离节点、observer 静默失效。
+    // 所以除依赖 htmlContent 建立 observer 外，容器子树变化时要重建它。
+    if (!contentRef.current || !htmlContent || toc.length === 0) return;
     const container = contentRef.current;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActiveTocId(entry.target.id);
+    let observer: IntersectionObserver | null = null;
+    const attach = () => {
+      observer?.disconnect();
+      observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              setActiveTocId(entry.target.id);
+            }
           }
-        }
-      },
-      { rootMargin: '-80px 0px -60% 0px' },
-    );
-    for (const item of toc) {
-      const el = container.querySelector(`#${CSS.escape(item.id)}`);
-      if (el) observer.observe(el);
-    }
-    return () => observer.disconnect();
-  }, [toc]);
+        },
+        { rootMargin: '-80px 0px -60% 0px' },
+      );
+      for (const item of toc) {
+        const el = container.querySelector(`#${CSS.escape(item.id)}`);
+        if (el) observer.observe(el);
+      }
+    };
+    attach();
+    const mutationObserver = new MutationObserver(attach);
+    mutationObserver.observe(container, { childList: true });
+    return () => {
+      mutationObserver.disconnect();
+      observer?.disconnect();
+    };
+  }, [toc, htmlContent]);
 
   const handleGenerate = useCallback(async () => {
     setError(null);

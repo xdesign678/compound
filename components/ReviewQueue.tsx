@@ -198,7 +198,8 @@ async function postJson(path: string, body: unknown) {
   });
   if (!res.ok) {
     const json = await res.json().catch(() => null);
-    throw new Error(json?.error || `HTTP ${res.status}`);
+    const detail = typeof json?.error === 'string' && json.error ? json.error : '请求失败';
+    throw new Error(`${detail} (${res.status})`);
   }
   return res.json();
 }
@@ -223,7 +224,8 @@ export default function ReviewQueue() {
         });
         if (!res.ok) {
           const json = await res.json().catch(() => null);
-          throw new Error(json?.error || `HTTP ${res.status}`);
+          const detail = typeof json?.error === 'string' && json.error ? json.error : '请求失败';
+          throw new Error(`${detail} (${res.status})`);
         }
         const json = await res.json();
         setItems(json.items || []);
@@ -333,33 +335,38 @@ export default function ReviewQueue() {
           <div className="ops-kicker">Compound Ops</div>
           <h1>审核队列</h1>
           <p>
-            系统遇到不太放心的自动化变更（大批量入库、低置信度抽取、同步冲突等）时，会先丢到这里等你拍板。卡片聚焦时可用快捷键：A
-            批准 / R 拒绝 / S 标记已解决。
+            系统遇到不太放心的自动化变更（大批量入库、低置信度抽取、同步冲突等）时，会先丢到这里等你拍板。
+            <span className="review-shortcut-hint">
+              卡片聚焦时可用快捷键：A 批准 / R 拒绝 / S 标记已解决。
+            </span>
           </p>
         </div>
         <div className="ops-actions">
-          <button
-            type="button"
-            className={`ops-btn ${status === 'open' ? 'primary' : ''}`}
-            aria-pressed={status === 'open'}
-            onClick={() => {
-              setStatus('open');
-              void load('open');
-            }}
-          >
-            待处理 {metrics.reviewOpen || 0}
-          </button>
-          <button
-            type="button"
-            className={`ops-btn ${status === 'all' ? 'primary' : ''}`}
-            aria-pressed={status === 'all'}
-            onClick={() => {
-              setStatus('all');
-              void load('all');
-            }}
-          >
-            全部
-          </button>
+          <div className="ops-actions-group" role="group" aria-label="视图筛选">
+            <button
+              type="button"
+              className={`ops-btn ${status === 'open' ? 'primary' : ''}`}
+              aria-pressed={status === 'open'}
+              onClick={() => {
+                setStatus('open');
+                void load('open');
+              }}
+            >
+              待处理 {metrics.reviewOpen || 0}
+            </button>
+            <button
+              type="button"
+              className={`ops-btn ${status === 'all' ? 'primary' : ''}`}
+              aria-pressed={status === 'all'}
+              onClick={() => {
+                setStatus('all');
+                void load('all');
+              }}
+            >
+              全部
+            </button>
+          </div>
+          <span className="ops-actions-divider" aria-hidden="true" />
           <Link className="ops-btn" href="/sync">
             同步控制台
           </Link>
@@ -368,6 +375,11 @@ export default function ReviewQueue() {
           </Link>
         </div>
       </header>
+      <style
+        dangerouslySetInnerHTML={{
+          __html: '@media (pointer: coarse) { .review-shortcut-hint { display: none; } }',
+        }}
+      />
 
       {error ? (
         <div role="alert" className="sync-v2-error">
@@ -583,9 +595,13 @@ export default function ReviewQueue() {
             );
           })}
 
-          {items.length === 0 ? (
+          {items.length === 0 && !error ? (
             <div className="ops-panel ops-empty-panel">
-              <p>当前没有待审核的条目。系统认为最近的自动化变更都在阈值范围内。</p>
+              <p>
+                {status === 'all'
+                  ? '暂无审核记录。'
+                  : '当前没有待审核的条目。系统认为最近的自动化变更都在阈值范围内。'}
+              </p>
             </div>
           ) : null}
         </section>

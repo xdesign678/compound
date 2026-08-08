@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback, useId } from 'react';
+import { useEffect, useRef, useState, useCallback, useId, type CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getDb } from '@/lib/db';
 import { useAppStore } from '@/lib/store';
 import { ensureConceptsHydrated } from '@/lib/cloud-sync';
@@ -449,12 +450,13 @@ export function RecapView() {
       // While the peek drawer is open, leave arrow keys alone so users can
       // scroll inside the detail without flipping cards behind it.
       if (peekConceptId) return;
+      // ←/→ 与下方翻页按钮语义一致：← 上一张，→ 下一张
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        advance('left');
+        advance('right');
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
-        advance('right');
+        advance('left');
       }
     };
     document.addEventListener('keydown', handleKeyDown);
@@ -508,7 +510,12 @@ export function RecapView() {
           </div>
           <h3 className="recap-state-heading">暂无待复盘内容</h3>
           <p className="recap-state-body">先添加一些资料，让 AI 编译成概念后就可以在这里复盘了。</p>
-          <button type="button" className="modal-btn" onClick={() => router.push('/')}>
+          <button
+            type="button"
+            className="modal-btn"
+            onClick={() => router.push('/')}
+            style={isDesktop ? { maxWidth: 240 } : undefined}
+          >
             回到主页
           </button>
         </div>
@@ -538,7 +545,12 @@ export function RecapView() {
           </div>
           <h3 className="recap-state-heading">本次复盘完成</h3>
           <p className="recap-state-body">共复盘了 {cards.length} 个概念，明天再来刷新一批。</p>
-          <button type="button" className="modal-btn" onClick={() => router.push('/')}>
+          <button
+            type="button"
+            className="modal-btn"
+            onClick={() => router.push('/')}
+            style={isDesktop ? { maxWidth: 240 } : undefined}
+          >
             回到主页
           </button>
         </div>
@@ -552,7 +564,20 @@ export function RecapView() {
   const currentCardMarkdown = (currentCard.body || '').trim() || (currentCard.summary || '').trim();
 
   return (
-    <div className="recap-root" ref={containerRef} tabIndex={-1} aria-labelledby={titleId}>
+    <div
+      className="recap-root"
+      ref={containerRef}
+      tabIndex={-1}
+      aria-labelledby={titleId}
+      style={
+        isDesktop
+          ? ({
+              /* 桌面端卡片下方有翻页按钮行，卡片高度让出约 64px */
+              '--recap-card-height': 'min(820px, calc(100dvh - 176px - var(--safe-bottom)))',
+            } as CSSProperties)
+          : undefined
+      }
+    >
       <header className="recap-header">
         <button
           type="button"
@@ -591,7 +616,11 @@ export function RecapView() {
               {currentCard.categories && currentCard.categories.length > 0 && (
                 <div className="recap-card-tags">
                   {currentCard.categories.slice(0, 3).map((cat) => (
-                    <span key={`${cat.primary}-${cat.secondary ?? ''}`} className="recap-card-tag">
+                    <span
+                      key={`${cat.primary}-${cat.secondary ?? ''}`}
+                      className="recap-card-tag"
+                      style={{ color: 'var(--brand-clay-text)' }}
+                    >
                       {cat.secondary || cat.primary}
                     </span>
                   ))}
@@ -620,6 +649,7 @@ export function RecapView() {
                   type="button"
                   onClick={() => handleReadMore(currentCard.id)}
                   aria-label={`深入阅读：${currentCard.title}`}
+                  style={{ color: 'var(--brand-clay-text)' }}
                 >
                   深入阅读
                   <Icon.Send />
@@ -638,6 +668,41 @@ export function RecapView() {
           </div>
         </div>
       </div>
+
+      {/* 桌面端可发现的翻页入口；移动端保持手势，不渲染按钮 */}
+      {isDesktop && (
+        <div
+          role="group"
+          aria-label="复盘翻页"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 'var(--space-lg)',
+            padding: '0 var(--space-lg) calc(10px + var(--safe-bottom))',
+            flexShrink: 0,
+          }}
+        >
+          <button
+            type="button"
+            className="recap-back-btn"
+            onClick={() => advance('right')}
+            disabled={currentIndex <= 0}
+            aria-label={`上一张，第 ${currentIndex} 张，共 ${cards.length} 张`}
+            style={currentIndex <= 0 ? { opacity: 0.35, cursor: 'not-allowed' } : undefined}
+          >
+            <ChevronLeft size={20} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="recap-back-btn"
+            onClick={() => advance('left')}
+            aria-label={`下一张，第 ${currentIndex + 1} 张，共 ${cards.length} 张`}
+          >
+            <ChevronRight size={20} aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       {peekConceptId && (
         <div

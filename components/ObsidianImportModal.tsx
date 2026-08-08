@@ -55,6 +55,9 @@ export function ObsidianImportModal() {
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [confirmingClearManifest, setConfirmingClearManifest] = useState(false);
   const [visible, setVisible] = useState(false);
+  // 触屏设备没有 Cmd/Ctrl 多选手势；iOS Safari 不支持 webkitdirectory
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [dirPickerSupported, setDirPickerSupported] = useState(true);
   const stopRef = useRef(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -63,6 +66,13 @@ export function ObsidianImportModal() {
 
   useModalKeyboard(isOpen, close);
   useFocusTrap(modalRef, isOpen);
+
+  useEffect(() => {
+    setIsTouchDevice(window.matchMedia('(pointer: coarse)').matches);
+    const probe = document.createElement('input');
+    probe.type = 'file';
+    setDirPickerSupported('webkitdirectory' in probe || 'directory' in probe);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -297,17 +307,21 @@ export function ObsidianImportModal() {
           <>
             <div className="ingest-options">
               <button
-                className="ingest-option"
+                className={`ingest-option${dirPickerSupported ? '' : ' ingest-option-disabled'}`}
                 type="button"
                 onClick={handlePickFolder}
-                disabled={loadingFiles}
+                disabled={loadingFiles || !dirPickerSupported}
               >
                 <div className="opt-icon" aria-hidden="true">
                   <Icon.File />
                 </div>
                 <div>
                   <div className="opt-title">选择整个文件夹</div>
-                  <div className="opt-sub">推荐 · 会扫描所有 .md 文件（自动跳过 .obsidian）</div>
+                  <div className="opt-sub">
+                    {dirPickerSupported
+                      ? '推荐 · 会扫描所有 .md 文件（自动跳过 .obsidian）'
+                      : '当前浏览器不支持选择文件夹，请改用「选择多个文件」'}
+                  </div>
                 </div>
               </button>
               <button
@@ -321,7 +335,11 @@ export function ObsidianImportModal() {
                 </div>
                 <div>
                   <div className="opt-title">选择多个文件</div>
-                  <div className="opt-sub">按住 Cmd/Ctrl 多选 .md 文件</div>
+                  <div className="opt-sub">
+                    {isTouchDevice
+                      ? '在文件选择器里可一次多选 .md 文件'
+                      : '按住 Cmd/Ctrl 多选 .md 文件'}
+                  </div>
                 </div>
               </button>
             </div>

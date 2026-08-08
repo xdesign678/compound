@@ -74,6 +74,17 @@ function redactSensitiveText(text: string): string {
   );
 }
 
+/** 从「启动失败 (401): …」这类消息中提取 HTTP 状态码，用于按状态码区分排障文案 */
+function getErrorHttpStatus(error: string): number | null {
+  const match = error.match(/\((\d{3})\)/);
+  return match ? Number(match[1]) : null;
+}
+
+/** 401/403 是登录态问题，与环境变量无关，单独引导重新认证 */
+function authFailureHint(status: number): string {
+  return `访问保护认证未通过（${status}）。请回到主页，在「设置 → 模型 → 访问保护」中重新保存 Admin Token，然后重试同步。`;
+}
+
 export function GithubSyncModal() {
   const open = useAppStore((s) => s.githubSyncOpen);
   const close = useAppStore((s) => s.closeGithubSync);
@@ -304,7 +315,14 @@ export function GithubSyncModal() {
     job && job.total > 0 ? Math.round(((job.done + job.failed) / job.total) * 100) : 0;
   const stageItems = buildSyncStageItems({ phase, pulling, job });
   const currentFile = getCurrentFileDisplay(job?.current ?? null);
-  const statusCopy = getSyncStatusCopy({ phase, pulling, job, pollIssue, error });
+  // 副标题只放可读摘要；原始错误（含 JSON）统一收进失败卡片的「查看详情」折叠区
+  const statusCopy = getSyncStatusCopy({
+    phase,
+    pulling,
+    job,
+    pollIssue,
+    error: error ? '这次同步没有顺利完成，请先处理下方失败原因。' : null,
+  });
 
   return (
     <div
@@ -450,10 +468,18 @@ export function GithubSyncModal() {
                   </div>
                 </div>
                 <ErrorDetail error={error} />
-                <p className="gh-sync-hint">
-                  常见原因：<code>GITHUB_TOKEN</code>、<code>GITHUB_REPO</code> 未配置，或
-                  <code>LLM_API_KEY</code> 在 Zeabur 环境变量里缺失。
-                </p>
+                {(() => {
+                  const status = getErrorHttpStatus(error);
+                  if (status === 401 || status === 403) {
+                    return <p className="gh-sync-hint">{authFailureHint(status)}</p>;
+                  }
+                  return (
+                    <p className="gh-sync-hint">
+                      常见原因：<code>GITHUB_TOKEN</code>、<code>GITHUB_REPO</code> 未配置，或
+                      <code>LLM_API_KEY</code> 在 Zeabur 环境变量里缺失。
+                    </p>
+                  );
+                })()}
               </div>
             )}
 
@@ -570,11 +596,19 @@ function IdleView({ onStart, error }: { onStart: () => void; error: string | nul
             </div>
           </div>
           <ErrorDetail error={error} />
-          <p className="gh-sync-hint">
-            请在 Zeabur 控制台确认环境变量 <code>GITHUB_REPO</code>、<code>GITHUB_TOKEN</code>、
-            <code>GITHUB_BRANCH</code>、<code>LLM_API_KEY</code> 均已设置，并已挂载 Volume 到
-            <code>DATA_DIR</code>（默认 <code>/data</code>）。
-          </p>
+          {(() => {
+            const status = getErrorHttpStatus(error);
+            if (status === 401 || status === 403) {
+              return <p className="gh-sync-hint">{authFailureHint(status)}</p>;
+            }
+            return (
+              <p className="gh-sync-hint">
+                请在 Zeabur 控制台确认环境变量 <code>GITHUB_REPO</code>、<code>GITHUB_TOKEN</code>、
+                <code>GITHUB_BRANCH</code>、<code>LLM_API_KEY</code> 均已设置，并已挂载 Volume 到
+                <code>DATA_DIR</code>（默认 <code>/data</code>）。
+              </p>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -628,11 +662,13 @@ function StartingView({
 function ErrorDetail({ error }: { error: string }) {
   const [expanded, setExpanded] = useState(false);
   const safeError = redactSensitiveText(error);
-  // Attempt to extract a user-friendly summary from the error string
-  // Take first line or up to 120 chars as the main message
-  const lines = safeError.split('\n');
-  const mainMessage = lines[0]?.slice(0, 200) ?? safeError;
-  const hasDetails = safeError.length > mainMessage.length || lines.length > 1;
+  // Attempt to extract a user-friendly summary from the error string.
+  // 原始 JSON/堆栈（如 {"error":"Unauthorized",…}）不上屏，收进「查看详情」折叠区。
+  const firstLine = safeError.split('\n')[0] ?? safeError;
+  const jsonStart = firstLine.search(/[{[]/);
+  const readableHead = (jsonStart >= 0 ? firstLine.slice(0, jsonStart) : firstLine).trim();
+  const mainMessage = (readableHead || '同步失败，展开可查看服务端返回的原始错误。').slice(0, 200);
+  const hasDetails = safeError.length > mainMessage.length || jsonStart >= 0;
 
   return (
     <div className="gh-sync-error-detail">

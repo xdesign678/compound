@@ -40,9 +40,20 @@ export default function IssueCenter({
     <section className="sync-v2-issues" aria-label="问题中心">
       <header className="sync-v2-section-head">
         <h2>问题中心 · {groups.length} 类</h2>
-        <button type="button" className="sync-v2-link" onClick={onOpenAdvanced}>
-          全部活动
-        </button>
+        <div className="sync-v2-issue-actions">
+          <button
+            type="button"
+            className="sync-v2-btn sync-v2-btn-tiny"
+            disabled={busy}
+            onClick={onRetryAll}
+            title="当前重试接口按整个运行粒度执行，会重试该运行内全部失败文件"
+          >
+            重试全部失败
+          </button>
+          <button type="button" className="sync-v2-link" onClick={onOpenAdvanced}>
+            全部活动
+          </button>
+        </div>
       </header>
       <div className="sync-v2-issue-list">
         {groups.map((group) => {
@@ -62,15 +73,6 @@ export default function IssueCenter({
                   {group.stage ? <span className="sync-v2-issue-stage">{group.stage}</span> : null}
                 </div>
                 <div className="sync-v2-issue-actions">
-                  <button
-                    type="button"
-                    className="sync-v2-btn sync-v2-btn-tiny"
-                    disabled={busy}
-                    onClick={onRetryAll}
-                    title="当前重试接口按整个运行粒度执行，会重试该运行内全部失败文件"
-                  >
-                    重试全部失败
-                  </button>
                   <button
                     type="button"
                     className="sync-v2-btn sync-v2-btn-tiny sync-v2-btn-ghost"

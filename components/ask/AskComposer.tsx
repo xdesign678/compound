@@ -7,6 +7,8 @@ import type { LlmConfig } from '../../lib/types';
 import { Icon, SourceTypeIcon } from '../Icons';
 import type { MentionItem, MentionKind, ModelOption } from './types';
 
+const INLINE_LISTBOX_ID = 'ask-inline-mention-listbox';
+
 export function AskComposer({
   input,
   setInput,
@@ -91,6 +93,12 @@ export function AskComposer({
   const modelBtnRef = useRef<HTMLButtonElement>(null);
   const prevPickerOpen = useRef(false);
   const prevModelOpen = useRef(false);
+  // combobox 模式：aria-activedescendant 必须挂在获焦点的 textarea 上，
+  // 指向内联 @ 面板里当前高亮的 option（高亮索引按扁平 inlineResults 顺序）
+  const inlineActiveDescendant =
+    showInlinePanel && inlineResults.length > 0
+      ? `mention-option-${inlineResults[inlineHighlight % inlineResults.length]?.kind}-${inlineResults[inlineHighlight % inlineResults.length]?.id}`
+      : undefined;
   useEffect(() => {
     if (prevPickerOpen.current && !referencePickerOpen) {
       referenceBtnRef.current?.focus({ preventScroll: true });
@@ -178,6 +186,10 @@ export function AskComposer({
             aria-label="输入问题"
             placeholder="问点什么… 输入 @ 引用概念或资料"
             rows={1}
+            role="combobox"
+            aria-expanded={showInlinePanel}
+            aria-controls={showInlinePanel ? INLINE_LISTBOX_ID : undefined}
+            aria-activedescendant={inlineActiveDescendant}
             value={input}
             onChange={(event) => {
               setInput(event.target.value);
@@ -426,15 +438,12 @@ function MentionResults({
   // 高亮索引按扁平 items 顺序（概念组在前、资料组在后，与 inlineResults 一致）
   const flatIndexOf = (item: MentionItem) =>
     items.findIndex((entry) => entry.id === item.id && entry.kind === item.kind);
-  const activeId = keyboardNav
-    ? `mention-option-${items[highlightIndex % items.length]?.kind}-${items[highlightIndex % items.length]?.id}`
-    : undefined;
 
   return (
     <div
       className="ask-reference-list"
+      id={keyboardNav ? INLINE_LISTBOX_ID : undefined}
       role={keyboardNav ? 'listbox' : undefined}
-      aria-activedescendant={activeId}
     >
       {conceptItems.length > 0 && (
         <div className="ask-reference-group">

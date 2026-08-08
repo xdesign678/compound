@@ -207,6 +207,12 @@ export async function renderMarkdown(md: string): Promise<string> {
           'a',
           'br',
           'hr',
+          'table',
+          'thead',
+          'tbody',
+          'tr',
+          'th',
+          'td',
         ],
         ALLOWED_ATTR: [
           'class',

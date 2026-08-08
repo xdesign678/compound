@@ -234,10 +234,6 @@
   align-items: flex-start;
   gap: 10px;
   padding: 10px 14px;
-  transition: background var(--motion-duration-fast);
-}
-.tc-item:hover {
-  background: var(--bg-hover);
 }
 .tc-item-icon {
   width: 18px;
@@ -341,4 +337,17 @@
   font-weight: 400;
   color: var(--text-tertiary);
   font-size: var(--text-sm);
+}
+
+/* 触控设备：关闭/跳转类小图标按钮补齐 44px 触控目标 */
+@media (pointer: coarse) {
+  .tc-dismiss-btn,
+  .selection-wiki-progress-close,
+  .recap-entry-action {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
 }

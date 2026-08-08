@@ -8,10 +8,11 @@ import {
   SELECTION_WIKI_RUNS_EVENT,
   type TrackedSelectionWikiRun,
 } from '@/lib/selection-wiki-runs';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, friendlyErrorMessage } from '@/lib/store';
 import type { SelectionWikiRunStatusResponse } from '@/lib/types';
 
 const POLL_INTERVAL_MS = 1_500;
+const MAX_POLL_FAILURES = 3;
 
 const PHASE_LABEL: Record<SelectionWikiRunStatusResponse['phase'], string> = {
   queued: '排队中',
@@ -25,6 +26,7 @@ export function SelectionWikiProgress() {
   const [runs, setRuns] = useState<TrackedSelectionWikiRun[]>([]);
   const [statuses, setStatuses] = useState<Record<string, SelectionWikiRunStatusResponse>>({});
   const completedRef = useRef<Set<string>>(new Set());
+  const pollFailuresRef = useRef<Record<string, number>>({});
   const openConcept = useAppStore((s) => s.openConcept);
   const markFresh = useAppStore((s) => s.markFresh);
   const showToast = useAppStore((s) => s.showToast);
@@ -68,6 +70,7 @@ export function SelectionWikiProgress() {
         try {
           const status = await getWikiFromSelectionRun(run.runId);
           if (cancelled) return;
+          pollFailuresRef.current[run.runId] = 0;
           setStatuses((current) => ({ ...current, [run.runId]: status }));
 
           if (status.status === 'done' && status.result && !completedRef.current.has(run.runId)) {
@@ -89,20 +92,44 @@ export function SelectionWikiProgress() {
         } catch (err) {
           if (cancelled) return;
           const message = err instanceof Error ? err.message : '状态查询失败';
+          const runGone = message.includes('run not found') || message.includes('(404)');
+          const failures = (pollFailuresRef.current[run.runId] ?? 0) + 1;
+          pollFailuresRef.current[run.runId] = failures;
+          const baseStatus = (current: SelectionWikiRunStatusResponse | undefined) =>
+            current ?? {
+              runId: run.runId,
+              status: 'running' as const,
+              phase: 'queued' as const,
+              selectionPreview: run.selectionPreview,
+              startedAt: run.startedAt,
+              finishedAt: null,
+              error: null,
+              result: null,
+            };
+          if (!runGone && failures < MAX_POLL_FAILURES) {
+            setStatuses((current) => ({
+              ...current,
+              [run.runId]: {
+                ...baseStatus(current[run.runId]),
+                runId: run.runId,
+                status: 'running',
+                error: friendlyErrorMessage(message),
+              },
+            }));
+            continue;
+          }
+          // 终态失败：停止轮询、清理 tracked run（避免每次回首页重现），卡片保留可手动关闭
+          delete pollFailuresRef.current[run.runId];
+          forgetSelectionWikiRun(run.runId);
           setStatuses((current) => ({
             ...current,
             [run.runId]: {
-              ...(current[run.runId] ?? {
-                runId: run.runId,
-                phase: 'queued',
-                selectionPreview: run.selectionPreview,
-                startedAt: run.startedAt,
-                finishedAt: null,
-                result: null,
-              }),
+              ...baseStatus(current[run.runId]),
               runId: run.runId,
-              status: 'running',
-              error: message,
+              status: 'failed',
+              error: runGone
+                ? '服务端已没有该任务（可能已过期或服务已重启），请重新发起。'
+                : friendlyErrorMessage(message),
             },
           }));
         }
@@ -149,7 +176,7 @@ export function SelectionWikiProgress() {
                   }}
                   aria-label="关闭"
                 >
-                  x
+                  ×
                 </button>
               )}
             </div>

@@ -1,3 +1,29 @@
+/* 正文表格：概念 / 资料 / 分类 Wiki 三个详情页共用（本文件被三者共同加载）。
+   原先唯一的 .prose table 规则在懒加载的 concept-detail.css 里，直接打开
+   Wiki 页时该 chunk 未加载，表格零样式、布局随访问路径不同；统一收敛于此。 */
+.prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0 0 18px;
+  border-collapse: collapse;
+  font-size: calc(var(--prose-font-size, 16px) * 0.9375);
+}
+.prose th,
+.prose td {
+  padding: 8px 14px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border-section);
+}
+.prose thead th {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  border-bottom-color: var(--border-default);
+}
+
 .related-chip {
   min-width: 0;
   display: flex;
