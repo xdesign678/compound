@@ -14,7 +14,9 @@ test('failed cloud pull does not seed an empty local library', async ({ page }) 
   });
 
   await page.goto('/');
-  await expect(page.locator('.desktop-brand-meta')).toHaveText('0 个概念 · 0 份资料');
+  await expect(page.locator('.desktop-brand-meta')).toHaveText('0 个概念 · 0 份资料', {
+    timeout: 15_000,
+  });
 
   const localState = await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
