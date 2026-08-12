@@ -64,6 +64,7 @@ let syncInFlight: Promise<PullResult> | null = null;
 
 export interface PullResult {
   pulledAt: number;
+  authoritativeEmpty: boolean;
   applied: {
     sources: number;
     concepts: number;
@@ -167,6 +168,7 @@ async function pullSnapshotFromCloudInner(): Promise<PullResult> {
   let requestCursor = initialCursor;
   let upperCursor: number | null = null;
   let offset = 0;
+  let authoritativeEmpty = false;
   const fullSourceIds = new Set<string>();
   const fullConceptIds = new Set<string>();
 
@@ -190,7 +192,16 @@ async function pullSnapshotFromCloudInner(): Promise<PullResult> {
       throw new Error(`snapshot failed (${res.status}): ${text.slice(0, 200)}`);
     }
     const snap = (await res.json()) as SnapshotResponse;
-    if (snap.mode === 'full') fullReconciliation = true;
+    if (snap.mode === 'full') {
+      fullReconciliation = true;
+      if (offset === 0 && snap.pagination) {
+        authoritativeEmpty =
+          snap.pagination.totalSources === 0 &&
+          snap.pagination.totalConcepts === 0 &&
+          snap.counts.activity === 0 &&
+          snap.counts.ask === 0;
+      }
+    }
     upperCursor ??= snap.sync.upperCursor;
     pulledAt = snap.fetchedAt;
 
@@ -331,7 +342,7 @@ async function pullSnapshotFromCloudInner(): Promise<PullResult> {
     // ignore (private mode etc.)
   }
 
-  return { pulledAt, applied, skipped };
+  return { pulledAt, authoritativeEmpty, applied, skipped };
 }
 
 export function getLastSyncCursor(): number | null {

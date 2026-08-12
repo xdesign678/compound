@@ -7,7 +7,7 @@
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
 - Routes: **43**
-- Handlers (HTTP methods): **52**
+- Handlers (HTTP methods): **53**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
@@ -79,10 +79,18 @@ Source: [`app/api/auth/session/route.ts`](../app/api/auth/session/route.ts)
 
 | Field       | Value                    |
 | ----------- | ------------------------ |
-| Methods     | `POST`, `DELETE`         |
+| Methods     | `GET`, `POST`, `DELETE`  |
 | Runtime     | `nodejs`                 |
 | maxDuration | _unset_                  |
 | Guards      | `content-length-guarded` |
+
+#### GET
+
+GET /api/auth/session
+Reports whether the current browser has a valid access-protection session.
+The response never exposes the token and is not cacheable.
+
+@returns 200 JSON `{ authenticated: boolean }`.
 
 #### POST
 

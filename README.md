@@ -24,7 +24,11 @@ or:
 X-Compound-Admin-Token: <token>
 ```
 
-The Settings drawer also has a local “访问保护” field for saving the same token in the current browser.
+The Settings drawer also has a local “访问保护” field for starting an httpOnly
+browser session. Signing out immediately locks private IndexedDB content. You can
+either keep the unencrypted browser offline cache for a later sign-in, or
+explicitly clear this device's IndexedDB knowledge, drafts, and local model
+credentials; neither option deletes the server-side knowledge base.
 
 ## Architecture
 

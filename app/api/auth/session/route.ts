@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getAdminToken, isAdminAuthConfigured, safeEqual } from '@/lib/server-auth';
+import {
+  getAdminToken,
+  isAdminAuthConfigured,
+  isAuthorizedRequest,
+  safeEqual,
+  shouldEnforceAdminAuth,
+} from '@/lib/server-auth';
 import { authRateLimitCheck, authRateLimitFail, authRateLimitReset } from '@/lib/rate-limit';
 import {
   enforceContentLength,
@@ -42,6 +48,21 @@ function clearAuthCookie(req: Request, res: NextResponse): NextResponse {
     maxAge: 0,
   });
   return res;
+}
+
+/**
+ * GET /api/auth/session
+ * Reports whether the current browser has a valid access-protection session.
+ * The response never exposes the token and is not cacheable.
+ *
+ * @returns 200 JSON `{ authenticated: boolean }`.
+ */
+export async function GET(req: Request) {
+  const authenticated = !shouldEnforceAdminAuth() || isAuthorizedRequest(req);
+  return NextResponse.json(
+    { authenticated },
+    { headers: { 'Cache-Control': 'no-store, private' } },
+  );
 }
 
 /**

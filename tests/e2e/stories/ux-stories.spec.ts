@@ -25,18 +25,31 @@ async function withStoryTrace(
 }
 
 async function stubEmptySnapshot(page: Page) {
+  let servedAuthoritativeSnapshot = false;
   await page.route('**/api/data/snapshot**', async (route) => {
+    if (servedAuthoritativeSnapshot) {
+      await route.fulfill({ status: 503, body: 'story fixture is local-only after bootstrap' });
+      return;
+    }
+    servedAuthoritativeSnapshot = true;
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         fetchedAt: Date.now(),
         mode: 'full',
+        pagination: { limit: 1000, offset: 0, totalSources: 0, totalConcepts: 0 },
         counts: { sources: 0, concepts: 0, activity: 0, ask: 0 },
         sources: [],
         concepts: [],
         activity: [],
         ask: [],
+        sync: {
+          cursor: 0,
+          upperCursor: 0,
+          hasMore: false,
+          deleted: { sources: [], concepts: [], activity: [], ask: [] },
+        },
       }),
     });
   });

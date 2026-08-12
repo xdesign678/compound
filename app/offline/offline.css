@@ -94,6 +94,38 @@
   color: var(--text-primary, #141413);
 }
 
+.offline-login {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 10px;
+  margin-top: 32px;
+  text-align: left;
+}
+
+.offline-login label {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary, #5e5d59);
+}
+
+.offline-login input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default, rgba(20, 20, 19, 0.18));
+  border-radius: 8px;
+  background: var(--bg-card, #fefdfb);
+  color: var(--text-primary, #141413);
+  font: inherit;
+}
+
+.offline-login input:focus-visible {
+  outline: 2px solid var(--brand-clay, #c96442);
+  outline-offset: 2px;
+}
+
 .offline-actions {
   display: flex;
   flex-wrap: wrap;

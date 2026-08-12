@@ -1,4 +1,51 @@
 const AUTH_SESSION_PATH = '/api/auth/session';
+const OFFLINE_ACCESS_KEY = 'compound:offline-access';
+const LOCAL_CACHE_LOCK_KEY = 'compound:local-cache-lock';
+
+function updateOfflineAccess(granted: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (granted) {
+      window.localStorage.setItem(OFFLINE_ACCESS_KEY, '1');
+      window.localStorage.removeItem(LOCAL_CACHE_LOCK_KEY);
+    } else {
+      window.localStorage.removeItem(OFFLINE_ACCESS_KEY);
+    }
+  } catch {
+    // Ignore — storage may be unavailable.
+  }
+}
+
+function lockPrivateCache(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(OFFLINE_ACCESS_KEY);
+    window.localStorage.setItem(LOCAL_CACHE_LOCK_KEY, '1');
+  } catch {
+    // Ignore — storage may be unavailable.
+  }
+}
+
+function hasOfflineAccess(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return (
+      window.localStorage.getItem(LOCAL_CACHE_LOCK_KEY) !== '1' &&
+      window.localStorage.getItem(OFFLINE_ACCESS_KEY) === '1'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isPrivateCacheLocallyLocked(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    return window.localStorage.getItem(LOCAL_CACHE_LOCK_KEY) === '1';
+  } catch {
+    return true;
+  }
+}
 
 /**
  * Always returns an empty string.
@@ -23,7 +70,10 @@ export async function saveAdminToken(token: string): Promise<void> {
     body: JSON.stringify({ token: trimmed }),
   });
 
-  if (res.ok) return;
+  if (res.ok) {
+    updateOfflineAccess(true);
+    return;
+  }
   if (res.status === 401) throw new Error('访问保护密钥无效，请重新输入。');
   if (res.status === 503) throw new Error('服务端访问保护未配置，请检查环境变量。');
 
@@ -36,6 +86,7 @@ export async function saveAdminToken(token: string): Promise<void> {
  * storage credentials left by older builds.
  */
 export async function clearAdminToken(): Promise<void> {
+  lockPrivateCache();
   try {
     await fetch(AUTH_SESSION_PATH, {
       method: 'DELETE',
@@ -48,6 +99,36 @@ export async function clearAdminToken(): Promise<void> {
       // Ignore — storage may be unavailable.
     }
   }
+}
+
+/**
+ * Checks whether the current httpOnly cookie still represents a valid session.
+ * Returns null when the server cannot be reached, so callers can make an
+ * explicit offline-access decision instead of treating an outage as logout.
+ */
+export async function checkAdminSession(): Promise<boolean | null> {
+  try {
+    const res = await fetch(AUTH_SESSION_PATH, {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+
+    const body = (await res.json()) as { authenticated?: unknown };
+    const authenticated = body.authenticated === true;
+    updateOfflineAccess(authenticated);
+    return authenticated;
+  } catch {
+    return null;
+  }
+}
+
+/** Grants access with a live session, or with the last verified offline grant. */
+export async function canReadPrivateCache(): Promise<boolean> {
+  if (isPrivateCacheLocallyLocked()) return false;
+  const authenticated = await checkAdminSession();
+  return authenticated ?? hasOfflineAccess();
 }
 
 /**

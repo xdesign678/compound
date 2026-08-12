@@ -6,6 +6,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getDb } from '@/lib/db';
+import { canReadPrivateCache } from '@/lib/admin-auth-client';
 import { useAppStore } from '@/lib/store';
 import { ensureConceptsHydrated } from '@/lib/cloud-sync';
 import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
@@ -38,8 +39,27 @@ export function RecapView() {
   const setTab = useAppStore((s) => s.setTab);
   const detail = useAppStore((s) => s.detail);
   const back = useAppStore((s) => s.back);
+  const [cacheAccessGranted, setCacheAccessGranted] = useState(false);
 
-  const allConcepts = useLiveQuery(async () => getDb().concepts.toArray(), []);
+  useEffect(() => {
+    let cancelled = false;
+    void canReadPrivateCache().then((granted) => {
+      if (cancelled) return;
+      if (granted) {
+        setCacheAccessGranted(true);
+      } else {
+        window.location.replace('/offline');
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const allConcepts = useLiveQuery(
+    async () => (cacheAccessGranted ? getDb().concepts.toArray() : undefined),
+    [cacheAccessGranted],
+  );
 
   const [cards, setCards] = useState<Concept[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -61,8 +81,9 @@ export function RecapView() {
   const hydrationAttemptsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
+    if (!cacheAccessGranted) return;
     setMounted(true);
-  }, []);
+  }, [cacheAccessGranted]);
 
   // Detect web/desktop viewport so we can swap "深入阅读" navigation for an inline drawer.
   useEffect(() => {

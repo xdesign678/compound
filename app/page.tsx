@@ -5,6 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
+import { canReadPrivateCache } from '@/lib/admin-auth-client';
 import { useAppStore, type TabId } from '@/lib/store';
 import { DESKTOP_LAYOUT_MIN_WIDTH, isDesktopWidth } from '@/lib/responsive';
 
@@ -150,6 +151,22 @@ export default function Page() {
   const hydrateHomeStyle = useAppStore((s) => s.hydrateHomeStyle);
   const hydrateFontSize = useAppStore((s) => s.hydrateFontSize);
   const hydrateLineHeight = useAppStore((s) => s.hydrateLineHeight);
+  const [cacheAccessGranted, setCacheAccessGranted] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void canReadPrivateCache().then((granted) => {
+      if (cancelled) return;
+      if (granted) {
+        setCacheAccessGranted(true);
+      } else {
+        window.location.replace('/offline');
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Only render dexie-driven content after client mount to avoid SSR/CSR mismatch
   const [mounted, setMounted] = useState(false);
@@ -167,6 +184,7 @@ export default function Page() {
   const currentTabRef = useRef(tab);
   const restoreTargetRef = useRef(0);
   useEffect(() => {
+    if (!cacheAccessGranted) return;
     setMounted(true);
     hydrateHomeStyle();
     hydrateFontSize();
@@ -182,7 +200,7 @@ export default function Page() {
       media.removeEventListener('change', syncLayout);
       window.removeEventListener('resize', syncLayout);
     };
-  }, [hydrateHomeStyle, hydrateFontSize, hydrateLineHeight]);
+  }, [cacheAccessGranted, hydrateHomeStyle, hydrateFontSize, hydrateLineHeight]);
 
   // Browser history support for detail navigation
   useEffect(() => {
@@ -215,9 +233,11 @@ export default function Page() {
     bootstrapRef.current = true;
     let cancelled = false;
     (async () => {
+      let cloudAuthorityEmpty = false;
       try {
         const { pullSnapshotFromCloud } = await import('@/lib/cloud-sync');
-        await pullSnapshotFromCloud();
+        const pullResult = await pullSnapshotFromCloud();
+        cloudAuthorityEmpty = pullResult.authoritativeEmpty;
       } catch (e) {
         // Non-fatal: local-only mode still works.
         console.warn('[cloud-sync] snapshot pull failed:', e);
@@ -229,6 +249,7 @@ export default function Page() {
         db.sources.count(),
       ]);
       if (
+        cloudAuthorityEmpty &&
         currentConceptCount === 0 &&
         currentSourceCount === 0 &&
         !localStorage.getItem('compound_seeded')

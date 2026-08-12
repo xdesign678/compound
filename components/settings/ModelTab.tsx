@@ -17,6 +17,7 @@ import {
 } from '@/lib/llm-config';
 import { DEFAULT_LLM_MODEL } from '@/lib/model-defaults';
 import { clearAdminToken, getAdminToken, saveAdminToken } from '@/lib/admin-auth-client';
+import { clearPrivateOfflineCache } from '@/lib/private-cache';
 import { t, useLocale, type Locale } from '@/lib/i18n';
 import type { LlmConfig } from '@/lib/types';
 import { Icon } from '../Icons';
@@ -97,6 +98,8 @@ export function ModelTab() {
   const [adminToken, setAdminToken] = useState('');
   const [adminSaved, setAdminSaved] = useState(false);
   const [adminStatus, setAdminStatus] = useState<StatusMessage | null>(null);
+  const [confirmingCacheClear, setConfirmingCacheClear] = useState(false);
+  const [adminAction, setAdminAction] = useState<'logout' | 'clear' | null>(null);
   const [usage, setUsage] = useState<ModelUsageSummary | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageStatus, setUsageStatus] = useState<StatusMessage | null>(null);
@@ -371,12 +374,18 @@ export function ModelTab() {
     }
   }
 
-  async function clearAdmin() {
-    await clearAdminToken();
-    setAdminToken('');
-    setAdminSaved(true);
-    setAdminStatus({ tone: 'success', text: t('settings.admin.statusCleared') });
-    safeTimeout(() => setAdminSaved(false), 2000);
+  async function clearAdmin(clearCache: boolean) {
+    if (adminAction) return;
+    setAdminAction(clearCache ? 'clear' : 'logout');
+    setAdminStatus(null);
+    try {
+      await clearAdminToken().catch(() => undefined);
+      if (clearCache) await clearPrivateOfflineCache();
+      window.location.replace('/offline');
+    } catch {
+      setAdminStatus({ tone: 'danger', text: t('settings.admin.statusClearFailed') });
+      setAdminAction(null);
+    }
   }
 
   async function resetLlmToDefault() {
@@ -655,11 +664,53 @@ export function ModelTab() {
           <button
             className="modal-btn settings-secondary-action"
             type="button"
-            onClick={() => void clearAdmin()}
+            onClick={() => void clearAdmin(false)}
+            disabled={adminAction !== null}
           >
-            {t('settings.admin.clear')}
+            {adminAction === 'logout'
+              ? t('settings.admin.loggingOut')
+              : t('settings.admin.logoutKeep')}
           </button>
         </div>
+        {confirmingCacheClear ? (
+          <div
+            className="settings-confirm-block settings-confirm-danger"
+            role="group"
+            aria-label={t('settings.admin.clearCacheConfirmTitle')}
+          >
+            <p className="modal-desc">
+              <strong>{t('settings.admin.clearCacheConfirmTitle')}</strong>
+              {t('settings.admin.clearCacheConfirmDesc')}
+            </p>
+            <button
+              className="modal-btn primary danger-confirm"
+              type="button"
+              disabled={adminAction !== null}
+              onClick={() => void clearAdmin(true)}
+            >
+              {adminAction === 'clear'
+                ? t('settings.admin.clearingCache')
+                : t('settings.admin.clearCacheConfirmAction')}
+            </button>
+            <button
+              className="modal-btn"
+              type="button"
+              disabled={adminAction !== null}
+              onClick={() => setConfirmingCacheClear(false)}
+            >
+              {t('settings.llm.cancel')}
+            </button>
+          </div>
+        ) : (
+          <button
+            className="modal-btn danger settings-secondary-action"
+            type="button"
+            disabled={adminAction !== null}
+            onClick={() => setConfirmingCacheClear(true)}
+          >
+            {t('settings.admin.logoutClearCache')}
+          </button>
+        )}
         <StatusNotice message={adminStatus} />
       </div>
     </div>

@@ -124,10 +124,16 @@ export type I18nKey =
   | 'settings.admin.placeholder'
   | 'settings.admin.hint'
   | 'settings.admin.save'
-  | 'settings.admin.clear'
+  | 'settings.admin.logoutKeep'
+  | 'settings.admin.logoutClearCache'
+  | 'settings.admin.clearCacheConfirmTitle'
+  | 'settings.admin.clearCacheConfirmDesc'
+  | 'settings.admin.clearCacheConfirmAction'
+  | 'settings.admin.loggingOut'
+  | 'settings.admin.clearingCache'
   | 'settings.admin.statusSaved'
-  | 'settings.admin.statusCleared'
-  | 'settings.admin.statusFailed';
+  | 'settings.admin.statusFailed'
+  | 'settings.admin.statusClearFailed';
 
 export const DEFAULT_LOCALE: Locale = 'zh-CN';
 
@@ -369,17 +375,38 @@ export const I18N_DICT: Record<I18nKey, Record<Locale, string>> = {
     en: 'Access protection uses a server cookie; the Admin Token is never written to local storage.',
   },
   'settings.admin.save': { 'zh-CN': '保存访问密钥', en: 'Save access token' },
-  'settings.admin.clear': { 'zh-CN': '清除', en: 'Clear' },
+  'settings.admin.logoutKeep': {
+    'zh-CN': '退出并保留缓存',
+    en: 'Sign out and keep cache',
+  },
+  'settings.admin.logoutClearCache': {
+    'zh-CN': '退出并清除此设备缓存',
+    en: 'Sign out and clear this device',
+  },
+  'settings.admin.clearCacheConfirmTitle': {
+    'zh-CN': '清除此设备的私有缓存？',
+    en: 'Clear private cache on this device?',
+  },
+  'settings.admin.clearCacheConfirmDesc': {
+    'zh-CN': '将删除本机资料、概念、问答、草稿和本地模型凭据。服务器知识库不会删除。',
+    en: 'This deletes local sources, concepts, Q&A, drafts, and local model credentials. Server data is not deleted.',
+  },
+  'settings.admin.clearCacheConfirmAction': {
+    'zh-CN': '确认退出并清除',
+    en: 'Sign out and clear',
+  },
+  'settings.admin.loggingOut': { 'zh-CN': '退出中…', en: 'Signing out…' },
+  'settings.admin.clearingCache': { 'zh-CN': '清除中…', en: 'Clearing…' },
   'settings.admin.statusSaved': {
     'zh-CN': '访问保护已登录；同源请求会自动使用服务端 httpOnly Cookie。',
     en: 'Signed in; same-origin requests automatically use the server httpOnly cookie.',
   },
-  'settings.admin.statusCleared': {
-    'zh-CN': '已退出访问保护，并清理旧版本地访问密钥。',
-    en: 'Signed out of access protection and cleared legacy local tokens.',
-  },
   'settings.admin.statusFailed': {
     'zh-CN': '访问保护登录失败',
     en: 'Access protection sign-in failed',
+  },
+  'settings.admin.statusClearFailed': {
+    'zh-CN': '已锁定本地缓存，但未能完整清除。请重试彻底退出。',
+    en: 'Local cache is locked, but cleanup did not finish. Try the full sign-out again.',
   },
 };
