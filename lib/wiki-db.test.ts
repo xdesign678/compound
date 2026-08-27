@@ -302,3 +302,48 @@ test('getConceptVersions 按版本倒序返回 AI 编辑记录', async (t) => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 });
+
+test(
+  'syncRelatedConceptRelations skips missing target concepts instead of writing orphans',
+  { concurrency: false },
+  async (t) => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'compound-relation-guard-'));
+    const previousDataDir = process.env.DATA_DIR;
+    process.env.DATA_DIR = tempDir;
+    closeServerDbGlobal();
+
+    const { repo } = await import('./server-db');
+    const { wikiRepo } = await import('./wiki-db');
+    const now = Date.now();
+    repo.upsertConcept({
+      id: 'c-real',
+      title: '真实概念',
+      summary: '摘要',
+      body: '正文',
+      sources: [],
+      related: ['c-ghost'],
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+      categories: [],
+      categoryKeys: [],
+    });
+
+    const changed = wikiRepo.syncRelatedConceptRelations([repo.getConcept('c-real')!]);
+    const relations = wikiRepo.getRelationsForConcepts(['c-real']);
+
+    assert.equal(changed, 0);
+    assert.equal(relations.length, 0);
+    assert.equal(
+      wikiRepo.upsertConceptRelation({ sourceConceptId: 'c-real', targetConceptId: 'c-ghost' }),
+      null,
+    );
+
+    t.after(() => {
+      closeServerDbGlobal();
+      if (previousDataDir === undefined) delete process.env.DATA_DIR;
+      else process.env.DATA_DIR = previousDataDir;
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+  },
+);

@@ -622,6 +622,14 @@ export const wikiRepo = {
     const now = Date.now();
     const runBatch = db.transaction(() => {
       for (const item of items) {
+        if (!repo.getConcept(item.conceptId) || !repo.getSource(item.sourceId)) {
+          logger.warn('wiki.evidence_missing_parent', {
+            code: 'evidence_parent_missing',
+            conceptId: item.conceptId,
+            sourceId: item.sourceId,
+          });
+          continue;
+        }
         insert.run({
           id: `ev-${nanoid(10)}`,
           concept_id: item.conceptId,
@@ -650,6 +658,14 @@ export const wikiRepo = {
     const sourceConceptId = input.sourceConceptId.trim();
     const targetConceptId = input.targetConceptId.trim();
     if (!sourceConceptId || !targetConceptId || sourceConceptId === targetConceptId) return null;
+    if (!repo.getConcept(sourceConceptId) || !repo.getConcept(targetConceptId)) {
+      logger.warn('wiki.relation_missing_concept', {
+        code: 'relation_parent_missing',
+        sourceConceptId,
+        targetConceptId,
+      });
+      return null;
+    }
 
     const kind = normalizeRelationKind(input.kind);
     const now = input.now ?? Date.now();
@@ -752,9 +768,21 @@ export const wikiRepo = {
       confidence: number;
     }> = [];
 
+    const relatedIds = Array.from(
+      new Set(concepts.flatMap((concept) => concept.related.filter(Boolean))),
+    );
+    const existingTargets = new Set(repo.getConceptsByIds(relatedIds).map((concept) => concept.id));
     for (const concept of concepts) {
       for (const targetId of concept.related) {
         if (!targetId || targetId === concept.id) continue;
+        if (!conceptIds.has(targetId) && !existingTargets.has(targetId)) {
+          logger.warn('wiki.relation_missing_concept', {
+            code: 'legacy_related_target_missing',
+            sourceConceptId: concept.id,
+            targetConceptId: targetId,
+          });
+          continue;
+        }
         rows.push({
           sourceConceptId: concept.id,
           targetConceptId: targetId,

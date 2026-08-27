@@ -224,6 +224,7 @@ button {
 .header {
   min-height: 60px;
   flex-shrink: 0;
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
 }
 
 .app-main {

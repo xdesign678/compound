@@ -83,6 +83,19 @@ test(
       rawContent: '# S1',
       ingestedAt: now,
     });
+    repo.upsertConcept({
+      id: 'c-1',
+      title: 'C1',
+      summary: 'summary',
+      body: 'body',
+      sources: ['s-1'],
+      related: [],
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+      categories: [],
+      categoryKeys: [],
+    });
 
     const initial = wikiRepo.upsertSourceChunks(
       's-1',

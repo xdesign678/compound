@@ -443,12 +443,17 @@ export async function searchWikiContext(input: {
   query: string;
   conceptLimit?: number;
   chunkLimit?: number;
+  signal?: AbortSignal;
 }): Promise<WikiSearchResult> {
-  return postJSON<WikiSearchResult>('/api/wiki/search', {
-    query: input.query,
-    conceptLimit: input.conceptLimit,
-    chunkLimit: input.chunkLimit,
-  });
+  return postJSON<WikiSearchResult>(
+    '/api/wiki/search',
+    {
+      query: input.query,
+      conceptLimit: input.conceptLimit,
+      chunkLimit: input.chunkLimit,
+    },
+    { signal: input.signal },
+  );
 }
 
 /** Ask the Wiki with streaming deltas, then resolve with the full response. */

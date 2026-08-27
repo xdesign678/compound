@@ -141,8 +141,14 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
     }
 
     let cancelled = false;
+    const controller = new AbortController();
     setServerSearchLoading(true);
-    searchWikiContext({ query: q, conceptLimit: visibleCount, chunkLimit: 8 })
+    searchWikiContext({
+      query: q,
+      conceptLimit: visibleCount,
+      chunkLimit: 8,
+      signal: controller.signal,
+    })
       .then((result) => {
         if (cancelled) return;
         setServerConcepts(result.concepts);
@@ -160,6 +166,7 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [deferredQuery, visibleCount]);
 
