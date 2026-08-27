@@ -97,7 +97,11 @@ function getAdminToken(): string {
 }
 
 function isPublicHealthPath(pathname: string): boolean {
-  return pathname === '/api/health';
+  return (
+    pathname === '/api/health' ||
+    pathname === '/api/health/live' ||
+    pathname === '/api/health/ready'
+  );
 }
 
 function isWebhookPath(pathname: string): boolean {

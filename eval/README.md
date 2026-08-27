@@ -1,5 +1,10 @@
 # Query Eval
 
+CI uses `eval/fixtures/ci-corpus.json` only. That fixture is synthetic and
+de-identified. Production-matching question sets stay off git and are not run
+unless separately authorized. Aggregate-only live eval is reserved; this
+repository does not execute paid or private production eval.
+
 `golden-set.json` is a repeatable Q&A suite for the Wiki query pipeline. It
 expects the target environment to contain the LLM Wiki concept set named in each
 item's `expectedConceptTitles`.

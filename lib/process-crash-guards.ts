@@ -7,14 +7,13 @@
  * whole Node.js process. Both handlers emit a structured log line and forward
  * the error to Sentry when configured.
  *
- * Policy: neither handler calls `process.exit()`. An unhandled rejection must
- * never terminate the server, and an uncaught exception is logged but the
- * service stays available (the host's liveness probe can still restart us if
- * the process is genuinely wedged). This is intentionally Node-runtime only —
- * the Edge runtime has no `process` event emitter and never reaches here.
+ * Policy: unhandledRejection is logged and the process stays up. uncaughtException
+ * marks readiness failed, logs, then exits non-zero so the supervisor can
+ * replace a potentially corrupted process. This is Node-runtime only.
  *
  * Server-only.
  */
+import { markProcessUnready } from './process-readiness';
 import { logger } from './server-logger';
 import { reportError } from './observability/sentry';
 
@@ -54,6 +53,9 @@ export function describeCrashReason(reason: unknown): { name: string; message: s
  */
 export function handleProcessCrash(kind: ProcessCrashKind, reason: unknown): ProcessCrashLog {
   const { name, message } = describeCrashReason(reason);
+  if (kind === 'uncaughtException') {
+    markProcessUnready('uncaughtException');
+  }
   logger.error(
     kind === 'unhandledRejection' ? 'process.unhandled_rejection' : 'process.uncaught_exception',
     { kind, name, message },
@@ -82,7 +84,7 @@ export function registerGlobalCrashGuards(): void {
 
   process.on('uncaughtException', (err) => {
     handleProcessCrash('uncaughtException', err);
-    // Stay up by default — logging is enough to keep the service available for
-    // other requests; we do not call process.exit() here.
+    process.exitCode = 1;
+    process.exit(1);
   });
 }

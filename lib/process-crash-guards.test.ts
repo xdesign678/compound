@@ -6,6 +6,7 @@ import {
   handleProcessCrash,
   registerGlobalCrashGuards,
 } from './process-crash-guards';
+import { isProcessReady, resetProcessReadinessForTests } from './process-readiness';
 import { setLoggerSink } from './server-logger';
 
 function captureErrorLogs(fn: () => void): string[] {
@@ -63,7 +64,8 @@ test('handleProcessCrash logs unhandledRejection without exiting the process', (
   assert.equal('stack' in payload, false);
 });
 
-test('handleProcessCrash logs uncaughtException without exiting the process', () => {
+test('handleProcessCrash marks readiness failed on uncaughtException without exiting itself', () => {
+  resetProcessReadinessForTests();
   const originalExit = process.exit;
   let exitCalls = 0;
   // @ts-expect-error test stub
@@ -77,7 +79,8 @@ test('handleProcessCrash logs uncaughtException without exiting the process', ()
 
   process.exit = originalExit;
 
-  assert.equal(exitCalls, 0, 'uncaughtException handler must not call process.exit by default');
+  assert.equal(exitCalls, 0, 'handleProcessCrash must not exit; the listener does');
+  assert.equal(isProcessReady(), false);
   const payload = JSON.parse(lines[0]) as Record<string, unknown>;
   assert.equal(payload.msg, 'process.uncaught_exception');
   assert.equal(payload.name, 'RangeError');

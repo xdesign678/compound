@@ -1,0 +1,35 @@
+{
+  "_help": "Deterministic, de-identified CI eval fixture. No production questions, titles, or answers. Structural and citation contracts are hard gates; model quality is report-only.",
+  "items": [
+    {
+      "id": "fixture-definition-001",
+      "category": "definition",
+      "question": "What is Fixture Concept Alpha?",
+      "expectedConceptIds": ["c-fixture-alpha"],
+      "expectedConceptTitles": ["Fixture Concept Alpha"],
+      "expectedKeywords": ["synthetic", "fixture"],
+      "shouldAnswer": true
+    },
+    {
+      "id": "fixture-comparison-001",
+      "category": "comparison",
+      "question": "How do Fixture Concept Alpha and Fixture Concept Beta relate?",
+      "expectedConceptIds": ["c-fixture-alpha", "c-fixture-beta"],
+      "expectedConceptTitles": [
+        "Fixture Concept Alpha",
+        "Fixture Concept Beta"
+      ],
+      "expectedKeywords": ["related", "synthetic"],
+      "shouldAnswer": true
+    },
+    {
+      "id": "fixture-unknown-001",
+      "category": "unknown",
+      "question": "What is the classified production incident from last Tuesday?",
+      "expectedConceptIds": [],
+      "expectedConceptTitles": [],
+      "expectedKeywords": ["do not know", "not in", "insufficient"],
+      "shouldAnswer": false
+    }
+  ]
+}

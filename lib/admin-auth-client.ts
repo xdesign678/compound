@@ -101,18 +101,28 @@ export async function clearAdminToken(): Promise<void> {
   }
 }
 
+export const SESSION_CHECK_TIMEOUT_MS = 6_000;
+
 /**
  * Checks whether the current httpOnly cookie still represents a valid session.
- * Returns null when the server cannot be reached, so callers can make an
- * explicit offline-access decision instead of treating an outage as logout.
+ * Returns false for 401/403 (authoritative revoke). Returns null when the
+ * server cannot be reached, timed out, or returned 5xx, so callers can make
+ * an explicit offline-access decision instead of treating an outage as logout.
  */
 export async function checkAdminSession(): Promise<boolean | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SESSION_CHECK_TIMEOUT_MS);
   try {
     const res = await fetch(AUTH_SESSION_PATH, {
       method: 'GET',
       credentials: 'same-origin',
       cache: 'no-store',
+      signal: controller.signal,
     });
+    if (res.status === 401 || res.status === 403) {
+      lockPrivateCache();
+      return false;
+    }
     if (!res.ok) return null;
 
     const body = (await res.json()) as { authenticated?: unknown };
@@ -121,6 +131,8 @@ export async function checkAdminSession(): Promise<boolean | null> {
     return authenticated;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

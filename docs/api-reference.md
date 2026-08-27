@@ -6,8 +6,8 @@
 
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
-- Routes: **43**
-- Handlers (HTTP methods): **53**
+- Routes: **45**
+- Handlers (HTTP methods): **55**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
@@ -26,6 +26,8 @@ This document is generated automatically from the Next.js Route Handlers under `
   - [`/api/data/snapshot`](#api-data-snapshot)
   - [`/api/data/sources`](#api-data-sources)
 - **health**
+  - [`/api/health/live`](#api-health-live)
+  - [`/api/health/ready`](#api-health-ready)
   - [`/api/health`](#api-health)
 - **ingest**
   - [`/api/ingest`](#api-ingest)
@@ -270,6 +272,39 @@ Updates a source document and recompiles retrieval artifacts for all
 concepts backed by that source. Body: `{ id, rawContent, title? }`.
 
 ## health
+
+### `/api/health/live`
+
+Source: [`app/api/health/live/route.ts`](../app/api/health/live/route.ts)
+
+| Field       | Value             |
+| ----------- | ----------------- |
+| Methods     | `GET`             |
+| Runtime     | `nodejs`          |
+| maxDuration | _unset_           |
+| Guards      | _(none detected)_ |
+
+#### GET
+
+GET /api/health/live
+Process liveness only. Does not inspect SQLite, volumes, or workers.
+
+### `/api/health/ready`
+
+Source: [`app/api/health/ready/route.ts`](../app/api/health/ready/route.ts)
+
+| Field       | Value             |
+| ----------- | ----------------- |
+| Methods     | `GET`             |
+| Runtime     | `nodejs`          |
+| maxDuration | _unset_           |
+| Guards      | _(none detected)_ |
+
+#### GET
+
+GET /api/health/ready
+Readiness probe. Public body is only `{ status, probe }`. Detailed failure
+reasons are written to authenticated logs, not the response.
 
 ### `/api/health`
 

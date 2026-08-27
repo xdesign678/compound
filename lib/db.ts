@@ -1,6 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import { normalizeCategoryState } from './category-normalization';
 import { inferContentStatusFromText } from './content-status';
+import type { OfflineOutboxItem, SyncMetaRecord } from './offline-outbox';
 import type { Source, Concept, ActivityLog, AskMessage } from './types';
 
 export class CompoundDB extends Dexie {
@@ -8,6 +9,8 @@ export class CompoundDB extends Dexie {
   concepts!: Table<Concept, string>;
   activity!: Table<ActivityLog, string>;
   askHistory!: Table<AskMessage, string>;
+  offlineOutbox!: Table<OfflineOutboxItem, string>;
+  syncMeta!: Table<SyncMetaRecord, string>;
 
   constructor() {
     super('compound-db');
@@ -141,6 +144,15 @@ export class CompoundDB extends Dexie {
             source.updatedAt = source.updatedAt ?? source.ingestedAt;
           }),
       );
+    // v11: durable offline outbox + sync meta. Additive; existing rows stay.
+    this.version(11).stores({
+      sources: 'id, ingestedAt, updatedAt, type, externalKey, title',
+      concepts: 'id, updatedAt, createdAt, *sources, *related, *categoryKeys, title',
+      activity: 'id, at, type, [type+at]',
+      askHistory: 'id, at',
+      offlineOutbox: 'id, operationId, state, createdAt, nextAttemptAt',
+      syncMeta: 'id',
+    });
   }
 }
 

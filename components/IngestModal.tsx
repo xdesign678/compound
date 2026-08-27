@@ -3,9 +3,10 @@
 import '@/components/modals.css';
 import '@/app/modals.css';
 import { useState, useEffect, useRef, type DragEvent } from 'react';
-import { useAppStore, type TaskItem } from '@/lib/store';
+import { useAppStore } from '@/lib/store';
 import { ingestSource, isOfflineError } from '@/lib/api-client';
 import { canQueueOfflineWrite, getOfflineWritePayloadBytes } from '@/lib/cloud-sync';
+import { createOutboxItem, persistOutboxItem, updateOutboxItem } from '@/lib/offline-outbox';
 import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 import { Icon } from './Icons';
 import { ImportProgress, rememberRecentImport } from './ImportProgress';
@@ -83,53 +84,81 @@ export function IngestModal() {
     setConfirmClose(false);
   }
 
+  async function queueIngestWrite(
+    payload: {
+      title: string;
+      type: SourceType;
+      author?: string;
+      url?: string;
+      rawContent: string;
+    },
+    label: string,
+  ): Promise<void> {
+    const outbox = createOutboxItem({ kind: 'ingest', payload });
+    await persistOutboxItem(outbox);
+    const taskId = outbox.id;
+    const run = async () => {
+      await updateOutboxItem(outbox.id, { state: 'inflight' });
+      const result = await ingestSource({ ...payload, operationId: outbox.operationId });
+      const summary = `新建 ${result.newConceptIds.length} 个概念，更新 ${result.updatedConceptIds.length} 个`;
+      await updateOutboxItem(outbox.id, { state: 'succeeded', result: summary });
+      markFresh(result.newConceptIds);
+      return summary;
+    };
+    addTask({
+      id: taskId,
+      kind: 'ingest',
+      label,
+      status: 'running',
+      startedAt: Date.now(),
+      queuedPayloadBytes: getOfflineWritePayloadBytes(payload),
+      retry: async () => {
+        const summary = await run();
+        updateTask(taskId, { result: summary });
+      },
+    });
+    try {
+      const summary = await run();
+      updateTask(taskId, {
+        status: 'success',
+        finishedAt: Date.now(),
+        result: summary,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const shouldQueue = isOfflineError(err) && canQueueOfflineWrite(payload);
+      const errorText = shouldQueue
+        ? '离线暂停，联网后会自动重试。'
+        : isOfflineError(err)
+          ? '离线队列单条内容超过 256KB，请联网后重新提交。'
+          : msg.slice(0, 160);
+      await updateOutboxItem(outbox.id, {
+        state: shouldQueue ? 'queued' : 'failed',
+        error: errorText,
+      });
+      updateTask(taskId, {
+        status: shouldQueue ? 'paused-offline' : 'error',
+        finishedAt: shouldQueue ? undefined : Date.now(),
+        error: errorText,
+      });
+      throw err;
+    }
+  }
+
   async function handleNoteEditorDone(noteTitle: string, noteContent: string) {
     setNoteEditorOpen(false);
     setSubmitting(true);
-    const taskId = `ingest-${Date.now()}`;
     const payload = {
       title: noteTitle,
       type: 'text' as const,
       rawContent: noteContent,
     };
-    const task: TaskItem = {
-      id: taskId,
-      kind: 'ingest',
-      label: noteTitle || '笔记',
-      status: 'running',
-      startedAt: Date.now(),
-      queuedPayloadBytes: getOfflineWritePayloadBytes(payload),
-      retry: async () => {
-        const result = await ingestSource(payload);
-        markFresh(result.newConceptIds);
-        updateTask(taskId, {
-          result: `新建 ${result.newConceptIds.length} 个概念，更新 ${result.updatedConceptIds.length} 个`,
-        });
-      },
-    };
-    addTask(task);
-    close();
-    reset();
     try {
-      const result = await ingestSource(payload);
-      markFresh(result.newConceptIds);
-      updateTask(taskId, {
-        status: 'success',
-        finishedAt: Date.now(),
-        result: `新建 ${result.newConceptIds.length} 个概念，更新 ${result.updatedConceptIds.length} 个`,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const shouldQueue = isOfflineError(err) && canQueueOfflineWrite(payload);
-      updateTask(taskId, {
-        status: shouldQueue ? 'paused-offline' : 'error',
-        finishedAt: shouldQueue ? undefined : Date.now(),
-        error: shouldQueue
-          ? '离线暂停，联网后会自动重试。'
-          : isOfflineError(err)
-            ? '离线队列单条内容超过 256KB，请联网后重新提交。'
-            : msg.slice(0, 160),
-      });
+      await queueIngestWrite(payload, noteTitle || '笔记');
+      close();
+      reset();
+    } catch {
+      setSubmitting(false);
     }
   }
 
@@ -153,64 +182,28 @@ export function IngestModal() {
     if (!content.trim() || !title.trim()) return;
     setSubmitting(true);
     setError(null);
-    const taskId = `ingest-${Date.now()}`;
     const capturedTitle = title.trim();
-    const capturedContent = content.trim();
-    const capturedAuthor = author.trim();
     const capturedUrl = url.trim();
     const payload = {
       title: capturedTitle,
       type,
-      author: capturedAuthor || undefined,
+      author: author.trim() || undefined,
       url: capturedUrl || undefined,
-      rawContent: capturedContent,
+      rawContent: content.trim(),
     };
-    const task: TaskItem = {
-      id: taskId,
-      kind: 'ingest',
-      label: capturedTitle,
-      status: 'running',
-      startedAt: Date.now(),
-      queuedPayloadBytes: getOfflineWritePayloadBytes(payload),
-      retry: async () => {
-        const result = await ingestSource(payload);
-        markFresh(result.newConceptIds);
-        updateTask(taskId, {
-          result: `新建 ${result.newConceptIds.length} 个概念，更新 ${result.updatedConceptIds.length} 个`,
-        });
-      },
-    };
-    addTask(task);
     rememberRecentImport({
       kind: 'ingest',
       label: capturedTitle,
       detail: capturedUrl || '手动粘贴正文',
     });
     try {
-      const result = await ingestSource(payload);
-      markFresh(result.newConceptIds);
-      updateTask(taskId, {
-        status: 'success',
-        finishedAt: Date.now(),
-        result: `新建 ${result.newConceptIds.length} 个概念，更新 ${result.updatedConceptIds.length} 个`,
-      });
+      await queueIngestWrite(payload, capturedTitle);
       reset();
       close();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      const shouldQueue = isOfflineError(err) && canQueueOfflineWrite(payload);
-      const nextError = shouldQueue
-        ? '离线暂停，联网后会自动重试。'
-        : isOfflineError(err)
-          ? '离线队列单条内容超过 256KB，请联网后重新提交。'
-          : msg.slice(0, 160);
-      setError(nextError);
+      setError(msg.slice(0, 160));
       setSubmitting(false);
-      updateTask(taskId, {
-        status: shouldQueue ? 'paused-offline' : 'error',
-        finishedAt: shouldQueue ? undefined : Date.now(),
-        error: nextError,
-      });
     }
   }
 

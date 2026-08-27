@@ -166,3 +166,30 @@ test('canReadPrivateCache falls back to the last verified grant during a network
     browser.restore();
   }
 });
+
+test('checkAdminSession locks the cache on 401 and does not allow offline fallback', async () => {
+  const browser = withMockWindow();
+  browser.localStorage.setItem('compound:offline-access', '1');
+  const mock = withMockFetch(() => new Response('Unauthorized', { status: 401 }));
+  try {
+    assert.equal(await checkAdminSession(), false);
+    assert.equal(browser.localStorage.getItem('compound:local-cache-lock'), '1');
+    assert.equal(await canReadPrivateCache(), false);
+  } finally {
+    mock.restore();
+    browser.restore();
+  }
+});
+
+test('checkAdminSession treats 5xx as unavailable and keeps a prior offline grant', async () => {
+  const browser = withMockWindow();
+  browser.localStorage.setItem('compound:offline-access', '1');
+  const mock = withMockFetch(() => new Response('nope', { status: 503 }));
+  try {
+    assert.equal(await checkAdminSession(), null);
+    assert.equal(await canReadPrivateCache(), true);
+  } finally {
+    mock.restore();
+    browser.restore();
+  }
+});

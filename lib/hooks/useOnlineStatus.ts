@@ -36,6 +36,9 @@ export function useOnlineStatus() {
       window.localStorage.removeItem(OFFLINE_SINCE_KEY);
       setOnline(true);
       void useAppStore.getState().replayPausedOfflineTasks();
+      void import('@/lib/api-client')
+        .then((mod) => mod.replayDurableIngestOutbox())
+        .catch(() => {});
       // 恢复在线时自动同步
       triggerSync();
     };

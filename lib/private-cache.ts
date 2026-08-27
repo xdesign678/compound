@@ -41,18 +41,24 @@ function clearStorage(storage: Storage): void {
  * preferences untouched. A database argument is accepted for deterministic tests.
  */
 export async function clearPrivateOfflineCache(database: CompoundDB = getDb()): Promise<void> {
-  await database.transaction(
-    'rw',
-    [database.sources, database.concepts, database.activity, database.askHistory],
-    async () => {
-      await Promise.all([
-        database.sources.clear(),
-        database.concepts.clear(),
-        database.activity.clear(),
-        database.askHistory.clear(),
-      ]);
-    },
-  );
+  const tables = [
+    database.sources,
+    database.concepts,
+    database.activity,
+    database.askHistory,
+    ...(database.offlineOutbox ? [database.offlineOutbox] : []),
+    ...(database.syncMeta ? [database.syncMeta] : []),
+  ];
+  await database.transaction('rw', tables, async () => {
+    await Promise.all([
+      database.sources.clear(),
+      database.concepts.clear(),
+      database.activity.clear(),
+      database.askHistory.clear(),
+      database.offlineOutbox?.clear(),
+      database.syncMeta?.clear(),
+    ]);
+  });
 
   if (typeof window === 'undefined') return;
   try {

@@ -152,9 +152,13 @@ export default function Page() {
   const hydrateFontSize = useAppStore((s) => s.hydrateFontSize);
   const hydrateLineHeight = useAppStore((s) => s.hydrateLineHeight);
   const [cacheAccessGranted, setCacheAccessGranted] = useState(false);
+  const [authTimedOut, setAuthTimedOut] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) setAuthTimedOut(true);
+    }, 8_000);
     void canReadPrivateCache().then((granted) => {
       if (cancelled) return;
       if (granted) {
@@ -165,6 +169,7 @@ export default function Page() {
     });
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
     };
   }, []);
 
@@ -560,6 +565,23 @@ export default function Page() {
             <span className="skeleton" style={{ width: 30, height: 10 }} />
           </div>
         </nav>
+        {authTimedOut ? (
+          <div className="offline-banner" role="alert">
+            <p>会话检查超时。弱网下可以离线阅读、重试或重新登录。</p>
+            <div className="settings-data-actions">
+              <button
+                type="button"
+                className="modal-btn primary"
+                onClick={() => window.location.reload()}
+              >
+                重试
+              </button>
+              <a className="modal-btn" href="/offline">
+                离线进入
+              </a>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }

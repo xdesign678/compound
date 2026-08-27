@@ -316,6 +316,7 @@ export async function ingestSource(input: {
   url?: string;
   rawContent: string;
   externalKey?: string;
+  operationId?: string;
 }): Promise<{
   sourceId: string;
   newConceptIds: string[];
@@ -348,6 +349,7 @@ export async function ingestSource(input: {
       rawContent: source.rawContent,
       externalKey: source.externalKey,
     },
+    operationId: input.operationId,
   };
 
   // 3. Call API
@@ -378,6 +380,37 @@ export async function ingestSource(input: {
     updatedConceptIds: resp.updatedConceptIds,
     activityId: resp.activityId,
   };
+}
+
+export async function replayDurableIngestOutbox(): Promise<void> {
+  const { listReplayableOutbox, persistOutboxItem, nextOutboxAttempt, updateOutboxItem } =
+    await import('./offline-outbox');
+  const items = await listReplayableOutbox();
+  for (const item of items) {
+    if (item.kind !== 'ingest') continue;
+    const payload = item.payload as {
+      title: string;
+      type: SourceType;
+      author?: string;
+      url?: string;
+      rawContent: string;
+      externalKey?: string;
+    };
+    try {
+      await updateOutboxItem(item.id, { state: 'inflight' });
+      const result = await ingestSource({ ...payload, operationId: item.operationId });
+      await updateOutboxItem(item.id, {
+        state: 'succeeded',
+        result: `新建 ${result.newConceptIds.length} 个概念，更新 ${result.updatedConceptIds.length} 个`,
+      });
+    } catch (error) {
+      const next = nextOutboxAttempt({
+        ...item,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await persistOutboxItem(next);
+    }
+  }
 }
 
 /** Pipeline stage event emitted by the server during a streaming query. */
