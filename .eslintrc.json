@@ -51,7 +51,8 @@
               "./lib/process-crash-guards.*",
               "./lib/retention.*",
               "./lib/boot-recovery.*",
-              "./lib/backup-status.*"
+              "./lib/backup-status.*",
+              "./lib/ingest-operations.*"
             ],
             "message": "Server-only modules (Node.js APIs: better-sqlite3, node:fs, node:crypto, process.env, etc.) must not be imported from client-side code. Use app/api/ routes as the interface layer."
           },

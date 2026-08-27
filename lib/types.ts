@@ -117,6 +117,7 @@ export interface IngestRequest {
   existingConcepts?: Array<{ id: string; title: string; summary: string }>;
   existingCategories?: string[];
   llmConfig?: LlmConfig;
+  operationId?: string;
 }
 
 export interface IngestResponse {

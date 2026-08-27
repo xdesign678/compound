@@ -22,6 +22,7 @@ import {
   SYNC_META_KEY,
   SYNC_QUARANTINE_KEY,
   buildQuarantineRecord,
+  identitiesMatch,
   planFullReconciliation,
   readDatasetIdentity,
   resolveDestructiveDeletes,
@@ -138,6 +139,20 @@ function readLocalDatasetIdentity(): DatasetIdentity | null {
     return readDatasetIdentity(localStorage.getItem(SYNC_META_KEY));
   } catch {
     return null;
+  }
+}
+
+function persistLocalDatasetIdentity(identity: DatasetIdentity): void {
+  try {
+    localStorage.setItem(
+      SYNC_META_KEY,
+      JSON.stringify({
+        datasetId: identity.datasetId ?? null,
+        generation: identity.generation ?? identity.epoch ?? null,
+      }),
+    );
+  } catch {
+    // ignore
   }
 }
 
@@ -408,7 +423,15 @@ async function pullSnapshotFromCloudInner(): Promise<PullResult> {
       });
     } else {
       clearSyncQuarantine();
+      if (remoteIdentity?.datasetId && (plan.trusted || plan.reason === 'first_bind')) {
+        persistLocalDatasetIdentity(remoteIdentity);
+      }
     }
+  } else if (
+    remoteIdentity?.datasetId &&
+    identitiesMatch(readLocalDatasetIdentity(), remoteIdentity)
+  ) {
+    persistLocalDatasetIdentity(remoteIdentity);
   }
 
   try {

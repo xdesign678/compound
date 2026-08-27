@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { apiError } from '@/lib/api-error';
+import { IngestOperationHttpError } from '@/lib/ingest-operations';
 import { ingestSourceToServerDb } from '@/lib/server-ingest';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
@@ -31,6 +32,8 @@ const MAX_EXISTING_CONCEPTS = 500;
  *
  * Body: `IngestRequest` — `source.rawContent` is required (<= 100k chars).
  * Optional `existingConcepts` (<= 500) hints the LLM about prior concepts.
+ * Optional `operationId` is an idempotency key: same id and payload replay the
+ * stored result; same id with a different payload returns 409.
  *
  * Guards: admin token, LLM rate limit, 512KB body cap.
  */
@@ -71,6 +74,7 @@ export const POST = withRequestTracing(async (req: Request) => {
       externalKey: body.source.externalKey,
       llmConfig,
       signal: req.signal,
+      operationId: body.operationId,
     });
 
     try {
@@ -90,6 +94,9 @@ export const POST = withRequestTracing(async (req: Request) => {
 
     return NextResponse.json(result);
   } catch (err) {
+    if (err instanceof IngestOperationHttpError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
     if (isRequestBodyTooLargeError(err)) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }

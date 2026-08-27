@@ -18,6 +18,12 @@ import { contextualizeChunk, contextualizeChunkBatch } from './contextual-chunk'
 import { logger } from './server-logger';
 import { autoQueueCategoryWikis } from './category-wiki-worker';
 import { requireHttpUrl } from './safe-url';
+import {
+  beginIngestOperation,
+  completeIngestOperation,
+  failIngestOperation,
+  hashIngestPayload,
+} from './ingest-operations';
 import type { Source, Concept, ActivityLog, SourceType, LlmConfig } from './types';
 
 export interface ServerIngestInput {
@@ -31,6 +37,7 @@ export interface ServerIngestInput {
   replaceSourceId?: string;
   llmConfig?: LlmConfig;
   signal?: AbortSignal;
+  operationId?: string;
 }
 
 export interface ServerIngestResult {
@@ -52,6 +59,34 @@ export interface ServerIngestResult {
 
 export async function ingestSourceToServerDb(
   input: ServerIngestInput,
+): Promise<ServerIngestResult> {
+  const operationId = input.operationId?.trim() || undefined;
+  if (operationId) {
+    const begun = beginIngestOperation(
+      operationId,
+      hashIngestPayload({
+        title: input.title,
+        type: input.type,
+        author: input.author,
+        url: input.url,
+        rawContent: input.rawContent,
+        externalKey: input.externalKey,
+      }),
+    );
+    if (begun.kind === 'replay') return begun.result as ServerIngestResult;
+  }
+
+  try {
+    return await ingestSourceToServerDbInner(input, operationId);
+  } catch (error) {
+    if (operationId) failIngestOperation(operationId, error);
+    throw error;
+  }
+}
+
+async function ingestSourceToServerDbInner(
+  input: ServerIngestInput,
+  operationId: string | undefined,
 ): Promise<ServerIngestResult> {
   const now = Date.now();
   const exactExisting = input.externalKey ? repo.getSourceByExternalKey(input.externalKey) : null;
@@ -185,6 +220,7 @@ export async function ingestSourceToServerDb(
   };
 
   let compilerResult: ServerIngestResult['compiler'];
+  let persisted: ServerIngestResult | undefined;
 
   // 8. Write everything in a single transaction (better-sqlite3 is synchronous)
   const trx = getServerDb().transaction(() => {
@@ -232,32 +268,44 @@ export async function ingestSourceToServerDb(
     });
 
     repo.insertActivity(activity);
+
+    const affectedConceptIds = Array.from(
+      new Set([...newConceptIds, ...updatedConceptIds, ...biDirUpdates.map((update) => update.id)]),
+    );
+    persisted = {
+      sourceId: source.id,
+      newConceptIds,
+      updatedConceptIds,
+      activityId: activity.id,
+      source: repo.getSource(source.id) ?? source,
+      concepts: repo.getConceptsByIds(affectedConceptIds),
+      activity,
+      compiler: compilerResult,
+    };
+    if (operationId) completeIngestOperation(operationId, persisted);
   });
   trx.immediate();
 
-  const affectedConceptIds = Array.from(
-    new Set([...newConceptIds, ...updatedConceptIds, ...biDirUpdates.map((update) => update.id)]),
-  );
+  if (!persisted) throw new Error('ingest transaction produced no result');
 
   try {
-    autoQueueCategoryWikis({ conceptIds: affectedConceptIds });
+    autoQueueCategoryWikis({
+      conceptIds: Array.from(
+        new Set([
+          ...persisted.newConceptIds,
+          ...persisted.updatedConceptIds,
+          ...biDirUpdates.map((update) => update.id),
+        ]),
+      ),
+    });
   } catch (error) {
     logger.warn('ingest.category_wiki_auto_queue_failed', {
-      sourceId: source.id,
+      sourceId: persisted.sourceId,
       error: error instanceof Error ? error.message : String(error),
     });
   }
 
-  return {
-    sourceId: source.id,
-    newConceptIds,
-    updatedConceptIds,
-    activityId: activity.id,
-    source: repo.getSource(source.id) ?? source,
-    concepts: repo.getConceptsByIds(affectedConceptIds),
-    activity,
-    compiler: compilerResult,
-  };
+  return persisted;
 }
 
 const CONTEXTUALIZATION_CONCURRENCY = Math.max(

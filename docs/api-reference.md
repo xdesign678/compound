@@ -312,6 +312,8 @@ stores the source row, and merges concepts into the SQLite-backed Wiki.
 
 Body: `IngestRequest` — `source.rawContent` is required (<= 100k chars).
 Optional `existingConcepts` (<= 500) hints the LLM about prior concepts.
+Optional `operationId` is an idempotency key: same id and payload replay the
+stored result; same id with a different payload returns 409.
 
 Guards: admin token, LLM rate limit, 512KB body cap.
 

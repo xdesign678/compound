@@ -87,8 +87,10 @@ export async function GET(req: Request) {
       const ask = repo.getAskHistoryByIds(upsertIds.ask);
       const nextCursor = changes.at(-1)?.seq ?? upperCursor;
 
+      const dataset = repo.getDatasetIdentity();
       return NextResponse.json({
         fetchedAt: Date.now(),
+        dataset,
         mode: 'delta',
         counts: {
           sources: sources.length,
@@ -137,8 +139,10 @@ export async function GET(req: Request) {
       });
     }
 
+    const dataset = repo.getDatasetIdentity();
     return NextResponse.json({
       fetchedAt: Date.now(),
+      dataset,
       mode: 'full',
       pagination: { limit, offset, totalSources, totalConcepts },
       counts: {

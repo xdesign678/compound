@@ -244,7 +244,23 @@ function runMigrations(db: DB): void {
     );
     CREATE INDEX IF NOT EXISTS idx_sync_changes_entity
       ON sync_changes(entity_type, entity_id, seq DESC);
+
+    CREATE TABLE IF NOT EXISTS ingest_operations (
+      operation_id  TEXT PRIMARY KEY,
+      payload_hash  TEXT NOT NULL,
+      status        TEXT NOT NULL,
+      result_json   TEXT,
+      source_id     TEXT,
+      error         TEXT,
+      created_at    INTEGER NOT NULL,
+      updated_at    INTEGER NOT NULL,
+      lease_until   INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_ingest_operations_status
+      ON ingest_operations(status, updated_at);
   `);
+
+  ensureDatasetIdentity(db);
 
   const conceptColumns = new Set(
     (db.prepare(`PRAGMA table_info(concepts)`).all() as Array<{ name: string }>).map(
@@ -287,6 +303,25 @@ function runMigrations(db: DB): void {
 
   runCategoryNormalizationIfNeeded(db);
   backfillSyncChangesIfNeeded(db);
+}
+
+function ensureDatasetIdentity(db: DB): void {
+  const read = (key: string): string | undefined => {
+    const row = db.prepare(`SELECT value FROM meta WHERE key = ?`).get(key) as
+      | { value: string }
+      | undefined;
+    return row?.value;
+  };
+  if (!read('dataset_id')) {
+    db.prepare(`INSERT INTO meta(key, value) VALUES (?, ?)`).run('dataset_id', crypto.randomUUID());
+  }
+  const generation = Number(read('dataset_generation'));
+  if (!Number.isFinite(generation) || generation < 1) {
+    db.prepare(`INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)`).run(
+      'dataset_generation',
+      '1',
+    );
+  }
 }
 
 const SYNC_CHANGE_BACKFILL_REVISION = '2026-07-sync-change-log-v1';
@@ -687,6 +722,23 @@ function noteCategoryKeysOnWrite(keys: string[] | undefined): void {
 // --------------------------------------------------------------------
 
 export const repo = {
+  getDatasetIdentity(): { datasetId: string; generation: number } {
+    const db = getServerDb();
+    const read = (key: string): string | undefined => {
+      const row = db.prepare(`SELECT value FROM meta WHERE key = ?`).get(key) as
+        | { value: string }
+        | undefined;
+      return row?.value;
+    };
+    const datasetId = read('dataset_id');
+    const generation = Number(read('dataset_generation'));
+    if (!datasetId || !Number.isFinite(generation) || generation < 1) {
+      ensureDatasetIdentity(db);
+      return repo.getDatasetIdentity();
+    }
+    return { datasetId, generation: Math.trunc(generation) };
+  },
+
   // ---- monotonic cloud-sync change log -------------------------
   getLatestSyncCursor(): number {
     const row = cachedPrepare(`SELECT COALESCE(MAX(seq), 0) AS cursor FROM sync_changes`).get() as
