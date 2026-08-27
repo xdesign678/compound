@@ -66,6 +66,28 @@ test('renderPrometheusMetrics exposes LLM retry and SSRF counters', () => {
   assert.match(body, /compound_llm_ssrf_blocks_total\{host="169\.254\.169\.254"\} 1/);
 });
 
+test('renderPrometheusMetrics exposes backup age and checksum gauges', () => {
+  resetPrometheusMetricsForTests();
+
+  const body = renderPrometheusMetrics({
+    backupStatus: {
+      present: true,
+      ageSeconds: 3600,
+      stale: false,
+      checksumPresent: true,
+      sameVolumeAsDataDir: true,
+      offsiteConfigured: false,
+    },
+  });
+
+  assert.match(body, /compound_backup_present 1/);
+  assert.match(body, /compound_backup_age_seconds 3600/);
+  assert.match(body, /compound_backup_stale 0/);
+  assert.match(body, /compound_backup_checksum_metadata 1/);
+  assert.match(body, /compound_backup_same_volume 1/);
+  assert.match(body, /compound_backup_offsite_configured 0/);
+});
+
 test('renderPrometheusMetrics exposes LLM run counts by task and prompt version', () => {
   resetPrometheusMetricsForTests();
 

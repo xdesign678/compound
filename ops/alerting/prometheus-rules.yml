@@ -63,3 +63,13 @@ groups:
           summary: 'Compound review queue backlog is high'
           description: 'More than 50 review items have remained open for 6 hours. Review queue triage is lagging behind ingestion or analysis output.'
           runbook_url: 'https://github.com/xdesign678/compound/blob/main/docs/operations/alerting.md#compoundreviewbackloghigh'
+      - alert: 'CompoundBackupStale'
+        expr: 'compound_backup_present == 0 or compound_backup_stale == 1 or compound_backup_checksum_metadata == 0'
+        for: '30m'
+        labels:
+          severity: 'warning'
+          team: 'compound'
+        annotations:
+          summary: 'Compound SQLite backup is missing, stale, or lacks checksum metadata'
+          description: 'The newest local backup is absent, older than 26 hours, or missing SHA-256 metadata. This does not prove offsite replication. See the data persistence runbook before restoring.'
+          runbook_url: 'https://github.com/xdesign678/compound/blob/main/docs/operations/alerting.md#compoundbackupstale'

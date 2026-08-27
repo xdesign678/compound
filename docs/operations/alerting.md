@@ -83,3 +83,11 @@ metrics.
 Open `/review`, triage stale items, and check whether a recent sync imported a
 large document batch. A high queue is not usually an outage, but it means the
 knowledge base is waiting for human review.
+
+### CompoundBackupStale
+
+The newest local SQLite backup is missing, older than 26 hours, or lacks SHA-256
+metadata. Check `/api/health` (authenticated) `data.backup`, confirm
+`COMPOUND_BACKUP_DIR` is scheduled, and see `runbooks/data-persistence.md`.
+This alert does not prove offsite replication; copying snapshots to another
+volume still requires separate authorization.

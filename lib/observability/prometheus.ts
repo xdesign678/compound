@@ -37,10 +37,20 @@ export interface HttpObservation {
   durationMs: number;
 }
 
+export interface BackupMetrics {
+  present: boolean;
+  ageSeconds: number | null;
+  stale: boolean;
+  checksumPresent: boolean;
+  sameVolumeAsDataDir: boolean;
+  offsiteConfigured: boolean;
+}
+
 export interface PrometheusRenderInput {
   syncDashboard?: SyncDashboard;
   reviewMetrics?: Record<string, number>;
   embeddingMetrics?: Record<string, string | number | boolean>;
+  backupStatus?: BackupMetrics;
   collectionErrors?: Array<{ collector: string; message: string }>;
 }
 
@@ -585,6 +595,48 @@ function addEmbeddingMetrics(
   }
 }
 
+function addBackupMetrics(out: PrometheusTextBuilder, status: BackupMetrics): void {
+  out.metric('compound_backup_present', 'gauge', 'Whether a local SQLite backup snapshot exists.');
+  out.sample('compound_backup_present', status.present ? 1 : 0);
+
+  out.metric(
+    'compound_backup_age_seconds',
+    'gauge',
+    'Age of the newest local SQLite backup in seconds.',
+  );
+  if (status.ageSeconds !== null) {
+    out.sample('compound_backup_age_seconds', status.ageSeconds);
+  }
+
+  out.metric(
+    'compound_backup_stale',
+    'gauge',
+    'Whether the newest backup is older than 26 hours or missing checksum metadata.',
+  );
+  out.sample('compound_backup_stale', status.stale ? 1 : 0);
+
+  out.metric(
+    'compound_backup_checksum_metadata',
+    'gauge',
+    'Whether the newest backup has SHA-256 metadata.',
+  );
+  out.sample('compound_backup_checksum_metadata', status.checksumPresent ? 1 : 0);
+
+  out.metric(
+    'compound_backup_same_volume',
+    'gauge',
+    'Whether the backup directory is inside the data volume.',
+  );
+  out.sample('compound_backup_same_volume', status.sameVolumeAsDataDir ? 1 : 0);
+
+  out.metric(
+    'compound_backup_offsite_configured',
+    'gauge',
+    'Whether COMPOUND_BACKUP_OFFSITE_URI is set. Does not prove a successful offsite copy.',
+  );
+  out.sample('compound_backup_offsite_configured', status.offsiteConfigured ? 1 : 0);
+}
+
 function addCollectionErrors(
   out: PrometheusTextBuilder,
   errors: Array<{ collector: string; message: string }>,
@@ -673,6 +725,7 @@ export function renderPrometheusMetrics(input: PrometheusRenderInput = {}): stri
   if (input.syncDashboard) addSyncMetrics(out, input.syncDashboard);
   if (input.reviewMetrics) addReviewMetrics(out, input.reviewMetrics);
   addEmbeddingMetrics(out, input.embeddingMetrics ?? {});
+  if (input.backupStatus) addBackupMetrics(out, input.backupStatus);
   if (input.collectionErrors?.length) addCollectionErrors(out, input.collectionErrors);
   return out.toString();
 }

@@ -1,3 +1,4 @@
+import { inspectLocalBackupStatus, toPublicBackupStatus } from '@/lib/backup-status';
 import { requireAdmin } from '@/lib/server-auth';
 import { getEmbeddingMetrics } from '@/lib/embedding';
 import {
@@ -45,6 +46,12 @@ export const GET = withRequestTracing(async (req: Request) => {
     input.embeddingMetrics = getEmbeddingMetrics();
   } catch (error) {
     input.collectionErrors?.push({ collector: 'embedding', message: errorMessage(error) });
+  }
+
+  try {
+    input.backupStatus = toPublicBackupStatus(inspectLocalBackupStatus());
+  } catch (error) {
+    input.collectionErrors?.push({ collector: 'backup', message: errorMessage(error) });
   }
 
   return new Response(renderPrometheusMetrics(input), {

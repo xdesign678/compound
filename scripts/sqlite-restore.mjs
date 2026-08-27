@@ -18,6 +18,11 @@ export async function restoreSqliteBackup(options) {
   if (!existsSync(backupPath)) throw new Error(`Backup not found: ${backupPath}`);
   verifySqliteFile(backupPath);
   const expectedChecksum = readExpectedChecksum(backupPath);
+  if (!expectedChecksum && !options.allowMissingChecksum) {
+    throw new Error(
+      'Backup checksum metadata is required. Pass --allow-missing-checksum only as break-glass.',
+    );
+  }
   if (expectedChecksum && sha256File(backupPath) !== expectedChecksum) {
     throw new Error('Backup checksum does not match its metadata');
   }
@@ -74,11 +79,14 @@ export async function restoreSqliteBackup(options) {
 function parseArgs(argv) {
   const fromIndex = argv.indexOf('--from');
   if (fromIndex < 0 || !argv[fromIndex + 1]) {
-    throw new Error('Usage: npm run restore -- --from /path/to/backup.db --force');
+    throw new Error(
+      'Usage: npm run restore -- --from /path/to/backup.db --force [--allow-missing-checksum]',
+    );
   }
   return {
     backupPath: argv[fromIndex + 1],
     force: argv.includes('--force'),
+    allowMissingChecksum: argv.includes('--allow-missing-checksum'),
   };
 }
 

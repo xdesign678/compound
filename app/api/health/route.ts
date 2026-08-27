@@ -4,6 +4,7 @@ import {
   isAuthorizedRequest,
   shouldEnforceAdminAuth,
 } from '@/lib/server-auth';
+import { inspectLocalBackupStatus, toPublicBackupStatus } from '@/lib/backup-status';
 import { getRequestContext, withRequestTracing } from '@/lib/request-context';
 import { getEmbeddingMode } from '@/lib/embedding';
 import { getModelForTask } from '@/lib/model-history';
@@ -49,6 +50,23 @@ export const GET = withRequestTracing(async (req: Request) => {
       ? 'No real embedding endpoint configured. Set COMPOUND_EMBEDDING_API_KEY (and optionally COMPOUND_EMBEDDING_API_URL) to enable semantic vector retrieval; otherwise queries fall back to FTS-only.'
       : null;
 
+  let backup = null;
+  try {
+    backup = toPublicBackupStatus(inspectLocalBackupStatus());
+  } catch {
+    backup = {
+      present: false,
+      latestCreatedAt: null,
+      ageSeconds: null,
+      stale: true,
+      checksumPresent: false,
+      checksumOk: null,
+      sameVolumeAsDataDir: true,
+      offsiteConfigured: false,
+      offsiteVerified: false as const,
+    };
+  }
+
   return NextResponse.json({
     ...publicResponse,
     traceId: ctx?.traceId,
@@ -71,6 +89,7 @@ export const GET = withRequestTracing(async (req: Request) => {
     },
     data: {
       configured: Boolean(process.env.DATA_DIR),
+      backup,
     },
   });
 });

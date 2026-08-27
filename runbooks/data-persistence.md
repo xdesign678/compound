@@ -46,9 +46,18 @@ default. Set `COMPOUND_BACKUP_KEEP` to change retention. The backup directory
 must be replicated outside the application volume; a snapshot on the same
 failed disk is not a disaster-recovery backup.
 
+Authenticated `/api/health` and `/api/metrics` expose backup age, checksum
+metadata presence, and whether the backup directory is inside `DATA_DIR`. Alert
+`CompoundBackupStale` fires when the newest snapshot is missing, older than 26
+hours, or has no SHA-256 sidecar. Set `COMPOUND_BACKUP_OFFSITE_URI` only as an
+observability flag; this repository does not copy backups off-volume.
+
 Schedule the command from the deployment platform at least daily. For a private
 knowledge base, the operational target is RPO 24 hours or less and RTO 2 hours
 or less unless the owner chooses stricter values.
+
+Offsite encrypted replication and isolated restore drills are **not executed
+from this repository**. They need separate production authorization.
 
 ## Restore
 
@@ -61,9 +70,10 @@ or less unless the owner chooses stricter values.
    DATA_DIR=/data npm run restore -- --from /data/backups/compound-<timestamp>.db --force
    ```
 
-4. The restore command validates the source checksum and SQLite integrity,
-   creates a safety snapshot of the current target when it exists, swaps the
-   restored database atomically, and runs foreign-key checks.
+4. The restore command requires checksum metadata by default, validates the
+   SHA-256 and SQLite integrity, creates a safety snapshot of the current target
+   when it exists, swaps the restored database atomically, and runs foreign-key
+   checks. `--allow-missing-checksum` is break-glass only.
 5. Start the service and complete the verification checklist below.
 
 Never restore into a running container. Never copy `compound.db` together with
