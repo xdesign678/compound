@@ -17,6 +17,18 @@ import { mergeRemoteConcept, mergeRemoteSource } from './snapshot-merge';
 import { getAdminAuthHeaders } from './admin-auth-client';
 import { withRequestId } from './trace-client';
 import type { Source, Concept, ActivityLog, AskMessage } from './types';
+import {
+  DESTRUCTIVE_RECONCILE_BLOCKED,
+  SYNC_META_KEY,
+  SYNC_QUARANTINE_KEY,
+  buildQuarantineRecord,
+  planFullReconciliation,
+  readDatasetIdentity,
+  resolveDestructiveDeletes,
+  type DatasetIdentity,
+  type ReconcileMode,
+  type SyncQuarantine,
+} from './sync-reconciliation';
 
 interface SnapshotResponse {
   fetchedAt: number;
@@ -43,6 +55,7 @@ interface SnapshotResponse {
       ask: string[];
     };
   };
+  dataset?: DatasetIdentity | null;
 }
 
 const LAST_SYNC_CURSOR_KEY = 'compound:lastSyncCursor';
@@ -65,6 +78,9 @@ let syncInFlight: Promise<PullResult> | null = null;
 export interface PullResult {
   pulledAt: number;
   authoritativeEmpty: boolean;
+  reconcileMode: ReconcileMode;
+  destructiveReconcileBlocked: boolean;
+  quarantine: SyncQuarantine | null;
   applied: {
     sources: number;
     concepts: number;
@@ -115,6 +131,30 @@ function buildSnapshotRequestPath(input: {
 function buildSameOriginRequestUrl(path: string): string {
   if (typeof window === 'undefined') return path;
   return new URL(path, window.location.origin).toString();
+}
+
+function readLocalDatasetIdentity(): DatasetIdentity | null {
+  try {
+    return readDatasetIdentity(localStorage.getItem(SYNC_META_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function persistSyncQuarantine(record: SyncQuarantine): void {
+  try {
+    localStorage.setItem(SYNC_QUARANTINE_KEY, JSON.stringify(record));
+  } catch {
+    // ignore (private mode etc.)
+  }
+}
+
+function clearSyncQuarantine(): void {
+  try {
+    localStorage.removeItem(SYNC_QUARANTINE_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 async function fetchConceptDetails(ids: string[]): Promise<Concept[]> {
@@ -169,6 +209,7 @@ async function pullSnapshotFromCloudInner(): Promise<PullResult> {
   let upperCursor: number | null = null;
   let offset = 0;
   let authoritativeEmpty = false;
+  let remoteIdentity: DatasetIdentity | null = null;
   const fullSourceIds = new Set<string>();
   const fullConceptIds = new Set<string>();
 
@@ -192,6 +233,7 @@ async function pullSnapshotFromCloudInner(): Promise<PullResult> {
       throw new Error(`snapshot failed (${res.status}): ${text.slice(0, 200)}`);
     }
     const snap = (await res.json()) as SnapshotResponse;
+    if (snap.dataset) remoteIdentity = snap.dataset;
     if (snap.mode === 'full') {
       fullReconciliation = true;
       if (offset === 0 && snap.pagination) {
@@ -319,20 +361,53 @@ async function pullSnapshotFromCloudInner(): Promise<PullResult> {
     offset = nextOffset;
   }
 
+  let reconcileMode: ReconcileMode = fullReconciliation ? 'destructive_full' : 'delta';
+  let destructiveReconcileBlocked = false;
+  let quarantine: SyncQuarantine | null = null;
+
   if (fullReconciliation) {
     const [localSourceIds, localConceptIds] = await Promise.all([
       db.sources.toCollection().primaryKeys(),
       db.concepts.toCollection().primaryKeys(),
     ]);
-    const staleSourceIds = localSourceIds.filter((id) => !fullSourceIds.has(String(id)));
-    const staleConceptIds = localConceptIds.filter((id) => !fullConceptIds.has(String(id)));
-    if (staleSourceIds.length > 0) {
-      await db.sources.bulkDelete(staleSourceIds.map(String));
-      applied.sources += staleSourceIds.length;
+    const plan = planFullReconciliation({
+      hadLocalCursor: initialCursor !== null,
+      hadLocalBinding: initialCursor !== null || readLocalDatasetIdentity() !== null,
+      localIdentity: readLocalDatasetIdentity(),
+      remoteIdentity,
+      localSourceIds,
+      localConceptIds,
+      remoteSourceIds: fullSourceIds,
+      remoteConceptIds: fullConceptIds,
+    });
+    const deletes = resolveDestructiveDeletes(plan);
+    reconcileMode = plan.allowDestructiveDelete ? 'destructive_full' : 'merge_only';
+    if (deletes.sourceIdsToDelete.length > 0) {
+      await db.sources.bulkDelete(deletes.sourceIdsToDelete);
+      applied.sources += deletes.sourceIdsToDelete.length;
     }
-    if (staleConceptIds.length > 0) {
-      await db.concepts.bulkDelete(staleConceptIds.map(String));
-      applied.concepts += staleConceptIds.length;
+    if (deletes.conceptIdsToDelete.length > 0) {
+      await db.concepts.bulkDelete(deletes.conceptIdsToDelete);
+      applied.concepts += deletes.conceptIdsToDelete.length;
+    }
+    if (deletes.blocked) {
+      destructiveReconcileBlocked = true;
+      quarantine = buildQuarantineRecord({
+        at: pulledAt,
+        reason: plan.reason,
+        staleSourceIds: plan.staleSourceIds,
+        staleConceptIds: plan.staleConceptIds,
+        localCursor: initialCursor,
+        remoteCursor: upperCursor,
+      });
+      persistSyncQuarantine(quarantine);
+      console.warn('[cloud-sync] ' + DESTRUCTIVE_RECONCILE_BLOCKED, {
+        reason: plan.reason,
+        staleSourceCount: quarantine.staleSourceCount,
+        staleConceptCount: quarantine.staleConceptCount,
+      });
+    } else {
+      clearSyncQuarantine();
     }
   }
 
@@ -342,7 +417,15 @@ async function pullSnapshotFromCloudInner(): Promise<PullResult> {
     // ignore (private mode etc.)
   }
 
-  return { pulledAt, authoritativeEmpty, applied, skipped };
+  return {
+    pulledAt,
+    authoritativeEmpty,
+    reconcileMode,
+    destructiveReconcileBlocked,
+    quarantine,
+    applied,
+    skipped,
+  };
 }
 
 export function getLastSyncCursor(): number | null {

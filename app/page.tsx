@@ -238,6 +238,17 @@ export default function Page() {
         const { pullSnapshotFromCloud } = await import('@/lib/cloud-sync');
         const pullResult = await pullSnapshotFromCloud();
         cloudAuthorityEmpty = pullResult.authoritativeEmpty;
+        if (pullResult.destructiveReconcileBlocked && pullResult.quarantine) {
+          const isolated =
+            pullResult.quarantine.staleSourceCount + pullResult.quarantine.staleConceptCount;
+          useAppStore
+            .getState()
+            .showToast(
+              `云端全量快照未经代际验证，已保留本机 ${isolated} 条最后副本，未执行删除`,
+              false,
+              true,
+            );
+        }
       } catch (e) {
         // Non-fatal: local-only mode still works.
         console.warn('[cloud-sync] snapshot pull failed:', e);
@@ -738,7 +749,19 @@ export default function Page() {
       <PullToRefresh
         onRefresh={async () => {
           const { pullSnapshotFromCloud } = await import('@/lib/cloud-sync');
-          await pullSnapshotFromCloud();
+          const pullResult = await pullSnapshotFromCloud();
+          if (pullResult.destructiveReconcileBlocked && pullResult.quarantine) {
+            const isolated =
+              pullResult.quarantine.staleSourceCount + pullResult.quarantine.staleConceptCount;
+            useAppStore
+              .getState()
+              .showToast(
+                `云端全量快照未经代际验证，已保留本机 ${isolated} 条最后副本，未执行删除`,
+                false,
+                true,
+              );
+            return;
+          }
           useAppStore.getState().showToast('数据已刷新');
         }}
       />

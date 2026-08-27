@@ -66,7 +66,7 @@ Architectural boundaries between server-side and client-side code are enforced v
 - Client-side code should call `app/api/**` routes instead of importing server modules directly.
 - API routes must NOT import `lib/db.ts` (Dexie/IndexedDB) or `lib/store.ts` (Zustand) — use `lib/server-db.ts` (better-sqlite3) for server-side data access.
 
-**Client-safe modules** (browser-compatible, usable from both client and server): `lib/db.ts`, `lib/store.ts`, `lib/api-client.ts`, `lib/cloud-sync.ts`, `lib/format.ts`, `lib/types.ts`, `lib/haptic.ts`, `lib/responsive.ts`, `lib/utils.ts`, `lib/llm-config.ts`, `lib/seed.ts`, `lib/admin-auth-client.ts`, `lib/trace-client.ts`, `lib/github-sync-ui.ts`, `lib/github-sync-poll.ts`, `lib/ask-suggestions.ts`, `lib/categorize-status.ts`, `lib/concept-body-format.ts`, `lib/content-status.ts`, `lib/category-normalization.ts`, `lib/model-history.ts`, `lib/snapshot-merge.ts`, `lib/ingest-core.ts`, `lib/obsidian-import.ts`.
+**Client-safe modules** (browser-compatible, usable from both client and server): `lib/db.ts`, `lib/store.ts`, `lib/api-client.ts`, `lib/cloud-sync.ts`, `lib/sync-reconciliation.ts`, `lib/format.ts`, `lib/types.ts`, `lib/haptic.ts`, `lib/responsive.ts`, `lib/utils.ts`, `lib/llm-config.ts`, `lib/seed.ts`, `lib/admin-auth-client.ts`, `lib/trace-client.ts`, `lib/github-sync-ui.ts`, `lib/github-sync-poll.ts`, `lib/ask-suggestions.ts`, `lib/categorize-status.ts`, `lib/concept-body-format.ts`, `lib/content-status.ts`, `lib/category-normalization.ts`, `lib/model-history.ts`, `lib/snapshot-merge.ts`, `lib/ingest-core.ts`, `lib/obsidian-import.ts`.
 
 ## Incident response runbooks
 

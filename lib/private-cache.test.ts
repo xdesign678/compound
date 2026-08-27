@@ -59,6 +59,8 @@ test('clearPrivateOfflineCache removes all IndexedDB knowledge tables and privat
   const sessionStorage = new MemoryStorage();
   localStorage.setItem('compound_recent_command_items', 'private titles');
   localStorage.setItem('compound_note_draft_123', 'private draft');
+  localStorage.setItem('compound:syncQuarantine', '{"reason":"untrusted_forced_full"}');
+  localStorage.setItem('compound:syncMeta', '{"datasetId":"ds-1"}');
   localStorage.setItem('compound_theme', 'dark');
   sessionStorage.setItem('compound_llm_config', 'private credential');
   const previousWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
@@ -74,6 +76,8 @@ test('clearPrivateOfflineCache removes all IndexedDB knowledge tables and privat
     assert.deepEqual(transactionTables, [sources, concepts, activity, askHistory]);
     assert.equal(localStorage.getItem('compound_recent_command_items'), null);
     assert.equal(localStorage.getItem('compound_note_draft_123'), null);
+    assert.equal(localStorage.getItem('compound:syncQuarantine'), null);
+    assert.equal(localStorage.getItem('compound:syncMeta'), null);
     assert.equal(sessionStorage.getItem('compound_llm_config'), null);
     assert.equal(localStorage.getItem('compound_theme'), 'dark');
   } finally {

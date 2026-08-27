@@ -3,6 +3,8 @@ import { getDb, type CompoundDB } from './db';
 const PRIVATE_STORAGE_KEYS = [
   'compound:lastSyncCursor',
   'compound:offline-since',
+  'compound:syncMeta',
+  'compound:syncQuarantine',
   'compound_active_lint_run',
   'compound_active_repair_run',
   'compound_admin_token',
