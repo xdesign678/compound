@@ -871,7 +871,12 @@ Source: [`app/api/wiki/export/route.ts`](../app/api/wiki/export/route.ts)
 
 #### GET
 
-_No JSDoc comment found above the `GET` handler. Add a leading `/** ... */` block in `app/api/wiki/export/route.ts` to document this endpoint._
+GET /api/wiki/export
+Export the current Wiki as Markdown files plus graph/topic JSON. The payload
+`{ ok, files: [{ path, content }] }` can be downloaded from Data settings
+and re-imported via `/api/wiki/import`.
+
+Guards: admin token.
 
 ### `/api/wiki/health`
 

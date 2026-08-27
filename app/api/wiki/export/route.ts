@@ -27,6 +27,14 @@ function yamlArray(values: string[]): string {
   return `[${values.map((value) => yamlString(value)).join(', ')}]`;
 }
 
+/**
+ * GET /api/wiki/export
+ * Export the current Wiki as Markdown files plus graph/topic JSON. The payload
+ * `{ ok, files: [{ path, content }] }` can be downloaded from Data settings
+ * and re-imported via `/api/wiki/import`.
+ *
+ * Guards: admin token.
+ */
 export async function GET(req: Request) {
   const denied = requireAdmin(req);
   if (denied) return denied;

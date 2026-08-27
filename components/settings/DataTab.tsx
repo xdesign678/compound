@@ -3,12 +3,23 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useAppStore } from '@/lib/store';
-import { lintWiki } from '@/lib/api-client';
+import { exportWiki, lintWiki } from '@/lib/api-client';
 import { getDb } from '@/lib/db';
+import { formatRelativeTime } from '@/lib/format';
 import { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } from '@/lib/seed';
 import type { LintResponse } from '@/lib/types';
+import {
+  LAST_WIKI_EXPORT_KEY,
+  buildWikiExportFilename,
+  readLastWikiExport,
+  serializeWikiExport,
+  triggerJsonDownload,
+  writeLastWikiExport,
+  type LastWikiExport,
+} from '@/lib/wiki-export-client';
 import { Icon } from '../Icons';
 import { readRecentImports, type RecentImportEntry } from '../ImportProgress';
+import { WikiExportPanel } from './WikiExportPanel';
 
 export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
   const openConcept = useAppStore((s) => s.openConcept);
@@ -24,6 +35,9 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
 
   const [lintResult, setLintResult] = useState<LintResponse | null>(null);
   const [lintLoading, setLintLoading] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [lastExport, setLastExport] = useState<LastWikiExport | null>(null);
   const [confirming, setConfirming] = useState<'seed' | 'clear' | 'sample' | null>(null);
   const [dataAction, setDataAction] = useState<'seed' | 'clear' | 'sample' | null>(null);
   const [recentImports, setRecentImports] = useState<RecentImportEntry[]>([]);
@@ -31,6 +45,11 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
 
   useEffect(() => {
     setRecentImports(readRecentImports());
+    try {
+      setLastExport(readLastWikiExport(window.localStorage.getItem(LAST_WIKI_EXPORT_KEY)));
+    } catch {
+      setLastExport(null);
+    }
   }, []);
 
   const safeTimeout = useCallback((fn: () => void, ms: number) => {
@@ -38,6 +57,37 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
     timersRef.current.push(id);
     return id;
   }, []);
+
+  async function handleExport() {
+    setExportLoading(true);
+    setExportError(null);
+    showToast('正在导出 Wiki…', true);
+    try {
+      const payload = await exportWiki();
+      const filename = buildWikiExportFilename();
+      triggerJsonDownload(filename, serializeWikiExport(payload.files));
+      const record: LastWikiExport = {
+        at: Date.now(),
+        fileCount: payload.files.length,
+        filename,
+      };
+      try {
+        window.localStorage.setItem(LAST_WIKI_EXPORT_KEY, writeLastWikiExport(record));
+      } catch {
+        // ignore private-mode storage
+      }
+      setLastExport(record);
+      showToast(`已导出 ${payload.files.length} 个文件`, false);
+      safeTimeout(() => hideToast(), 3000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const errorText = `导出失败: ${msg.slice(0, 120)}`;
+      setExportError(errorText);
+      showErrorToast(errorText, () => handleExport());
+    } finally {
+      setExportLoading(false);
+    }
+  }
 
   async function handleLint() {
     setLintLoading(true);
@@ -124,11 +174,24 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
         </div>
         <div>
           <div className="settings-card-title">Wiki 维护</div>
-          <div className="settings-card-desc">体检结构问题，找出矛盾和缺失链接。</div>
+          <div className="settings-card-desc">导出 Markdown 备份，或体检结构问题。</div>
         </div>
       </div>
 
-      <div className="settings-tool-row settings-card-head-adjacent">
+      <WikiExportPanel
+        loading={exportLoading}
+        error={exportError}
+        lastExportLabel={
+          lastExport
+            ? `${formatRelativeTime(lastExport.at)} · ${lastExport.fileCount} 个文件`
+            : null
+        }
+        onExport={() => {
+          void handleExport();
+        }}
+      />
+
+      <div className="settings-tool-row">
         <div>
           <div className="settings-tool-title">Lint · Wiki 体检</div>
           <div className="settings-card-desc">找出矛盾、孤立页和缺失链接</div>

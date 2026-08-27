@@ -28,6 +28,7 @@ import type {
   CategoryWikiRunStatusResponse,
   CategoryWikiRunSummary,
 } from './types';
+import type { WikiExportPayload } from './wiki-export-client';
 
 const CLIENT_CANDIDATE_LIMIT = 320;
 const QUERY_CANDIDATE_LIMIT = 50;
@@ -768,6 +769,25 @@ export async function pruneDeletedConcepts(ids: string[]): Promise<void> {
   if (!ids || ids.length === 0) return;
   const db = getDb();
   await db.concepts.bulkDelete(ids);
+}
+
+export async function exportWiki(): Promise<WikiExportPayload> {
+  const res = await fetch('/api/wiki/export', {
+    cache: 'no-store',
+    headers: {
+      'X-Request-ID': generateClientRequestId(),
+      ...getAdminAuthHeaders(),
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 200) || `Wiki 导出失败 (${res.status})`);
+  }
+  const data = (await res.json()) as { ok?: boolean; files?: WikiExportPayload['files'] };
+  if (data?.ok !== true || !Array.isArray(data.files)) {
+    throw new Error('Wiki 导出响应无效');
+  }
+  return { ok: true, files: data.files };
 }
 
 export async function lintWiki(activityId?: string): Promise<LintResponse> {
