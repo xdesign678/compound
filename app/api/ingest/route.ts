@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { apiError } from '@/lib/api-error';
 import { IngestOperationHttpError } from '@/lib/ingest-operations';
-import { ingestSourceToServerDb } from '@/lib/server-ingest';
+import { ingestSourceToServerDbDetailed } from '@/lib/server-ingest';
 import { requireAdmin } from '@/lib/server-auth';
 import { llmRateLimit } from '@/lib/rate-limit';
 import {
@@ -63,9 +63,18 @@ export const POST = withRequestTracing(async (req: Request) => {
       return NextResponse.json({ error: 'Too many existing concepts' }, { status: 400 });
     }
 
+    if (body.operationId !== undefined) {
+      if (typeof body.operationId !== 'string') {
+        return NextResponse.json(
+          { error: 'operationId must be a string', code: 'invalid_operation_id' },
+          { status: 400 },
+        );
+      }
+    }
+
     const llmConfig = readLlmConfigOverride(req, body);
 
-    const result = await ingestSourceToServerDb({
+    const execution = await ingestSourceToServerDbDetailed({
       title: body.source.title,
       type: body.source.type,
       author: body.source.author,
@@ -77,22 +86,24 @@ export const POST = withRequestTracing(async (req: Request) => {
       operationId: body.operationId,
     });
 
-    try {
-      const { queueSourceEnhancementJobs, startAnalysisWorker } =
-        await import('@/lib/analysis-worker');
-      queueSourceEnhancementJobs({
-        sourceId: result.sourceId,
-        sourcePath: result.source.title,
-      });
-      startAnalysisWorker('manual_ingest');
-    } catch (error) {
-      logger.warn('ingest.post_jobs_queue_failed', {
-        sourceId: result.sourceId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    if (!execution.replayed) {
+      try {
+        const { queueSourceEnhancementJobs, startAnalysisWorker } =
+          await import('@/lib/analysis-worker');
+        queueSourceEnhancementJobs({
+          sourceId: execution.result.sourceId,
+          sourcePath: execution.result.source.title,
+        });
+        startAnalysisWorker('manual_ingest');
+      } catch (error) {
+        logger.warn('ingest.post_jobs_queue_failed', {
+          sourceId: execution.result.sourceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json(execution.result);
   } catch (err) {
     if (err instanceof IngestOperationHttpError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });

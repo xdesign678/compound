@@ -24,6 +24,12 @@ export function useOnlineStatus() {
     }
     setOnline(navigator.onLine);
 
+    const replayOutbox = () => {
+      void import('@/lib/api-client')
+        .then((mod) => mod.replayDurableIngestOutboxIfAuthorized())
+        .catch(() => {});
+    };
+
     const triggerSync = () => {
       import('@/lib/cloud-sync')
         .then((mod) => {
@@ -32,14 +38,15 @@ export function useOnlineStatus() {
         .catch(() => {});
     };
 
+    if (navigator.onLine) {
+      replayOutbox();
+    }
+
     const onOnline = () => {
       window.localStorage.removeItem(OFFLINE_SINCE_KEY);
       setOnline(true);
       void useAppStore.getState().replayPausedOfflineTasks();
-      void import('@/lib/api-client')
-        .then((mod) => mod.replayDurableIngestOutbox())
-        .catch(() => {});
-      // 恢复在线时自动同步
+      replayOutbox();
       triggerSync();
     };
     const onOffline = () => {

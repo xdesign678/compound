@@ -2,26 +2,43 @@
  * In-process readiness flag. Fatal crashes and drain start by flipping this
  * so /api/health/ready fails before the process exits.
  *
+ * Stored on globalThis so Next.js chunk reloads share the same flag.
  * Server-only.
  */
 
-let processReady = true;
-let unreadinessReason: string | null = null;
+const PROCESS_READINESS_KEY = '__compound_process_readiness__';
+
+interface ProcessReadinessState {
+  ready: boolean;
+  reason: string | null;
+}
+
+function readinessState(): ProcessReadinessState {
+  const holder = globalThis as typeof globalThis & {
+    [PROCESS_READINESS_KEY]?: ProcessReadinessState;
+  };
+  if (!holder[PROCESS_READINESS_KEY]) {
+    holder[PROCESS_READINESS_KEY] = { ready: true, reason: null };
+  }
+  return holder[PROCESS_READINESS_KEY];
+}
 
 export function isProcessReady(): boolean {
-  return processReady;
+  return readinessState().ready;
 }
 
 export function getUnreadinessReason(): string | null {
-  return unreadinessReason;
+  return readinessState().reason;
 }
 
 export function markProcessUnready(reason: string): void {
-  processReady = false;
-  unreadinessReason = reason;
+  const state = readinessState();
+  state.ready = false;
+  state.reason = reason;
 }
 
 export function resetProcessReadinessForTests(): void {
-  processReady = true;
-  unreadinessReason = null;
+  const state = readinessState();
+  state.ready = true;
+  state.reason = null;
 }

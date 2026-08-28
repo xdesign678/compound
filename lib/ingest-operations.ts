@@ -5,9 +5,11 @@
  * Server-only.
  */
 import { createHash } from 'node:crypto';
-import { getServerDb } from './server-db';
+import { getServerDb, repo } from './server-db';
+import type { ActivityLog, Concept, Source } from './types';
 
 export const INGEST_OPERATION_LEASE_MS = 5 * 60 * 1000;
+export const INGEST_OPERATION_ID_PATTERN = /^op-[A-Za-z0-9_-]{8,64}$/;
 
 export type IngestOperationStatus = 'processing' | 'succeeded' | 'failed';
 
@@ -29,6 +31,27 @@ export interface CanonicalIngestPayload {
   url?: string;
   rawContent: string;
   externalKey?: string;
+  model?: string;
+  apiUrl?: string;
+  keyFingerprint?: string;
+}
+
+export interface CompactIngestResult {
+  v: 1;
+  sourceId: string;
+  newConceptIds: string[];
+  updatedConceptIds: string[];
+  activityId: string;
+}
+
+export interface HydratedIngestResult {
+  sourceId: string;
+  newConceptIds: string[];
+  updatedConceptIds: string[];
+  activityId: string;
+  source: Source | null;
+  concepts: Concept[];
+  activity: ActivityLog | null;
 }
 
 interface IngestOperationRow {
@@ -41,6 +64,13 @@ interface IngestOperationRow {
   created_at: number;
   updated_at: number;
   lease_until: number | null;
+  attempt_token: number | null;
+}
+
+export function assertValidOperationId(operationId: string): void {
+  if (!INGEST_OPERATION_ID_PATTERN.test(operationId)) {
+    throw new IngestOperationHttpError('invalid operationId', 400, 'invalid_operation_id');
+  }
 }
 
 export function hashIngestPayload(input: CanonicalIngestPayload): string {
@@ -51,15 +81,114 @@ export function hashIngestPayload(input: CanonicalIngestPayload): string {
     url: input.url ?? '',
     rawContent: input.rawContent,
     externalKey: input.externalKey ?? '',
+    model: input.model ?? '',
+    apiUrl: input.apiUrl ?? '',
+    keyFingerprint: input.keyFingerprint ?? '',
   });
   return createHash('sha256').update(canonical).digest('hex');
+}
+
+export function compactIngestResult(result: {
+  sourceId: string;
+  newConceptIds?: string[];
+  updatedConceptIds?: string[];
+  activityId?: string;
+}): CompactIngestResult {
+  return {
+    v: 1,
+    sourceId: result.sourceId,
+    newConceptIds: [...(result.newConceptIds ?? [])],
+    updatedConceptIds: [...(result.updatedConceptIds ?? [])],
+    activityId: result.activityId ?? '',
+  };
+}
+
+export function hydrateIngestResult(result: unknown): HydratedIngestResult {
+  const compact = parseCompactResult(result);
+  const conceptIds = [...compact.newConceptIds, ...compact.updatedConceptIds];
+  const source = compact.sourceId ? repo.getSource(compact.sourceId) : null;
+  const concepts = conceptIds.length > 0 ? repo.getConceptsByIds(conceptIds) : [];
+  const activity = compact.activityId
+    ? (repo.getActivityByIds([compact.activityId])[0] ?? null)
+    : null;
+  return {
+    ...compact,
+    source,
+    concepts,
+    activity,
+  };
+}
+
+function parseCompactResult(result: unknown): CompactIngestResult {
+  if (!result || typeof result !== 'object') {
+    return { v: 1, sourceId: '', newConceptIds: [], updatedConceptIds: [], activityId: '' };
+  }
+  const record = result as Record<string, unknown>;
+  if (typeof record.sourceId === 'string' && record.v === 1) {
+    return {
+      v: 1,
+      sourceId: record.sourceId,
+      newConceptIds: Array.isArray(record.newConceptIds)
+        ? record.newConceptIds.filter((id): id is string => typeof id === 'string')
+        : [],
+      updatedConceptIds: Array.isArray(record.updatedConceptIds)
+        ? record.updatedConceptIds.filter((id): id is string => typeof id === 'string')
+        : [],
+      activityId: typeof record.activityId === 'string' ? record.activityId : '',
+    };
+  }
+  if (typeof record.sourceId === 'string') {
+    return compactIngestResult({
+      sourceId: record.sourceId,
+      newConceptIds: Array.isArray(record.newConceptIds)
+        ? record.newConceptIds.filter((id): id is string => typeof id === 'string')
+        : [],
+      updatedConceptIds: Array.isArray(record.updatedConceptIds)
+        ? record.updatedConceptIds.filter((id): id is string => typeof id === 'string')
+        : [],
+      activityId: typeof record.activityId === 'string' ? record.activityId : '',
+    });
+  }
+  const nestedSource = record.source as { id?: unknown } | undefined;
+  if (nestedSource && typeof nestedSource.id === 'string') {
+    return compactIngestResult({
+      sourceId: nestedSource.id,
+      newConceptIds: Array.isArray(record.newConceptIds)
+        ? record.newConceptIds.filter((id): id is string => typeof id === 'string')
+        : [],
+      updatedConceptIds: Array.isArray(record.updatedConceptIds)
+        ? record.updatedConceptIds.filter((id): id is string => typeof id === 'string')
+        : [],
+      activityId:
+        typeof record.activityId === 'string'
+          ? record.activityId
+          : typeof (record.activity as { id?: unknown } | undefined)?.id === 'string'
+            ? String((record.activity as { id: string }).id)
+            : '',
+    });
+  }
+  return { v: 1, sourceId: '', newConceptIds: [], updatedConceptIds: [], activityId: '' };
+}
+
+function ensureIngestOperationSchema(): void {
+  const db = getServerDb();
+  const columns = new Set(
+    (db.prepare(`PRAGMA table_info(ingest_operations)`).all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    ),
+  );
+  if (!columns.has('attempt_token')) {
+    db.exec(`ALTER TABLE ingest_operations ADD COLUMN attempt_token INTEGER NOT NULL DEFAULT 0`);
+  }
 }
 
 export function beginIngestOperation(
   operationId: string,
   payloadHash: string,
   now = Date.now(),
-): { kind: 'new' } | { kind: 'replay'; result: unknown } {
+): { kind: 'new'; attemptToken: number } | { kind: 'replay'; result: HydratedIngestResult } {
+  assertValidOperationId(operationId);
+  ensureIngestOperationSchema();
   const db = getServerDb();
   const existing = db
     .prepare(`SELECT * FROM ingest_operations WHERE operation_id = ?`)
@@ -69,10 +198,10 @@ export function beginIngestOperation(
     db.prepare(
       `INSERT INTO ingest_operations(
         operation_id, payload_hash, status, result_json, source_id, error,
-        created_at, updated_at, lease_until
-      ) VALUES (?, ?, 'processing', NULL, NULL, NULL, ?, ?, ?)`,
+        created_at, updated_at, lease_until, attempt_token
+      ) VALUES (?, ?, 'processing', NULL, NULL, NULL, ?, ?, ?, 1)`,
     ).run(operationId, payloadHash, now, now, now + INGEST_OPERATION_LEASE_MS);
-    return { kind: 'new' };
+    return { kind: 'new', attemptToken: 1 };
   }
 
   if (existing.payload_hash !== payloadHash) {
@@ -84,7 +213,10 @@ export function beginIngestOperation(
   }
 
   if (existing.status === 'succeeded' && existing.result_json) {
-    return { kind: 'replay', result: JSON.parse(existing.result_json) as unknown };
+    return {
+      kind: 'replay',
+      result: hydrateIngestResult(JSON.parse(existing.result_json) as unknown),
+    };
   }
 
   if (
@@ -99,28 +231,40 @@ export function beginIngestOperation(
     );
   }
 
-  db.prepare(
-    `UPDATE ingest_operations
-     SET status = 'processing', error = NULL, updated_at = ?, lease_until = ?
-     WHERE operation_id = ?`,
-  ).run(now, now + INGEST_OPERATION_LEASE_MS, operationId);
-  return { kind: 'new' };
+  const updated = db
+    .prepare(
+      `UPDATE ingest_operations
+       SET status = 'processing', error = NULL, updated_at = ?, lease_until = ?,
+           attempt_token = COALESCE(attempt_token, 0) + 1
+       WHERE operation_id = ?
+       RETURNING attempt_token`,
+    )
+    .get(now, now + INGEST_OPERATION_LEASE_MS, operationId) as { attempt_token: number };
+  return { kind: 'new', attemptToken: updated.attempt_token };
 }
 
 export function completeIngestOperation(
   operationId: string,
-  result: { sourceId: string },
+  result: {
+    sourceId: string;
+    newConceptIds?: string[];
+    updatedConceptIds?: string[];
+    activityId?: string;
+  },
+  attemptToken: number,
   now = Date.now(),
 ): void {
-  const payload = JSON.stringify(result);
+  ensureIngestOperationSchema();
+  const compact = compactIngestResult(result);
+  const payload = JSON.stringify(compact);
   const outcome = getServerDb()
     .prepare(
       `UPDATE ingest_operations
        SET status = 'succeeded', result_json = ?, source_id = ?, error = NULL,
            updated_at = ?, lease_until = NULL
-       WHERE operation_id = ? AND status = 'processing'`,
+       WHERE operation_id = ? AND status = 'processing' AND attempt_token = ?`,
     )
-    .run(payload, result.sourceId, now, operationId);
+    .run(payload, compact.sourceId, now, operationId, attemptToken);
   if (outcome.changes === 0) {
     throw new IngestOperationHttpError(
       'operation lease lost before success was recorded',
@@ -130,13 +274,27 @@ export function completeIngestOperation(
   }
 }
 
-export function failIngestOperation(operationId: string, error: unknown, now = Date.now()): void {
+export function failIngestOperation(
+  operationId: string,
+  error: unknown,
+  attemptToken?: number,
+  now = Date.now(),
+): void {
+  ensureIngestOperationSchema();
   const message = error instanceof Error ? error.message : String(error);
+  if (typeof attemptToken !== 'number') return;
   getServerDb()
     .prepare(
       `UPDATE ingest_operations
        SET status = 'failed', error = ?, updated_at = ?, lease_until = NULL
-       WHERE operation_id = ? AND status = 'processing'`,
+       WHERE operation_id = ? AND status = 'processing' AND attempt_token = ?`,
     )
-    .run(message.slice(0, 500), now, operationId);
+    .run(message.slice(0, 500), now, operationId, attemptToken);
+}
+
+export function readIngestOperationRow(operationId: string): IngestOperationRow | undefined {
+  ensureIngestOperationSchema();
+  return getServerDb()
+    .prepare(`SELECT * FROM ingest_operations WHERE operation_id = ?`)
+    .get(operationId) as IngestOperationRow | undefined;
 }

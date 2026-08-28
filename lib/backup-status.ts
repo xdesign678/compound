@@ -12,6 +12,8 @@ import path from 'node:path';
 export const BACKUP_STALE_AFTER_MS = 26 * 60 * 60 * 1000;
 const BACKUP_NAME = /^compound-\d{4}-.*\.db$/;
 
+export type VolumeRelation = 'same' | 'different' | 'unknown';
+
 export interface BackupStatus {
   present: boolean;
   latestCreatedAt: string | null;
@@ -21,7 +23,8 @@ export interface BackupStatus {
   checksumOk: boolean | null;
   bytes: number | null;
   file: string | null;
-  sameVolumeAsDataDir: boolean;
+  sameVolumeAsDataDir: boolean | null;
+  volumeRelation: VolumeRelation;
   offsiteConfigured: boolean;
   offsiteVerified: false;
 }
@@ -32,13 +35,41 @@ function sha256File(filePath: string): string {
   return createHash('sha256').update(readFileSync(filePath)).digest('hex');
 }
 
-export function isPathInsideDirectory(parent: string, child: string): boolean {
-  const relative = path.relative(parent, child);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+export function resolveExistingPathDevice(targetPath: string): {
+  path: string;
+  dev: number | null;
+  unknown: boolean;
+} {
+  let current = path.resolve(targetPath);
+  while (true) {
+    try {
+      return { path: current, dev: statSync(current).dev, unknown: false };
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) return { path: current, dev: null, unknown: true };
+      current = parent;
+    }
+  }
+}
+
+export function compareVolumeDevices(
+  dataDir: string,
+  backupDir: string,
+): { sameVolumeAsDataDir: boolean | null; volumeRelation: VolumeRelation } {
+  const data = resolveExistingPathDevice(dataDir);
+  const backup = resolveExistingPathDevice(backupDir);
+  if (data.unknown || backup.unknown || data.dev == null || backup.dev == null) {
+    return { sameVolumeAsDataDir: null, volumeRelation: 'unknown' };
+  }
+  if (data.dev === backup.dev) {
+    return { sameVolumeAsDataDir: true, volumeRelation: 'same' };
+  }
+  return { sameVolumeAsDataDir: false, volumeRelation: 'different' };
 }
 
 function emptyStatus(input: {
-  sameVolumeAsDataDir: boolean;
+  sameVolumeAsDataDir: boolean | null;
+  volumeRelation: VolumeRelation;
   offsiteConfigured: boolean;
 }): BackupStatus {
   return {
@@ -51,6 +82,7 @@ function emptyStatus(input: {
     bytes: null,
     file: null,
     sameVolumeAsDataDir: input.sameVolumeAsDataDir,
+    volumeRelation: input.volumeRelation,
     offsiteConfigured: input.offsiteConfigured,
     offsiteVerified: false,
   };
@@ -73,8 +105,12 @@ export function inspectLocalBackupStatus(
   const offsiteConfigured = Boolean(
     (options.offsiteUri ?? process.env.COMPOUND_BACKUP_OFFSITE_URI ?? '').trim(),
   );
-  const sameVolumeAsDataDir = isPathInsideDirectory(dataDir, backupDir);
-  const empty = emptyStatus({ sameVolumeAsDataDir, offsiteConfigured });
+  const volume = compareVolumeDevices(dataDir, backupDir);
+  const empty = emptyStatus({
+    sameVolumeAsDataDir: volume.sameVolumeAsDataDir,
+    volumeRelation: volume.volumeRelation,
+    offsiteConfigured,
+  });
   if (!existsSync(backupDir)) return empty;
 
   const backups = readdirSync(backupDir)
@@ -125,7 +161,8 @@ export function inspectLocalBackupStatus(
     checksumOk,
     bytes: statSync(latest.filePath).size,
     file: latest.name,
-    sameVolumeAsDataDir,
+    sameVolumeAsDataDir: volume.sameVolumeAsDataDir,
+    volumeRelation: volume.volumeRelation,
     offsiteConfigured,
     offsiteVerified: false,
   };
@@ -140,6 +177,7 @@ export function toPublicBackupStatus(status: BackupStatus): PublicBackupStatus {
     checksumPresent: status.checksumPresent,
     checksumOk: status.checksumOk,
     sameVolumeAsDataDir: status.sameVolumeAsDataDir,
+    volumeRelation: status.volumeRelation,
     offsiteConfigured: status.offsiteConfigured,
     offsiteVerified: status.offsiteVerified,
   };

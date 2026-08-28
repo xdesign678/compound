@@ -14,6 +14,10 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useRouter } from 'next/navigation';
 import { getDb } from '@/lib/db';
 import { searchWikiContext } from '@/lib/api-client';
+import {
+  WIKI_REMOTE_SEARCH_DEBOUNCE_MS,
+  createStaleRequestGuard,
+} from '@/lib/wiki-search-schedule';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { getUnreviewedCountFromDb } from '@/lib/review-picks';
@@ -79,6 +83,7 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   const [serverConcepts, setServerConcepts] = useState<Concept[] | null>(null);
   const [serverSearchLoading, setServerSearchLoading] = useState(false);
   const scrollRestoredRef = useRef(false);
+  const remoteSearchGuardRef = useRef(createStaleRequestGuard());
 
   const handleWikiScroll = useCallback((scrollTop: number) => {
     useAppStore.getState().setWikiState({ scrollTop });
@@ -133,42 +138,44 @@ export function WikiView({ scrollRootSelector = '.app-main' }: WikiViewProps) {
   }, [deferredQuery]);
 
   useEffect(() => {
-    const q = deferredQuery.trim();
+    const q = query.trim();
     if (!q) {
       setServerConcepts(null);
       setServerSearchLoading(false);
       return;
     }
 
-    let cancelled = false;
     const controller = new AbortController();
+    const generation = remoteSearchGuardRef.current.next();
     setServerSearchLoading(true);
-    searchWikiContext({
-      query: q,
-      conceptLimit: visibleCount,
-      chunkLimit: 8,
-      signal: controller.signal,
-    })
-      .then((result) => {
-        if (cancelled) return;
-        setServerConcepts(result.concepts);
-        if (result.concepts.length > 0) {
-          void getDb().concepts.bulkPut(
-            result.concepts.map((concept) => ({ ...concept, contentStatus: 'full' as const })),
-          );
-        }
+    const timer = window.setTimeout(() => {
+      searchWikiContext({
+        query: q,
+        conceptLimit: visibleCount,
+        chunkLimit: 8,
+        signal: controller.signal,
       })
-      .catch(() => {
-        if (!cancelled) setServerConcepts(null);
-      })
-      .finally(() => {
-        if (!cancelled) setServerSearchLoading(false);
-      });
+        .then((result) => {
+          if (!remoteSearchGuardRef.current.isCurrent(generation)) return;
+          setServerConcepts(result.concepts);
+          if (result.concepts.length > 0) {
+            void getDb().concepts.bulkPut(
+              result.concepts.map((concept) => ({ ...concept, contentStatus: 'full' as const })),
+            );
+          }
+        })
+        .catch(() => {
+          if (remoteSearchGuardRef.current.isCurrent(generation)) setServerConcepts(null);
+        })
+        .finally(() => {
+          if (remoteSearchGuardRef.current.isCurrent(generation)) setServerSearchLoading(false);
+        });
+    }, WIKI_REMOTE_SEARCH_DEBOUNCE_MS);
     return () => {
-      cancelled = true;
+      window.clearTimeout(timer);
       controller.abort();
     };
-  }, [deferredQuery, visibleCount]);
+  }, [query, visibleCount]);
 
   useEffect(() => {
     getUnreviewedCountFromDb().then(setUnreviewedCount);

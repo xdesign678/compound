@@ -83,8 +83,17 @@ export function registerGlobalCrashGuards(): void {
   });
 
   process.on('uncaughtException', (err) => {
-    handleProcessCrash('uncaughtException', err);
-    process.exitCode = 1;
-    process.exit(1);
+    handleUncaughtExceptionAndStop(err);
   });
+}
+
+export function handleUncaughtExceptionAndStop(
+  err: unknown,
+  exitProcess: (code: number) => never | void = (code) => {
+    process.exit(code);
+  },
+): void {
+  handleProcessCrash('uncaughtException', err);
+  process.exitCode = 1;
+  exitProcess(1);
 }

@@ -5,6 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useAppStore } from '@/lib/store';
 import { exportWiki, lintWiki } from '@/lib/api-client';
 import { getDb } from '@/lib/db';
+import { resetLocalKnowledgeCache } from '@/lib/private-cache';
 import { formatRelativeTime } from '@/lib/format';
 import { SEED_SOURCES, SEED_CONCEPTS, SEED_ACTIVITY } from '@/lib/seed';
 import type { LintResponse } from '@/lib/types';
@@ -125,44 +126,44 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
     }
   }
 
-  async function clearAll() {
-    setDataAction('clear');
-    const db = getDb();
+  async function reloadFromServer(): Promise<void> {
+    const { pullSnapshotFromCloud } = await import('@/lib/cloud-sync');
+    await pullSnapshotFromCloud();
+  }
+
+  async function resetLocalAndReload(kind: 'clear' | 'sample'): Promise<void> {
+    setDataAction(kind);
     try {
-      await db.sources.clear();
-      await db.concepts.clear();
-      await db.activity.clear();
-      await db.askHistory.clear();
+      await resetLocalKnowledgeCache();
       clearFresh();
-      localStorage.removeItem('compound_is_sample');
       setLintResult(null);
-      setConfirming(null);
-      onCloseAction();
-      showToast('已清空所有数据', false);
-      safeTimeout(() => hideToast(), 2500);
+      try {
+        await reloadFromServer();
+        setConfirming(null);
+        onCloseAction();
+        showToast(
+          kind === 'sample' ? '示例缓存已清除，已从服务器重载' : '本机缓存已重置，已从服务器重载',
+          false,
+        );
+        safeTimeout(() => hideToast(), 2500);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        showErrorToast(
+          `本机已清空，但服务器重载失败：${msg.slice(0, 120)}，可重试。`,
+          () => void resetLocalAndReload(kind),
+        );
+      }
     } finally {
       setDataAction(null);
     }
   }
 
+  async function clearAll() {
+    await resetLocalAndReload('clear');
+  }
+
   async function clearSample() {
-    setDataAction('sample');
-    const db = getDb();
-    try {
-      await db.sources.clear();
-      await db.concepts.clear();
-      await db.activity.clear();
-      await db.askHistory.clear();
-      clearFresh();
-      localStorage.removeItem('compound_is_sample');
-      setLintResult(null);
-      setConfirming(null);
-      onCloseAction();
-      showToast('示例数据已清除', false);
-      safeTimeout(() => hideToast(), 2500);
-    } finally {
-      setDataAction(null);
-    }
+    await resetLocalAndReload('sample');
   }
 
   return (
@@ -332,11 +333,11 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
         <div
           className="settings-confirm-block settings-confirm-danger"
           role="group"
-          aria-label="确认清空所有数据"
+          aria-label="确认重置本机缓存"
         >
           <p className="modal-desc">
-            <strong>确认清空所有数据。</strong>
-            本操作会删除所有资料、概念页、问答记录和活动日志，且不可撤销。
+            <strong>确认重置本机缓存并从服务器重载。</strong>
+            这会清掉本机资料、概念、问答、活动、离线队列和同步游标，然后拉一次完整快照。不会删除服务器上的知识。
           </p>
           <button
             className="modal-btn primary danger-confirm"
@@ -344,7 +345,7 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
             onClick={clearAll}
             disabled={dataAction !== null}
           >
-            {dataAction === 'clear' ? '清空中…' : '确认清空'}
+            {dataAction === 'clear' ? '重置中…' : '确认重置并重载'}
           </button>
           <button
             className="modal-btn"
@@ -363,7 +364,7 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
         >
           <p className="modal-desc">
             <strong>确认清除示例数据。</strong>
-            清除后会从空白知识库重新开始。
+            会重置本机缓存并避免立即重新种回示例，然后从服务器重载。
           </p>
           <button
             className="modal-btn primary danger-confirm"
@@ -401,7 +402,7 @@ export function DataTab({ onCloseAction }: { onCloseAction: () => void }) {
             载入示例 Wiki
           </button>
           <button className="modal-btn danger" type="button" onClick={() => setConfirming('clear')}>
-            清空所有数据
+            重置本机缓存并重载
           </button>
         </div>
       )}

@@ -5,7 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 
-import { BACKUP_STALE_AFTER_MS, inspectLocalBackupStatus } from './backup-status';
+import {
+  BACKUP_STALE_AFTER_MS,
+  compareVolumeDevices,
+  inspectLocalBackupStatus,
+} from './backup-status';
 
 function writeBackup(dir: string, name: string, body: string, createdAt: string, sha?: string) {
   const filePath = path.join(dir, name);
@@ -42,7 +46,8 @@ test('inspectLocalBackupStatus reports a fresh checksummed backup', () => {
   assert.equal(status.stale, false);
   assert.equal(status.checksumPresent, true);
   assert.equal(status.checksumOk, true);
-  assert.equal(status.sameVolumeAsDataDir, false);
+  assert.equal(status.sameVolumeAsDataDir, true);
+  assert.equal(status.volumeRelation, 'same');
   assert.equal(status.offsiteConfigured, false);
   assert.equal(status.offsiteVerified, false);
   assert.equal(status.ageSeconds, 3600);
@@ -66,6 +71,7 @@ test('inspectLocalBackupStatus marks missing checksum or old backups stale', () 
   assert.equal(status.checksumPresent, false);
   assert.equal(status.stale, true);
   assert.equal(status.sameVolumeAsDataDir, true);
+  assert.equal(status.volumeRelation, 'same');
 });
 
 test('inspectLocalBackupStatus treats a missing backup directory as stale', () => {
@@ -82,4 +88,22 @@ test('inspectLocalBackupStatus treats a missing backup directory as stale', () =
   assert.equal(status.offsiteConfigured, true);
   assert.equal(status.offsiteVerified, false);
   assert.ok(BACKUP_STALE_AFTER_MS > 24 * 60 * 60 * 1000);
+  assert.equal(status.volumeRelation, 'same');
+});
+
+test('missing backup directory uses the nearest existing parent and is not off-volume', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'compound-backup-volume-'));
+  const dataDir = path.join(root, 'data');
+  mkdirSync(dataDir, { recursive: true });
+  const status = inspectLocalBackupStatus({
+    dataDir,
+    backupDir: path.join(root, 'backups-not-created-yet'),
+    now: Date.now(),
+  });
+  assert.equal(status.present, false);
+  assert.notEqual(status.sameVolumeAsDataDir, false);
+  assert.equal(status.volumeRelation, 'same');
+  const sibling = compareVolumeDevices(dataDir, path.join(root, 'also-missing'));
+  assert.equal(sibling.volumeRelation, 'same');
+  assert.equal(sibling.sameVolumeAsDataDir, true);
 });

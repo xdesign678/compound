@@ -38,7 +38,15 @@ async function stubEmptySnapshot(page: Page) {
       body: JSON.stringify({
         fetchedAt: Date.now(),
         mode: 'full',
-        pagination: { limit: 1000, offset: 0, totalSources: 0, totalConcepts: 0 },
+        dataset: { datasetId: 'story-empty-dataset', generation: 1 },
+        pagination: {
+          limit: 1000,
+          offset: 0,
+          totalSources: 0,
+          totalConcepts: 0,
+          totalActivity: 0,
+          totalAsk: 0,
+        },
         counts: { sources: 0, concepts: 0, activity: 0, ask: 0 },
         sources: [],
         concepts: [],

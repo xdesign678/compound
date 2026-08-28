@@ -246,6 +246,8 @@ Returns a stable full snapshot or an incremental change delta after `?cursor=...
 Full snapshots use `?beforeCursor=...` for stable pagination and return the
 authoritative cursor that clients persist for the next pull.
 Supports `?limit=N&offset=M` for pagination (defaults: limit=5000, offset=0).
+Full snapshots paginate sources, concepts, activity, and ask with the same
+offset/limit and expose `totalSources/totalConcepts/totalActivity/totalAsk`.
 Full concept bodies / source raw content are fetched on demand by detail views
 and heavy workflows such as ask / categorize.
 
@@ -305,6 +307,9 @@ Source: [`app/api/health/ready/route.ts`](../app/api/health/ready/route.ts)
 GET /api/health/ready
 Readiness probe. Public body is only `{ status, probe }`. Detailed failure
 reasons are written to authenticated logs, not the response.
+
+Checks process liveness, SQLite readability, critical schema/meta, and that
+DATA_DIR is writable. A missing backup directory is not a ready failure.
 
 ### `/api/health`
 

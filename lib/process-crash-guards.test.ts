@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   describeCrashReason,
   handleProcessCrash,
+  handleUncaughtExceptionAndStop,
   registerGlobalCrashGuards,
 } from './process-crash-guards';
 import { isProcessReady, resetProcessReadinessForTests } from './process-readiness';
@@ -84,6 +85,20 @@ test('handleProcessCrash marks readiness failed on uncaughtException without exi
   const payload = JSON.parse(lines[0]) as Record<string, unknown>;
   assert.equal(payload.msg, 'process.uncaught_exception');
   assert.equal(payload.name, 'RangeError');
+});
+
+test('uncaughtException listener control flow marks unready and requests exit without killing tests', () => {
+  resetProcessReadinessForTests();
+  const previousExitCode = process.exitCode;
+  let exitCode: number | null = null;
+  handleUncaughtExceptionAndStop(new Error('listener boom'), (code: number) => {
+    exitCode = code;
+  });
+  assert.equal(exitCode, 1);
+  assert.equal(process.exitCode, 1);
+  assert.equal(isProcessReady(), false);
+  resetProcessReadinessForTests();
+  process.exitCode = previousExitCode;
 });
 
 test('registerGlobalCrashGuards is idempotent and wires both listeners once', () => {

@@ -182,7 +182,7 @@ export function NoteEditor({ onDone, onCancel, disabled = false, draftId }: Note
           disabled={!hasContent || disabled}
           onClick={handleDone}
         >
-          {disabled ? '离线中' : '完成'}
+          完成
         </button>
       </div>
 

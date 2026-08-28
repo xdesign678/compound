@@ -260,7 +260,13 @@ async function postJSON<T>(
         throw new Error('请求过于频繁，请稍后重试（可切换模型或减少并发）');
       }
       if (res.status === 401 || res.status === 403) {
-        throw new Error('认证失败，请在设置中检查 API Key 和 Admin Token');
+        const { applyHttpAuthLock } = await import('./admin-auth-client');
+        applyHttpAuthLock(res.status);
+        const error = new Error('认证失败，请在设置中检查 API Key 和 Admin Token') as Error & {
+          status: number;
+        };
+        error.status = res.status;
+        throw error;
       }
       // 5xx — retry if allowed
       if (res.status >= 500) {
@@ -382,13 +388,104 @@ export async function ingestSource(input: {
   };
 }
 
-export async function replayDurableIngestOutbox(): Promise<void> {
-  const { listReplayableOutbox, persistOutboxItem, nextOutboxAttempt, updateOutboxItem } =
-    await import('./offline-outbox');
+export interface OutboxReplayReport {
+  authorized: boolean;
+  claimed: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+}
+
+const EMPTY_REPLAY_REPORT: OutboxReplayReport = {
+  authorized: false,
+  claimed: 0,
+  succeeded: 0,
+  failed: 0,
+  skipped: 0,
+};
+
+let outboxReplayInFlight: Promise<OutboxReplayReport> | null = null;
+
+export async function replayDurableIngestOutboxIfAuthorized(): Promise<OutboxReplayReport> {
+  const { canReadPrivateCache } = await import('./admin-auth-client');
+  if (!(await canReadPrivateCache())) return { ...EMPTY_REPLAY_REPORT, authorized: false };
+  return replayDurableIngestOutbox();
+}
+
+export async function replayDurableIngestOutbox(): Promise<OutboxReplayReport> {
+  if (outboxReplayInFlight) return outboxReplayInFlight;
+  const run = replayDurableIngestOutboxInner();
+  outboxReplayInFlight = run;
+  try {
+    return await run;
+  } finally {
+    if (outboxReplayInFlight === run) outboxReplayInFlight = null;
+  }
+}
+
+function parseOutboxFailure(error: unknown): { message: string; status?: number; code?: string } {
+  const message = error instanceof Error ? error.message : String(error);
+  try {
+    const parsed = JSON.parse(message) as { error?: unknown; code?: unknown; status?: unknown };
+    if (parsed && typeof parsed === 'object') {
+      return {
+        message: typeof parsed.error === 'string' ? parsed.error : message,
+        code: typeof parsed.code === 'string' ? parsed.code : undefined,
+        status: typeof parsed.status === 'number' ? parsed.status : undefined,
+      };
+    }
+  } catch {
+    // not JSON
+  }
+  const statusMatch = message.match(/\((\d{3})\)/);
+  return {
+    message,
+    status: statusMatch ? Number(statusMatch[1]) : undefined,
+  };
+}
+
+async function replayDurableIngestOutboxInner(): Promise<OutboxReplayReport> {
+  const {
+    CREDENTIAL_CONTEXT_LOST,
+    buildCredentialContext,
+    claimOutboxItem,
+    classifyOutboxError,
+    completeOutboxIfClaimed,
+    credentialContextMatches,
+    gcOutbox,
+    listReplayableOutbox,
+    nextOutboxAttempt,
+  } = await import('./offline-outbox');
+  const { applyHttpAuthLock } = await import('./admin-auth-client');
+  const { getLlmConfigForPurpose } = await import('./llm-config');
   const items = await listReplayableOutbox();
+  const currentContext = await buildCredentialContext(getLlmConfigForPurpose('wiki'));
+  const report: OutboxReplayReport = {
+    authorized: true,
+    claimed: 0,
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+  };
   for (const item of items) {
     if (item.kind !== 'ingest') continue;
-    const payload = item.payload as {
+    const claimed = await claimOutboxItem(item.id);
+    if (!claimed?.claimToken) {
+      report.skipped += 1;
+      continue;
+    }
+    report.claimed += 1;
+    if (!credentialContextMatches(claimed.credentialContext, currentContext)) {
+      const next = nextOutboxAttempt({
+        ...claimed,
+        error: CREDENTIAL_CONTEXT_LOST,
+        errorClass: 'credential_context_lost',
+      });
+      await completeOutboxIfClaimed(claimed.id, claimed.claimToken, next);
+      report.failed += 1;
+      continue;
+    }
+    const payload = claimed.payload as {
       title: string;
       type: SourceType;
       author?: string;
@@ -397,20 +494,35 @@ export async function replayDurableIngestOutbox(): Promise<void> {
       externalKey?: string;
     };
     try {
-      await updateOutboxItem(item.id, { state: 'inflight' });
-      const result = await ingestSource({ ...payload, operationId: item.operationId });
-      await updateOutboxItem(item.id, {
+      const result = await ingestSource({ ...payload, operationId: claimed.operationId });
+      const wrote = await completeOutboxIfClaimed(claimed.id, claimed.claimToken, {
         state: 'succeeded',
         result: `新建 ${result.newConceptIds.length} 个概念，更新 ${result.updatedConceptIds.length} 个`,
+        error: undefined,
+        errorClass: undefined,
       });
+      if (wrote) report.succeeded += 1;
+      else report.skipped += 1;
     } catch (error) {
-      const next = nextOutboxAttempt({
-        ...item,
-        error: error instanceof Error ? error.message : String(error),
+      const parsed = parseOutboxFailure(error);
+      const errorClass = classifyOutboxError({
+        ...parsed,
+        message: parsed.message,
+        status: parsed.status ?? (error as { status?: number }).status,
       });
-      await persistOutboxItem(next);
+      if (errorClass === 'auth_locked') applyHttpAuthLock(parsed.status ?? 401);
+      const next = nextOutboxAttempt({
+        ...claimed,
+        error: parsed.message,
+        errorClass,
+      });
+      const wrote = await completeOutboxIfClaimed(claimed.id, claimed.claimToken, next);
+      if (wrote) report.failed += 1;
+      else report.skipped += 1;
     }
   }
+  await gcOutbox();
+  return report;
 }
 
 /** Pipeline stage event emitted by the server during a streaming query. */

@@ -26,6 +26,17 @@ function lockPrivateCache(): void {
   }
 }
 
+/** Authoritative 401/403: drop the offline grant and lock private cache. */
+export function lockPrivateCacheOnAuthoritativeReject(): void {
+  lockPrivateCache();
+}
+
+export function applyHttpAuthLock(status: number): boolean {
+  if (status !== 401 && status !== 403) return false;
+  lockPrivateCacheOnAuthoritativeReject();
+  return true;
+}
+
 function hasOfflineAccess(): boolean {
   if (typeof window === 'undefined') return false;
   try {
@@ -103,13 +114,30 @@ export async function clearAdminToken(): Promise<void> {
 
 export const SESSION_CHECK_TIMEOUT_MS = 6_000;
 
+export type SessionProbeResult =
+  | { kind: 'authenticated' }
+  | { kind: 'unauthenticated' }
+  | { kind: 'revoked' }
+  | { kind: 'unavailable'; reason: 'timeout' | 'server_error' | 'network' };
+
+export type PrivateCacheDecision =
+  | { kind: 'granted'; live: boolean }
+  | { kind: 'revoked' }
+  | { kind: 'locked' }
+  | { kind: 'unavailable'; reason: 'timeout' | 'server_error' | 'network' };
+
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const name = 'name' in error ? String((error as { name?: unknown }).name) : '';
+  const message = 'message' in error ? String((error as { message?: unknown }).message) : '';
+  return name === 'AbortError' || /aborted|timeout/i.test(message);
+}
+
 /**
- * Checks whether the current httpOnly cookie still represents a valid session.
- * Returns false for 401/403 (authoritative revoke). Returns null when the
- * server cannot be reached, timed out, or returned 5xx, so callers can make
- * an explicit offline-access decision instead of treating an outage as logout.
+ * Distinguishes authoritative revoke (401/403), a live anonymous/authenticated
+ * session, and unknown outages (timeout/5xx/network).
  */
-export async function checkAdminSession(): Promise<boolean | null> {
+export async function probeAdminSession(): Promise<SessionProbeResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SESSION_CHECK_TIMEOUT_MS);
   try {
@@ -121,26 +149,48 @@ export async function checkAdminSession(): Promise<boolean | null> {
     });
     if (res.status === 401 || res.status === 403) {
       lockPrivateCache();
-      return false;
+      return { kind: 'revoked' };
     }
-    if (!res.ok) return null;
+    if (!res.ok) return { kind: 'unavailable', reason: 'server_error' };
 
     const body = (await res.json()) as { authenticated?: unknown };
     const authenticated = body.authenticated === true;
     updateOfflineAccess(authenticated);
-    return authenticated;
-  } catch {
-    return null;
+    return authenticated ? { kind: 'authenticated' } : { kind: 'unauthenticated' };
+  } catch (error) {
+    return { kind: 'unavailable', reason: isAbortError(error) ? 'timeout' : 'network' };
   } finally {
     clearTimeout(timer);
   }
 }
 
+/**
+ * Checks whether the current httpOnly cookie still represents a valid session.
+ * Returns false for 401/403 (authoritative revoke). Returns null when the
+ * server cannot be reached, timed out, or returned 5xx, so callers can make
+ * an explicit offline-access decision instead of treating an outage as logout.
+ */
+export async function checkAdminSession(): Promise<boolean | null> {
+  const probe = await probeAdminSession();
+  if (probe.kind === 'authenticated') return true;
+  if (probe.kind === 'revoked' || probe.kind === 'unauthenticated') return false;
+  return null;
+}
+
+export async function resolvePrivateCacheAccess(): Promise<PrivateCacheDecision> {
+  if (isPrivateCacheLocallyLocked()) return { kind: 'locked' };
+  const probe = await probeAdminSession();
+  if (probe.kind === 'authenticated') return { kind: 'granted', live: true };
+  if (probe.kind === 'revoked') return { kind: 'revoked' };
+  if (probe.kind === 'unauthenticated') return { kind: 'revoked' };
+  if (hasOfflineAccess()) return { kind: 'granted', live: false };
+  return { kind: 'unavailable', reason: probe.reason };
+}
+
 /** Grants access with a live session, or with the last verified offline grant. */
 export async function canReadPrivateCache(): Promise<boolean> {
-  if (isPrivateCacheLocallyLocked()) return false;
-  const authenticated = await checkAdminSession();
-  return authenticated ?? hasOfflineAccess();
+  const decision = await resolvePrivateCacheAccess();
+  return decision.kind === 'granted';
 }
 
 /**

@@ -18,6 +18,7 @@ import { contextualizeChunk, contextualizeChunkBatch } from './contextual-chunk'
 import { logger } from './server-logger';
 import { autoQueueCategoryWikis } from './category-wiki-worker';
 import { requireHttpUrl } from './safe-url';
+import { createHash } from 'node:crypto';
 import {
   beginIngestOperation,
   completeIngestOperation,
@@ -57,10 +58,22 @@ export interface ServerIngestResult {
   };
 }
 
+export interface ServerIngestExecution {
+  replayed: boolean;
+  result: ServerIngestResult;
+}
+
 export async function ingestSourceToServerDb(
   input: ServerIngestInput,
 ): Promise<ServerIngestResult> {
+  return (await ingestSourceToServerDbDetailed(input)).result;
+}
+
+export async function ingestSourceToServerDbDetailed(
+  input: ServerIngestInput,
+): Promise<ServerIngestExecution> {
   const operationId = input.operationId?.trim() || undefined;
+  let attemptToken: number | undefined;
   if (operationId) {
     const begun = beginIngestOperation(
       operationId,
@@ -71,15 +84,41 @@ export async function ingestSourceToServerDb(
         url: input.url,
         rawContent: input.rawContent,
         externalKey: input.externalKey,
+        model: input.llmConfig?.model,
+        apiUrl: input.llmConfig?.apiUrl,
+        keyFingerprint: input.llmConfig?.apiKey
+          ? createHash('sha256').update(input.llmConfig.apiKey).digest('hex')
+          : '',
       }),
     );
-    if (begun.kind === 'replay') return begun.result as ServerIngestResult;
+    if (begun.kind === 'replay') {
+      const replayed = begun.result;
+      if (!replayed.source || !replayed.activity) {
+        throw new Error('ingest replay could not hydrate the stored result');
+      }
+      return {
+        replayed: true,
+        result: {
+          sourceId: replayed.sourceId,
+          newConceptIds: replayed.newConceptIds,
+          updatedConceptIds: replayed.updatedConceptIds,
+          activityId: replayed.activityId,
+          source: replayed.source,
+          concepts: replayed.concepts,
+          activity: replayed.activity,
+        },
+      };
+    }
+    attemptToken = begun.attemptToken;
   }
 
   try {
-    return await ingestSourceToServerDbInner(input, operationId);
+    const result = await ingestSourceToServerDbInner(input, operationId, attemptToken);
+    return { replayed: false, result };
   } catch (error) {
-    if (operationId) failIngestOperation(operationId, error);
+    if (operationId && typeof attemptToken === 'number') {
+      failIngestOperation(operationId, error, attemptToken);
+    }
     throw error;
   }
 }
@@ -87,6 +126,7 @@ export async function ingestSourceToServerDb(
 async function ingestSourceToServerDbInner(
   input: ServerIngestInput,
   operationId: string | undefined,
+  attemptToken: number | undefined,
 ): Promise<ServerIngestResult> {
   const now = Date.now();
   const exactExisting = input.externalKey ? repo.getSourceByExternalKey(input.externalKey) : null;
@@ -282,7 +322,18 @@ async function ingestSourceToServerDbInner(
       activity,
       compiler: compilerResult,
     };
-    if (operationId) completeIngestOperation(operationId, persisted);
+    if (operationId && typeof attemptToken === 'number') {
+      completeIngestOperation(
+        operationId,
+        {
+          sourceId: persisted.sourceId,
+          newConceptIds: persisted.newConceptIds,
+          updatedConceptIds: persisted.updatedConceptIds,
+          activityId: persisted.activityId,
+        },
+        attemptToken,
+      );
+    }
   });
   trx.immediate();
 

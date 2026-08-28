@@ -1,7 +1,8 @@
 'use client';
 
 import './task-center.css';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import {
   useAppStore,
   friendlyErrorMessage,
@@ -9,7 +10,15 @@ import {
   type TaskStatus,
   type TaskKind,
 } from '@/lib/store';
-import { isOfflineError } from '@/lib/api-client';
+import { isOfflineError, replayDurableIngestOutboxIfAuthorized } from '@/lib/api-client';
+import { getDb } from '@/lib/db';
+import {
+  cancelOutboxItem,
+  clearTerminalOutbox,
+  dismissTerminalOutbox,
+  requeueOutboxItem,
+  type OfflineOutboxItem,
+} from '@/lib/offline-outbox';
 import { Icon } from './Icons';
 
 const TASK_KIND_LABEL: Record<TaskKind, string> = {
@@ -50,13 +59,59 @@ function relativeTime(ts: number) {
   return `${Math.floor(diff / 3600000)}小时前`;
 }
 
+function outboxStatus(row: OfflineOutboxItem): TaskStatus {
+  if (row.state === 'queued') return 'queued';
+  if (row.state === 'inflight') return 'running';
+  if (row.state === 'succeeded') return 'success';
+  if (row.errorClass === 'retryable') return 'paused-offline';
+  return 'error';
+}
+
+function taskFromOutbox(row: OfflineOutboxItem): TaskItem {
+  const payload = row.payload as { title?: string } | undefined;
+  return {
+    id: row.id,
+    kind: 'ingest',
+    label: payload?.title || '离线摄入',
+    status: outboxStatus(row),
+    startedAt: row.createdAt,
+    finishedAt: row.state === 'succeeded' || row.state === 'failed' ? row.updatedAt : undefined,
+    error: row.error,
+    result: row.result,
+    retry:
+      row.errorClass === 'auth_locked' ||
+      row.errorClass === 'credential_context_lost' ||
+      row.state === 'succeeded'
+        ? undefined
+        : async () => {
+            const queued = await requeueOutboxItem(row.id);
+            if (!queued) return;
+            await replayDurableIngestOutboxIfAuthorized();
+          },
+  };
+}
+
 export function TaskCenter() {
-  const tasks = useAppStore((s) => s.tasks);
+  const zustandTasks = useAppStore((s) => s.tasks);
   const open = useAppStore((s) => s.taskCenterOpen);
   const toggleTaskCenter = useAppStore((s) => s.toggleTaskCenter);
   const updateTask = useAppStore((s) => s.updateTask);
   const removeTask = useAppStore((s) => s.removeTask);
   const clearFinishedTasks = useAppStore((s) => s.clearFinishedTasks);
+
+  const outboxRows = useLiveQuery(async () => getDb().offlineOutbox.toArray(), []);
+  const ingestTasks = useMemo(
+    () =>
+      (outboxRows ?? [])
+        .filter((row) => row.state !== 'cancelled')
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .map(taskFromOutbox),
+    [outboxRows],
+  );
+  const tasks = useMemo(
+    () => [...ingestTasks, ...zustandTasks.filter((task) => task.kind !== 'ingest')],
+    [ingestTasks, zustandTasks],
+  );
 
   const activeCount = tasks.filter((t) =>
     ['queued', 'running', 'paused-offline'].includes(t.status),
@@ -92,6 +147,10 @@ export function TaskCenter() {
 
   const handleRetry = async (task: TaskItem) => {
     if (!task.retry) return;
+    if (task.kind === 'ingest') {
+      await task.retry();
+      return;
+    }
     updateTask(task.id, { status: 'running', error: undefined, result: undefined });
     try {
       await task.retry();
@@ -149,7 +208,14 @@ export function TaskCenter() {
             </h4>
             <div className="tc-header-actions">
               {tasks.some((t) => !['queued', 'running', 'paused-offline'].includes(t.status)) && (
-                <button type="button" className="tc-header-btn" onClick={clearFinishedTasks}>
+                <button
+                  type="button"
+                  className="tc-header-btn"
+                  onClick={() => {
+                    void clearTerminalOutbox();
+                    clearFinishedTasks();
+                  }}
+                >
                   清除已完成
                 </button>
               )}
@@ -204,20 +270,34 @@ export function TaskCenter() {
                     <button
                       type="button"
                       className="tc-dismiss-btn"
-                      onClick={() => removeTask(task.id)}
+                      onClick={() => {
+                        if (task.kind === 'ingest') {
+                          void dismissTerminalOutbox(task.id);
+                          return;
+                        }
+                        removeTask(task.id);
+                      }}
                       aria-label="关闭"
                     >
                       <span aria-hidden="true">×</span>
                     </button>
                   )}
-                  {task.status === 'paused-offline' && (
+                  {(task.status === 'queued' ||
+                    task.status === 'paused-offline' ||
+                    task.status === 'running') && (
                     <button
                       type="button"
                       className="tc-dismiss-btn"
-                      onClick={() => removeTask(task.id)}
-                      aria-label="关闭"
+                      onClick={() => {
+                        if (task.kind === 'ingest') {
+                          void cancelOutboxItem(task.id);
+                          return;
+                        }
+                        removeTask(task.id);
+                      }}
+                      aria-label="取消"
                     >
-                      <span aria-hidden="true">×</span>
+                      取消
                     </button>
                   )}
                 </div>

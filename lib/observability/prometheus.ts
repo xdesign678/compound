@@ -42,7 +42,7 @@ export interface BackupMetrics {
   ageSeconds: number | null;
   stale: boolean;
   checksumPresent: boolean;
-  sameVolumeAsDataDir: boolean;
+  sameVolumeAsDataDir: boolean | null;
   offsiteConfigured: boolean;
 }
 
@@ -627,7 +627,9 @@ function addBackupMetrics(out: PrometheusTextBuilder, status: BackupMetrics): vo
     'gauge',
     'Whether the backup directory is inside the data volume.',
   );
-  out.sample('compound_backup_same_volume', status.sameVolumeAsDataDir ? 1 : 0);
+  if (status.sameVolumeAsDataDir != null) {
+    out.sample('compound_backup_same_volume', status.sameVolumeAsDataDir ? 1 : 0);
+  }
 
   out.metric(
     'compound_backup_offsite_configured',

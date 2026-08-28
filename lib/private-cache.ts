@@ -1,4 +1,5 @@
 import { getDb, type CompoundDB } from './db';
+import { LAST_SYNC_CURSOR_KEY, SYNC_META_KEY, SYNC_QUARANTINE_KEY } from './sync-reconciliation';
 
 const PRIVATE_STORAGE_KEYS = [
   'compound:lastSyncCursor',
@@ -70,5 +71,50 @@ export async function clearPrivateOfflineCache(database: CompoundDB = getDb()): 
     clearStorage(window.sessionStorage);
   } catch {
     // Ignore — session storage may be unavailable.
+  }
+}
+
+const KNOWLEDGE_SYNC_STORAGE_KEYS = [
+  LAST_SYNC_CURSOR_KEY,
+  SYNC_META_KEY,
+  SYNC_QUARANTINE_KEY,
+  'compound_is_sample',
+] as const;
+
+function clearKnowledgeSyncStorage(storage: Storage): void {
+  for (const key of KNOWLEDGE_SYNC_STORAGE_KEYS) storage.removeItem(key);
+}
+
+/**
+ * Resets the local knowledge cache (four tables + outbox + sync meta + legacy
+ * cursor keys) without touching BYOK credentials or the signed-in session.
+ * Does not delete server knowledge.
+ */
+export async function resetLocalKnowledgeCache(database: CompoundDB = getDb()): Promise<void> {
+  const tables = [
+    database.sources,
+    database.concepts,
+    database.activity,
+    database.askHistory,
+    ...(database.offlineOutbox ? [database.offlineOutbox] : []),
+    ...(database.syncMeta ? [database.syncMeta] : []),
+  ];
+  await database.transaction('rw', tables, async () => {
+    await Promise.all([
+      database.sources.clear(),
+      database.concepts.clear(),
+      database.activity.clear(),
+      database.askHistory.clear(),
+      database.offlineOutbox?.clear(),
+      database.syncMeta?.clear(),
+    ]);
+  });
+
+  if (typeof window === 'undefined') return;
+  try {
+    clearKnowledgeSyncStorage(window.localStorage);
+    window.localStorage.setItem('compound_seeded', '1');
+  } catch {
+    // Ignore — storage may be unavailable.
   }
 }

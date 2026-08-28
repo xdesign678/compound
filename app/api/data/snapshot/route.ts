@@ -4,6 +4,7 @@ import { logger } from '@/lib/logging';
 import { repo } from '@/lib/server-db';
 import { requireAdmin } from '@/lib/server-auth';
 import { autoQueueCategoryWikis } from '@/lib/category-wiki-worker';
+import { fullSnapshotHasMore } from '@/lib/sync-reconciliation';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -31,6 +32,8 @@ function parseIntParam(value: string | null, defaultVal: number, max: number): n
  * Full snapshots use `?beforeCursor=...` for stable pagination and return the
  * authoritative cursor that clients persist for the next pull.
  * Supports `?limit=N&offset=M` for pagination (defaults: limit=5000, offset=0).
+ * Full snapshots paginate sources, concepts, activity, and ask with the same
+ * offset/limit and expose `totalSources/totalConcepts/totalActivity/totalAsk`.
  * Full concept bodies / source raw content are fetched on demand by detail views
  * and heavy workflows such as ask / categorize.
  */
@@ -113,20 +116,24 @@ export async function GET(req: Request) {
 
     const sourceIds = repo.listEntityIdsAtSyncCursor('source', upperCursor, { limit, offset });
     const conceptIds = repo.listEntityIdsAtSyncCursor('concept', upperCursor, { limit, offset });
-    const activityIds =
-      offset === 0
-        ? repo.listEntityIdsAtSyncCursor('activity', upperCursor, { limit: 1000, offset: 0 })
-        : [];
-    const askIds =
-      offset === 0
-        ? repo.listEntityIdsAtSyncCursor('ask', upperCursor, { limit: 500, offset: 0 })
-        : [];
+    const activityIds = repo.listEntityIdsAtSyncCursor('activity', upperCursor, { limit, offset });
+    const askIds = repo.listEntityIdsAtSyncCursor('ask', upperCursor, { limit, offset });
     const sources = repo.getSourcesByIds(sourceIds, { summariesOnly: true });
     const concepts = repo.getConceptsByIds(conceptIds, { summariesOnly: true });
     const activity = repo.getActivityByIds(activityIds);
     const ask = repo.getAskHistoryByIds(askIds);
     const totalSources = repo.countEntityIdsAtSyncCursor('source', upperCursor);
     const totalConcepts = repo.countEntityIdsAtSyncCursor('concept', upperCursor);
+    const totalActivity = repo.countEntityIdsAtSyncCursor('activity', upperCursor);
+    const totalAsk = repo.countEntityIdsAtSyncCursor('ask', upperCursor);
+    const pagination = {
+      limit,
+      offset,
+      totalSources,
+      totalConcepts,
+      totalActivity,
+      totalAsk,
+    };
 
     try {
       const categoryWikiQueue = offset === 0 ? autoQueueCategoryWikis() : null;
@@ -144,7 +151,7 @@ export async function GET(req: Request) {
       fetchedAt: Date.now(),
       dataset,
       mode: 'full',
-      pagination: { limit, offset, totalSources, totalConcepts },
+      pagination,
       counts: {
         sources: sources.length,
         concepts: concepts.length,
@@ -158,7 +165,7 @@ export async function GET(req: Request) {
       sync: {
         cursor: upperCursor,
         upperCursor,
-        hasMore: offset + limit < totalSources || offset + limit < totalConcepts,
+        hasMore: fullSnapshotHasMore(pagination),
         deleted: { sources: [], concepts: [], activity: [], ask: [] },
       },
     });

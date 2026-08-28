@@ -5,7 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
-import { canReadPrivateCache } from '@/lib/admin-auth-client';
+import { resolvePrivateCacheAccess } from '@/lib/admin-auth-client';
 import { useAppStore, type TabId } from '@/lib/store';
 import { DESKTOP_LAYOUT_MIN_WIDTH, isDesktopWidth } from '@/lib/responsive';
 
@@ -152,24 +152,42 @@ export default function Page() {
   const hydrateFontSize = useAppStore((s) => s.hydrateFontSize);
   const hydrateLineHeight = useAppStore((s) => s.hydrateLineHeight);
   const [cacheAccessGranted, setCacheAccessGranted] = useState(false);
-  const [authTimedOut, setAuthTimedOut] = useState(false);
+  const [authGate, setAuthGate] = useState<'checking' | 'unavailable' | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    const timeout = window.setTimeout(() => {
-      if (!cancelled) setAuthTimedOut(true);
-    }, 8_000);
-    void canReadPrivateCache().then((granted) => {
+    let attempt = 0;
+
+    const applyDecision = async () => {
+      const decision = await resolvePrivateCacheAccess();
       if (cancelled) return;
-      if (granted) {
+      if (decision.kind === 'granted') {
         setCacheAccessGranted(true);
-      } else {
-        window.location.replace('/offline');
+        setAuthGate(null);
+        void import('@/lib/api-client')
+          .then((mod) => mod.replayDurableIngestOutboxIfAuthorized())
+          .catch(() => {});
+        return;
       }
-    });
+      if (decision.kind === 'revoked' || decision.kind === 'locked') {
+        window.location.replace('/offline');
+        return;
+      }
+      attempt += 1;
+      if (attempt <= 3) {
+        setAuthGate('unavailable');
+        window.setTimeout(() => {
+          if (!cancelled) void applyDecision();
+        }, 1000 * attempt);
+        return;
+      }
+      setAuthGate('unavailable');
+    };
+
+    setAuthGate('checking');
+    void applyDecision();
     return () => {
       cancelled = true;
-      window.clearTimeout(timeout);
     };
   }, []);
 
@@ -565,9 +583,9 @@ export default function Page() {
             <span className="skeleton" style={{ width: 30, height: 10 }} />
           </div>
         </nav>
-        {authTimedOut ? (
+        {authGate === 'unavailable' ? (
           <div className="offline-banner" role="alert">
-            <p>会话检查超时。弱网下可以离线阅读、重试或重新登录。</p>
+            <p>暂时无法确认访问会话。这不是登出：新设备在超时或服务异常时需要重试或登录。</p>
             <div className="settings-data-actions">
               <button
                 type="button"
@@ -577,7 +595,7 @@ export default function Page() {
                 重试
               </button>
               <a className="modal-btn" href="/offline">
-                离线进入
+                登录
               </a>
             </div>
           </div>

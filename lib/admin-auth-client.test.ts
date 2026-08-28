@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  applyHttpAuthLock,
   canReadPrivateCache,
   checkAdminSession,
   clearAdminToken,
+  resolvePrivateCacheAccess,
   saveAdminToken,
 } from './admin-auth-client';
 
@@ -188,8 +190,69 @@ test('checkAdminSession treats 5xx as unavailable and keeps a prior offline gran
   try {
     assert.equal(await checkAdminSession(), null);
     assert.equal(await canReadPrivateCache(), true);
+    assert.deepEqual(await resolvePrivateCacheAccess(), { kind: 'granted', live: false });
   } finally {
     mock.restore();
+    browser.restore();
+  }
+});
+
+test('timeout or 5xx on a new device is unavailable, not an authoritative logout', async () => {
+  const browser = withMockWindow();
+  const mock = withMockFetch(() => new Response('nope', { status: 503 }));
+  try {
+    assert.equal(await checkAdminSession(), null);
+    assert.equal(await canReadPrivateCache(), false);
+    const decision = await resolvePrivateCacheAccess();
+    assert.equal(decision.kind, 'unavailable');
+    if (decision.kind === 'unavailable') assert.equal(decision.reason, 'server_error');
+  } finally {
+    mock.restore();
+    browser.restore();
+  }
+});
+
+test('session abort is classified as timeout rather than revoke', async () => {
+  const browser = withMockWindow();
+  const mock = withMockFetch(() => {
+    const error = new Error('The operation was aborted.');
+    error.name = 'AbortError';
+    throw error;
+  });
+  try {
+    const decision = await resolvePrivateCacheAccess();
+    assert.equal(decision.kind, 'unavailable');
+    if (decision.kind === 'unavailable') assert.equal(decision.reason, 'timeout');
+    assert.equal(browser.localStorage.getItem('compound:local-cache-lock'), null);
+  } finally {
+    mock.restore();
+    browser.restore();
+  }
+});
+
+test('authoritative 401/403 lock the private cache; timeout and 5xx do not', () => {
+  const browser = withMockWindow();
+  browser.localStorage.setItem('compound:offline-access', '1');
+  try {
+    assert.equal(applyHttpAuthLock(503), false);
+    assert.equal(browser.localStorage.getItem('compound:offline-access'), '1');
+    assert.equal(browser.localStorage.getItem('compound:local-cache-lock'), null);
+
+    assert.equal(applyHttpAuthLock(401), true);
+    assert.equal(browser.localStorage.getItem('compound:offline-access'), null);
+    assert.equal(browser.localStorage.getItem('compound:local-cache-lock'), '1');
+  } finally {
+    browser.restore();
+  }
+});
+
+test('403 also drops the offline grant', () => {
+  const browser = withMockWindow();
+  browser.localStorage.setItem('compound:offline-access', '1');
+  try {
+    assert.equal(applyHttpAuthLock(403), true);
+    assert.equal(browser.localStorage.getItem('compound:local-cache-lock'), '1');
+  } finally {
     browser.restore();
   }
 });

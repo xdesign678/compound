@@ -62,6 +62,7 @@ export const GET = withRequestTracing(async (req: Request) => {
       checksumPresent: false,
       checksumOk: null,
       sameVolumeAsDataDir: true,
+      volumeRelation: 'same' as const,
       offsiteConfigured: false,
       offsiteVerified: false as const,
     };

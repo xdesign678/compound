@@ -4,9 +4,10 @@ import '@/components/modals.css';
 import '@/app/modals.css';
 import { useState, useEffect, useRef, type DragEvent } from 'react';
 import { useAppStore } from '@/lib/store';
-import { ingestSource, isOfflineError } from '@/lib/api-client';
-import { canQueueOfflineWrite, getOfflineWritePayloadBytes } from '@/lib/cloud-sync';
-import { createOutboxItem, persistOutboxItem, updateOutboxItem } from '@/lib/offline-outbox';
+import { replayDurableIngestOutboxIfAuthorized } from '@/lib/api-client';
+import { canQueueOfflineWrite } from '@/lib/cloud-sync';
+import { getLlmConfigForPurpose } from '@/lib/llm-config';
+import { buildCredentialContext, createOutboxItem, persistOutboxItem } from '@/lib/offline-outbox';
 import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 import { Icon } from './Icons';
 import { ImportProgress, rememberRecentImport } from './ImportProgress';
@@ -18,10 +19,7 @@ type Step = 'choose' | 'link' | 'processing';
 export function IngestModal() {
   const isOpen = useAppStore((s) => s.modalOpen);
   const close = useAppStore((s) => s.closeModal);
-  const markFresh = useAppStore((s) => s.markFresh);
   const isOnline = useAppStore((s) => s.isOnline);
-  const addTask = useAppStore((s) => s.addTask);
-  const updateTask = useAppStore((s) => s.updateTask);
 
   const modalRef = useRef<HTMLDivElement>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -92,61 +90,24 @@ export function IngestModal() {
       url?: string;
       rawContent: string;
     },
-    label: string,
+    _label: string,
   ): Promise<void> {
-    const outbox = createOutboxItem({ kind: 'ingest', payload });
-    await persistOutboxItem(outbox);
-    const taskId = outbox.id;
-    const run = async () => {
-      await updateOutboxItem(outbox.id, { state: 'inflight' });
-      const result = await ingestSource({ ...payload, operationId: outbox.operationId });
-      const summary = `新建 ${result.newConceptIds.length} 个概念，更新 ${result.updatedConceptIds.length} 个`;
-      await updateOutboxItem(outbox.id, { state: 'succeeded', result: summary });
-      markFresh(result.newConceptIds);
-      return summary;
-    };
-    addTask({
-      id: taskId,
+    if (!canQueueOfflineWrite(payload)) {
+      throw new Error('单条内容超过 256KB，未写入离线队列。请缩小后再提交。');
+    }
+    const outbox = createOutboxItem({
       kind: 'ingest',
-      label,
-      status: 'running',
-      startedAt: Date.now(),
-      queuedPayloadBytes: getOfflineWritePayloadBytes(payload),
-      retry: async () => {
-        const summary = await run();
-        updateTask(taskId, { result: summary });
-      },
+      payload,
+      credentialContext: await buildCredentialContext(getLlmConfigForPurpose('wiki')),
     });
-    try {
-      const summary = await run();
-      updateTask(taskId, {
-        status: 'success',
-        finishedAt: Date.now(),
-        result: summary,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const shouldQueue = isOfflineError(err) && canQueueOfflineWrite(payload);
-      const errorText = shouldQueue
-        ? '离线暂停，联网后会自动重试。'
-        : isOfflineError(err)
-          ? '离线队列单条内容超过 256KB，请联网后重新提交。'
-          : msg.slice(0, 160);
-      await updateOutboxItem(outbox.id, {
-        state: shouldQueue ? 'queued' : 'failed',
-        error: errorText,
-      });
-      updateTask(taskId, {
-        status: shouldQueue ? 'paused-offline' : 'error',
-        finishedAt: shouldQueue ? undefined : Date.now(),
-        error: errorText,
-      });
-      throw err;
+    await persistOutboxItem(outbox);
+    const online = typeof navigator === 'undefined' ? isOnline : navigator.onLine;
+    if (online) {
+      void replayDurableIngestOutboxIfAuthorized();
     }
   }
 
   async function handleNoteEditorDone(noteTitle: string, noteContent: string) {
-    setNoteEditorOpen(false);
     setSubmitting(true);
     const payload = {
       title: noteTitle,
@@ -155,9 +116,12 @@ export function IngestModal() {
     };
     try {
       await queueIngestWrite(payload, noteTitle || '笔记');
+      setNoteEditorOpen(false);
       close();
       reset();
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg.slice(0, 160));
       setSubmitting(false);
     }
   }
@@ -222,7 +186,6 @@ export function IngestModal() {
         onCancel={() => {
           setNoteEditorOpen(false);
         }}
-        disabled={!isOnline}
       />
     );
   }
@@ -382,10 +345,10 @@ export function IngestModal() {
                   <button
                     className="modal-btn primary"
                     type="button"
-                    disabled={!title.trim() || !content.trim() || submitting || !isOnline}
+                    disabled={!title.trim() || !content.trim() || submitting}
                     onClick={() => handleSubmit('link')}
                   >
-                    {!isOnline ? '离线中，无法提交' : submitting ? '编译中…' : '送入 AI 编译'}
+                    {submitting ? '提交中…' : !isOnline ? '离线排队' : '送入 AI 编译'}
                   </button>
                   <button
                     className="modal-btn"
