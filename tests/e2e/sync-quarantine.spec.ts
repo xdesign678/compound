@@ -112,6 +112,27 @@ test('quarantine exports, can be dismissed, and requires confirmation before acc
   await page.getByRole('button', { name: '接受远端副本' }).click();
   await page.getByRole('button', { name: '确认清空本机并接受远端' }).click();
   await expect(page.getByRole('heading', { name: '本机副本已被保护' })).toBeHidden();
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async () => {
+          const db = await new Promise<IDBDatabase>((resolve, reject) => {
+            const request = indexedDB.open('compound-db');
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => resolve(request.result);
+          });
+          const transaction = db.transaction('syncMeta', 'readonly');
+          const meta = await new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
+            const request = transaction.objectStore('syncMeta').get('current');
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => resolve(request.result);
+          });
+          db.close();
+          return meta;
+        }),
+      { timeout: 30_000 },
+    )
+    .toMatchObject({ datasetId: 'remote-dataset', generation: 1, cursor: 10 });
 
   const localState = await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {

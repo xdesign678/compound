@@ -43,4 +43,15 @@ test('mobile source detail exposes a single visible back header', async ({ page 
 
   await expect(page.locator('.mobile-detail-overlay')).toBeVisible();
   await expect(page.getByRole('button', { name: '返回' })).toHaveCount(1);
+  const detail = page.locator('.source-detail-page');
+  await expect(detail.locator('.source-block').first()).toBeVisible();
+  const horizontalPadding = await detail.evaluate((element) => {
+    const computed = getComputedStyle(element);
+    return {
+      left: Number.parseFloat(computed.paddingLeft),
+      right: Number.parseFloat(computed.paddingRight),
+    };
+  });
+  expect(horizontalPadding.left).toBeGreaterThanOrEqual(16);
+  expect(horizontalPadding.right).toBeGreaterThanOrEqual(16);
 });

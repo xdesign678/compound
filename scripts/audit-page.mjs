@@ -59,6 +59,10 @@ export const SURFACES = {
     setup: async (page) => {
       await page.getByRole('tab', { name: '资料' }).click();
       await page.locator('.source-card').first().click();
+      await page.locator('.source-block-editor .source-block').first().waitFor({
+        state: 'visible',
+        timeout: 30_000,
+      });
     },
   },
   activity: {
@@ -83,6 +87,10 @@ export const SURFACES = {
     setup: async (page) => {
       await openHeaderAction(page, ['设置', '打开设置']);
       await page.getByRole('dialog', { name: /设置|Settings/ }).waitFor({ timeout: 30_000 });
+      await page.locator('.modal-overlay.visible .settings-modal').waitFor({
+        state: 'visible',
+        timeout: 30_000,
+      });
     },
   },
   settingsData: {
@@ -425,6 +433,9 @@ async function preparePage(browser, baseUrl, surface, viewport) {
   const page = await context.newPage();
   await page.goto(surface.url, { waitUntil: 'networkidle' });
   await surface.setup(page);
+  await page.waitForFunction(() => document.title.trim().length > 0, undefined, {
+    timeout: 30_000,
+  });
   await page
     .waitForSelector('.loading-skeleton', { state: 'detached', timeout: 30_000 })
     .catch(() => undefined);

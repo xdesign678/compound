@@ -1394,7 +1394,7 @@ button {
 }
 .loading-copy span {
   color: var(--brand-clay-text);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
 }
 .loading-copy strong {

@@ -3,13 +3,14 @@
 
 /* Source detail page: Notion-style long-form reading layout */
 .source-detail-page {
-  padding-bottom: 96px;
+  box-sizing: border-box;
+  padding: 0 20px 96px;
   position: relative;
 }
 /* 与 .concept-detail 叠加在同一 <article> 上，两个 css chunk 加载顺序不定，
    提高特异性确保来源页规则稳赢（padding 96 vs 108、h1 宽度 680 vs 640） */
 .source-detail-page.source-detail-page {
-  padding-bottom: 96px;
+  padding: 0 20px 96px;
 }
 /* Hero: quiet, well-spaced vertical rhythm */
 .source-hero {
@@ -452,8 +453,8 @@
 }
 
 @media (max-width: 720px) {
-  .source-detail-page {
-    padding-bottom: 72px;
+  .source-detail-page.source-detail-page {
+    padding: 0 16px 72px;
   }
   .source-hero {
     margin-bottom: 28px;

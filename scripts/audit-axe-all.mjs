@@ -123,6 +123,9 @@ async function preparePage(browser, baseUrl, surface, viewport) {
   const page = await context.newPage();
   await page.goto(surface.url, { waitUntil: 'networkidle' });
   await surface.setup(page);
+  await page.waitForFunction(() => document.title.trim().length > 0, undefined, {
+    timeout: 30_000,
+  });
   await page
     .waitForSelector('.loading-skeleton', { state: 'detached', timeout: 30_000 })
     .catch(() => undefined);
