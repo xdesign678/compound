@@ -54,6 +54,10 @@ interface ConceptTocItem {
   title: string;
 }
 
+function hasOpenConceptDialog(versionDialogOpen: boolean, deleteDialogOpen: boolean): boolean {
+  return versionDialogOpen || deleteDialogOpen;
+}
+
 function isUsefulRect(rect: DOMRect): boolean {
   return rect.width > 0 && rect.height > 0;
 }
@@ -614,7 +618,7 @@ export function ConceptDetail({ id }: { id: string }) {
   }, []);
 
   useEffect(() => {
-    if (!versionDialog.open && !showDeleteConfirm) return;
+    if (!hasOpenConceptDialog(versionDialog.open, showDeleteConfirm)) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       // 全局快捷键钩子的 window 监听注册更早（冒泡阶段先触发），这里必须用
