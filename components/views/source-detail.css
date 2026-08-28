@@ -418,6 +418,14 @@
 .source-save-indicator-text.error {
   color: var(--color-error);
 }
+.source-save-indicator.conflict {
+  flex-wrap: wrap;
+  max-width: min(440px, calc(100vw - 32px));
+}
+.source-save-indicator-text.conflict {
+  color: var(--color-error);
+  flex-wrap: wrap;
+}
 .source-save-indicator-dot {
   width: 6px;
   height: 6px;

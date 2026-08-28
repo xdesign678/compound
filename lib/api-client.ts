@@ -52,6 +52,114 @@ export function isOfflineError(error: unknown): error is OfflineError {
   return error instanceof OfflineError || (error instanceof Error && error.name === 'OfflineError');
 }
 
+export const REVISION_CONFLICT_CODE = 'revision_conflict' as const;
+const PRIVATE_MUTATION_AUTH_ERROR = '认证失败，请在设置中检查 Admin Token';
+
+export class RevisionConflictError extends Error {
+  readonly code = REVISION_CONFLICT_CODE;
+  readonly status = 409;
+  readonly expectedRevision: number;
+  readonly currentRevision: number;
+
+  constructor(expectedRevision: number, currentRevision: number) {
+    super(REVISION_CONFLICT_CODE);
+    this.name = 'RevisionConflictError';
+    this.expectedRevision = expectedRevision;
+    this.currentRevision = currentRevision;
+  }
+}
+
+export class MissingExpectedRevisionError extends Error {
+  readonly code = 'revision_required' as const;
+
+  constructor(message = 'expectedRevision is required') {
+    super(message);
+    this.name = 'MissingExpectedRevisionError';
+  }
+}
+
+export function isRevisionConflictError(error: unknown): error is RevisionConflictError {
+  if (error instanceof RevisionConflictError) return true;
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as Partial<RevisionConflictError>;
+  return (
+    candidate.name === 'RevisionConflictError' &&
+    candidate.code === REVISION_CONFLICT_CODE &&
+    typeof candidate.expectedRevision === 'number' &&
+    typeof candidate.currentRevision === 'number'
+  );
+}
+
+export function isMissingExpectedRevisionError(
+  error: unknown,
+): error is MissingExpectedRevisionError {
+  return (
+    error instanceof MissingExpectedRevisionError ||
+    (error instanceof Error && error.name === 'MissingExpectedRevisionError')
+  );
+}
+
+/** Read a CAS token. Missing/invalid values stay undefined — never invent `1`. */
+export function readExpectedRevision(revision: unknown): number | undefined {
+  if (typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 1) {
+    return revision;
+  }
+  return undefined;
+}
+
+export function requireExpectedRevision(revision: unknown): number {
+  const parsed = readExpectedRevision(revision);
+  if (parsed === undefined) {
+    throw new MissingExpectedRevisionError();
+  }
+  return parsed;
+}
+
+/** After a 2xx source write, adopt the response token before any queued save. */
+export function adoptSavedSourceRevision(source: { serverRevision?: number }): number {
+  return requireExpectedRevision(source.serverRevision);
+}
+
+function parseRevisionConflict(payload: unknown): RevisionConflictError | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const record = payload as Record<string, unknown>;
+  if (record.code !== REVISION_CONFLICT_CODE) return null;
+  const expectedRevision = record.expectedRevision;
+  const currentRevision = record.currentRevision;
+  if (
+    typeof expectedRevision !== 'number' ||
+    typeof currentRevision !== 'number' ||
+    !Number.isSafeInteger(expectedRevision) ||
+    !Number.isSafeInteger(currentRevision)
+  ) {
+    return null;
+  }
+  return new RevisionConflictError(expectedRevision, currentRevision);
+}
+
+async function throwForFailedPrivateMutation(
+  res: Response,
+  fallbackMessage: string,
+): Promise<never> {
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(PRIVATE_MUTATION_AUTH_ERROR);
+  }
+  const text = await res.text().catch(() => '');
+  let payload: unknown = null;
+  if (text) {
+    try {
+      payload = JSON.parse(text) as unknown;
+    } catch {
+      payload = null;
+    }
+  }
+  if (res.status === 409) {
+    const conflict = parseRevisionConflict(payload);
+    if (conflict) throw conflict;
+  }
+  throw new Error(text.slice(0, 200) || fallbackMessage);
+}
+
 function assertOnlineForWrite(): void {
   if (typeof navigator === 'undefined' || navigator.onLine) return;
   const offlineSince =
@@ -814,12 +922,14 @@ export async function updateSourceContent(input: {
   id: string;
   title?: string;
   rawContent: string;
+  expectedRevision: number;
 }): Promise<{
   source: Source;
   concepts: Concept[];
   activity?: ActivityLog;
 }> {
   assertOnlineForWrite();
+  const expectedRevision = requireExpectedRevision(input.expectedRevision);
   const res = await fetchCompoundPrivateApi('/api/data/sources', {
     method: 'PATCH',
     headers: {
@@ -827,15 +937,16 @@ export async function updateSourceContent(input: {
       'X-Request-ID': generateClientRequestId(),
       ...getAdminAuthHeaders(),
     },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      id: input.id,
+      title: input.title,
+      rawContent: input.rawContent,
+      expectedRevision,
+    }),
     signal: buildTimeoutSignal(undefined, DEFAULT_REQUEST_TIMEOUT_MS),
   });
   if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
-      throw new Error('认证失败，请在设置中检查 Admin Token');
-    }
-    const text = await res.text().catch(() => '');
-    throw new Error(text.slice(0, 200) || `保存失败 (${res.status})`);
+    return await throwForFailedPrivateMutation(res, `保存失败 (${res.status})`);
   }
   const payload = (await res.json()) as {
     source: Source;
@@ -857,6 +968,108 @@ export async function updateSourceContent(input: {
     concepts: payload.concepts ?? [],
     activity: payload.activity,
   };
+}
+
+export interface ConceptFlagReview {
+  id: string;
+  kind: string;
+  status: string;
+  title: string;
+  target_id: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface FlagConceptIncorrectResponse {
+  created: boolean;
+  review: ConceptFlagReview;
+  activity: ActivityLog | null;
+}
+
+export interface DeleteConceptResponse {
+  deleted: boolean;
+  idempotent?: boolean;
+}
+
+export async function flagConceptIncorrect(input: {
+  id: string;
+  expectedRevision: number;
+}): Promise<FlagConceptIncorrectResponse> {
+  assertOnlineForWrite();
+  const expectedRevision = requireExpectedRevision(input.expectedRevision);
+  const res = await fetchCompoundPrivateApi(
+    `/api/data/concepts/${encodeURIComponent(input.id)}/flag`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Request-ID': generateClientRequestId(),
+        ...getAdminAuthHeaders(),
+      },
+      body: JSON.stringify({ expectedRevision }),
+      signal: buildTimeoutSignal(undefined, DEFAULT_REQUEST_TIMEOUT_MS),
+    },
+  );
+  if (!res.ok) {
+    return await throwForFailedPrivateMutation(res, `标记失败 (${res.status})`);
+  }
+  return (await res.json()) as FlagConceptIncorrectResponse;
+}
+
+export async function deleteConcept(input: {
+  id: string;
+  expectedRevision: number;
+}): Promise<DeleteConceptResponse> {
+  assertOnlineForWrite();
+  const expectedRevision = requireExpectedRevision(input.expectedRevision);
+  const res = await fetchCompoundPrivateApi(`/api/data/concepts/${encodeURIComponent(input.id)}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Request-ID': generateClientRequestId(),
+      ...getAdminAuthHeaders(),
+    },
+    body: JSON.stringify({ expectedRevision }),
+    signal: buildTimeoutSignal(undefined, DEFAULT_REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    return await throwForFailedPrivateMutation(res, `删除失败 (${res.status})`);
+  }
+  return (await res.json()) as DeleteConceptResponse;
+}
+
+export async function fetchSourceById(id: string): Promise<Source> {
+  const res = await fetchCompoundPrivateApi(`/api/data/sources?ids=${encodeURIComponent(id)}`, {
+    headers: {
+      'X-Request-ID': generateClientRequestId(),
+      ...getAdminAuthHeaders(),
+    },
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    return await throwForFailedPrivateMutation(res, `读取资料失败 (${res.status})`);
+  }
+  const payload = (await res.json()) as { sources?: Source[] };
+  const source = payload.sources?.[0];
+  if (!source) throw new Error('资料不存在');
+  return source;
+}
+
+export async function fetchConceptById(id: string): Promise<Concept> {
+  const res = await fetchCompoundPrivateApi(`/api/data/concepts?ids=${encodeURIComponent(id)}`, {
+    headers: {
+      'X-Request-ID': generateClientRequestId(),
+      ...getAdminAuthHeaders(),
+    },
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    return await throwForFailedPrivateMutation(res, `读取概念失败 (${res.status})`);
+  }
+  const payload = (await res.json()) as { concepts?: Concept[] };
+  const concept = payload.concepts?.[0];
+  if (!concept) throw new Error('概念不存在');
+  return concept;
 }
 
 export interface RepairFindingPayload {

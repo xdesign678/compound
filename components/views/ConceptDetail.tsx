@@ -15,7 +15,14 @@ import { formatRelativeTime } from '@/lib/format';
 import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
 import { fetchCompoundPrivateApi } from '@/lib/auth-response-guard';
-import { startWikiFromSelection } from '@/lib/api-client';
+import {
+  deleteConcept,
+  fetchConceptById,
+  flagConceptIncorrect,
+  isRevisionConflictError,
+  requireExpectedRevision,
+  startWikiFromSelection,
+} from '@/lib/api-client';
 import { rememberSelectionWikiRun } from '@/lib/selection-wiki-runs';
 import {
   computeSelectionPopoverPosition,
@@ -174,6 +181,8 @@ export function ConceptDetail({ id }: { id: string }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [flagging, setFlagging] = useState(false);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [versionDialog, setVersionDialog] = useState<VersionDialogState>({
     open: false,
     loading: false,
@@ -563,45 +572,83 @@ export function ConceptDetail({ id }: { id: string }) {
     }
   }, [concept?.title, creatingFromSelection, id, selectionPopover.text, showToast, showErrorToast]);
 
+  const refreshConceptFromServer = useCallback(async () => {
+    const remote = await fetchConceptById(id);
+    await getDb().concepts.put({
+      ...remote,
+      contentStatus: remote.contentStatus ?? 'full',
+    });
+    return remote;
+  }, [id]);
+
+  const handleRefreshConcept = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await refreshConceptFromServer();
+      setMutationError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '刷新失败';
+      setMutationError(message);
+      showErrorToast(message);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshConceptFromServer, refreshing, showErrorToast]);
+
   const handleFlagConcept = useCallback(async () => {
     if (flagging) return;
     setFlagging(true);
+    setMutationError(null);
     try {
-      const db = getDb();
-      await db.activity.add({
-        id: `flag-${id}-${Date.now()}`,
-        type: 'lint',
-        title: `标记有误：${concept?.title ?? id}`,
-        details: `用户手动标记概念 "${concept?.title ?? id}" 需要审核`,
-        status: 'success',
-        relatedConceptIds: [id],
-        at: Date.now(),
+      const remote = await refreshConceptFromServer();
+      const result = await flagConceptIncorrect({
+        id,
+        expectedRevision: requireExpectedRevision(remote.serverRevision),
       });
-      showToast('已标记为有误，将在下次同步时审核');
+      if (result.activity) {
+        await getDb().activity.put(result.activity);
+      }
+      showToast(result.created ? '已标记为有误' : '已在审核队列中');
     } catch (err) {
-      const message = err instanceof Error ? err.message : '标记失败';
+      const message = isRevisionConflictError(err)
+        ? '服务器版本已变化，未写入标记'
+        : err instanceof Error
+          ? err.message
+          : '标记失败';
+      setMutationError(message);
       showErrorToast(message);
     } finally {
       setFlagging(false);
     }
-  }, [concept?.title, flagging, id, showToast, showErrorToast]);
+  }, [flagging, id, refreshConceptFromServer, showToast, showErrorToast]);
 
   const handleDeleteConcept = useCallback(async () => {
     if (deleting) return;
     setDeleting(true);
+    setMutationError(null);
     try {
-      const db = getDb();
-      await db.concepts.delete(id);
+      const remote = await refreshConceptFromServer();
+      await deleteConcept({
+        id,
+        expectedRevision: requireExpectedRevision(remote.serverRevision),
+      });
+      await getDb().concepts.delete(id);
       showToast('概念已删除');
       back();
     } catch (err) {
-      const message = err instanceof Error ? err.message : '删除失败';
+      const message = isRevisionConflictError(err)
+        ? '服务器版本已变化，未删除本地概念'
+        : err instanceof Error
+          ? err.message
+          : '删除失败';
+      setMutationError(message);
       showErrorToast(message);
     } finally {
       setDeleting(false);
       setShowDeleteConfirm(false);
     }
-  }, [back, deleting, id, showToast, showErrorToast]);
+  }, [back, deleting, id, refreshConceptFromServer, showToast, showErrorToast]);
 
   useEffect(() => {
     if (!concept || hasFullBody) return;
@@ -976,6 +1023,21 @@ export function ConceptDetail({ id }: { id: string }) {
           </div>,
           document.body,
         )}
+
+      {mutationError && (
+        <div className="concept-mutation-error" role="alert">
+          <p>{mutationError}</p>
+          <button
+            className="concept-mutation-refresh"
+            type="button"
+            disabled={refreshing}
+            onClick={() => void handleRefreshConcept()}
+            aria-label="刷新服务器版本"
+          >
+            {refreshing ? '刷新中…' : '刷新服务器版本'}
+          </button>
+        </div>
+      )}
 
       {/* Action buttons */}
       <div className="detail-section detail-actions">

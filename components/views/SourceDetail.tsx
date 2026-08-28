@@ -8,7 +8,13 @@ import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { ensureSourceHydrated } from '@/lib/cloud-sync';
-import { updateSourceContent } from '@/lib/api-client';
+import {
+  adoptSavedSourceRevision,
+  fetchSourceById,
+  isRevisionConflictError,
+  readExpectedRevision,
+  updateSourceContent,
+} from '@/lib/api-client';
 import { useAppStore } from '@/lib/store';
 import { formatRelativeTime, renderMarkdown, loadMarked } from '@/lib/format';
 import {
@@ -75,6 +81,26 @@ function formatSourceHost(url: string): string {
   }
 }
 
+/** Fetch the authoritative CAS token without replacing local markdown/draft bytes. */
+async function ensureSourceExpectedRevision(
+  id: string,
+  expectedRevisionRef: { current: number | undefined },
+): Promise<number> {
+  const existing = readExpectedRevision(expectedRevisionRef.current);
+  if (existing !== undefined) return existing;
+  const remote = await fetchSourceById(id);
+  const token = readExpectedRevision(remote.serverRevision);
+  if (token === undefined) {
+    throw new Error('服务器未返回有效版本号');
+  }
+  expectedRevisionRef.current = token;
+  const local = await getDb().sources.get(id);
+  if (local) {
+    await getDb().sources.update(id, { serverRevision: token });
+  }
+  return token;
+}
+
 export function SourceDetail({ id }: { id: string }) {
   const openConcept = useAppStore((s) => s.openConcept);
   const sourceTitleId = useId();
@@ -84,13 +110,20 @@ export function SourceDetail({ id }: { id: string }) {
   const tocCloseTimerRef = useRef<number | null>(null);
   const [blocks, setBlocks] = useState<SourceBlock[]>([]);
   const [isDirty, setIsDirty] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'conflict'>(
+    'idle',
+  );
+  const [draftCopied, setDraftCopied] = useState(false);
+  const [reloading, setReloading] = useState(false);
   const [tocOpen, setTocOpen] = useState(false);
   const [tocVisible, setTocVisible] = useState(false);
   const textareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const activeBlockIdRef = useRef<string | null>(null);
   const saveInFlightRef = useRef(false);
   const queuedSaveRef = useRef<string | null>(null);
+  const expectedRevisionRef = useRef<number | undefined>(undefined);
+  const saveStatusRef = useRef<'idle' | 'saving' | 'saved' | 'error' | 'conflict'>('idle');
+  saveStatusRef.current = saveStatus;
 
   // null 哨兵区分「加载中」与「不存在」：useLiveQuery 首次 resolve 前返回 undefined，
   // 直接判 !source 会让存在的条目也先闪一帧「未找到资料」
@@ -180,11 +213,16 @@ export function SourceDetail({ id }: { id: string }) {
     setBlocks([]);
     setIsDirty(false);
     setSaveStatus('idle');
+    setDraftCopied(false);
+    setReloading(false);
+    expectedRevisionRef.current = undefined;
     closeToc();
   }, [closeToc, id]);
 
   useEffect(() => {
     if (!source || !hasFullContent || isDirty) return;
+    const loadedRevision = readExpectedRevision(source.serverRevision);
+    if (loadedRevision !== undefined) expectedRevisionRef.current = loadedRevision;
     const storedDraft = readSourceDraft(id);
     if (storedDraft !== null && storedDraft !== source.rawContent) {
       setBlocks(splitMarkdownBlocks(storedDraft, source.title));
@@ -213,7 +251,9 @@ export function SourceDetail({ id }: { id: string }) {
       } else {
         clearSourceDraft(id);
       }
-      setSaveStatus((current) => (current === 'saving' ? current : 'idle'));
+      setSaveStatus((current) =>
+        current === 'saving' || current === 'conflict' ? current : 'idle',
+      );
     },
     [id, source?.rawContent],
   );
@@ -267,6 +307,7 @@ export function SourceDetail({ id }: { id: string }) {
 
   const handleSave = useCallback(
     async (rawContent?: string) => {
+      if (saveStatusRef.current === 'conflict') return;
       const requestedContent = rawContent ?? joinBlocksToMarkdown(blocksRef.current);
       if (!canEdit || requestedContent === (source?.rawContent ?? '')) return;
       queuedSaveRef.current = requestedContent;
@@ -279,14 +320,22 @@ export function SourceDetail({ id }: { id: string }) {
           queuedSaveRef.current = null;
           setSaveStatus('saving');
           try {
-            await updateSourceContent({
+            const expectedRevision = await ensureSourceExpectedRevision(id, expectedRevisionRef);
+            const saved = await updateSourceContent({
               id,
               title: source?.title,
               rawContent: contentToSave,
+              expectedRevision,
             });
+            expectedRevisionRef.current = adoptSavedSourceRevision(saved.source);
           } catch (err) {
             queuedSaveRef.current = null;
             console.warn('[source-detail] save failed:', err);
+            if (isRevisionConflictError(err)) {
+              setSaveStatus('conflict');
+              setDraftCopied(false);
+              return;
+            }
             setSaveStatus('error');
             return;
           }
@@ -308,6 +357,38 @@ export function SourceDetail({ id }: { id: string }) {
     },
     [canEdit, id, source?.rawContent, source?.title],
   );
+
+  const handleCopyLocalDraft = useCallback(async () => {
+    const markdown = joinBlocksToMarkdown(blocksRef.current);
+    try {
+      if (!navigator.clipboard) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(markdown);
+      setDraftCopied(true);
+    } catch {
+      setDraftCopied(false);
+    }
+  }, []);
+
+  const handleReloadServerVersion = useCallback(async () => {
+    if (reloading) return;
+    setReloading(true);
+    try {
+      const remote = await fetchSourceById(id);
+      await getDb().sources.put({ ...remote, contentStatus: 'full' });
+      expectedRevisionRef.current = readExpectedRevision(remote.serverRevision);
+      const nextBlocks = splitMarkdownBlocks(remote.rawContent, remote.title);
+      setBlocks(nextBlocks);
+      clearSourceDraft(id);
+      setIsDirty(false);
+      setDraftCopied(false);
+      setSaveStatus('idle');
+    } catch (err) {
+      console.warn('[source-detail] reload failed:', err);
+      setSaveStatus('conflict');
+    } finally {
+      setReloading(false);
+    }
+  }, [id, reloading]);
 
   useEffect(() => {
     if (!isDirty) return;
@@ -339,7 +420,14 @@ export function SourceDetail({ id }: { id: string }) {
   );
 
   useEffect(() => {
-    if (!canEdit || !isDirty || saveStatus === 'saving' || saveStatus === 'error') return;
+    if (
+      !canEdit ||
+      !isDirty ||
+      saveStatus === 'saving' ||
+      saveStatus === 'error' ||
+      saveStatus === 'conflict'
+    )
+      return;
     const timer = window.setTimeout(() => {
       void handleSave();
     }, 1200);
@@ -615,7 +703,7 @@ export function SourceDetail({ id }: { id: string }) {
       {(isDirty || saveStatus !== 'idle') && (
         <div
           id={saveStatusId}
-          className="source-save-indicator"
+          className={`source-save-indicator${saveStatus === 'conflict' ? ' conflict' : ''}`}
           role="status"
           aria-live="polite"
           aria-atomic="true"
@@ -664,6 +752,29 @@ export function SourceDetail({ id }: { id: string }) {
                 aria-label="重试保存资料正文草稿"
               >
                 重试
+              </button>
+            </span>
+          )}
+          {saveStatus === 'conflict' && (
+            <span className="source-save-indicator-text conflict">
+              <span className="source-save-indicator-dot" aria-hidden="true" />
+              版本冲突，本地草稿未覆盖
+              <button
+                className="source-save-indicator-action"
+                onClick={() => void handleCopyLocalDraft()}
+                type="button"
+                aria-label="复制本地草稿"
+              >
+                {draftCopied ? '已复制' : '复制本地草稿'}
+              </button>
+              <button
+                className="source-save-indicator-action primary"
+                onClick={() => void handleReloadServerVersion()}
+                disabled={reloading}
+                type="button"
+                aria-label="重载服务器版本"
+              >
+                {reloading ? '重载中…' : '重载服务器版本'}
               </button>
             </span>
           )}
