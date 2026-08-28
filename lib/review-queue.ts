@@ -12,6 +12,7 @@ import {
   getServerDb,
   repo,
 } from './server-db';
+import { approveDerivedDraft, rejectDerivedDraft } from './query-provenance';
 import type { ActivityLog } from './types';
 import { wikiRepo, type ConceptRelationKind } from './wiki-db';
 
@@ -91,10 +92,6 @@ function applyDerivedDraftReview(
   if (item.kind !== DERIVED_DRAFT_KIND || item.target_type !== 'concept' || !item.target_id) {
     return null;
   }
-  // Lazy import: query-provenance archives drafts and would cycle at load time.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { approveDerivedDraft, rejectDerivedDraft } =
-    require('./query-provenance') as typeof import('./query-provenance');
   const concept =
     status === 'approved'
       ? approveDerivedDraft(item.target_id)
