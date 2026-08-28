@@ -145,9 +145,10 @@ Source: [`app/api/concepts/archive-answer/route.ts`](../app/api/concepts/archive
 
 #### POST
 
-Archive an Ask answer as a first-class server Wiki concept. The new concept
-is linked to the cited concepts, indexed into FTS, versioned, and mirrored
-back to the caller with all touched related concepts.
+Archive an Ask answer as a derived draft Wiki concept. The new concept,
+provenance, open review item, activity, and sync change share one SQLite
+transaction. Drafts stay visible for review but are excluded from retrieval
+until approved.
 
 ### `/api/concepts/from-selection`
 
