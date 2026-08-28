@@ -33,6 +33,11 @@ export function getUnreadinessReason(): string | null {
   return readinessState().reason;
 }
 
+/** True after SIGTERM/SIGINT drain has flipped readiness with reason `drain`. */
+export function isProcessDraining(): boolean {
+  return readinessState().reason === 'drain';
+}
+
 export function datasetIdentityAnchorConfigured(expectedDatasetId: string | undefined): boolean {
   return Boolean(expectedDatasetId?.trim());
 }

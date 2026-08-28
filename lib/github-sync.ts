@@ -13,6 +13,7 @@ import { buildExternalKey } from './github-sync-shared';
 import { logger } from './logging';
 import { buildOutboundTraceHeaders } from './request-context';
 import { parseRateLimitBackoffMs } from './llm-rate-headers';
+import { getProcessDrainSignal, PROCESS_DRAIN_ABORT_MESSAGE } from './process-drain';
 
 export { buildExternalKey, parseExternalKey, externalKeyPath } from './github-sync-shared';
 
@@ -84,9 +85,67 @@ function assertMarkdownFileSize(path: string, size: number | null | undefined): 
   );
 }
 
+function combineAbortSignals(signals: AbortSignal[]): AbortSignal {
+  const live = signals.filter((signal) => Boolean(signal));
+  if (live.length === 0) return new AbortController().signal;
+  if (live.length === 1) return live[0]!;
+  const any = (AbortSignal as typeof AbortSignal & { any?: (input: AbortSignal[]) => AbortSignal })
+    .any;
+  if (typeof any === 'function') return any(live);
+  const ctrl = new AbortController();
+  for (const signal of live) {
+    if (signal.aborted) {
+      ctrl.abort(signal.reason);
+      return ctrl.signal;
+    }
+    signal.addEventListener(
+      'abort',
+      () => {
+        if (!ctrl.signal.aborted) ctrl.abort(signal.reason);
+      },
+      { once: true },
+    );
+  }
+  return ctrl.signal;
+}
+
+function abortErrorFromSignal(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) return signal.reason;
+  const err = new Error(
+    typeof signal.reason === 'string' && signal.reason
+      ? signal.reason
+      : PROCESS_DRAIN_ABORT_MESSAGE,
+  );
+  err.name = 'AbortError';
+  return err;
+}
+
+function githubRequestSignal(): AbortSignal {
+  return combineAbortSignals([
+    getProcessDrainSignal(),
+    AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
+  ]);
+}
+
+function sleepWithSignal(ms: number, signal: AbortSignal): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  if (signal.aborted) return Promise.reject(abortErrorFromSignal(signal));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortErrorFromSignal(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 async function waitForGithubRateLimitBackoff(): Promise<void> {
   const delay = githubRateLimitBackoffUntil - Date.now();
-  if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+  if (delay > 0) await sleepWithSignal(delay, getProcessDrainSignal());
 }
 
 function applyGithubRateLimitHeaders(headers: Headers): void {
@@ -137,6 +196,8 @@ async function githubFetch(
   accept = 'application/vnd.github+json',
 ): Promise<Response> {
   await waitForGithubRateLimitBackoff();
+  const signal = githubRequestSignal();
+  if (signal.aborted) throw abortErrorFromSignal(signal);
   const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${cfg.token}`,
@@ -145,14 +206,21 @@ async function githubFetch(
       'User-Agent': 'compound-sync/1.0',
       ...buildOutboundTraceHeaders(),
     },
-    signal: AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
+    signal,
   });
   applyGithubRateLimitHeaders(res.headers);
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     const remaining = res.headers.get('x-ratelimit-remaining');
+    const path = (() => {
+      try {
+        return new URL(url).pathname;
+      } catch {
+        return '/github';
+      }
+    })();
     throw new Error(
-      `GitHub ${res.status} at ${new URL(url).pathname}` +
+      `GitHub ${res.status} at ${path}` +
         (remaining === '0' ? ' (rate limit exhausted)' : '') +
         (text ? `: ${text.slice(0, 300)}` : ''),
     );

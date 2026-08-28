@@ -64,6 +64,8 @@ export async function register() {
     await import('./sentry.server.config');
     const { registerGlobalCrashGuards } = await import('./lib/process-crash-guards');
     registerGlobalCrashGuards();
+    const { registerProcessDrainHandlers } = await import('./lib/process-drain');
+    registerProcessDrainHandlers();
     const { runBootRecovery } = await import('./lib/boot-recovery');
     runBootRecovery();
   }

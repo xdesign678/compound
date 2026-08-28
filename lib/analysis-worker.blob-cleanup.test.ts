@@ -34,7 +34,7 @@ function setupTempDb() {
 // Change 2: failJob / failJobPermanently early-return blob cleanup
 // ---------------------------------------------------------------------------
 
-test('failJob deletes github ingest payload blob even when job is no longer running (cancelled)', async (t) => {
+test('failJob does not delete payload blob when job is no longer running (cancelled)', async (t) => {
   const env = setupTempDb();
   t.after(env.cleanup);
 
@@ -108,17 +108,17 @@ test('failJob deletes github ingest payload blob even when job is no longer runn
   };
   assert.equal(afterJob.status, 'cancelled');
 
-  // But the blob should have been cleaned up (best-effort in early-return path)
   const blobCountAfter = Number(
     (db.prepare(`SELECT COUNT(*) AS cnt FROM analysis_payload_blobs`).get() as { cnt: number }).cnt,
   );
-  assert.ok(
-    blobCountAfter < blobCountBefore,
-    'payload blob should be deleted even when job was already cancelled',
+  assert.equal(
+    blobCountAfter,
+    blobCountBefore,
+    'payload blob must stay when failJob cannot claim the lease',
   );
 });
 
-test('failJobPermanently deletes github ingest payload blob even when job is no longer running (cancelled)', async (t) => {
+test('failJobPermanently does not delete payload blob when job is no longer running (cancelled)', async (t) => {
   const env = setupTempDb();
   t.after(env.cleanup);
 
@@ -185,13 +185,13 @@ test('failJobPermanently deletes github ingest payload blob even when job is no 
   };
   assert.equal(afterJob.status, 'cancelled');
 
-  // But the blob should have been cleaned up
   const blobCountAfter = Number(
     (db.prepare(`SELECT COUNT(*) AS cnt FROM analysis_payload_blobs`).get() as { cnt: number }).cnt,
   );
-  assert.ok(
-    blobCountAfter < blobCountBefore,
-    'payload blob should be deleted even when failJobPermanently early-returned',
+  assert.equal(
+    blobCountAfter,
+    blobCountBefore,
+    'payload blob must stay when failJobPermanently cannot claim the lease',
   );
 });
 

@@ -15,6 +15,8 @@ import { LINT_SYSTEM_PROMPT, LINT_SYSTEM_PROMPT_VERSION } from './prompts';
 import { getServerDb, repo } from './server-db';
 import { now, parseJson } from './utils';
 import { logger } from './logging';
+import { isProcessDraining } from './process-readiness';
+import { isProcessDrainAbort, withProcessDrainSignal } from './process-drain';
 import type { Concept, LlmConfig } from './types';
 
 export type LintRunPhase = 'loading_concepts' | 'analyzing' | 'done';
@@ -227,6 +229,7 @@ async function analyzeLintBatch(
     llmConfig,
     task: 'lint',
     promptVersion: LINT_SYSTEM_PROMPT_VERSION,
+    signal: withProcessDrainSignal(),
   });
 
   const parsed = parseJSON<{ findings?: Array<Partial<LintFinding>> }>(raw);
@@ -246,6 +249,9 @@ export async function analyzeLintConcepts(
   const seen = new Set<string>();
 
   for (let index = 0; index < batches.length; index += 1) {
+    if (isProcessDraining()) {
+      throw Object.assign(new Error('process draining'), { name: 'AbortError' });
+    }
     const batchFindings = normalizeLintFindings(
       await analyzeLintBatch(batches[index], index, batches.length, llmConfig),
       validIds,
@@ -284,6 +290,7 @@ async function runLintWorker(runId: string, llmConfig?: LlmConfig): Promise<void
     setPhase(runId, 'analyzing', sliced.length);
 
     const findings = await analyzeLintConcepts(sliced, llmConfig);
+    if (isProcessDraining()) return;
 
     // Phase 3: done
     getServerDb()
@@ -292,6 +299,7 @@ async function runLintWorker(runId: string, llmConfig?: LlmConfig): Promise<void
       )
       .run(now(), JSON.stringify(findings), runId);
   } catch (err) {
+    if (isProcessDraining() || isProcessDrainAbort(err)) return;
     const message = err instanceof Error ? err.message : String(err);
     logger.error('lint.worker_failed', { runId, error: message });
     getServerDb()
@@ -307,6 +315,7 @@ async function runLintWorker(runId: string, llmConfig?: LlmConfig): Promise<void
  * Survives server restarts — the status route revives pending runs.
  */
 export function startLintWorker(runId: string, llmConfig?: LlmConfig): void {
+  if (isProcessDraining()) return;
   ensureLintSchema();
   const g = globalThis as unknown as { __compoundLintWorkers?: Map<string, Promise<void>> };
   if (!g.__compoundLintWorkers) g.__compoundLintWorkers = new Map();

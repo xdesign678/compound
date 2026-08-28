@@ -254,3 +254,69 @@ test('listChangedSinceCommit filters compare results to markdown changes', async
     globalThis.fetch = originalFetch;
   }
 });
+
+test(
+  'hanging GitHub fetch aborts immediately when the process drain signal fires',
+  { concurrency: false },
+  async () => {
+    const { abortProcessDrainWork, isProcessDrainAbort, resetProcessDrainForTests } =
+      await import('./process-drain');
+    const { resetProcessReadinessForTests } = await import('./process-readiness');
+    resetProcessDrainForTests();
+    resetProcessReadinessForTests();
+
+    const originalFetch = globalThis.fetch;
+    const token = 'github-token-must-not-leak';
+    globalThis.fetch = ((_input: RequestInfo | URL, init?: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        const signal = init?.signal;
+        if (signal?.aborted) {
+          const err =
+            signal.reason instanceof Error
+              ? signal.reason
+              : Object.assign(new Error('Aborted'), { name: 'AbortError' });
+          reject(err);
+          return;
+        }
+        signal?.addEventListener(
+          'abort',
+          () => {
+            const err =
+              signal.reason instanceof Error
+                ? signal.reason
+                : Object.assign(new Error('Aborted'), { name: 'AbortError' });
+            if (err.name !== 'AbortError') err.name = 'AbortError';
+            reject(err);
+          },
+          { once: true },
+        );
+      });
+    }) as typeof fetch;
+
+    const startedAt = Date.now();
+    const pending = fetchMarkdownContent(
+      'notes/hang.md',
+      { owner: 'demo', repo: 'vault', branch: 'main', token },
+      'sha-hang',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    abortProcessDrainWork();
+    const err = await pending.then(
+      () => null,
+      (error: unknown) => error,
+    );
+    const elapsed = Date.now() - startedAt;
+    try {
+      assert.ok(err, 'fetch should reject');
+      assert.equal(isProcessDrainAbort(err), true);
+      assert.ok(elapsed < 2000, `abort should be immediate, took ${elapsed}ms`);
+      const text =
+        err instanceof Error ? `${err.name} ${err.message} ${err.stack ?? ''}` : String(err);
+      assert.equal(text.includes(token), false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      resetProcessDrainForTests();
+      resetProcessReadinessForTests();
+    }
+  },
+);

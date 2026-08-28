@@ -190,3 +190,67 @@ test(
     });
   },
 );
+
+test('drain abort writes no selection concept or activity', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+  await seedSourceConcept();
+  const { repo } = await import('./server-db');
+  const { createSelectionWikiRun, getSelectionWikiRunStatus, startSelectionWikiWorker } =
+    await import('./selection-wiki-worker');
+  const { drainProcess, resetProcessDrainForTests } = await import('./process-drain');
+  const { resetProcessReadinessForTests } = await import('./process-readiness');
+  t.after(() => {
+    resetProcessReadinessForTests();
+    resetProcessDrainForTests();
+  });
+
+  const beforeConcepts = repo.listConcepts({ summariesOnly: true }).length;
+  const { getServerDb } = await import('./server-db');
+  const beforeActivity = (
+    getServerDb().prepare(`SELECT COUNT(*) AS c FROM activity`).get() as { c: number }
+  ).c;
+  const runId = createSelectionWikiRun({
+    selection: '默认选项如何影响人们的选择而不限制自由。',
+    sourceConceptId: 'c-source',
+    contextTitle: '自由家长主义',
+  });
+  let reached!: () => void;
+  const atFetch = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  await withMockFetch(
+    async (_input, init) => {
+      reached();
+      const signal = init?.signal;
+      await new Promise<never>((_, reject) => {
+        const fail = () => {
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          reject(err);
+        };
+        if (signal?.aborted) fail();
+        else signal?.addEventListener('abort', fail, { once: true });
+      });
+      return new Response('unreachable');
+    },
+    async () => {
+      startSelectionWikiWorker(runId);
+      await atFetch;
+      await drainProcess('SIGTERM', {
+        delay: () => new Promise(() => {}),
+        timeoutMs: 10_000,
+        closeDatabase: () => {},
+        killProcess: () => {},
+        exitProcess: () => {},
+      });
+    },
+  );
+
+  assert.equal(repo.listConcepts({ summariesOnly: true }).length, beforeConcepts);
+  assert.equal(
+    (getServerDb().prepare(`SELECT COUNT(*) AS c FROM activity`).get() as { c: number }).c,
+    beforeActivity,
+  );
+  assert.equal(getSelectionWikiRunStatus(runId)?.status, 'running');
+});

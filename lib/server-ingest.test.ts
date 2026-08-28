@@ -115,3 +115,87 @@ test(
     });
   },
 );
+
+test(
+  'ingest persistGuard abort rolls back source/concept/activity writes',
+  { concurrency: false },
+  async (t) => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'compound-server-ingest-guard-'));
+    const previousEnv = new Map<string, string | undefined>();
+    for (const key of [
+      'DATA_DIR',
+      'LLM_API_KEY',
+      'LLM_API_URL',
+      'COMPOUND_SKIP_DNS_GUARD',
+      'COMPOUND_DISABLE_CATEGORY_WIKI_AUTO_WORKERS',
+    ]) {
+      previousEnv.set(key, process.env[key]);
+    }
+    process.env.DATA_DIR = tempDir;
+    process.env.LLM_API_KEY = 'server-key';
+    process.env.LLM_API_URL = 'https://api.example.com/v1/chat/completions';
+    process.env.COMPOUND_SKIP_DNS_GUARD = 'true';
+    process.env.COMPOUND_DISABLE_CATEGORY_WIKI_AUTO_WORKERS = 'true';
+    closeServerDbGlobal();
+    t.after(() => {
+      closeServerDbGlobal();
+      for (const [key, value] of previousEnv) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    const mockFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  newConcepts: [
+                    { title: 'Guarded', summary: 'g', body: 'g body', relatedConceptIds: [] },
+                  ],
+                  updatedConcepts: [],
+                  activitySummary: 'created Guarded',
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+
+    await withMockFetch(mockFetch, async () => {
+      const { getServerDb } = await import('./server-db');
+      const { ingestSourceToServerDb } = await import('./server-ingest');
+      const db = getServerDb();
+      const count = (table: string) =>
+        Number((db.prepare(`SELECT COUNT(*) AS c FROM ${table}`).get() as { c: number }).c);
+      const before = {
+        sources: count('sources'),
+        concepts: count('concepts'),
+        activity: count('activity'),
+      };
+      const err = Object.assign(new Error('analysis job lease lost'), {
+        name: 'JobLeaseLostError',
+      });
+      await assert.rejects(
+        () =>
+          ingestSourceToServerDb({
+            title: 'Guarded Notes',
+            type: 'text',
+            rawContent: 'Guarded raw notes',
+            persistGuard: () => {
+              throw err;
+            },
+          }),
+        /analysis job lease lost/,
+      );
+      assert.equal(count('sources'), before.sources);
+      assert.equal(count('concepts'), before.concepts);
+      assert.equal(count('activity'), before.activity);
+    });
+  },
+);

@@ -26,6 +26,8 @@ import { getServerDb, repo } from './server-db';
 import { now, parseJson } from './utils';
 import { compileConceptArtifactsAfterManualChange } from './wiki-compiler';
 import type { ActivityLog, Concept } from './types';
+import { isProcessDraining } from './process-readiness';
+import { getProcessDrainSignal, isProcessDrainAbort } from './process-drain';
 
 export type RepairJobKind = 'merge' | 'link' | 'orphan' | 'conflict';
 export type RepairJobStatus = 'queued' | 'running' | 'done' | 'failed' | 'skipped';
@@ -58,6 +60,7 @@ export interface RepairJobRow {
   locked_by: string | null;
   locked_at: number | null;
   lease_expires_at: number | null;
+  lease_version: number;
   attempts: number;
   max_attempts: number;
   updated_at: number;
@@ -146,6 +149,9 @@ export function ensureRepairSchema(): void {
   }
   if (!cols.has('max_attempts')) {
     db.exec(`ALTER TABLE repair_jobs ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 3;`);
+  }
+  if (!cols.has('lease_version')) {
+    db.exec(`ALTER TABLE repair_jobs ADD COLUMN lease_version INTEGER NOT NULL DEFAULT 0;`);
   }
 }
 
@@ -271,22 +277,87 @@ function bumpCounter(runId: string, field: 'done' | 'failed'): void {
   getServerDb().prepare(`UPDATE repair_runs SET ${field} = ${field} + 1 WHERE id = ?`).run(runId);
 }
 
+function repairLeaseGuard(job: RepairJobRow): { clause: string; params: unknown[] } {
+  if (job.locked_by && Number.isFinite(job.lease_version)) {
+    return {
+      clause: ' AND locked_by = ? AND lease_version = ?',
+      params: [job.locked_by, job.lease_version],
+    };
+  }
+  return { clause: ' AND locked_by IS NULL', params: [] };
+}
+
+export class RepairJobLeaseLostError extends Error {
+  constructor(message = 'repair job lease lost') {
+    super(message);
+    this.name = 'RepairJobLeaseLostError';
+  }
+}
+
+export function isRepairJobLeaseLostError(err: unknown): boolean {
+  return (
+    err instanceof RepairJobLeaseLostError ||
+    (err instanceof Error && err.name === 'RepairJobLeaseLostError')
+  );
+}
+
+export function repairJobHoldsLease(job: RepairJobRow): boolean {
+  const row = getServerDb()
+    .prepare(`SELECT status, locked_by, lease_version FROM repair_jobs WHERE id = ?`)
+    .get(job.id) as
+    | { status: string; locked_by: string | null; lease_version: number | null }
+    | undefined;
+  if (!row) return false;
+  if (row.status !== 'running') return false;
+  if (job.locked_by && Number.isFinite(job.lease_version)) {
+    return (
+      row.locked_by === job.locked_by && Number(row.lease_version) === Number(job.lease_version)
+    );
+  }
+  return row.locked_by == null;
+}
+
+export function withRepairJobLease<T>(job: RepairJobRow, fn: () => T): T | null {
+  const db = getServerDb();
+  try {
+    return db
+      .transaction(() => {
+        if (!repairJobHoldsLease(job)) return null;
+        return fn();
+      })
+      .immediate();
+  } catch (err) {
+    if (isRepairJobLeaseLostError(err)) return null;
+    throw err;
+  }
+}
+
 function markJob(
-  id: string,
+  job: RepairJobRow,
   status: RepairJobStatus,
   patch: { error?: string | null } = {},
 ): boolean {
+  const guard = repairLeaseGuard(job);
   const res = getServerDb()
     .prepare(
       `UPDATE repair_jobs
          SET status = ?, error = ?, locked_by = NULL, locked_at = NULL, lease_expires_at = NULL, updated_at = ?
-       WHERE id = ? AND status = 'running'`,
+       WHERE id = ? AND status = 'running'${guard.clause}`,
     )
-    .run(status, patch.error ?? null, now(), id);
+    .run(status, patch.error ?? null, now(), job.id, ...guard.params);
   return Number(res.changes) > 0;
 }
 
+export function markRepairJob(
+  job: RepairJobRow,
+  status: RepairJobStatus,
+  patch: { error?: string | null } = {},
+): boolean {
+  return markJob(job, status, patch);
+}
+
 function claimOneJob(runId: string, usedIds: Set<string>): RepairJobRow | null {
+  if (isProcessDraining()) return null;
   ensureRepairSchema();
   const db = getServerDb();
   const rows = db
@@ -301,13 +372,15 @@ function claimOneJob(runId: string, usedIds: Set<string>): RepairJobRow | null {
 
     const ts = now();
     const leaseExpiresAt = ts + REPAIR_LEASE_MS;
+    const nextVersion = (row.lease_version ?? 0) + 1;
     const res = db
       .prepare(
         `UPDATE repair_jobs
-         SET status = 'running', attempts = attempts + 1, locked_by = ?, locked_at = ?, lease_expires_at = ?, updated_at = ?
+         SET status = 'running', attempts = attempts + 1, locked_by = ?, locked_at = ?, lease_expires_at = ?,
+             lease_version = ?, updated_at = ?
          WHERE id = ? AND status = 'queued'`,
       )
-      .run(WORKER_ID, ts, leaseExpiresAt, ts, row.id);
+      .run(WORKER_ID, ts, leaseExpiresAt, nextVersion, ts, row.id);
     if (res.changes > 0) {
       payload.conceptIds.forEach((id) => usedIds.add(id));
       return {
@@ -316,10 +389,15 @@ function claimOneJob(runId: string, usedIds: Set<string>): RepairJobRow | null {
         locked_by: WORKER_ID,
         locked_at: ts,
         lease_expires_at: leaseExpiresAt,
+        lease_version: nextVersion,
       };
     }
   }
   return null;
+}
+
+export function claimRepairJob(runId: string): RepairJobRow | null {
+  return claimOneJob(runId, new Set());
 }
 
 function requireConcept(id: string): Concept {
@@ -380,50 +458,60 @@ function finalizeRun(runId: string): void {
 
 // ---------------- strategies ----------------------------------------
 
-async function runLinkJob(runId: string, job: RepairJobRow): Promise<void> {
+type RepairCommitResult = 'done' | 'skipped' | 'lost';
+
+function isDrainInterrupted(err: unknown): boolean {
+  return isProcessDraining() || isProcessDrainAbort(err) || isRepairJobLeaseLostError(err);
+}
+
+async function runLinkJob(runId: string, job: RepairJobRow): Promise<RepairCommitResult> {
   const payload = parseJson<{ conceptIds: string[] }>(job.payload_json, { conceptIds: [] });
   const [aId, bId] = payload.conceptIds;
   if (!aId || !bId || aId === bId) throw new Error('link job requires two distinct concepts');
   const a = requireConcept(aId);
   const b = requireConcept(bId);
   const ts = now();
-  if (!a.related.includes(bId)) {
-    repo.upsertConcept({
-      ...a,
-      related: Array.from(new Set([...a.related, bId])),
-      updatedAt: ts,
-      version: a.version + 1,
+  const applied = withRepairJobLease(job, () => {
+    if (!a.related.includes(bId)) {
+      repo.upsertConcept({
+        ...a,
+        related: Array.from(new Set([...a.related, bId])),
+        updatedAt: ts,
+        version: a.version + 1,
+      });
+    }
+    if (!b.related.includes(aId)) {
+      repo.upsertConcept({
+        ...b,
+        related: Array.from(new Set([...b.related, aId])),
+        updatedAt: ts,
+        version: b.version + 1,
+      });
+    }
+    const updated = repo.getConceptsByIds([aId, bId]);
+    const previousById = new Map([
+      [a.id, a],
+      [b.id, b],
+    ]);
+    compileConceptArtifactsAfterManualChange({
+      updatedConcepts: updated
+        .map((next) => {
+          const previous = previousById.get(next.id);
+          return previous && previous.version !== next.version ? { previous, next } : null;
+        })
+        .filter((item): item is { previous: Concept; next: Concept } => Boolean(item)),
+      changeSummary: '一键修复缺失链接。',
     });
-  }
-  if (!b.related.includes(aId)) {
-    repo.upsertConcept({
-      ...b,
-      related: Array.from(new Set([...b.related, aId])),
-      updatedAt: ts,
-      version: b.version + 1,
-    });
-  }
-  const updated = repo.getConceptsByIds([aId, bId]);
-  const previousById = new Map([
-    [a.id, a],
-    [b.id, b],
-  ]);
-  compileConceptArtifactsAfterManualChange({
-    updatedConcepts: updated
-      .map((next) => {
-        const previous = previousById.get(next.id);
-        return previous && previous.version !== next.version ? { previous, next } : null;
-      })
-      .filter((item): item is { previous: Concept; next: Concept } => Boolean(item)),
-    changeSummary: '一键修复缺失链接。',
+    const summary = readSummary(runId);
+    summary.linked += 1;
+    summary.touchedConceptIds = mergeArrays(summary.touchedConceptIds, [aId, bId]);
+    writeSummary(runId, summary);
+    return true;
   });
-  const summary = readSummary(runId);
-  summary.linked += 1;
-  summary.touchedConceptIds = mergeArrays(summary.touchedConceptIds, [aId, bId]);
-  writeSummary(runId, summary);
+  return applied ? 'done' : 'lost';
 }
 
-async function runMergeJob(runId: string, job: RepairJobRow): Promise<void> {
+async function runMergeJob(runId: string, job: RepairJobRow): Promise<RepairCommitResult> {
   const payload = parseJson<{ conceptIds: string[]; message?: string }>(job.payload_json, {
     conceptIds: [],
   });
@@ -450,6 +538,7 @@ async function runMergeJob(runId: string, job: RepairJobRow): Promise<void> {
       maxTokens: 1500,
       task: 'repair_merge',
       promptVersion: MERGE_SYSTEM_PROMPT_VERSION,
+      signal: getProcessDrainSignal(),
     });
     const parsed = parseJSON<{ title?: string; summary?: string; body?: string }>(raw);
     if (parsed.title && parsed.title.trim()) mergedTitle = parsed.title.trim().slice(0, 80);
@@ -457,6 +546,7 @@ async function runMergeJob(runId: string, job: RepairJobRow): Promise<void> {
       mergedSummary = parsed.summary.trim().slice(0, 240);
     if (parsed.body && parsed.body.trim().length >= 10) mergedBody = parsed.body.trim();
   } catch (err) {
+    if (isDrainInterrupted(err)) return 'lost';
     aiFallback = true;
     logger.warn('repair.merge_llm_failed', {
       fallback: 'mechanical_merge',
@@ -491,11 +581,9 @@ async function runMergeJob(runId: string, job: RepairJobRow): Promise<void> {
     updatedAt: ts,
     version: primary.version + 1,
   };
-  // Atomic concept-graph mutation: upsert merged page, rewire all references
-  // from secondary → primary, delete secondary, and recompile artifacts in one
-  // transaction so a crash mid-way leaves no duplicate concept or dangling
-  // `related` id behind.
-  getServerDb().transaction(() => {
+  // Atomic concept-graph mutation: lease check + upsert merged page, rewire
+  // references, delete secondary, recompile, and bump summary in one transaction.
+  const applied = withRepairJobLease(job, () => {
     repo.upsertConcept(mergedConcept);
     repo.replaceRelatedId(secondary.id, primary.id, ts);
     repo.deleteConcept(secondary.id);
@@ -504,17 +592,18 @@ async function runMergeJob(runId: string, job: RepairJobRow): Promise<void> {
       updatedConcepts: [{ previous: primary, next: nextPrimary }],
       changeSummary: `合并重复概念「${secondary.title}」。`,
     });
-  })();
-
-  const summary = readSummary(runId);
-  summary.merged += 1;
-  if (aiFallback) summary.aiFallbacks += 1;
-  summary.deletedConceptIds = mergeArrays(summary.deletedConceptIds, [secondary.id]);
-  summary.touchedConceptIds = mergeArrays(summary.touchedConceptIds, [primary.id]);
-  writeSummary(runId, summary);
+    const summary = readSummary(runId);
+    summary.merged += 1;
+    if (aiFallback) summary.aiFallbacks += 1;
+    summary.deletedConceptIds = mergeArrays(summary.deletedConceptIds, [secondary.id]);
+    summary.touchedConceptIds = mergeArrays(summary.touchedConceptIds, [primary.id]);
+    writeSummary(runId, summary);
+    return true;
+  });
+  return applied ? 'done' : 'lost';
 }
 
-async function runOrphanJob(runId: string, job: RepairJobRow): Promise<void> {
+async function runOrphanJob(runId: string, job: RepairJobRow): Promise<RepairCommitResult> {
   const payload = parseJson<{ conceptIds: string[] }>(job.payload_json, { conceptIds: [] });
   const [targetId] = payload.conceptIds;
   if (!targetId) throw new Error('orphan job requires at least one concept id');
@@ -525,10 +614,13 @@ async function runOrphanJob(runId: string, job: RepairJobRow): Promise<void> {
     .filter((c) => c.id !== targetId);
 
   if (candidates.length === 0) {
-    markJob(job.id, 'skipped', { error: 'no candidate concepts found' });
-    const summary = readSummary(runId);
-    writeSummary(runId, summary);
-    return;
+    const skipped = withRepairJobLease(job, () => {
+      if (!markJob(job, 'skipped', { error: 'no candidate concepts found' })) return null;
+      const summary = readSummary(runId);
+      writeSummary(runId, summary);
+      return true;
+    });
+    return skipped ? 'skipped' : 'lost';
   }
 
   const prompt = `# 目标概念\nid: ${target.id}\ntitle: ${target.title}\nsummary: ${target.summary}\n\nbody:\n${target.body.slice(0, 2000)}\n\n# 候选列表\n${candidates
@@ -547,6 +639,7 @@ async function runOrphanJob(runId: string, job: RepairJobRow): Promise<void> {
       maxTokens: 500,
       task: 'repair_orphan',
       promptVersion: ORPHAN_SYSTEM_PROMPT_VERSION,
+      signal: getProcessDrainSignal(),
     });
     const parsed = parseJSON<{ relatedIds?: string[] }>(raw);
     const valid = new Set(candidates.map((c) => c.id));
@@ -554,57 +647,65 @@ async function runOrphanJob(runId: string, job: RepairJobRow): Promise<void> {
       .filter((id) => valid.has(id) && id !== targetId)
       .slice(0, 3);
   } catch (err) {
+    if (isDrainInterrupted(err)) return 'lost';
     logger.warn('repair.orphan_llm_failed', {
       error: err instanceof Error ? err.message : String(err),
     });
   }
 
   if (relatedIds.length === 0) {
-    markJob(job.id, 'skipped', { error: 'LLM returned no viable candidates' });
-    return;
+    const skipped = withRepairJobLease(job, () => {
+      if (!markJob(job, 'skipped', { error: 'LLM returned no viable candidates' })) return null;
+      return true;
+    });
+    return skipped ? 'skipped' : 'lost';
   }
 
   const ts = now();
-  const merged = Array.from(new Set([...target.related, ...relatedIds]));
-  repo.upsertConcept({
-    ...target,
-    related: merged,
-    updatedAt: ts,
-    version: target.version + 1,
-  });
-
-  const previousRelatedById = new Map<string, Concept>();
-  for (const rid of relatedIds) {
-    const other = repo.getConcept(rid);
-    if (!other || other.related.includes(targetId)) continue;
-    previousRelatedById.set(rid, other);
+  const applied = withRepairJobLease(job, () => {
+    const merged = Array.from(new Set([...target.related, ...relatedIds]));
     repo.upsertConcept({
-      ...other,
-      related: Array.from(new Set([...other.related, targetId])),
+      ...target,
+      related: merged,
       updatedAt: ts,
-      version: other.version + 1,
+      version: target.version + 1,
     });
-  }
-  const updated = repo.getConceptsByIds([targetId, ...relatedIds]);
-  const previousById = new Map<string, Concept>([[target.id, target]]);
-  for (const [rid, previous] of previousRelatedById) previousById.set(rid, previous);
-  compileConceptArtifactsAfterManualChange({
-    updatedConcepts: updated
-      .map((next) => {
-        const previous = previousById.get(next.id);
-        return previous && previous.version !== next.version ? { previous, next } : null;
-      })
-      .filter((item): item is { previous: Concept; next: Concept } => Boolean(item)),
-    changeSummary: '一键修复孤岛概念链接。',
-  });
 
-  const summary = readSummary(runId);
-  summary.orphanFixed += 1;
-  summary.touchedConceptIds = mergeArrays(summary.touchedConceptIds, [targetId, ...relatedIds]);
-  writeSummary(runId, summary);
+    const previousRelatedById = new Map<string, Concept>();
+    for (const rid of relatedIds) {
+      const other = repo.getConcept(rid);
+      if (!other || other.related.includes(targetId)) continue;
+      previousRelatedById.set(rid, other);
+      repo.upsertConcept({
+        ...other,
+        related: Array.from(new Set([...other.related, targetId])),
+        updatedAt: ts,
+        version: other.version + 1,
+      });
+    }
+    const updated = repo.getConceptsByIds([targetId, ...relatedIds]);
+    const previousById = new Map<string, Concept>([[target.id, target]]);
+    for (const [rid, previous] of previousRelatedById) previousById.set(rid, previous);
+    compileConceptArtifactsAfterManualChange({
+      updatedConcepts: updated
+        .map((next) => {
+          const previous = previousById.get(next.id);
+          return previous && previous.version !== next.version ? { previous, next } : null;
+        })
+        .filter((item): item is { previous: Concept; next: Concept } => Boolean(item)),
+      changeSummary: '一键修复孤岛概念链接。',
+    });
+
+    const summary = readSummary(runId);
+    summary.orphanFixed += 1;
+    summary.touchedConceptIds = mergeArrays(summary.touchedConceptIds, [targetId, ...relatedIds]);
+    writeSummary(runId, summary);
+    return true;
+  });
+  return applied ? 'done' : 'lost';
 }
 
-async function runConflictJob(runId: string, job: RepairJobRow): Promise<void> {
+async function runConflictJob(runId: string, job: RepairJobRow): Promise<RepairCommitResult> {
   const payload = parseJson<{ conceptIds: string[]; message?: string }>(job.payload_json, {
     conceptIds: [],
   });
@@ -628,11 +729,13 @@ async function runConflictJob(runId: string, job: RepairJobRow): Promise<void> {
       maxTokens: 800,
       task: 'repair_conflict',
       promptVersion: CONFLICT_SYSTEM_PROMPT_VERSION,
+      signal: getProcessDrainSignal(),
     });
     const parsed = parseJSON<{ verdict?: string; reasoning?: string }>(raw);
     if (parsed.verdict && parsed.verdict.trim()) verdict = parsed.verdict.trim();
     if (parsed.reasoning && parsed.reasoning.trim()) reasoning = parsed.reasoning.trim();
   } catch (err) {
+    if (isDrainInterrupted(err)) return 'lost';
     logger.warn('repair.conflict_llm_failed', {
       error: err instanceof Error ? err.message : String(err),
     });
@@ -641,88 +744,116 @@ async function runConflictJob(runId: string, job: RepairJobRow): Promise<void> {
   const pair = `[${a.title}](concept:${a.id}) · [${b.title}](concept:${b.id})`;
   const block = `\n\n> ⚠ 待确认：${verdict}\n>\n> ${reasoning.replace(/\n/g, '\n> ')}\n>\n> 关联：${pair}`;
   const ts = now();
-  repo.upsertConcept({
-    ...a,
-    body: `${a.body}${block}`.trim(),
-    updatedAt: ts,
-    version: a.version + 1,
-  });
-  repo.upsertConcept({
-    ...b,
-    body: `${b.body}${block}`.trim(),
-    updatedAt: ts,
-    version: b.version + 1,
-  });
-  const conflictUpdated = repo.getConceptsByIds([a.id, b.id]);
-  const conflictPreviousById = new Map([
-    [a.id, a],
-    [b.id, b],
-  ]);
-  compileConceptArtifactsAfterManualChange({
-    updatedConcepts: conflictUpdated
-      .map((next) => {
-        const previous = conflictPreviousById.get(next.id);
-        return previous ? { previous, next } : null;
-      })
-      .filter((item): item is { previous: Concept; next: Concept } => Boolean(item)),
-    changeSummary: '一键修复追加冲突待确认说明。',
-  });
+  const applied = withRepairJobLease(job, () => {
+    repo.upsertConcept({
+      ...a,
+      body: `${a.body}${block}`.trim(),
+      updatedAt: ts,
+      version: a.version + 1,
+    });
+    repo.upsertConcept({
+      ...b,
+      body: `${b.body}${block}`.trim(),
+      updatedAt: ts,
+      version: b.version + 1,
+    });
+    const conflictUpdated = repo.getConceptsByIds([a.id, b.id]);
+    const conflictPreviousById = new Map([
+      [a.id, a],
+      [b.id, b],
+    ]);
+    compileConceptArtifactsAfterManualChange({
+      updatedConcepts: conflictUpdated
+        .map((next) => {
+          const previous = conflictPreviousById.get(next.id);
+          return previous ? { previous, next } : null;
+        })
+        .filter((item): item is { previous: Concept; next: Concept } => Boolean(item)),
+      changeSummary: '一键修复追加冲突待确认说明。',
+    });
 
-  createReviewItem({
-    kind: 'conflict',
-    title: `概念冲突：${a.title} ↔ ${b.title}`,
-    targetType: 'concept',
-    targetId: a.id,
-    sourceId: null,
-    confidence: 0.4,
-    payload: {
-      conceptIds: [a.id, b.id],
-      verdict,
-      reasoning,
-      lintMessage: payload.message || '',
-    },
-  });
+    createReviewItem({
+      kind: 'conflict',
+      title: `概念冲突：${a.title} ↔ ${b.title}`,
+      targetType: 'concept',
+      targetId: a.id,
+      sourceId: null,
+      confidence: 0.4,
+      payload: {
+        conceptIds: [a.id, b.id],
+        verdict,
+        reasoning,
+        lintMessage: payload.message || '',
+      },
+    });
 
-  const summary = readSummary(runId);
-  summary.conflictQueued += 1;
-  summary.touchedConceptIds = mergeArrays(summary.touchedConceptIds, [a.id, b.id]);
-  writeSummary(runId, summary);
+    const summary = readSummary(runId);
+    summary.conflictQueued += 1;
+    summary.touchedConceptIds = mergeArrays(summary.touchedConceptIds, [a.id, b.id]);
+    writeSummary(runId, summary);
+    return true;
+  });
+  return applied ? 'done' : 'lost';
 }
 
 async function dispatchJob(runId: string, job: RepairJobRow): Promise<void> {
   try {
-    if (job.kind === 'link') await runLinkJob(runId, job);
-    else if (job.kind === 'merge') await runMergeJob(runId, job);
-    else if (job.kind === 'orphan') await runOrphanJob(runId, job);
-    else if (job.kind === 'conflict') await runConflictJob(runId, job);
+    let result: RepairCommitResult;
+    if (job.kind === 'link') result = await runLinkJob(runId, job);
+    else if (job.kind === 'merge') result = await runMergeJob(runId, job);
+    else if (job.kind === 'orphan') result = await runOrphanJob(runId, job);
+    else if (job.kind === 'conflict') result = await runConflictJob(runId, job);
     else {
-      markJob(job.id, 'skipped', { error: `unknown kind: ${String(job.kind)}` });
+      const skipped = withRepairJobLease(job, () => {
+        if (!markJob(job, 'skipped', { error: `unknown kind: ${String(job.kind)}` })) return null;
+        bumpCounter(runId, 'done');
+        return true;
+      });
+      if (!skipped) return;
       return;
     }
-    // Some strategies (orphan) set their own status via markJob(skipped).
+    if (result === 'lost') return;
     const latest = getServerDb()
       .prepare(`SELECT status FROM repair_jobs WHERE id = ?`)
       .get(job.id) as { status: RepairJobStatus } | undefined;
     if (latest?.status === 'running') {
-      if (markJob(job.id, 'done')) {
+      const marked = withRepairJobLease(job, () => {
+        if (!markJob(job, result === 'skipped' ? 'skipped' : 'done')) return null;
         bumpCounter(runId, 'done');
-      }
+        return true;
+      });
+      if (!marked) return;
     } else if (latest?.status === 'skipped') {
       bumpCounter(runId, 'done');
     }
   } catch (err) {
+    if (isDrainInterrupted(err)) return;
     const message = err instanceof Error ? err.message : String(err);
-    if (markJob(job.id, 'failed', { error: message.slice(0, 500) })) {
+    const marked = withRepairJobLease(job, () => {
+      if (!markJob(job, 'failed', { error: message.slice(0, 500) })) return null;
       bumpCounter(runId, 'failed');
-    }
+      return true;
+    });
+    if (!marked) return;
     logger.warn('repair.job_failed', { runId, jobId: job.id, kind: job.kind, error: message });
   }
+}
+
+function runHasActiveJobs(runId: string): boolean {
+  const row = getServerDb()
+    .prepare(
+      `SELECT COUNT(*) AS count FROM repair_jobs
+        WHERE run_id = ? AND status IN ('queued', 'running')`,
+    )
+    .get(runId) as { count: number };
+  return Number(row.count || 0) > 0;
 }
 
 async function runRepairLoop(runId: string): Promise<void> {
   ensureRepairSchema();
   const usedIds = new Set<string>();
   for (;;) {
+    if (isProcessDraining()) return;
     const job = claimOneJob(runId, usedIds);
     if (!job) break;
     await dispatchJob(runId, job);
@@ -730,6 +861,8 @@ async function runRepairLoop(runId: string): Promise<void> {
     payload.conceptIds.forEach((id) => usedIds.delete(id));
     if (usedIds.size > 200) usedIds.clear(); // defensive reset
   }
+  if (isProcessDraining()) return;
+  if (runHasActiveJobs(runId)) return;
   finalizeRun(runId);
 }
 
@@ -739,6 +872,7 @@ async function runRepairLoop(runId: string): Promise<void> {
  * calls while the loop is still running are ignored.
  */
 export function startRepairWorker(runId: string): void {
+  if (isProcessDraining()) return;
   ensureRepairSchema();
   const g = globalThis as unknown as { __compoundRepairWorkers?: Map<string, Promise<void>> };
   if (!g.__compoundRepairWorkers) g.__compoundRepairWorkers = new Map();

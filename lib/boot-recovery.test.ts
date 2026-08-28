@@ -193,3 +193,132 @@ test(
     runBootRecovery();
   },
 );
+
+test(
+  'boot recovery drains a persisted webhook inbox after simulated crash',
+  { concurrency: false },
+  async (t) => {
+    const env = setupTempDb();
+    t.after(env.cleanup);
+
+    const { getServerDb, repo } = await import('./server-db');
+    const { persistWebhookDelivery, getWebhookDelivery } = await import('./webhook-inbox');
+    const { setGithubSyncLoopRunnerForTests } = await import('./github-sync-runner');
+    const { runBootRecovery } = await import('./boot-recovery');
+    t.after(() => setGithubSyncLoopRunnerForTests(null));
+
+    const runs: string[] = [];
+    setGithubSyncLoopRunnerForTests(async (jobId) => {
+      runs.push(jobId);
+      repo.updateSyncJob(jobId, { status: 'done', finished_at: Date.now(), current: 'injected' });
+    });
+
+    persistWebhookDelivery({
+      deliveryId: 'boot-delivery',
+      event: 'push',
+      signatureSha256: 'sha256=boot',
+      ref: 'refs/heads/main',
+      beforeSha: 'sha-boot-before',
+      afterSha: 'sha-boot-after',
+    });
+    const beforeBoot = getWebhookDelivery('boot-delivery');
+    assert.equal(beforeBoot?.status, 'received');
+    assert.equal(beforeBoot?.job_id, null);
+
+    runBootRecovery();
+    const holder = globalThis as unknown as { __activeSyncPromises?: Set<Promise<void>> };
+    for (let i = 0; i < 40; i += 1) {
+      const promises = Array.from(holder.__activeSyncPromises ?? []);
+      if (promises.length === 0) break;
+      await Promise.allSettled(promises);
+    }
+
+    const afterBoot = getWebhookDelivery('boot-delivery');
+    assert.equal(afterBoot?.status, 'processed');
+    assert.ok(afterBoot?.job_id);
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0], afterBoot?.job_id);
+    const jobs = getServerDb().prepare(`SELECT COUNT(*) AS count FROM sync_jobs`).get() as {
+      count: number;
+    };
+    assert.equal(jobs.count, 1);
+  },
+);
+
+test(
+  'boot recovery fails a just-crashed running job then drains its claimed delivery',
+  { concurrency: false },
+  async (t) => {
+    const env = setupTempDb();
+    t.after(env.cleanup);
+
+    const { getServerDb, repo } = await import('./server-db');
+    const { persistWebhookDelivery, getWebhookDelivery, ensureWebhookInboxSchema } =
+      await import('./webhook-inbox');
+    const { setGithubSyncLoopRunnerForTests } = await import('./github-sync-runner');
+    const { runBootRecovery } = await import('./boot-recovery');
+    t.after(() => setGithubSyncLoopRunnerForTests(null));
+
+    const runs: string[] = [];
+    setGithubSyncLoopRunnerForTests(async (jobId) => {
+      runs.push(jobId);
+      repo.updateSyncJob(jobId, { status: 'done', finished_at: Date.now(), current: 'injected' });
+    });
+
+    const justCrashedAt = Date.now() - 1;
+    repo.insertSyncJob({
+      id: 'job-orphan-boot',
+      kind: 'github',
+      status: 'running',
+      total: 1,
+      done: 0,
+      failed: 0,
+      current: 'download',
+      log: '[]',
+      error: null,
+      started_at: justCrashedAt,
+      finished_at: null,
+      heartbeat_at: justCrashedAt,
+    });
+    ensureWebhookInboxSchema();
+    persistWebhookDelivery({
+      deliveryId: 'boot-claimed',
+      event: 'push',
+      signatureSha256: 'sha256=claimed',
+      ref: 'refs/heads/main',
+      afterSha: 'sha-claimed',
+    });
+    getServerDb()
+      .prepare(
+        `UPDATE webhook_deliveries
+            SET status = 'claimed',
+                job_id = ?,
+                attempts = 1,
+                lease_version = 1
+          WHERE delivery_id = ?`,
+      )
+      .run('job-orphan-boot', 'boot-claimed');
+
+    const before = getWebhookDelivery('boot-claimed');
+    assert.equal(before?.status, 'claimed');
+    assert.equal(before?.job_id, 'job-orphan-boot');
+    assert.equal(repo.getSyncJob('job-orphan-boot')?.status, 'running');
+
+    runBootRecovery();
+    const holder = globalThis as unknown as { __activeSyncPromises?: Set<Promise<void>> };
+    for (let i = 0; i < 40; i += 1) {
+      const promises = Array.from(holder.__activeSyncPromises ?? []);
+      if (promises.length === 0) break;
+      await Promise.allSettled(promises);
+    }
+
+    const orphan = repo.getSyncJob('job-orphan-boot');
+    assert.equal(orphan?.status, 'failed', 'just-crashed running job is recovered at boot');
+    const after = getWebhookDelivery('boot-claimed');
+    assert.equal(after?.status, 'processed');
+    assert.ok(after?.job_id);
+    assert.notEqual(after?.job_id, 'job-orphan-boot');
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0], after?.job_id);
+  },
+);

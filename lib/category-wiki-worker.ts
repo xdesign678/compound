@@ -5,6 +5,8 @@ import { CATEGORY_WIKI_SYSTEM_PROMPT, CATEGORY_WIKI_SYSTEM_PROMPT_VERSION } from
 import { getServerDb, repo, rowToCategoryWiki } from './server-db';
 import { logger } from './logging';
 import { now, parseJson } from './utils';
+import { isProcessDraining } from './process-readiness';
+import { isProcessDrainAbort, withProcessDrainSignal } from './process-drain';
 import type {
   CategoryWiki,
   CategoryWikiRequest,
@@ -137,12 +139,24 @@ export function autoQueueCategoryWikis(
     conceptIds?: string[];
     limit?: number;
     startWorkers?: boolean;
+    persistGuard?: () => void;
   } = {},
 ): CategoryWikiAutoQueueResult {
+  if (isProcessDraining()) {
+    return {
+      discovered: 0,
+      queued: 0,
+      skippedFresh: 0,
+      skippedActive: 0,
+      skippedEmpty: 0,
+      failed: 0,
+    };
+  }
   ensureCategoryWikiSchema();
   const shouldStartWorkers =
     options.startWorkers !== false &&
-    process.env.COMPOUND_DISABLE_CATEGORY_WIKI_AUTO_WORKERS !== 'true';
+    process.env.COMPOUND_DISABLE_CATEGORY_WIKI_AUTO_WORKERS !== 'true' &&
+    !isProcessDraining();
   const targets = options.conceptIds?.length
     ? listCategoryWikiTargetsForConceptIds(options.conceptIds, options.limit)
     : listCategoryWikiTargets(options.limit);
@@ -181,13 +195,19 @@ export function autoQueueCategoryWikis(
         continue;
       }
 
-      const runId = createCategoryWikiRun({
-        primary: target.primary,
-        secondary: target.secondary,
-      });
+      const runId = getServerDb()
+        .transaction(() => {
+          options.persistGuard?.();
+          return createCategoryWikiRun({
+            primary: target.primary,
+            secondary: target.secondary,
+          });
+        })
+        .immediate();
       result.queued += 1;
       if (shouldStartWorkers) startCategoryWikiWorker(runId);
     } catch (err) {
+      if (err instanceof Error && err.name === 'JobLeaseLostError') throw err;
       result.failed += 1;
       logger.warn('category_wiki.auto_queue_target_failed', {
         primary: target.primary,
@@ -285,6 +305,7 @@ export function getCategoryWikiRunStatus(runId: string): CategoryWikiRunStatusRe
 }
 
 export function startCategoryWikiWorker(runId: string, llmConfig?: LlmConfig): void {
+  if (isProcessDraining()) return;
   ensureCategoryWikiSchema();
   const state = getCategoryWikiWorkerState();
   if (llmConfig) state.configs.set(runId, llmConfig);
@@ -292,6 +313,7 @@ export function startCategoryWikiWorker(runId: string, llmConfig?: LlmConfig): v
 }
 
 function startCategoryWikiWorkerNow(runId: string, llmConfig?: LlmConfig): void {
+  if (isProcessDraining()) return;
   const state = getCategoryWikiWorkerState();
   if (state.workers.has(runId)) return;
 
@@ -448,6 +470,7 @@ export function resumePendingCategoryWikiRuns(): void {
 }
 
 function startPendingCategoryWikiWorkers(): void {
+  if (isProcessDraining()) return;
   ensureCategoryWikiSchema();
   const state = getCategoryWikiWorkerState();
   const slots = getCategoryWikiWorkerConcurrency() - state.workers.size;
@@ -504,6 +527,7 @@ async function runCategoryWikiWorker(runId: string, llmConfig?: LlmConfig): Prom
       )
       .run(JSON.stringify({ success: true }), ts, ts, runId);
   } catch (err) {
+    if (isProcessDraining() || isProcessDrainAbort(err)) return;
     const message = err instanceof Error ? err.message : String(err);
     logger.error('category_wiki.worker_failed', { runId, error: message });
     getServerDb()
@@ -556,12 +580,17 @@ ${conceptBlock}
     llmConfig,
     task: 'category-wiki',
     promptVersion: CATEGORY_WIKI_SYSTEM_PROMPT_VERSION,
+    signal: withProcessDrainSignal(),
   });
 
   const parsed = parseJSON<CategoryWikiLLMResponse>(raw);
   const bodyMd = typeof parsed.bodyMd === 'string' ? parsed.bodyMd.trim() : '';
   if (!bodyMd) {
     throw new Error('LLM 未能生成有效的 Wiki 正文');
+  }
+
+  if (isProcessDraining()) {
+    throw Object.assign(new Error('process draining'), { name: 'AbortError' });
   }
 
   setRunPhase(runId, 'persisting');

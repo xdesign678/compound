@@ -22,7 +22,7 @@ import {
   SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
 } from './prompts';
 import { now, parseJson } from './utils';
-import { wikiRepo, type ConceptRelationKind } from './wiki-db';
+import { wikiRepo, type ConceptEvidence, type ConceptRelationKind } from './wiki-db';
 import {
   getBackgroundLlmBudgetStats,
   getLlmBudgetStats,
@@ -30,6 +30,9 @@ import {
   type LlmBudgetName,
 } from './llm-budgets';
 import { getModelForTask } from './model-history';
+import { isProcessDraining } from './process-readiness';
+import { getProcessDrainSignal, isProcessDrainAbort } from './process-drain';
+import type { Concept, Source } from './types';
 
 export type AdvancedAnalysisStage =
   | 'github_ingest'
@@ -44,7 +47,7 @@ export type AdvancedAnalysisStage =
 
 type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'cancelled';
 
-interface AnalysisJobRow {
+export interface AnalysisJobRow {
   id: string;
   source_id: string;
   source_sha: string | null;
@@ -133,7 +136,14 @@ const RELATION_KINDS = new Set<ConceptRelationKind>([
 let schemaReady = false;
 let schemaDb: ReturnType<typeof getServerDb> | null = null;
 const activeWorkerCounts = new Map<string, number>();
-const cancelControllers = new Map<string, AbortController>();
+
+function analysisCancelControllers(): Map<string, AbortController> {
+  const g = globalThis as unknown as {
+    __analysisCancelControllers?: Map<string, AbortController>;
+  };
+  g.__analysisCancelControllers ??= new Map();
+  return g.__analysisCancelControllers;
+}
 
 interface WorkerWakeTimer {
   at: number;
@@ -548,6 +558,7 @@ export function clearAnalysisWorkerWakeTimersForTests(): void {
 }
 
 function claimJobs(limit: number, stages?: AdvancedAnalysisStage[]): AnalysisJobRow[] {
+  if (isProcessDraining()) return [];
   ensureAnalysisWorkerSchema();
   const db = getServerDb();
   const filter = stageWhereClause(stages);
@@ -595,6 +606,108 @@ function leaseGuard(job: AnalysisJobRow): { clause: string; params: unknown[] } 
   return { clause: ' AND locked_by IS NULL', params: [] };
 }
 
+export class JobLeaseLostError extends Error {
+  constructor(message = 'analysis job lease lost') {
+    super(message);
+    this.name = 'JobLeaseLostError';
+  }
+}
+
+export function isJobLeaseLostError(err: unknown): boolean {
+  return (
+    err instanceof JobLeaseLostError || (err instanceof Error && err.name === 'JobLeaseLostError')
+  );
+}
+
+export function analysisJobHoldsLease(job: AnalysisJobRow): boolean {
+  const row = getServerDb()
+    .prepare(`SELECT status, locked_by, lease_version FROM analysis_jobs WHERE id = ?`)
+    .get(job.id) as
+    | { status: string; locked_by: string | null; lease_version: number | null }
+    | undefined;
+  if (!row) return false;
+  if (row.status !== 'running') return false;
+  if (job.locked_by && Number.isFinite(job.lease_version)) {
+    return (
+      row.locked_by === job.locked_by && Number(row.lease_version) === Number(job.lease_version)
+    );
+  }
+  return row.locked_by == null;
+}
+
+export function persistGuardForJob(job: AnalysisJobRow): () => void {
+  return () => {
+    if (!analysisJobHoldsLease(job)) throw new JobLeaseLostError();
+  };
+}
+
+/**
+ * Run `fn` inside one SQLite transaction after verifying the job is still
+ * `running` with this worker's `locked_by` + `lease_version`. Lost leases
+ * return null and roll back any writes from `fn`.
+ */
+export function withAnalysisJobLease<T>(job: AnalysisJobRow, fn: () => T): T | null {
+  const db = getServerDb();
+  try {
+    return db
+      .transaction(() => {
+        if (!analysisJobHoldsLease(job)) return null;
+        return fn();
+      })
+      .immediate();
+  } catch (err) {
+    if (isJobLeaseLostError(err)) return null;
+    throw err;
+  }
+}
+
+export interface FencedAnalysisEffects {
+  source?: Source;
+  concept?: Concept;
+  relation?: Parameters<typeof wikiRepo.upsertConceptRelation>[0];
+  evidence?: Omit<ConceptEvidence, 'id' | 'createdAt'>;
+  review?: Parameters<typeof createReviewItem>[0];
+}
+
+/** Test/production helper: late business writes only land while this lease is held. */
+export function applyFencedAnalysisEffects(
+  job: AnalysisJobRow,
+  effects: FencedAnalysisEffects,
+): boolean {
+  if (effects.relation || effects.evidence) wikiRepo.ensureSchema();
+  const applied = withAnalysisJobLease(job, () => {
+    if (effects.source) repo.insertSource(effects.source);
+    if (effects.concept) repo.upsertConcept(effects.concept);
+    if (effects.relation) wikiRepo.upsertConceptRelation(effects.relation);
+    if (effects.evidence) wikiRepo.addEvidenceBatch([effects.evidence]);
+    if (effects.review) createReviewItem(effects.review);
+    return true;
+  });
+  return applied === true;
+}
+
+function abortAnySignals(signals: AbortSignal[]): AbortSignal {
+  if (signals.length === 1) return signals[0];
+  const any = (AbortSignal as typeof AbortSignal & { any?: (input: AbortSignal[]) => AbortSignal })
+    .any;
+  if (typeof any === 'function') return any(signals);
+  const ctrl = new AbortController();
+  for (const signal of signals) {
+    if (signal.aborted) {
+      ctrl.abort(signal.reason);
+      return ctrl.signal;
+    }
+    signal.addEventListener(
+      'abort',
+      () => {
+        if (!ctrl.signal.aborted) ctrl.abort(signal.reason);
+      },
+      { once: true },
+    );
+  }
+  return ctrl.signal;
+}
+
 function stableHash(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
@@ -620,32 +733,41 @@ function classifyJobError(err: unknown): string {
 }
 
 function currentRunSignal(runId: string | null | undefined): AbortSignal | undefined {
-  if (!runId) return undefined;
-  let ctrl = cancelControllers.get(runId);
-  if (!ctrl) {
-    ctrl = new AbortController();
-    cancelControllers.set(runId, ctrl);
+  const signals: AbortSignal[] = [getProcessDrainSignal()];
+  if (runId) {
+    const controllers = analysisCancelControllers();
+    let ctrl = controllers.get(runId);
+    if (!ctrl) {
+      ctrl = new AbortController();
+      controllers.set(runId, ctrl);
+    }
+    signals.push(ctrl.signal);
   }
-  return ctrl.signal;
+  return abortAnySignals(signals);
 }
 
-function refreshJobHeartbeat(job: AnalysisJobRow): void {
-  const ts = now();
-  const guard = leaseGuard(job);
-  getServerDb()
-    .prepare(
-      `UPDATE analysis_jobs
-          SET heartbeat_at = ?, locked_at = ?, updated_at = ?
-        WHERE id = ? AND status = 'running'${guard.clause}`,
-    )
-    .run(ts, ts, ts, job.id, ...guard.params);
-  if (job.item_id) {
-    syncObs.updateRunItem(job.item_id, {
-      status: 'running',
-      stage: job.stage === 'github_ingest' ? 'llm' : 'enhance',
-    });
-  }
-  if (job.run_id) syncObs.updateRun(job.run_id, { stage: 'llm', current: job.source_path });
+export function refreshJobHeartbeat(job: AnalysisJobRow): boolean {
+  const applied = withAnalysisJobLease(job, () => {
+    const ts = now();
+    const guard = leaseGuard(job);
+    const res = getServerDb()
+      .prepare(
+        `UPDATE analysis_jobs
+            SET heartbeat_at = ?, locked_at = ?, updated_at = ?
+          WHERE id = ? AND status = 'running'${guard.clause}`,
+      )
+      .run(ts, ts, ts, job.id, ...guard.params);
+    if (Number(res.changes) === 0) return null;
+    if (job.item_id) {
+      syncObs.updateRunItem(job.item_id, {
+        status: 'running',
+        stage: job.stage === 'github_ingest' ? 'llm' : 'enhance',
+      });
+    }
+    if (job.run_id) syncObs.updateRun(job.run_id, { stage: 'llm', current: job.source_path });
+    return true;
+  });
+  return applied === true;
 }
 
 async function withJobHeartbeat<T>(job: AnalysisJobRow, fn: () => Promise<T>): Promise<T> {
@@ -697,7 +819,7 @@ async function withBackgroundLlmBudget<T>(
 function computeStageInputHash(job: AnalysisJobRow): string | null {
   if (job.stage === 'github_ingest') {
     const payload = parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload);
-    const rawContent = getGithubIngestRawContent(payload);
+    const rawContent = readGithubIngestRawContent(payload);
     if (typeof rawContent !== 'string') return null;
     const contentHash = payload.rawContentHash ?? stableHash(normalizeContentForHash(rawContent));
     return stableHash(
@@ -756,17 +878,32 @@ function getCachedStageStatus(job: AnalysisJobRow, inputHash: string | null): st
   return row?.status ?? null;
 }
 
-function getGithubIngestRawContent(payload: GithubIngestPayload): string | null {
+function readGithubIngestRawContent(payload: GithubIngestPayload): string | null {
   if (typeof payload.rawContent === 'string') return payload.rawContent;
   if (!payload.rawContentRef) return null;
   const row = getServerDb()
     .prepare(`SELECT content FROM analysis_payload_blobs WHERE ref = ?`)
     .get(payload.rawContentRef) as { content?: string } | undefined;
-  if (typeof row?.content !== 'string') return null;
+  return typeof row?.content === 'string' ? row.content : null;
+}
+
+export function getGithubIngestRawContent(
+  payload: GithubIngestPayload,
+  job: AnalysisJobRow,
+): string | null {
+  const content = readGithubIngestRawContent(payload);
+  if (content == null || typeof payload.rawContent === 'string' || !payload.rawContentRef) {
+    return content;
+  }
   getServerDb()
-    .prepare(`UPDATE analysis_payload_blobs SET last_used_at = ? WHERE ref = ?`)
-    .run(now(), payload.rawContentRef);
-  return row.content;
+    .transaction(() => {
+      persistGuardForJob(job)();
+      getServerDb()
+        .prepare(`UPDATE analysis_payload_blobs SET last_used_at = ? WHERE ref = ?`)
+        .run(now(), payload.rawContentRef);
+    })
+    .immediate();
+  return content;
 }
 
 function deleteGithubIngestPayloadBlob(payload: GithubIngestPayload): void {
@@ -776,8 +913,11 @@ function deleteGithubIngestPayloadBlob(payload: GithubIngestPayload): void {
     .run(payload.rawContentRef);
 }
 
-async function resolveGithubIngestRawContent(payload: GithubIngestPayload): Promise<string | null> {
-  const cached = getGithubIngestRawContent(payload);
+export async function resolveGithubIngestRawContent(
+  payload: GithubIngestPayload,
+  job: AnalysisJobRow,
+): Promise<string | null> {
+  const cached = getGithubIngestRawContent(payload, job);
   if (cached != null) return cached;
   if (!payload.path || !payload.sha) return null;
 
@@ -791,17 +931,23 @@ async function resolveGithubIngestRawContent(payload: GithubIngestPayload): Prom
       `github:${payload.repoSlug}:${payload.branch}:${payload.path}@${payload.sha}:${rawContentHash.slice(0, 16)}`;
     const ts = now();
     getServerDb()
-      .prepare(
-        `INSERT INTO analysis_payload_blobs (ref, content, content_hash, created_at, last_used_at)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(ref) DO UPDATE SET
-           content = excluded.content,
-           content_hash = excluded.content_hash,
-           last_used_at = excluded.last_used_at`,
-      )
-      .run(rawContentRef, remote.content, rawContentHash, ts, ts);
+      .transaction(() => {
+        persistGuardForJob(job)();
+        getServerDb()
+          .prepare(
+            `INSERT INTO analysis_payload_blobs (ref, content, content_hash, created_at, last_used_at)
+             VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(ref) DO UPDATE SET
+               content = excluded.content,
+               content_hash = excluded.content_hash,
+               last_used_at = excluded.last_used_at`,
+          )
+          .run(rawContentRef, remote.content, rawContentHash, ts, ts);
+      })
+      .immediate();
     return remote.content;
-  } catch {
+  } catch (err) {
+    if (isJobLeaseLostError(err) || isProcessDrainAbort(err) || isProcessDraining()) throw err;
     return null;
   }
 }
@@ -928,75 +1074,65 @@ export function failJob(job: AnalysisJobRow, err: unknown): void {
   const durationMs = job.started_at ? Math.max(0, ts - job.started_at) : null;
   const guard = leaseGuard(job);
 
-  const res = getServerDb()
-    .prepare(
-      `UPDATE analysis_jobs
+  const committed = withAnalysisJobLease(job, () => {
+    const res = getServerDb()
+      .prepare(
+        `UPDATE analysis_jobs
        SET status = ?, attempts = ?, error = ?, error_category = ?, not_before_at = ?, updated_at = ?,
            finished_at = CASE WHEN ? THEN ? ELSE finished_at END,
            duration_ms = CASE WHEN ? THEN ? ELSE duration_ms END,
            dead_letter_at = CASE WHEN ? THEN ? ELSE NULL END,
            locked_at = NULL, locked_by = NULL
        WHERE id = ? AND status = 'running'${guard.clause}`,
-    )
-    .run(
-      terminal ? 'failed' : 'queued',
-      attempts,
-      message.slice(0, 500),
-      category,
-      delay ? ts + delay : null,
-      ts,
-      terminal ? 1 : 0,
-      ts,
-      terminal ? 1 : 0,
-      durationMs,
-      terminal ? 1 : 0,
-      ts,
-      job.id,
-      ...guard.params,
-    );
-  if (Number(res.changes) === 0) {
-    // Job was no longer running (e.g. cancelled); still try to clean up the
-    // payload blob so it doesn't linger until retention GC.
-    if (job.stage === 'github_ingest') {
-      try {
-        deleteGithubIngestPayloadBlob(
-          parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload),
-        );
-      } catch {
-        // Best-effort; retention GC will eventually clean it up.
-      }
+      )
+      .run(
+        terminal ? 'failed' : 'queued',
+        attempts,
+        message.slice(0, 500),
+        category,
+        delay ? ts + delay : null,
+        ts,
+        terminal ? 1 : 0,
+        ts,
+        terminal ? 1 : 0,
+        durationMs,
+        terminal ? 1 : 0,
+        ts,
+        job.id,
+        ...guard.params,
+      );
+    if (Number(res.changes) === 0) return null;
+    if (terminal && job.stage === 'github_ingest') {
+      deleteGithubIngestPayloadBlob(
+        parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload),
+      );
     }
-    return;
-  }
-
-  if (terminal && job.stage === 'github_ingest') {
-    deleteGithubIngestPayloadBlob(
-      parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload),
-    );
-  }
-
-  syncObs.recordEvent({
-    runId: job.run_id,
-    itemId: job.item_id,
-    level: terminal ? 'error' : 'warn',
-    stage: job.stage,
-    path: job.source_path,
-    message: terminal
-      ? `分析失败：${message.slice(0, 180)}`
-      : `分析失败，稍后重试：${message.slice(0, 180)}`,
-  });
-
-  if (terminal && job.item_id && job.stage === 'github_ingest') {
-    syncObs.updateRunItem(job.item_id, {
-      status: 'failed',
-      stage: 'llm',
-      error: message.slice(0, 500),
-      finished_at: ts,
+    syncObs.recordEvent({
+      runId: job.run_id,
+      itemId: job.item_id,
+      level: terminal ? 'error' : 'warn',
+      stage: job.stage,
+      path: job.source_path,
+      message: terminal
+        ? `分析失败：${message.slice(0, 180)}`
+        : `分析失败，稍后重试：${message.slice(0, 180)}`,
     });
-    incrementLegacy(job, 'failed');
+    if (terminal && job.item_id && job.stage === 'github_ingest') {
+      syncObs.updateRunItem(job.item_id, {
+        status: 'failed',
+        stage: 'llm',
+        error: message.slice(0, 500),
+        finished_at: ts,
+      });
+      incrementLegacy(job, 'failed');
+    } else if (terminal) {
+      maybeFinalizeItemAfterStage(job);
+    }
+    return true;
+  });
+  if (!committed) return;
+  if (terminal && job.item_id && job.stage === 'github_ingest') {
     maybeFinishRun(job.run_id || null);
-  } else if (terminal) {
-    maybeFinalizeItemAfterStage(job);
   }
 }
 
@@ -1005,9 +1141,10 @@ export function failJobPermanently(job: AnalysisJobRow, message: string): boolea
   const attempts = job.max_attempts || 1;
   const durationMs = job.started_at ? Math.max(0, ts - job.started_at) : null;
   const guard = leaseGuard(job);
-  const res = getServerDb()
-    .prepare(
-      `UPDATE analysis_jobs
+  const committed = withAnalysisJobLease(job, () => {
+    const res = getServerDb()
+      .prepare(
+        `UPDATE analysis_jobs
        SET status = 'failed',
            attempts = ?,
            error = ?,
@@ -1020,39 +1157,26 @@ export function failJobPermanently(job: AnalysisJobRow, message: string): boolea
            locked_at = NULL,
            locked_by = NULL
        WHERE id = ? AND status = 'running'${guard.clause}`,
-    )
-    .run(attempts, message.slice(0, 500), ts, ts, durationMs, ts, job.id, ...guard.params);
-  if (Number(res.changes) === 0) {
-    // Job was no longer running (e.g. cancelled); still try to clean up the
-    // payload blob so it doesn't linger until retention GC.
+      )
+      .run(attempts, message.slice(0, 500), ts, ts, durationMs, ts, job.id, ...guard.params);
+    if (Number(res.changes) === 0) return null;
     if (job.stage === 'github_ingest') {
-      try {
-        deleteGithubIngestPayloadBlob(
-          parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload),
-        );
-      } catch {
-        // Best-effort; retention GC will eventually clean it up.
-      }
+      deleteGithubIngestPayloadBlob(
+        parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload),
+      );
     }
-    return false;
-  }
-
-  if (job.stage === 'github_ingest') {
-    deleteGithubIngestPayloadBlob(
-      parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload),
-    );
-  }
-
-  syncObs.recordEvent({
-    runId: job.run_id,
-    itemId: job.item_id,
-    level: 'error',
-    stage: job.stage,
-    path: job.source_path,
-    message: message.slice(0, 180),
+    syncObs.recordEvent({
+      runId: job.run_id,
+      itemId: job.item_id,
+      level: 'error',
+      stage: job.stage,
+      path: job.source_path,
+      message: message.slice(0, 180),
+    });
+    maybeFinalizeItemAfterStage(job);
+    return true;
   });
-  maybeFinalizeItemAfterStage(job);
-  return true;
+  return committed === true;
 }
 
 function incrementLegacy(job: AnalysisJobRow, outcome: 'done' | 'failed'): void {
@@ -1068,7 +1192,7 @@ function incrementLegacy(job: AnalysisJobRow, outcome: 'done' | 'failed'): void 
   });
 }
 
-function finalizeLegacyIfPossible(runId: string | null): void {
+export function finalizeLegacyIfPossible(runId: string | null): void {
   if (!runId) return;
   const pending = getServerDb()
     .prepare(
@@ -1095,11 +1219,27 @@ function finalizeLegacyIfPossible(runId: string | null): void {
   if (!legacyJobId) return;
   const row = repo.getSyncJob(legacyJobId);
   if (!row || row.status !== 'running') return;
+  const nextStatus = anyFailed.count > 0 ? 'failed' : 'done';
   repo.updateSyncJob(legacyJobId, {
-    status: anyFailed.count > 0 ? 'failed' : 'done',
+    status: nextStatus,
     current: anyFailed.count > 0 ? '部分文件分析失败' : null,
     error: anyFailed.count > 0 ? '部分文件分析失败，请到 /sync 查看详情' : null,
     finished_at: now(),
+  });
+  const after = repo.getSyncJob(legacyJobId);
+  if (after && (after.status === 'done' || after.status === 'failed')) {
+    notifyLegacySyncJobTerminal(legacyJobId);
+  }
+}
+
+function notifyLegacySyncJobTerminal(jobId: string): void {
+  queueMicrotask(() => {
+    try {
+      const runner = require('./github-sync-runner') as typeof import('./github-sync-runner');
+      runner.notifyGithubSyncJobTerminal(jobId);
+    } catch {
+      // Runner may be unavailable in isolated tests; ingest still finalized.
+    }
   });
 }
 
@@ -1188,66 +1328,82 @@ export function queueSourceEnhancementJobs(input: {
   });
 }
 
-async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
+export async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
   const payload = parseJson<GithubIngestPayload>(job.payload_json, {} as GithubIngestPayload);
-  const rawContent = await resolveGithubIngestRawContent(payload);
+  const rawContent = await resolveGithubIngestRawContent(payload, job);
   if (typeof rawContent !== 'string' || !payload.path || !payload.externalKey) {
     const message = 'GitHub 分析任务缺少文件内容，请重新同步该文件。';
-    if (!failJobPermanently(job, message)) return;
-    if (job.item_id) {
-      syncObs.updateRunItem(job.item_id, {
-        status: 'failed',
-        stage: 'llm',
-        error: message,
-        finished_at: now(),
-      });
-    }
-    incrementLegacy(job, 'failed');
+    const committed = withAnalysisJobLease(job, () => {
+      if (!failJobPermanently(job, message)) return null;
+      if (job.item_id) {
+        syncObs.updateRunItem(job.item_id, {
+          status: 'failed',
+          stage: 'llm',
+          error: message,
+          finished_at: now(),
+        });
+      }
+      incrementLegacy(job, 'failed');
+      return true;
+    });
+    if (!committed) return;
     maybeFinishRun(job.run_id || null);
     return;
   }
   if (rawContent.trim().length === 0) {
-    deleteGithubIngestPayloadBlob(payload);
-    finishJob(job, 'skipped', 'empty markdown file');
-    if (payload.itemId) {
-      syncObs.updateRunItem(payload.itemId, {
-        status: 'skipped',
-        stage: 'complete',
-        finished_at: now(),
-        error: '空 Markdown 文件，已跳过分析',
-      });
-    }
-    incrementLegacy(job, 'done');
+    const committed = withAnalysisJobLease(job, () => {
+      deleteGithubIngestPayloadBlob(payload);
+      finishJob(job, 'skipped', 'empty markdown file');
+      if (payload.itemId) {
+        syncObs.updateRunItem(payload.itemId, {
+          status: 'skipped',
+          stage: 'complete',
+          finished_at: now(),
+          error: '空 Markdown 文件，已跳过分析',
+        });
+      }
+      incrementLegacy(job, 'done');
+      return true;
+    });
+    if (!committed) return;
     maybeFinishRun(payload.runId);
     return;
   }
   if (isRunCancelled(payload.runId)) {
-    finishJob(job, 'cancelled', 'run cancelled');
-    if (payload.itemId) {
-      syncObs.updateRunItem(payload.itemId, {
-        status: 'cancelled',
-        stage: 'complete',
-        finished_at: now(),
-        error: 'run cancelled',
-      });
-    }
+    const committed = withAnalysisJobLease(job, () => {
+      finishJob(job, 'cancelled', 'run cancelled');
+      if (payload.itemId) {
+        syncObs.updateRunItem(payload.itemId, {
+          status: 'cancelled',
+          stage: 'complete',
+          finished_at: now(),
+          error: 'run cancelled',
+        });
+      }
+      return true;
+    });
+    if (!committed) return;
     return;
   }
 
-  syncObs.updateRunItem(payload.itemId, {
-    status: 'running',
-    stage: 'llm',
-    attempts: (job.attempts || 0) + 1,
-    error: null,
-    started_at: now(),
+  const started = withAnalysisJobLease(job, () => {
+    syncObs.updateRunItem(payload.itemId, {
+      status: 'running',
+      stage: 'llm',
+      attempts: (job.attempts || 0) + 1,
+      error: null,
+      started_at: now(),
+    });
+    syncObs.recordEvent({
+      runId: payload.runId,
+      itemId: payload.itemId,
+      stage: 'llm',
+      path: payload.path,
+      message: '开始 LLM 摄入与概念更新',
+    });
+    return true;
   });
-  syncObs.recordEvent({
-    runId: payload.runId,
-    itemId: payload.itemId,
-    stage: 'llm',
-    path: payload.path,
-    message: '开始 LLM 摄入与概念更新',
-  });
+  if (!started) return;
 
   const result = await ingestSourceToServerDb({
     title: payload.title,
@@ -1257,99 +1413,114 @@ async function processGithubIngest(job: AnalysisJobRow): Promise<void> {
     lastSyncedCommitSha: payload.headSha ?? undefined,
     replaceSourceId: payload.replaceSourceId ?? undefined,
     signal: currentRunSignal(payload.runId),
+    persistGuard: persistGuardForJob(job),
   });
 
   const compiler = result.compiler;
-  syncObs.markSourceFileActive({
-    repo: payload.repoSlug,
-    branch: payload.branch,
-    path: payload.path,
-    sourceId: result.sourceId,
-    externalKey: payload.externalKey,
-    blobSha: payload.sha,
-    runId: payload.runId,
-  });
-  syncObs.updateRunItem(payload.itemId, {
-    source_id: result.sourceId,
-    status: 'running',
-    stage: 'enhance',
-    chunks: compiler?.chunks ?? null,
-    concepts_created: result.newConceptIds.length,
-    concepts_updated: result.updatedConceptIds.length,
-    evidence: compiler?.evidence ?? null,
-    error: null,
-    finished_at: null,
-  });
-
-  if (
-    result.newConceptIds.length + result.updatedConceptIds.length >
-    Number(process.env.COMPOUND_REVIEW_LARGE_CHANGE_THRESHOLD || 15)
-  ) {
-    createReviewItem({
-      kind: 'large_ingest_change',
-      title: `大批量概念变更：${payload.path}`,
-      targetType: 'source',
-      targetId: result.sourceId,
+  const committed = withAnalysisJobLease(job, () => {
+    syncObs.markSourceFileActive({
+      repo: payload.repoSlug,
+      branch: payload.branch,
+      path: payload.path,
       sourceId: result.sourceId,
-      confidence: 0.55,
-      payload: {
-        path: payload.path,
-        newConceptIds: result.newConceptIds,
-        updatedConceptIds: result.updatedConceptIds,
-      },
+      externalKey: payload.externalKey,
+      blobSha: payload.sha,
+      runId: payload.runId,
     });
-  }
+    syncObs.updateRunItem(payload.itemId, {
+      source_id: result.sourceId,
+      status: 'running',
+      stage: 'enhance',
+      chunks: compiler?.chunks ?? null,
+      concepts_created: result.newConceptIds.length,
+      concepts_updated: result.updatedConceptIds.length,
+      evidence: compiler?.evidence ?? null,
+      error: null,
+      finished_at: null,
+    });
+    if (
+      result.newConceptIds.length + result.updatedConceptIds.length >
+      Number(process.env.COMPOUND_REVIEW_LARGE_CHANGE_THRESHOLD || 15)
+    ) {
+      createReviewItem({
+        kind: 'large_ingest_change',
+        title: `大批量概念变更：${payload.path}`,
+        targetType: 'source',
+        targetId: result.sourceId,
+        sourceId: result.sourceId,
+        confidence: 0.55,
+        payload: {
+          path: payload.path,
+          newConceptIds: result.newConceptIds,
+          updatedConceptIds: result.updatedConceptIds,
+        },
+      });
+    }
 
-  incrementLegacy(job, 'done');
-  syncObs.recordEvent({
-    runId: payload.runId,
-    itemId: payload.itemId,
-    level: 'success',
-    stage: 'enhance',
-    path: payload.path,
-    message: `基础入库完成，增强分析已排队：新增 ${result.newConceptIds.length}，更新 ${result.updatedConceptIds.length}，分块 ${compiler?.chunks ?? 0}`,
+    incrementLegacy(job, 'done');
+    syncObs.recordEvent({
+      runId: payload.runId,
+      itemId: payload.itemId,
+      level: 'success',
+      stage: 'enhance',
+      path: payload.path,
+      message: `基础入库完成，增强分析已排队：新增 ${result.newConceptIds.length}，更新 ${result.updatedConceptIds.length}，分块 ${compiler?.chunks ?? 0}`,
+    });
+    queueSourceEnhancementJobs({
+      runId: payload.runId,
+      itemId: payload.itemId,
+      sourceId: result.sourceId,
+      sourceSha: payload.sha,
+      sourcePath: payload.path,
+    });
+    deleteGithubIngestPayloadBlob(payload);
+    finishJob({ ...job, source_id: result.sourceId }, 'succeeded');
+    return true;
   });
-  queueSourceEnhancementJobs({
-    runId: payload.runId,
-    itemId: payload.itemId,
-    sourceId: result.sourceId,
-    sourceSha: payload.sha,
-    sourcePath: payload.path,
-  });
-  deleteGithubIngestPayloadBlob(payload);
-  finishJob({ ...job, source_id: result.sourceId }, 'succeeded');
+  if (!committed) return;
 }
 
 async function processEmbedding(job: AnalysisJobRow): Promise<void> {
-  const result = await embedSourceChunks(job.source_id, { signal: currentRunSignal(job.run_id) });
-  syncObs.recordEvent({
-    runId: job.run_id,
-    itemId: job.item_id,
-    level: 'success',
-    stage: 'embedding',
-    path: job.source_path,
-    message: `向量索引完成：${result.embedded} / ${result.total} chunks`,
+  const result = await embedSourceChunks(job.source_id, {
+    signal: currentRunSignal(job.run_id),
+    persistGuard: persistGuardForJob(job),
   });
-  finishJob(job, 'succeeded');
+  withAnalysisJobLease(job, () => {
+    syncObs.recordEvent({
+      runId: job.run_id,
+      itemId: job.item_id,
+      level: 'success',
+      stage: 'embedding',
+      path: job.source_path,
+      message: `向量索引完成：${result.embedded} / ${result.total} chunks`,
+    });
+    finishJob(job, 'succeeded');
+    return true;
+  });
 }
 
 async function processContextualize(job: AnalysisJobRow): Promise<void> {
   const result = await contextualizeSourceChunks(job.source_id, {
     model: job.model ?? undefined,
     signal: currentRunSignal(job.run_id),
+    persistGuard: persistGuardForJob(job),
   });
-  syncObs.recordEvent({
-    runId: job.run_id,
-    itemId: job.item_id,
-    level: result.updated < result.total ? 'warn' : 'success',
-    stage: 'contextualize',
-    path: job.source_path,
-    message: `情境索引完成：${result.updated} / ${result.total} chunks`,
+  const committed = withAnalysisJobLease(job, () => {
+    syncObs.recordEvent({
+      runId: job.run_id,
+      itemId: job.item_id,
+      level: result.updated < result.total ? 'warn' : 'success',
+      stage: 'contextualize',
+      path: job.source_path,
+      message: `情境索引完成：${result.updated} / ${result.total} chunks`,
+    });
+    if (result.updated < result.total) {
+      throw new Error(`contextualization incomplete (${result.updated}/${result.total})`);
+    }
+    finishJob(job, 'succeeded');
+    return true;
   });
-  if (result.updated < result.total) {
-    throw new Error(`contextualization incomplete (${result.updated}/${result.total})`);
-  }
-  finishJob(job, 'succeeded');
+  if (!committed) return;
 }
 
 async function processSummarize(job: AnalysisJobRow): Promise<void> {
@@ -1385,37 +1556,41 @@ async function processSummarize(job: AnalysisJobRow): Promise<void> {
   }>(raw);
   const confidence =
     typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : 0.7;
-  getServerDb()
-    .prepare(
-      `INSERT OR REPLACE INTO source_analysis
+  const committed = withAnalysisJobLease(job, () => {
+    getServerDb()
+      .prepare(
+        `INSERT OR REPLACE INTO source_analysis
         (source_id, source_sha, title, summary, topics, entities, confidence, model, prompt_version, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      source.id,
-      job.source_sha,
-      source.title,
-      parsed.summary || '',
-      JSON.stringify(Array.isArray(parsed.topics) ? parsed.topics.slice(0, 12) : []),
-      JSON.stringify(Array.isArray(parsed.entities) ? parsed.entities.slice(0, 24) : []),
-      confidence,
-      getModelForTask('source_summarize'),
-      job.prompt_version ?? SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
-      now(),
-    );
+      )
+      .run(
+        source.id,
+        job.source_sha,
+        source.title,
+        parsed.summary || '',
+        JSON.stringify(Array.isArray(parsed.topics) ? parsed.topics.slice(0, 12) : []),
+        JSON.stringify(Array.isArray(parsed.entities) ? parsed.entities.slice(0, 24) : []),
+        confidence,
+        getModelForTask('source_summarize'),
+        job.prompt_version ?? SOURCE_SUMMARY_SYSTEM_PROMPT_VERSION,
+        now(),
+      );
 
-  if (confidence < Number(process.env.COMPOUND_REVIEW_CONFIDENCE_THRESHOLD || 0.62)) {
-    createReviewItem({
-      kind: 'low_confidence_summary',
-      title: `低置信度文档分析：${source.title}`,
-      targetType: 'source',
-      targetId: source.id,
-      sourceId: source.id,
-      confidence,
-      payload: parsed,
-    });
-  }
-  finishJob(job, 'succeeded');
+    if (confidence < Number(process.env.COMPOUND_REVIEW_CONFIDENCE_THRESHOLD || 0.62)) {
+      createReviewItem({
+        kind: 'low_confidence_summary',
+        title: `低置信度文档分析：${source.title}`,
+        targetType: 'source',
+        targetId: source.id,
+        sourceId: source.id,
+        confidence,
+        payload: parsed,
+      });
+    }
+    finishJob(job, 'succeeded');
+    return true;
+  });
+  if (!committed) return;
 }
 
 async function processQaIndex(job: AnalysisJobRow): Promise<void> {
@@ -1468,36 +1643,40 @@ async function processRelations(job: AnalysisJobRow): Promise<void> {
     limit: MAX_RELATION_CONCEPTS,
   });
 
-  const synced = wikiRepo.syncRelatedConceptRelations(sourceConcepts, {
-    reason: `资料「${source.title}」关系抽取前同步。`,
-    confidence: 0.68,
+  const prepared = withAnalysisJobLease(job, () => {
+    const synced = wikiRepo.syncRelatedConceptRelations(sourceConcepts, {
+      reason: `资料「${source.title}」关系抽取前同步。`,
+      confidence: 0.68,
+    });
+    if (sourceConcepts.length < 2) {
+      syncObs.recordEvent({
+        runId: job.run_id,
+        itemId: job.item_id,
+        level: 'success',
+        stage: 'relations',
+        path: job.source_path,
+        message: `关系同步完成：legacy related ${synced} 条，概念不足 2 个，跳过 LLM 抽取`,
+      });
+      finishJob(job, 'succeeded');
+      return { skipLlm: true, synced };
+    }
+    if (process.env.COMPOUND_DISABLE_RELATION_WORKER === 'true' || !hasConfiguredServerLlm()) {
+      syncObs.recordEvent({
+        runId: job.run_id,
+        itemId: job.item_id,
+        level: 'success',
+        stage: 'relations',
+        path: job.source_path,
+        message: `关系同步完成：legacy related ${synced} 条，LLM 关系抽取未启用`,
+      });
+      finishJob(job, 'succeeded');
+      return { skipLlm: true, synced };
+    }
+    return { skipLlm: false, synced };
   });
-
-  if (sourceConcepts.length < 2) {
-    syncObs.recordEvent({
-      runId: job.run_id,
-      itemId: job.item_id,
-      level: 'success',
-      stage: 'relations',
-      path: job.source_path,
-      message: `关系同步完成：legacy related ${synced} 条，概念不足 2 个，跳过 LLM 抽取`,
-    });
-    finishJob(job, 'succeeded');
-    return;
-  }
-
-  if (process.env.COMPOUND_DISABLE_RELATION_WORKER === 'true' || !hasConfiguredServerLlm()) {
-    syncObs.recordEvent({
-      runId: job.run_id,
-      itemId: job.item_id,
-      level: 'success',
-      stage: 'relations',
-      path: job.source_path,
-      message: `关系同步完成：legacy related ${synced} 条，LLM 关系抽取未启用`,
-    });
-    finishJob(job, 'succeeded');
-    return;
-  }
+  if (!prepared) return;
+  if (prepared.skipLlm) return;
+  const synced = prepared.synced;
 
   const prompt = `请从下面同一资料生成的概念页中抽取概念关系，只输出严格 JSON。\n\nSchema: {"relations":[{"sourceConceptId":"c-...","targetConceptId":"c-...","kind":"supports|extends|depends_on|example_of|similar_to|related|contradicts|same_as","reason":"一句话说明证据","confidence":0.0}]}\n\n规则：\n- 只使用列表中存在的 concept id。\n- 不要输出自环。\n- 有明确方向时保留方向，例如 A depends_on B。\n- 没有明确语义但确实相关时才使用 related。\n- confidence 低于 0.55 的不要输出。\n\n资料标题：${source.title}\n\n概念列表：\n${buildRelationConceptBlock(sourceConcepts)}`;
 
@@ -1520,87 +1699,100 @@ async function processRelations(job: AnalysisJobRow): Promise<void> {
   const conceptIds = new Set(sourceConcepts.map((concept) => concept.id));
   const titleById = new Map(sourceConcepts.map((concept) => [concept.id, concept.title]));
 
-  let applied = 0;
-  let queued = 0;
-  for (const suggestion of (parsed.relations ?? []).slice(0, 40)) {
-    const sourceConceptId = suggestion.sourceConceptId?.trim() || '';
-    const targetConceptId = suggestion.targetConceptId?.trim() || '';
-    if (
-      !conceptIds.has(sourceConceptId) ||
-      !conceptIds.has(targetConceptId) ||
-      sourceConceptId === targetConceptId
-    ) {
-      continue;
-    }
-    const kind = normalizeWorkerRelationKind(suggestion.kind);
-    const confidence =
-      typeof suggestion.confidence === 'number'
-        ? Math.max(0, Math.min(1, suggestion.confidence))
-        : 0.6;
-    const reason = suggestion.reason?.trim().slice(0, 500) || 'LLM 抽取的概念关系。';
+  const committed = withAnalysisJobLease(job, () => {
+    let applied = 0;
+    let queued = 0;
+    for (const suggestion of (parsed.relations ?? []).slice(0, 40)) {
+      const sourceConceptId = suggestion.sourceConceptId?.trim() || '';
+      const targetConceptId = suggestion.targetConceptId?.trim() || '';
+      if (
+        !conceptIds.has(sourceConceptId) ||
+        !conceptIds.has(targetConceptId) ||
+        sourceConceptId === targetConceptId
+      ) {
+        continue;
+      }
+      const kind = normalizeWorkerRelationKind(suggestion.kind);
+      const confidence =
+        typeof suggestion.confidence === 'number'
+          ? Math.max(0, Math.min(1, suggestion.confidence))
+          : 0.6;
+      const reason = suggestion.reason?.trim().slice(0, 500) || 'LLM 抽取的概念关系。';
 
-    if (confidence >= RELATION_CONFIDENCE_AUTO_APPLY) {
-      wikiRepo.upsertConceptRelation({
-        sourceConceptId,
-        targetConceptId,
-        kind,
-        reason,
-        confidence,
-      });
-      wikiRepo.linkConceptPair(sourceConceptId, targetConceptId);
-      applied += 1;
-    } else {
-      createReviewItem({
-        kind: 'relation_suggestion',
-        title: `关系建议：${titleById.get(sourceConceptId) ?? sourceConceptId} → ${
-          titleById.get(targetConceptId) ?? targetConceptId
-        }`,
-        targetType: 'concept_relation',
-        targetId: `${sourceConceptId}:${targetConceptId}:${kind}`,
-        sourceId: source.id,
-        confidence,
-        payload: {
+      if (confidence >= RELATION_CONFIDENCE_AUTO_APPLY) {
+        wikiRepo.upsertConceptRelation({
           sourceConceptId,
           targetConceptId,
           kind,
           reason,
           confidence,
-          sourceTitle: titleById.get(sourceConceptId),
-          targetTitle: titleById.get(targetConceptId),
-        },
-      });
-      queued += 1;
+        });
+        wikiRepo.linkConceptPair(sourceConceptId, targetConceptId);
+        applied += 1;
+      } else {
+        createReviewItem({
+          kind: 'relation_suggestion',
+          title: `关系建议：${titleById.get(sourceConceptId) ?? sourceConceptId} → ${
+            titleById.get(targetConceptId) ?? targetConceptId
+          }`,
+          targetType: 'concept_relation',
+          targetId: `${sourceConceptId}:${targetConceptId}:${kind}`,
+          sourceId: source.id,
+          confidence,
+          payload: {
+            sourceConceptId,
+            targetConceptId,
+            kind,
+            reason,
+            confidence,
+            sourceTitle: titleById.get(sourceConceptId),
+            targetTitle: titleById.get(targetConceptId),
+          },
+        });
+        queued += 1;
+      }
     }
-  }
 
-  syncObs.recordEvent({
-    runId: job.run_id,
-    itemId: job.item_id,
-    level: 'success',
-    stage: 'relations',
-    path: job.source_path,
-    message: `关系抽取完成：自动写入 ${applied} 条，待审 ${queued} 条，legacy 同步 ${synced} 条`,
+    syncObs.recordEvent({
+      runId: job.run_id,
+      itemId: job.item_id,
+      level: 'success',
+      stage: 'relations',
+      path: job.source_path,
+      message: `关系抽取完成：自动写入 ${applied} 条，待审 ${queued} 条，legacy 同步 ${synced} 条`,
+    });
+    finishJob(job, 'succeeded');
+    return true;
   });
-  finishJob(job, 'succeeded');
+  if (!committed) return;
 }
 
 async function processJob(job: AnalysisJobRow): Promise<void> {
   try {
     const inputHash = computeStageInputHash(job);
-    getServerDb()
-      .prepare(`UPDATE analysis_jobs SET input_hash = ? WHERE id = ?`)
-      .run(inputHash, job.id);
+    const hashGuard = leaseGuard(job);
+    const hashRes = getServerDb()
+      .prepare(
+        `UPDATE analysis_jobs SET input_hash = ?
+          WHERE id = ? AND status = 'running'${hashGuard.clause}`,
+      )
+      .run(inputHash, job.id, ...hashGuard.params);
+    if (Number(hashRes.changes) === 0) return;
     if (getCachedStageStatus(job, inputHash) === 'succeeded') {
-      syncObs.recordEvent({
-        runId: job.run_id,
-        itemId: job.item_id,
-        level: 'success',
-        stage: job.stage,
-        path: job.source_path,
-        message: `输入 fingerprint 未变化，跳过 ${job.stage}`,
-        meta: { event: 'analysis.stage_cache_hit', stage: job.stage },
+      const skipped = withAnalysisJobLease(job, () => {
+        syncObs.recordEvent({
+          runId: job.run_id,
+          itemId: job.item_id,
+          level: 'success',
+          stage: job.stage,
+          path: job.source_path,
+          message: `输入 fingerprint 未变化，跳过 ${job.stage}`,
+          meta: { event: 'analysis.stage_cache_hit', stage: job.stage },
+        });
+        finishJob(job, 'skipped', 'stage fingerprint unchanged');
+        return true;
       });
-      finishJob(job, 'skipped', 'stage fingerprint unchanged');
+      if (!skipped) return;
       return;
     }
 
@@ -1640,6 +1832,8 @@ async function processJob(job: AnalysisJobRow): Promise<void> {
       finishJob(job, 'skipped', `unknown stage: ${job.stage}`);
     }
   } catch (err) {
+    if (isJobLeaseLostError(err)) return;
+    if (isProcessDraining() || isProcessDrainAbort(err)) return;
     if (classifyJobError(err) === 'cancelled') {
       finishJob(job, 'cancelled', err instanceof Error ? err.message : String(err));
       return;
@@ -1671,6 +1865,9 @@ export async function runAnalysisWorkerOnce(
   remaining: number;
   recovered: number;
 }> {
+  if (isProcessDraining()) {
+    return { claimed: 0, remaining: 0, recovered: 0 };
+  }
   ensureAnalysisWorkerSchema();
   const recovery = recoverStaleAnalysisJobs();
   const jobs = claimJobs(WORKER_BATCH, options.stages);
@@ -1696,6 +1893,15 @@ export function startAnalysisWorker(
   reason = 'manual',
   options: { stages?: AdvancedAnalysisStage[] } = {},
 ): StartAnalysisWorkerResult {
+  if (isProcessDraining()) {
+    return {
+      started: false,
+      reason: 'draining',
+      activeWorkers: activeWorkerCount(),
+      queued: 0,
+      recovered: 0,
+    };
+  }
   ensureAnalysisWorkerSchema();
   // Always attempt recovery — dashboard polls every 2s, so this gives us a
   // free continuous lease-reaper without spinning a separate timer.
@@ -1768,6 +1974,7 @@ function startWorkerLoop(pool: WorkerPoolConfig, reason: string, queued: number)
   const workerPromise = (async () => {
     try {
       for (let i = 0; i < WORKER_MAX_LOOPS; i += 1) {
+        if (isProcessDraining()) break;
         const result = await runAnalysisWorkerOnce({ stages: pool.stages });
         if (result.claimed === 0) break;
       }
@@ -1817,7 +2024,7 @@ function startWorkerLoop(pool: WorkerPoolConfig, reason: string, queued: number)
  */
 export function isRunCancelled(runId: string | null | undefined): boolean {
   if (!runId) return false;
-  const ctrl = cancelControllers.get(runId);
+  const ctrl = analysisCancelControllers().get(runId);
   if (ctrl?.signal.aborted) return true;
   const row = getServerDb()
     .prepare(`SELECT status FROM sync_runs WHERE id = ? LIMIT 1`)
@@ -1826,14 +2033,15 @@ export function isRunCancelled(runId: string | null | undefined): boolean {
 }
 
 export function abortRun(runId: string, reason = 'cancelled by user'): boolean {
-  const ctrl = cancelControllers.get(runId);
+  const controllers = analysisCancelControllers();
+  const ctrl = controllers.get(runId);
   if (!ctrl) return false;
   try {
     ctrl.abort(new Error(reason));
   } catch {
     // ignore — already aborted
   }
-  cancelControllers.delete(runId);
+  controllers.delete(runId);
   return true;
 }
 

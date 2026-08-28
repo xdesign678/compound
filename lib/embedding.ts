@@ -351,7 +351,7 @@ function cosine(a: Vector, b: Vector): number {
 
 export async function embedSourceChunks(
   sourceId: string,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; persistGuard?: () => void } = {},
 ): Promise<{ total: number; embedded: number; provider: string; model: string }> {
   ensureEmbeddingSchema();
   const chunks = getServerDb()
@@ -375,6 +375,7 @@ export async function embedSourceChunks(
     model = result.model;
     const ts = now();
     const trx = getServerDb().transaction(() => {
+      options.persistGuard?.();
       for (let j = 0; j < batch.length; j += 1) {
         const chunk = batch[j];
         const vector = result.vectors[j];
@@ -391,7 +392,7 @@ export async function embedSourceChunks(
         );
       }
     });
-    trx();
+    trx.immediate();
     embedded += batch.length;
   }
   return { total: chunks.length, embedded, provider, model };

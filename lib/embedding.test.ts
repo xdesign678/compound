@@ -219,3 +219,69 @@ test('remote embedding rejects metadata service URLs before sending credentials'
     rmSync(tempDir, { recursive: true, force: true });
   });
 });
+
+test('embed persistGuard abort writes no chunk_embeddings', async (t) => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'compound-embedding-guard-'));
+  const previousEnv = new Map<string, string | undefined>();
+  for (const key of [
+    'DATA_DIR',
+    'COMPOUND_EMBEDDING_PROVIDER',
+    'COMPOUND_EMBEDDING_API_KEY',
+    'COMPOUND_EMBEDDING_API_URL',
+    'COMPOUND_SKIP_DNS_GUARD',
+  ]) {
+    previousEnv.set(key, process.env[key]);
+  }
+  process.env.DATA_DIR = tempDir;
+  process.env.COMPOUND_EMBEDDING_PROVIDER = 'remote';
+  process.env.COMPOUND_EMBEDDING_API_KEY = 'embedding-key';
+  process.env.COMPOUND_EMBEDDING_API_URL = 'https://example.com/v1/embeddings';
+  process.env.COMPOUND_SKIP_DNS_GUARD = 'true';
+  closeServerDbGlobal();
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url, init) => {
+    const body = JSON.parse(String(init?.body || '{}')) as { input?: string[] };
+    const input = body.input || ['x'];
+    return new Response(JSON.stringify({ data: input.map(() => ({ embedding: [1, 0, 0] })) }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  const { repo, getServerDb } = await import('./server-db');
+  const { wikiRepo } = await import('./wiki-db');
+  const { embedSourceChunks } = await import('./embedding');
+  repo.insertSource({
+    id: 's-guard',
+    title: 'Guard',
+    type: 'file',
+    rawContent: '# Guard\n\nEmbedding persist must roll back.',
+    ingestedAt: Date.now(),
+  });
+  wikiRepo.indexSource(repo.getSource('s-guard')!);
+  const err = Object.assign(new Error('analysis job lease lost'), { name: 'JobLeaseLostError' });
+  await assert.rejects(
+    () =>
+      embedSourceChunks('s-guard', {
+        persistGuard: () => {
+          throw err;
+        },
+      }),
+    /analysis job lease lost/,
+  );
+  const after = (
+    getServerDb().prepare(`SELECT COUNT(*) AS c FROM chunk_embeddings`).get() as { c: number }
+  ).c;
+  assert.equal(after, 0);
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    closeServerDbGlobal();
+    for (const [key, value] of previousEnv) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+});

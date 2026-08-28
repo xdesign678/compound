@@ -16,8 +16,12 @@ import { resumePendingRepairRuns } from './repair-worker';
 import { resumePendingSelectionWikiRuns } from './selection-wiki-worker';
 import { resumePendingLintRuns } from './lint-worker';
 import { resumePendingCategoryWikiRuns } from './category-wiki-worker';
+import { recoverAndDrainWebhookInbox } from './github-sync-runner';
 
-const STALE_SYNC_JOB_MAX_AGE_MS = 10 * 60 * 1000;
+// At process boot every leftover running sync job is orphaned, including a
+// just-crashed heartbeat. recoverStaleSyncJobs(maxAge) fails running rows whose
+// heartbeat is older than maxAge; 0 means heartbeat < now.
+const BOOT_ORPHAN_SYNC_JOB_MAX_AGE_MS = 0;
 
 function runStep(step: string, fn: () => void): void {
   try {
@@ -35,8 +39,14 @@ function runStep(step: string, fn: () => void): void {
  */
 export function runBootRecovery(): void {
   runStep('sync_jobs', () => {
-    const recovered = repo.recoverStaleSyncJobs(STALE_SYNC_JOB_MAX_AGE_MS);
+    const recovered = repo.recoverStaleSyncJobs(BOOT_ORPHAN_SYNC_JOB_MAX_AGE_MS);
     if (recovered > 0) logger.info('boot_recovery.sync_jobs_recovered', { recovered });
+  });
+  runStep('webhook_inbox', () => {
+    const drain = recoverAndDrainWebhookInbox();
+    if (drain.recoveredClaims > 0 || drain.started) {
+      logger.info('boot_recovery.webhook_inbox_drained', drain);
+    }
   });
   runStep('analysis_jobs', () => {
     const recovery = recoverStaleAnalysisJobs();

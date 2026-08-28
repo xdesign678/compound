@@ -27,6 +27,9 @@ import {
 } from './ingest-operations';
 import type { Source, Concept, ActivityLog, SourceType, LlmConfig } from './types';
 
+/** Called at the start of a persist transaction, before any business writes. */
+export type PersistGuard = () => void;
+
 export interface ServerIngestInput {
   title: string;
   type: SourceType;
@@ -39,6 +42,7 @@ export interface ServerIngestInput {
   llmConfig?: LlmConfig;
   signal?: AbortSignal;
   operationId?: string;
+  persistGuard?: PersistGuard;
 }
 
 export interface ServerIngestResult {
@@ -116,7 +120,11 @@ export async function ingestSourceToServerDbDetailed(
     const result = await ingestSourceToServerDbInner(input, operationId, attemptToken);
     return { replayed: false, result };
   } catch (error) {
-    if (operationId && typeof attemptToken === 'number') {
+    if (
+      operationId &&
+      typeof attemptToken === 'number' &&
+      !(error instanceof Error && error.name === 'JobLeaseLostError')
+    ) {
       failIngestOperation(operationId, error, attemptToken);
     }
     throw error;
@@ -264,6 +272,7 @@ async function ingestSourceToServerDbInner(
 
   // 8. Write everything in a single transaction (better-sqlite3 is synchronous)
   const trx = getServerDb().transaction(() => {
+    input.persistGuard?.();
     for (const next of updatedConceptDocs) {
       const base = conceptById.get(next.id);
       const current = repo.getConcept(next.id);
@@ -348,8 +357,10 @@ async function ingestSourceToServerDbInner(
           ...biDirUpdates.map((update) => update.id),
         ]),
       ),
+      persistGuard: input.persistGuard,
     });
   } catch (error) {
+    if (error instanceof Error && error.name === 'JobLeaseLostError') return persisted;
     logger.warn('ingest.category_wiki_auto_queue_failed', {
       sourceId: persisted.sourceId,
       error: error instanceof Error ? error.message : String(error),
@@ -380,7 +391,12 @@ export interface SourceContextualizationResult {
  */
 export async function contextualizeSourceChunks(
   sourceId: string,
-  opts: { llmConfig?: LlmConfig; model?: string; signal?: AbortSignal } = {},
+  opts: {
+    llmConfig?: LlmConfig;
+    model?: string;
+    signal?: AbortSignal;
+    persistGuard?: PersistGuard;
+  } = {},
 ): Promise<SourceContextualizationResult> {
   if (process.env.COMPOUND_CONTEXTUAL_RETRIEVAL === 'off') {
     return { total: 0, updated: 0 };
@@ -395,6 +411,7 @@ async function runContextualizationForSource(opts: {
   llmConfig?: LlmConfig;
   model?: string;
   signal?: AbortSignal;
+  persistGuard?: PersistGuard;
 }): Promise<SourceContextualizationResult> {
   const chunks = getServerDb()
     .prepare(
@@ -452,7 +469,12 @@ async function runContextualizationForSource(opts: {
   }
   const updates = Array.from(prefixesByChunk, ([chunkId, prefix]) => ({ chunkId, prefix }));
   if (updates.length > 0) {
-    wikiRepo.applyContextualPrefixes(updates);
+    getServerDb()
+      .transaction(() => {
+        opts.persistGuard?.();
+        wikiRepo.applyContextualPrefixes(updates);
+      })
+      .immediate();
   }
   return { total: chunks.length, updated: updates.length };
 }

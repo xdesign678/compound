@@ -8,6 +8,8 @@ import { wikiRepo } from './wiki-db';
 import { escapeHTML } from './format';
 import { logger } from './logging';
 import { now, parseJson } from './utils';
+import { isProcessDraining } from './process-readiness';
+import { isProcessDrainAbort, withProcessDrainSignal } from './process-drain';
 import type {
   ActivityLog,
   CategoryTag,
@@ -121,6 +123,7 @@ export function getSelectionWikiRunStatus(runId: string): SelectionWikiRunStatus
 }
 
 export function startSelectionWikiWorker(runId: string, llmConfig?: LlmConfig): void {
+  if (isProcessDraining()) return;
   ensureSelectionWikiSchema();
   const g = globalThis as unknown as {
     __compoundSelectionWikiWorkers?: Map<string, Promise<void>>;
@@ -171,6 +174,7 @@ async function runSelectionWikiWorker(runId: string, llmConfig?: LlmConfig): Pro
       )
       .run(JSON.stringify(result), now(), now(), runId);
   } catch (err) {
+    if (isProcessDraining() || isProcessDrainAbort(err)) return;
     const message = err instanceof Error ? err.message : String(err);
     logger.error('selection_wiki.worker_failed', { runId, error: message });
     getServerDb()
@@ -237,6 +241,7 @@ ${categoryList}
     llmConfig,
     task: 'selection-wiki',
     promptVersion: SELECTION_WIKI_SYSTEM_PROMPT_VERSION,
+    signal: withProcessDrainSignal(),
   });
 
   const parsed = parseJSON<SelectionLLMResponse>(raw);
@@ -250,6 +255,10 @@ ${categoryList}
       hasBody: Boolean(draftBody),
     });
     throw new Error('LLM 未能生成有效的概念草稿，请稍后重试。');
+  }
+
+  if (isProcessDraining()) {
+    throw Object.assign(new Error('process draining'), { name: 'AbortError' });
   }
 
   setRunPhase(runId, 'persisting');

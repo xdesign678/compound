@@ -265,3 +265,53 @@ test(
     }
   },
 );
+
+test('drain abort leaves lint run running without findings', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+  await seedConcepts(2);
+  const { createLintRun, getLintRunStatus, startLintWorker } = await import('./lint-worker');
+  const { drainProcess, resetProcessDrainForTests } = await import('./process-drain');
+  const { resetProcessReadinessForTests } = await import('./process-readiness');
+  t.after(() => {
+    resetProcessReadinessForTests();
+    resetProcessDrainForTests();
+  });
+
+  const runId = createLintRun();
+  let reached!: () => void;
+  const atFetch = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  await withMockFetch(
+    async (_input, init) => {
+      reached();
+      const signal = init?.signal;
+      await new Promise<never>((_, reject) => {
+        const fail = () => {
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          reject(err);
+        };
+        if (signal?.aborted) fail();
+        else signal?.addEventListener('abort', fail, { once: true });
+      });
+      return new Response('unreachable');
+    },
+    async () => {
+      startLintWorker(runId);
+      await atFetch;
+      await drainProcess('SIGTERM', {
+        delay: () => new Promise(() => {}),
+        timeoutMs: 10_000,
+        closeDatabase: () => {},
+        killProcess: () => {},
+        exitProcess: () => {},
+      });
+    },
+  );
+
+  const status = getLintRunStatus(runId);
+  assert.equal(status?.status, 'running');
+  assert.deepEqual(status?.findings ?? [], []);
+});

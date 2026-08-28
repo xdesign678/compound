@@ -238,3 +238,167 @@ test('auto queue skips fresh category wiki content and requeues stale content', 
   assert.equal(third.queued, 0);
   assert.equal(third.skippedActive, 1);
 });
+
+test('drain abort leaves category wiki running without writing wiki body', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+  process.env.LLM_API_KEY = 'server-key';
+  process.env.LLM_API_URL = 'https://api.example.com/v1/chat/completions';
+  process.env.COMPOUND_SKIP_DNS_GUARD = 'true';
+
+  const { repo } = await import('./server-db');
+  const {
+    createCategoryWikiRun,
+    getCategoryWiki,
+    getCategoryWikiRunStatus,
+    startCategoryWikiWorker,
+  } = await import('./category-wiki-worker');
+  const { drainProcess, resetProcessDrainForTests } = await import('./process-drain');
+  const { resetProcessReadinessForTests } = await import('./process-readiness');
+  t.after(() => {
+    resetProcessReadinessForTests();
+    resetProcessDrainForTests();
+  });
+
+  const now = Date.now();
+  repo.upsertConcept({
+    id: 'c-drain-wiki',
+    title: 'Drain wiki',
+    summary: 'drain',
+    body: 'drain body',
+    sources: [],
+    related: [],
+    categories: [{ primary: '测试', secondary: '停机' }],
+    categoryKeys: ['测试', '测试/停机'],
+    createdAt: now,
+    updatedAt: now,
+    version: 1,
+  });
+  const runId = createCategoryWikiRun({ primary: '测试', secondary: '停机' });
+  let reached!: () => void;
+  const atFetch = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const previousFetch = global.fetch;
+  global.fetch = (async (_input, init) => {
+    reached();
+    const signal = init?.signal;
+    await new Promise<never>((_, reject) => {
+      const fail = () => {
+        const err = new Error('aborted');
+        err.name = 'AbortError';
+        reject(err);
+      };
+      if (signal?.aborted) fail();
+      else signal?.addEventListener('abort', fail, { once: true });
+    });
+    return new Response('unreachable');
+  }) as typeof fetch;
+  t.after(() => {
+    global.fetch = previousFetch;
+  });
+
+  startCategoryWikiWorker(runId);
+  await atFetch;
+  await drainProcess('SIGTERM', {
+    delay: () => new Promise(() => {}),
+    timeoutMs: 10_000,
+    closeDatabase: () => {},
+    killProcess: () => {},
+    exitProcess: () => {},
+  });
+
+  assert.equal(getCategoryWiki('测试', '停机'), null);
+  const status = getCategoryWikiRunStatus(runId);
+  assert.equal(status?.status, 'running');
+});
+
+test('autoQueue persistGuard shares IMMEDIATE txn with category_wiki_runs insert', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { repo, getServerDb } = await import('./server-db');
+  const { autoQueueCategoryWikis } = await import('./category-wiki-worker');
+  const { persistGuardForJob, queueAdvancedAnalysisJob, JobLeaseLostError } =
+    await import('./analysis-worker');
+  const Database = require('better-sqlite3') as typeof import('better-sqlite3');
+  const now = Date.now();
+  repo.upsertConcept({
+    id: 'c-queue-lease',
+    title: 'Queue lease',
+    summary: 'q',
+    body: 'q body',
+    sources: [],
+    related: [],
+    categories: [{ primary: '测试', secondary: '排队' }],
+    categoryKeys: ['测试', '测试/排队'],
+    createdAt: now,
+    updatedAt: now,
+    version: 1,
+  });
+  repo.insertSource({
+    id: 's-queue-lease',
+    title: 'Q',
+    type: 'file',
+    rawContent: '# q',
+    ingestedAt: now,
+  });
+  const jobId = queueAdvancedAnalysisJob({ sourceId: 's-queue-lease', stage: 'qa_index' });
+  const db = getServerDb();
+  db.prepare(
+    `UPDATE analysis_jobs
+        SET status = 'running', started_at = ?, locked_at = ?, locked_by = 'worker-a', lease_version = 1
+      WHERE id = ?`,
+  ).run(now, now, jobId);
+  const job = db.prepare(`SELECT * FROM analysis_jobs WHERE id = ?`).get(jobId) as Parameters<
+    typeof persistGuardForJob
+  >[0];
+
+  db.prepare(`UPDATE analysis_jobs SET locked_by = 'worker-b', lease_version = 2 WHERE id = ?`).run(
+    jobId,
+  );
+  const before = Number(
+    (db.prepare(`SELECT COUNT(*) AS c FROM category_wiki_runs`).get() as { c: number }).c,
+  );
+  assert.throws(
+    () =>
+      autoQueueCategoryWikis({
+        conceptIds: ['c-queue-lease'],
+        startWorkers: false,
+        persistGuard: persistGuardForJob(job),
+      }),
+    (err: unknown) => err instanceof JobLeaseLostError,
+  );
+  const afterSteal = Number(
+    (db.prepare(`SELECT COUNT(*) AS c FROM category_wiki_runs`).get() as { c: number }).c,
+  );
+  assert.equal(afterSteal, before);
+
+  db.prepare(`UPDATE analysis_jobs SET locked_by = 'worker-a', lease_version = 1 WHERE id = ?`).run(
+    jobId,
+  );
+  const peer = new Database(path.join(process.env.DATA_DIR as string, 'compound.db'));
+  peer.pragma('journal_mode = WAL');
+  peer.pragma('busy_timeout = 50');
+  t.after(() => peer.close());
+  let peerTookOverWhileAHeld = false;
+  const queued = autoQueueCategoryWikis({
+    conceptIds: ['c-queue-lease'],
+    startWorkers: false,
+    persistGuard: () => {
+      persistGuardForJob(job)();
+      try {
+        peer
+          .prepare(
+            `UPDATE analysis_jobs SET locked_by = 'worker-b', lease_version = 2 WHERE id = ?`,
+          )
+          .run(jobId);
+        peerTookOverWhileAHeld = true;
+      } catch (err) {
+        assert.match(String(err), /busy|locked/i);
+      }
+    },
+  });
+  assert.equal(peerTookOverWhileAHeld, false);
+  assert.equal(queued.queued, 1);
+});

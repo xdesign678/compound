@@ -34,6 +34,14 @@ import {
   recoverStaleAnalysisJobs,
 } from './analysis-worker';
 import { logger } from './logging';
+import {
+  claimWebhookInboxForSync,
+  completeWebhookDelivery,
+  persistWebhookDelivery,
+  recoverClaimedWebhookDeliveries,
+} from './webhook-inbox';
+import { isProcessDraining } from './process-readiness';
+import { getProcessDrainSignal, isProcessDrainAbort } from './process-drain';
 
 const MAX_LOG_ENTRIES = 50;
 const STALE_JOB_MAX_AGE_MS = Number(process.env.COMPOUND_SYNC_STALE_MS || 10 * 60 * 1000);
@@ -80,6 +88,7 @@ export interface GithubWebhookDeliveryInput {
   deliveryId: string;
   event: string;
   signatureSha256: string;
+  ref?: string;
   beforeSha?: string;
   afterSha?: string;
 }
@@ -87,11 +96,97 @@ export interface GithubWebhookDeliveryInput {
 type StartGithubSyncResult = {
   jobId: string;
   existing?: boolean;
+  queued?: boolean;
+  draining?: boolean;
   runId?: string;
   recoveredJobs?: number;
   recoveredAnalysis?: number;
   workerStarted?: boolean;
 };
+
+export type GithubSyncLoopRunner = (
+  jobId: string,
+  options: StartGithubSyncOptions,
+) => Promise<void>;
+
+const GITHUB_SYNC_LOOP_RUNNER_KEY = '__compound_github_sync_loop_runner__';
+const WEBHOOK_CLAIMS_BY_JOB_KEY = '__compound_webhook_inbox_claims__';
+const ACTIVE_SYNC_JOB_PROMISES_KEY = '__compound_active_sync_job_promises__';
+
+type WebhookClaimByJob = Map<string, { deliveryId: string; leaseVersion: number }>;
+
+function webhookClaimsByJob(): WebhookClaimByJob {
+  const holder = globalThis as unknown as { [WEBHOOK_CLAIMS_BY_JOB_KEY]?: WebhookClaimByJob };
+  holder[WEBHOOK_CLAIMS_BY_JOB_KEY] ??= new Map();
+  return holder[WEBHOOK_CLAIMS_BY_JOB_KEY];
+}
+
+function activeSyncJobPromises(): Map<string, Promise<void>> {
+  const holder = globalThis as unknown as {
+    [ACTIVE_SYNC_JOB_PROMISES_KEY]?: Map<string, Promise<void>>;
+  };
+  holder[ACTIVE_SYNC_JOB_PROMISES_KEY] ??= new Map();
+  return holder[ACTIVE_SYNC_JOB_PROMISES_KEY];
+}
+
+function isTerminalSyncJobStatus(status: string | null | undefined): boolean {
+  return status === 'done' || status === 'failed';
+}
+
+function shouldStopForProcessDrain(err?: unknown): boolean {
+  return isProcessDraining() || isProcessDrainAbort(err);
+}
+
+function drainingStartResult(activeJobId?: string | null): StartGithubSyncResult {
+  return {
+    jobId: activeJobId ?? '',
+    existing: Boolean(activeJobId),
+    queued: true,
+    draining: true,
+    workerStarted: false,
+  };
+}
+
+function sleepWithDrainSignal(ms: number): Promise<void> {
+  const signal = getProcessDrainSignal();
+  if (ms <= 0) return Promise.resolve();
+  if (signal.aborted) {
+    return Promise.reject(
+      signal.reason instanceof Error
+        ? signal.reason
+        : Object.assign(new Error('process draining'), { name: 'AbortError' }),
+    );
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      const reason =
+        signal.reason instanceof Error
+          ? signal.reason
+          : Object.assign(new Error('process draining'), { name: 'AbortError' });
+      reject(reason);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+export function setGithubSyncLoopRunnerForTests(runner: GithubSyncLoopRunner | null): void {
+  const holder = globalThis as unknown as {
+    [GITHUB_SYNC_LOOP_RUNNER_KEY]?: GithubSyncLoopRunner | null;
+  };
+  holder[GITHUB_SYNC_LOOP_RUNNER_KEY] = runner;
+}
+
+function resolveGithubSyncLoopRunner(): GithubSyncLoopRunner {
+  const holder = globalThis as unknown as {
+    [GITHUB_SYNC_LOOP_RUNNER_KEY]?: GithubSyncLoopRunner | null;
+  };
+  return holder[GITHUB_SYNC_LOOP_RUNNER_KEY] ?? runGithubSyncLoop;
+}
 
 function readLog(row: SyncJobRow | null): LogEntry[] {
   if (!row?.log) return [];
@@ -146,11 +241,15 @@ async function withRetry<T>(
 ): Promise<T> {
   let last: unknown;
   for (let i = 0; i <= opts.retries; i += 1) {
+    if (isProcessDraining()) {
+      throw Object.assign(new Error('process draining'), { name: 'AbortError' });
+    }
     try {
       return await fn();
     } catch (err) {
       last = err;
       const message = err instanceof Error ? err.message : String(err);
+      if (shouldStopForProcessDrain(err)) throw err;
       const permanent = /^Invalid API URL/i.test(message) || /\b(401|403|404)\b/.test(message);
       if (permanent || i === opts.retries) break;
       const delay = opts.baseDelayMs * 2 ** i + Math.floor(Math.random() * 250);
@@ -161,7 +260,7 @@ async function withRetry<T>(
         level: 'warn',
         message: `${opts.label} 失败，${delay}ms 后重试`,
       });
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await sleepWithDrainSignal(delay);
     }
   }
   throw last;
@@ -211,14 +310,8 @@ function bumpLegacy(jobId: string, field: 'done' | 'failed', current?: string): 
   });
 }
 
-export function startGithubSync(options: StartGithubSyncOptions = {}): {
-  jobId: string;
-  existing?: boolean;
-  runId?: string;
-  recoveredJobs?: number;
-  recoveredAnalysis?: number;
-  workerStarted?: boolean;
-} {
+export function startGithubSync(options: StartGithubSyncOptions = {}): StartGithubSyncResult {
+  if (isProcessDraining()) return drainingStartResult(repo.getActiveSyncJob()?.id);
   const recovered = repo.recoverStaleSyncJobs(STALE_JOB_MAX_AGE_MS);
   if (recovered > 0) logger.info('github_sync.stale_jobs_recovered', { recovered });
   // Always sweep orphaned analysis jobs too — even if there's no active sync
@@ -237,55 +330,104 @@ export function startGithubSync(options: StartGithubSyncOptions = {}): {
 export function startGithubSyncFromWebhook(
   delivery: GithubWebhookDeliveryInput,
 ): StartGithubSyncResult {
-  syncObs.ensureSchema();
   if (!delivery.deliveryId.trim()) throw new Error('Missing X-GitHub-Delivery header');
+  const persisted = persistWebhookDelivery({
+    deliveryId: delivery.deliveryId,
+    event: delivery.event,
+    signatureSha256: delivery.signatureSha256,
+    ref: delivery.ref,
+    beforeSha: delivery.beforeSha,
+    afterSha: delivery.afterSha,
+  });
+  if (isProcessDraining()) {
+    return {
+      ...drainingStartResult(persisted.row.job_id),
+      existing: !persisted.inserted,
+      queued: true,
+    };
+  }
   const recovered = repo.recoverStaleSyncJobs(STALE_JOB_MAX_AGE_MS);
   if (recovered > 0) logger.info('github_sync.stale_jobs_recovered', { recovered });
   const analysisRecovery = recoverStaleAnalysisJobs();
-  const db = getServerDb();
-  const result = db.transaction(() => {
-    const inserted = db
-      .prepare(
-        `INSERT OR IGNORE INTO webhook_deliveries
-          (delivery_id, event, signature_sha256, received_at, status)
-         VALUES (?, ?, ?, ?, 'received')`,
-      )
-      .run(delivery.deliveryId, delivery.event, delivery.signatureSha256, Date.now());
+  const drain = drainWebhookInbox();
+  return {
+    jobId: drain.jobId || persisted.row.job_id || '',
+    existing: !persisted.inserted,
+    queued: persisted.inserted && !drain.started,
+    recoveredJobs: recovered,
+    recoveredAnalysis: analysisRecovery.jobs + analysisRecovery.items,
+    workerStarted: drain.started,
+  };
+}
 
-    if (inserted.changes === 0) {
-      const existingDelivery = db
-        .prepare(`SELECT job_id FROM webhook_deliveries WHERE delivery_id = ?`)
-        .get(delivery.deliveryId) as { job_id: string | null } | undefined;
-      return {
-        jobId: existingDelivery?.job_id ?? '',
-        existing: true,
-        recoveredJobs: recovered,
-        recoveredAnalysis: analysisRecovery.jobs + analysisRecovery.items,
-        workerStarted: false,
-      } satisfies StartGithubSyncResult;
-    }
+export function drainWebhookInbox(): { started: boolean; jobId?: string } {
+  if (isProcessDraining()) return { started: false };
+  const claim = claimWebhookInboxForSync({
+    hasActiveJob: () => Boolean(repo.getActiveSyncJob()),
+    createJob: () =>
+      createGithubSyncJob({
+        recoveredJobs: 0,
+        recoveredAnalysis: 0,
+      }),
+  });
+  if (!claim) return { started: false };
+  webhookClaimsByJob().set(claim.jobId, {
+    deliveryId: claim.deliveryId,
+    leaseVersion: claim.leaseVersion,
+  });
+  logger.info('github_sync.webhook_inbox_claimed', {
+    deliveryId: claim.deliveryId,
+    jobId: claim.jobId,
+    coalesced: claim.coalescedDeliveryIds.length,
+    ref: claim.ref,
+  });
+  launchGithubSyncLoop(claim.jobId, {
+    triggerType: 'webhook',
+    beforeSha: claim.beforeSha ?? undefined,
+    afterSha: claim.afterSha ?? undefined,
+  });
+  return { started: true, jobId: claim.jobId };
+}
 
-    const sync = createGithubSyncJob({
-      recoveredJobs: recovered,
-      recoveredAnalysis: analysisRecovery.jobs + analysisRecovery.items,
-    });
-    db.prepare(
-      `UPDATE webhook_deliveries
-          SET status = 'processed',
-              job_id = ?,
-              error = NULL
-        WHERE delivery_id = ?`,
-    ).run(sync.jobId, delivery.deliveryId);
-    return sync;
-  })();
+export function recoverAndDrainWebhookInbox(): { recoveredClaims: number; started: boolean } {
+  if (isProcessDraining()) return { recoveredClaims: 0, started: false };
+  const recoveredClaims = recoverClaimedWebhookDeliveries();
+  if (recoveredClaims > 0) {
+    logger.info('github_sync.webhook_inbox_recovered', { recoveredClaims });
+  }
+  const drain = drainWebhookInbox();
+  return { recoveredClaims, started: drain.started };
+}
 
-  if (!result.existing)
-    launchGithubSyncLoop(result.jobId, {
-      triggerType: 'webhook',
-      beforeSha: delivery.beforeSha,
-      afterSha: delivery.afterSha,
-    });
-  return result;
+function finalizeWebhookClaimForJob(jobId: string): boolean {
+  const claim = webhookClaimsByJob().get(jobId);
+  if (!claim) return false;
+  const job = repo.getSyncJob(jobId);
+  if (!isTerminalSyncJobStatus(job?.status)) return false;
+  const failed = job?.status === 'failed';
+  const completed = completeWebhookDelivery({
+    deliveryId: claim.deliveryId,
+    leaseVersion: claim.leaseVersion,
+    status: failed ? 'failed' : 'processed',
+    error: failed ? (job?.error ?? null) : null,
+  });
+  if (completed) webhookClaimsByJob().delete(jobId);
+  return completed;
+}
+
+/**
+ * Called when a legacy sync job becomes terminal (done/failed), including from
+ * analysis-worker after ingest finishes. Idempotent: a still-running job keeps
+ * its webhook claim mapping; a missing claim is a no-op besides attempting drain.
+ */
+export function notifyGithubSyncJobTerminal(jobId: string): {
+  finalized: boolean;
+  started: boolean;
+} {
+  if (isProcessDraining()) return { finalized: false, started: false };
+  const finalized = finalizeWebhookClaimForJob(jobId);
+  const drain = drainWebhookInbox();
+  return { finalized, started: drain.started };
 }
 
 function createGithubSyncJobTransaction(input: {
@@ -336,19 +478,31 @@ function createGithubSyncJob(input: {
 }
 
 function launchGithubSyncLoop(jobId: string, options: StartGithubSyncOptions): void {
+  if (isProcessDraining()) return;
+  const run = resolveGithubSyncLoopRunner();
   const promise = Promise.resolve()
-    .then(() => runGithubSyncLoop(jobId, options))
+    .then(() => run(jobId, options))
     .catch((err) => {
+      if (shouldStopForProcessDrain(err)) return;
       const message = err instanceof Error ? err.message : String(err);
       repo.updateSyncJob(jobId, { status: 'failed', error: message, finished_at: Date.now() });
+    })
+    .finally(() => {
+      if (isProcessDraining()) return;
+      notifyGithubSyncJobTerminal(jobId);
     });
   const g = globalThis as unknown as { __activeSyncPromises?: Set<Promise<void>> };
   g.__activeSyncPromises ??= new Set();
   g.__activeSyncPromises.add(promise);
-  void promise.finally(() => g.__activeSyncPromises?.delete(promise));
+  activeSyncJobPromises().set(jobId, promise);
+  void promise.finally(() => {
+    g.__activeSyncPromises?.delete(promise);
+    activeSyncJobPromises().delete(jobId);
+  });
 }
 
 async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions): Promise<void> {
+  if (isProcessDraining()) return;
   let cfg: ReturnType<typeof getGithubConfig>;
   let runId = `sr-${nanoid(10)}`;
   try {
@@ -401,6 +555,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
       remote = await listMarkdownFiles(cfg);
     }
   } catch (err) {
+    if (shouldStopForProcessDrain(err)) return;
     const message = err instanceof Error ? err.message : String(err);
     if (useCompare) {
       syncObs.recordEvent({
@@ -418,6 +573,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
         remote = await listMarkdownFiles(cfg);
         compareChanged = null;
       } catch (fallbackErr) {
+        if (shouldStopForProcessDrain(fallbackErr)) return;
         const fallbackMessage =
           fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
         syncObs.finishRun(runId, 'failed', fallbackMessage);
@@ -438,6 +594,8 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
       return;
     }
   }
+
+  if (isProcessDraining()) return;
 
   const localByPath = new Map(localSources.map((row) => [row.path, row]));
   const remoteByPath = new Map(remote.map((row) => [row.path, row]));
@@ -592,6 +750,10 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
   let nextIndex = 0;
 
   const processPlanItem = async (item: PlanItem, index: number): Promise<void> => {
+    if (isProcessDraining()) {
+      cancelled = true;
+      return;
+    }
     const legacy = repo.getSyncJob(jobId);
     if (!legacy || legacy.status !== 'running') {
       if (!cancelled) {
@@ -627,6 +789,10 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
     }
 
     if (item.action === 'delete') {
+      if (isProcessDraining()) {
+        cancelled = true;
+        return;
+      }
       try {
         syncObs.markSourceFileDeleted({
           repo: repoSlug,
@@ -677,7 +843,10 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
           path: item.path,
         },
       );
-      if (cancelled) return;
+      if (cancelled || isProcessDraining()) {
+        cancelled = true;
+        return;
+      }
       queueGithubIngestJob({
         runId,
         itemId: item.itemId,
@@ -702,6 +871,10 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
       });
       startAnalysisWorker('github-sync-stream');
     } catch (err) {
+      if (shouldStopForProcessDrain(err)) {
+        cancelled = true;
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       syncObs.updateRunItem(item.itemId, {
         status: 'failed',
@@ -724,7 +897,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
   };
 
   const processQueue = async (): Promise<void> => {
-    while (!cancelled) {
+    while (!cancelled && !isProcessDraining()) {
       const index = nextIndex;
       nextIndex += 1;
       if (index >= plan.length) return;
@@ -738,7 +911,7 @@ async function runGithubSyncLoop(jobId: string, options: StartGithubSyncOptions)
     Array.from({ length: Math.min(DOWNLOAD_CONCURRENCY, plan.length) }, () => processQueue()),
   );
 
-  if (cancelled) {
+  if (cancelled || isProcessDraining()) {
     return;
   }
 
@@ -783,6 +956,9 @@ export function cancelGithubSync(): {
     );
   }
   const cancelledJobs = cancelAnalysisJobs({ runId });
+  if (active && !activeSyncJobPromises().has(active.id)) {
+    notifyGithubSyncJobTerminal(active.id);
+  }
   return {
     cancelledRuns: runId ? 1 : 0,
     cancelledJobs,
