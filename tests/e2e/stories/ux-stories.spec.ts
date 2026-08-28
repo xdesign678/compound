@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type Page, type Route, type TestInfo } from '@playwright/test';
 
 const STORIES_DIR = join(process.cwd(), 'tmp/ux-audit/stories');
 
@@ -115,6 +115,32 @@ async function seedManyConcepts(page: Page, count: number) {
   }, count);
 }
 
+const STORY_SOURCE_PREFLIGHT_REVISION = 4;
+
+async function fulfillSourceGetWithRevision(route: Route, fallbackRevision: number): Promise<void> {
+  const ids =
+    new URL(route.request().url()).searchParams.get('ids')?.split(',').filter(Boolean) ?? [];
+  if (ids.length === 0) {
+    await route.continue();
+    return;
+  }
+  await route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      sources: ids.map((id) => ({
+        id,
+        title: 'E2E source',
+        type: 'article',
+        rawContent: 'server preflight body — must not replace the local draft',
+        ingestedAt: Date.now(),
+        contentStatus: 'full',
+        serverRevision: fallbackRevision,
+      })),
+    }),
+  });
+}
+
 async function openFirstSourceBlockForEditing(page: Page) {
   const firstBlock = page.getByRole('group', { name: '内容块' }).first();
   await expect(firstBlock).toBeVisible();
@@ -138,8 +164,15 @@ test('story: first visit reaches a usable seeded wiki', async ({ page }, testInf
 
 test('story: offline source edit survives until reconnect and save', async ({ page }, testInfo) => {
   await stubEmptySnapshot(page);
-  await page.route('**/api/data/sources', async (route) => {
-    if (route.request().method() !== 'PATCH') {
+  let patchedExpectedRevision: number | undefined;
+  let returnedServerRevision: number | undefined;
+  await page.route('**/api/data/sources**', async (route) => {
+    const method = route.request().method();
+    if (method === 'GET') {
+      await fulfillSourceGetWithRevision(route, STORY_SOURCE_PREFLIGHT_REVISION);
+      return;
+    }
+    if (method !== 'PATCH') {
       await route.continue();
       return;
     }
@@ -147,7 +180,11 @@ test('story: offline source edit survives until reconnect and save', async ({ pa
       id: string;
       title?: string;
       rawContent: string;
+      expectedRevision?: number;
     };
+    expect(payload.expectedRevision).toBe(STORY_SOURCE_PREFLIGHT_REVISION);
+    patchedExpectedRevision = payload.expectedRevision;
+    returnedServerRevision = STORY_SOURCE_PREFLIGHT_REVISION + 1;
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -159,6 +196,7 @@ test('story: offline source edit survives until reconnect and save', async ({ pa
           rawContent: payload.rawContent,
           ingestedAt: Date.now(),
           contentStatus: 'full',
+          serverRevision: returnedServerRevision,
         },
         concepts: [],
       }),
@@ -177,8 +215,16 @@ test('story: offline source edit survives until reconnect and save', async ({ pa
     await expect(page.getByRole('heading', { name: '离线编辑' })).toBeVisible();
 
     await page.context().setOffline(false);
-    await page.getByRole('button', { name: '保存资料正文草稿' }).click();
-    await expect(page.getByText('已保存')).toBeVisible();
+    const saveButton = page.getByRole('button', { name: /保存资料正文草稿/ });
+    const savedStatus = page.getByText('已保存');
+    await expect(saveButton.or(savedStatus)).toBeVisible();
+    if (await saveButton.isVisible()) {
+      await saveButton.click();
+    }
+    await expect(savedStatus).toBeVisible();
+    await expect(page.getByRole('heading', { name: '离线编辑' })).toBeVisible();
+    expect(patchedExpectedRevision).toBe(STORY_SOURCE_PREFLIGHT_REVISION);
+    expect(returnedServerRevision).toBe(STORY_SOURCE_PREFLIGHT_REVISION + 1);
   });
 });
 

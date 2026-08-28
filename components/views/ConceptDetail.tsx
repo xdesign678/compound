@@ -15,15 +15,9 @@ import { formatRelativeTime } from '@/lib/format';
 import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
 import { fetchCompoundPrivateApi } from '@/lib/auth-response-guard';
-import {
-  deleteConcept,
-  fetchConceptById,
-  flagConceptIncorrect,
-  isRevisionConflictError,
-  requireExpectedRevision,
-  startWikiFromSelection,
-} from '@/lib/api-client';
+import { startWikiFromSelection } from '@/lib/api-client';
 import { rememberSelectionWikiRun } from '@/lib/selection-wiki-runs';
+import { useConceptMutations } from '@/lib/hooks/useConceptMutations';
 import {
   computeSelectionPopoverPosition,
   getSelectionChangeAction,
@@ -61,8 +55,105 @@ interface ConceptTocItem {
   title: string;
 }
 
-function hasOpenConceptDialog(versionDialogOpen: boolean, deleteDialogOpen: boolean): boolean {
-  return versionDialogOpen || deleteDialogOpen;
+function ConceptMutationPanel({
+  conceptTitle,
+  mutations,
+}: {
+  conceptTitle: string;
+  mutations: ReturnType<typeof useConceptMutations>;
+}) {
+  const deleteDialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(deleteDialogRef, mutations.showDeleteConfirm);
+
+  const { showDeleteConfirm, setShowDeleteConfirm } = mutations;
+  useEffect(() => {
+    if (!showDeleteConfirm) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setShowDeleteConfirm(false);
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [setShowDeleteConfirm, showDeleteConfirm]);
+
+  return (
+    <>
+      {mutations.mutationError && (
+        <div className="concept-mutation-error" role="alert">
+          <p>{mutations.mutationError}</p>
+          <button
+            className="concept-mutation-refresh"
+            type="button"
+            disabled={mutations.refreshing}
+            onClick={() => void mutations.handleRefreshConcept()}
+            aria-label="刷新服务器版本"
+          >
+            {mutations.refreshing ? '刷新中…' : '刷新服务器版本'}
+          </button>
+        </div>
+      )}
+
+      <div className="detail-section detail-actions">
+        <button
+          className="modal-btn"
+          type="button"
+          disabled={mutations.flagging}
+          onClick={mutations.handleFlagConcept}
+        >
+          {mutations.flagging ? '标记中…' : '标记有误'}
+        </button>
+        <button
+          className="modal-btn danger"
+          type="button"
+          onClick={() => mutations.setShowDeleteConfirm(true)}
+        >
+          删除概念
+        </button>
+      </div>
+
+      {mutations.showDeleteConfirm && (
+        <div
+          className="modal-overlay visible"
+          onClick={() => mutations.setShowDeleteConfirm(false)}
+        >
+          <div
+            ref={deleteDialogRef}
+            className="modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-confirm-title"
+            aria-describedby="delete-confirm-desc"
+            tabIndex={-1}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-handle" />
+            <h3 id="delete-confirm-title">确认删除</h3>
+            <p id="delete-confirm-desc" className="modal-desc">
+              确定要删除「{conceptTitle}」吗？此操作不可撤销。
+            </p>
+            <div className="detail-dialog-actions">
+              <button
+                className="modal-btn"
+                type="button"
+                onClick={() => mutations.setShowDeleteConfirm(false)}
+              >
+                取消
+              </button>
+              <button
+                className="modal-btn danger-confirm"
+                type="button"
+                disabled={mutations.deleting}
+                onClick={mutations.handleDeleteConcept}
+              >
+                {mutations.deleting ? '删除中…' : '确认删除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 function isUsefulRect(rect: DOMRect): boolean {
@@ -178,11 +269,12 @@ export function ConceptDetail({ id }: { id: string }) {
   const [hydrateError, setHydrateError] = useState<string | null>(null);
   const [hydrateAttempt, setHydrateAttempt] = useState(0);
   const [retrying, setRetrying] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [flagging, setFlagging] = useState(false);
-  const [mutationError, setMutationError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const mutations = useConceptMutations({
+    id,
+    showToast,
+    showErrorToast,
+    back,
+  });
   const [versionDialog, setVersionDialog] = useState<VersionDialogState>({
     open: false,
     loading: false,
@@ -208,7 +300,6 @@ export function ConceptDetail({ id }: { id: string }) {
   const bodyShellRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const versionDialogRef = useRef<HTMLDivElement>(null);
-  const deleteDialogRef = useRef<HTMLDivElement>(null);
   const tocDialogRef = useRef<HTMLDivElement>(null);
   // 点击 popover 时浏览器会清除外部选区 -> selectionchange 触发 -> popover 被卸载 ->
   // onClick 无法触发。用一个短暂的抑制窗口，让 click 先落地。
@@ -218,7 +309,6 @@ export function ConceptDetail({ id }: { id: string }) {
   // null 哨兵区分「加载中」与「不存在」，避免打开存在的概念先闪一帧「未找到概念」
   const concept = useLiveQuery(async () => (await getDb().concepts.get(id)) ?? null, [id]);
   useFocusTrap(versionDialogRef, versionDialog.open);
-  useFocusTrap(deleteDialogRef, showDeleteConfirm);
   // 目录弹窗与来源页对齐：焦点圈定 + 关闭后焦点回收
   useFocusTrap(tocDialogRef, tocOpen);
   const sources = useLiveQuery(async () => {
@@ -572,84 +662,6 @@ export function ConceptDetail({ id }: { id: string }) {
     }
   }, [concept?.title, creatingFromSelection, id, selectionPopover.text, showToast, showErrorToast]);
 
-  const refreshConceptFromServer = useCallback(async () => {
-    const remote = await fetchConceptById(id);
-    await getDb().concepts.put({
-      ...remote,
-      contentStatus: remote.contentStatus ?? 'full',
-    });
-    return remote;
-  }, [id]);
-
-  const handleRefreshConcept = useCallback(async () => {
-    if (refreshing) return;
-    setRefreshing(true);
-    try {
-      await refreshConceptFromServer();
-      setMutationError(null);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '刷新失败';
-      setMutationError(message);
-      showErrorToast(message);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refreshConceptFromServer, refreshing, showErrorToast]);
-
-  const handleFlagConcept = useCallback(async () => {
-    if (flagging) return;
-    setFlagging(true);
-    setMutationError(null);
-    try {
-      const remote = await refreshConceptFromServer();
-      const result = await flagConceptIncorrect({
-        id,
-        expectedRevision: requireExpectedRevision(remote.serverRevision),
-      });
-      if (result.activity) {
-        await getDb().activity.put(result.activity);
-      }
-      showToast(result.created ? '已标记为有误' : '已在审核队列中');
-    } catch (err) {
-      const message = isRevisionConflictError(err)
-        ? '服务器版本已变化，未写入标记'
-        : err instanceof Error
-          ? err.message
-          : '标记失败';
-      setMutationError(message);
-      showErrorToast(message);
-    } finally {
-      setFlagging(false);
-    }
-  }, [flagging, id, refreshConceptFromServer, showToast, showErrorToast]);
-
-  const handleDeleteConcept = useCallback(async () => {
-    if (deleting) return;
-    setDeleting(true);
-    setMutationError(null);
-    try {
-      const remote = await refreshConceptFromServer();
-      await deleteConcept({
-        id,
-        expectedRevision: requireExpectedRevision(remote.serverRevision),
-      });
-      await getDb().concepts.delete(id);
-      showToast('概念已删除');
-      back();
-    } catch (err) {
-      const message = isRevisionConflictError(err)
-        ? '服务器版本已变化，未删除本地概念'
-        : err instanceof Error
-          ? err.message
-          : '删除失败';
-      setMutationError(message);
-      showErrorToast(message);
-    } finally {
-      setDeleting(false);
-      setShowDeleteConfirm(false);
-    }
-  }, [back, deleting, id, refreshConceptFromServer, showToast, showErrorToast]);
-
   useEffect(() => {
     if (!concept || hasFullBody) return;
     void hydrateBody();
@@ -665,22 +677,18 @@ export function ConceptDetail({ id }: { id: string }) {
   }, []);
 
   useEffect(() => {
-    if (!hasOpenConceptDialog(versionDialog.open, showDeleteConfirm)) return;
+    if (!versionDialog.open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       // 全局快捷键钩子的 window 监听注册更早（冒泡阶段先触发），这里必须用
       // capture 阶段抢先 preventDefault，全局钩子看到 defaultPrevented 才会放行，
       // 否则按一次 Esc 会把详情页一起关掉。
       event.preventDefault();
-      if (showDeleteConfirm) {
-        setShowDeleteConfirm(false);
-      } else {
-        closeVersionDialog();
-      }
+      closeVersionDialog();
     };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [closeVersionDialog, showDeleteConfirm, versionDialog.open]);
+  }, [closeVersionDialog, versionDialog.open]);
 
   if (concept === undefined) {
     return (
@@ -1024,73 +1032,7 @@ export function ConceptDetail({ id }: { id: string }) {
           document.body,
         )}
 
-      {mutationError && (
-        <div className="concept-mutation-error" role="alert">
-          <p>{mutationError}</p>
-          <button
-            className="concept-mutation-refresh"
-            type="button"
-            disabled={refreshing}
-            onClick={() => void handleRefreshConcept()}
-            aria-label="刷新服务器版本"
-          >
-            {refreshing ? '刷新中…' : '刷新服务器版本'}
-          </button>
-        </div>
-      )}
-
-      {/* Action buttons */}
-      <div className="detail-section detail-actions">
-        <button className="modal-btn" type="button" disabled={flagging} onClick={handleFlagConcept}>
-          {flagging ? '标记中…' : '标记有误'}
-        </button>
-        <button
-          className="modal-btn danger"
-          type="button"
-          onClick={() => setShowDeleteConfirm(true)}
-        >
-          删除概念
-        </button>
-      </div>
-
-      {/* Delete confirmation dialog */}
-      {showDeleteConfirm && (
-        <div className="modal-overlay visible" onClick={() => setShowDeleteConfirm(false)}>
-          <div
-            ref={deleteDialogRef}
-            className="modal"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="delete-confirm-title"
-            aria-describedby="delete-confirm-desc"
-            tabIndex={-1}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-handle" />
-            <h3 id="delete-confirm-title">确认删除</h3>
-            <p id="delete-confirm-desc" className="modal-desc">
-              确定要删除「{concept.title}」吗？此操作不可撤销。
-            </p>
-            <div className="detail-dialog-actions">
-              <button
-                className="modal-btn"
-                type="button"
-                onClick={() => setShowDeleteConfirm(false)}
-              >
-                取消
-              </button>
-              <button
-                className="modal-btn danger-confirm"
-                type="button"
-                disabled={deleting}
-                onClick={handleDeleteConcept}
-              >
-                {deleting ? '删除中…' : '确认删除'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConceptMutationPanel conceptTitle={concept.title} mutations={mutations} />
     </article>
   );
 }
