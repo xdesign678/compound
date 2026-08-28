@@ -1,35 +1,336 @@
 {
+  "version": 1,
+  "kind": "ci-eval-corpus",
   "_help": "Deterministic, de-identified CI eval fixture. No production questions, titles, or answers. Structural and citation contracts are hard gates; model quality is report-only.",
+  "sources": [
+    {
+      "id": "s-fixture-alpha",
+      "title": "Fixture Source Alpha",
+      "type": "text",
+      "rawContent": "Fixture Concept Alpha is a synthetic node used only in CI. It has no production counterpart.",
+      "ingestedAt": 1700000000000
+    },
+    {
+      "id": "s-fixture-beta",
+      "title": "Fixture Source Beta",
+      "type": "text",
+      "rawContent": "Fixture Concept Beta is a second synthetic node. It is related to Fixture Concept Alpha through a declared graph edge.",
+      "ingestedAt": 1700000000000
+    },
+    {
+      "id": "s-fixture-bridge",
+      "title": "Fixture Source Bridge",
+      "type": "text",
+      "rawContent": "Alpha and Beta are related synthetic fixtures. The bridge record exists so multi-hop queries can traverse from Alpha to Beta.",
+      "ingestedAt": 1700000000000
+    }
+  ],
+  "concepts": [
+    {
+      "id": "c-fixture-alpha",
+      "title": "Fixture Concept Alpha",
+      "summary": "A synthetic CI concept with no production counterpart.",
+      "body": "Fixture Concept Alpha is a synthetic node used only in CI. It is defined in Fixture Source Alpha and participates in the synthetic fixture graph.",
+      "sources": ["s-fixture-alpha", "s-fixture-bridge"],
+      "related": ["c-fixture-beta"],
+      "createdAt": 1700000000000,
+      "updatedAt": 1700000000000,
+      "version": 1,
+      "categories": [{ "primary": "fixture" }],
+      "categoryKeys": ["fixture"]
+    },
+    {
+      "id": "c-fixture-beta",
+      "title": "Fixture Concept Beta",
+      "summary": "A second synthetic CI concept related to Alpha.",
+      "body": "Fixture Concept Beta is related to Fixture Concept Alpha through the synthetic fixture graph. It is defined in Fixture Source Beta.",
+      "sources": ["s-fixture-beta", "s-fixture-bridge"],
+      "related": ["c-fixture-alpha"],
+      "createdAt": 1700000000000,
+      "updatedAt": 1700000000000,
+      "version": 1,
+      "categories": [{ "primary": "fixture" }],
+      "categoryKeys": ["fixture"]
+    }
+  ],
+  "chunks": [
+    {
+      "id": "k-fixture-alpha-1",
+      "sourceId": "s-fixture-alpha",
+      "chunkIndex": 0,
+      "heading": "Alpha",
+      "headingPath": ["Alpha"],
+      "content": "Fixture Concept Alpha is a synthetic node used only in CI. It has no production counterpart.",
+      "tokenCount": 24,
+      "contentHash": "fixture-hash-alpha-1",
+      "createdAt": 1700000000000,
+      "updatedAt": 1700000000000
+    },
+    {
+      "id": "k-fixture-beta-1",
+      "sourceId": "s-fixture-beta",
+      "chunkIndex": 0,
+      "heading": "Beta",
+      "headingPath": ["Beta"],
+      "content": "Fixture Concept Beta is a second synthetic node. It is related to Fixture Concept Alpha through a declared graph edge.",
+      "tokenCount": 28,
+      "contentHash": "fixture-hash-beta-1",
+      "createdAt": 1700000000000,
+      "updatedAt": 1700000000000
+    },
+    {
+      "id": "k-fixture-bridge-1",
+      "sourceId": "s-fixture-bridge",
+      "chunkIndex": 0,
+      "heading": "Bridge",
+      "headingPath": ["Bridge"],
+      "content": "Alpha and Beta are related synthetic fixtures. The bridge record exists so multi-hop queries can traverse from Alpha to Beta.",
+      "tokenCount": 32,
+      "contentHash": "fixture-hash-bridge-1",
+      "createdAt": 1700000000000,
+      "updatedAt": 1700000000000
+    }
+  ],
+  "evidence": [
+    {
+      "id": "e-fixture-alpha-1",
+      "conceptId": "c-fixture-alpha",
+      "sourceId": "s-fixture-alpha",
+      "chunkId": "k-fixture-alpha-1",
+      "quote": "Fixture Concept Alpha is a synthetic node used only in CI.",
+      "claim": "Alpha is a synthetic CI concept.",
+      "kind": "definition",
+      "confidence": 1,
+      "createdAt": 1700000000000
+    },
+    {
+      "id": "e-fixture-beta-1",
+      "conceptId": "c-fixture-beta",
+      "sourceId": "s-fixture-beta",
+      "chunkId": "k-fixture-beta-1",
+      "quote": "Fixture Concept Beta is a second synthetic node.",
+      "claim": "Beta is a synthetic CI concept.",
+      "kind": "definition",
+      "confidence": 1,
+      "createdAt": 1700000000000
+    },
+    {
+      "id": "e-fixture-bridge-1",
+      "conceptId": "c-fixture-alpha",
+      "sourceId": "s-fixture-bridge",
+      "chunkId": "k-fixture-bridge-1",
+      "quote": "Alpha and Beta are related synthetic fixtures.",
+      "claim": "Alpha relates to Beta through the synthetic fixture graph.",
+      "kind": "support",
+      "confidence": 1,
+      "createdAt": 1700000000000
+    }
+  ],
+  "relations": [
+    {
+      "id": "r-fixture-alpha-beta",
+      "sourceConceptId": "c-fixture-alpha",
+      "targetConceptId": "c-fixture-beta",
+      "kind": "related",
+      "reason": "Synthetic multi-hop edge for CI.",
+      "confidence": 1,
+      "createdAt": 1700000000000,
+      "updatedAt": 1700000000000
+    }
+  ],
   "items": [
     {
       "id": "fixture-definition-001",
       "category": "definition",
+      "hop": "one-hop",
       "question": "What is Fixture Concept Alpha?",
       "expectedConceptIds": ["c-fixture-alpha"],
       "expectedConceptTitles": ["Fixture Concept Alpha"],
+      "expectedSourceIds": ["s-fixture-alpha"],
+      "expectedChunkIds": ["k-fixture-alpha-1"],
+      "expectedEvidenceIds": ["e-fixture-alpha-1"],
       "expectedKeywords": ["synthetic", "fixture"],
-      "shouldAnswer": true
+      "shouldAnswer": true,
+      "expectedOutput": {
+        "answer": "Fixture Concept Alpha is a synthetic node used only in this CI fixture. [C1]",
+        "sseEvents": [
+          {
+            "event": "stage",
+            "data": {
+              "key": "retrieve",
+              "status": "done",
+              "detail": "1 concept"
+            }
+          },
+          {
+            "event": "delta",
+            "data": {
+              "text": "Fixture Concept Alpha is a synthetic node used only in this CI fixture. [C1]"
+            }
+          },
+          {
+            "event": "done",
+            "data": {
+              "citedConceptIds": ["c-fixture-alpha"],
+              "citedSourceIds": ["s-fixture-alpha"],
+              "citedChunkIds": ["k-fixture-alpha-1"],
+              "citedEvidenceIds": ["e-fixture-alpha-1"],
+              "citedConcepts": [
+                { "id": "c-fixture-alpha", "title": "Fixture Concept Alpha" }
+              ],
+              "retrievedConcepts": [
+                { "id": "c-fixture-alpha", "title": "Fixture Concept Alpha" }
+              ],
+              "archivable": false,
+              "suggestedQuestions": [
+                "How is Fixture Concept Alpha represented in the graph?"
+              ],
+              "stageDurations": { "retrieve": 1, "synthesize": 1 },
+              "retrievalMode": "fts-only",
+              "faithfulness": { "score": 1, "level": "high" }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "fixture-comparison-001",
       "category": "comparison",
+      "hop": "multi-hop",
       "question": "How do Fixture Concept Alpha and Fixture Concept Beta relate?",
       "expectedConceptIds": ["c-fixture-alpha", "c-fixture-beta"],
       "expectedConceptTitles": [
         "Fixture Concept Alpha",
         "Fixture Concept Beta"
       ],
+      "expectedSourceIds": [
+        "s-fixture-alpha",
+        "s-fixture-beta",
+        "s-fixture-bridge"
+      ],
+      "expectedChunkIds": [
+        "k-fixture-alpha-1",
+        "k-fixture-beta-1",
+        "k-fixture-bridge-1"
+      ],
+      "expectedEvidenceIds": [
+        "e-fixture-alpha-1",
+        "e-fixture-beta-1",
+        "e-fixture-bridge-1"
+      ],
       "expectedKeywords": ["related", "synthetic"],
-      "shouldAnswer": true
+      "shouldAnswer": true,
+      "expectedOutput": {
+        "answer": "Fixture Concept Alpha and Fixture Concept Beta are related synthetic nodes in the fixture graph. [C1] [C2]",
+        "sseEvents": [
+          {
+            "event": "stage",
+            "data": {
+              "key": "retrieve",
+              "status": "done",
+              "detail": "2 concepts"
+            }
+          },
+          {
+            "event": "stage",
+            "data": {
+              "key": "graph",
+              "status": "done",
+              "detail": "1-hop expansion"
+            }
+          },
+          {
+            "event": "delta",
+            "data": {
+              "text": "Fixture Concept Alpha and Fixture Concept Beta are related synthetic nodes in the fixture graph. [C1] [C2]"
+            }
+          },
+          {
+            "event": "done",
+            "data": {
+              "citedConceptIds": ["c-fixture-alpha", "c-fixture-beta"],
+              "citedSourceIds": [
+                "s-fixture-alpha",
+                "s-fixture-beta",
+                "s-fixture-bridge"
+              ],
+              "citedChunkIds": [
+                "k-fixture-alpha-1",
+                "k-fixture-beta-1",
+                "k-fixture-bridge-1"
+              ],
+              "citedEvidenceIds": [
+                "e-fixture-alpha-1",
+                "e-fixture-beta-1",
+                "e-fixture-bridge-1"
+              ],
+              "citedConcepts": [
+                { "id": "c-fixture-alpha", "title": "Fixture Concept Alpha" },
+                { "id": "c-fixture-beta", "title": "Fixture Concept Beta" }
+              ],
+              "retrievedConcepts": [
+                { "id": "c-fixture-alpha", "title": "Fixture Concept Alpha" },
+                { "id": "c-fixture-beta", "title": "Fixture Concept Beta" }
+              ],
+              "archivable": false,
+              "suggestedQuestions": [
+                "What evidence supports the Alpha-Beta edge?"
+              ],
+              "stageDurations": { "retrieve": 1, "graph": 1, "synthesize": 1 },
+              "retrievalMode": "fts-only",
+              "faithfulness": { "score": 1, "level": "high" }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "fixture-unknown-001",
       "category": "unknown",
+      "hop": "unknown",
       "question": "What is the classified production incident from last Tuesday?",
       "expectedConceptIds": [],
       "expectedConceptTitles": [],
+      "expectedSourceIds": [],
+      "expectedChunkIds": [],
+      "expectedEvidenceIds": [],
       "expectedKeywords": ["do not know", "not in", "insufficient"],
-      "shouldAnswer": false
+      "shouldAnswer": false,
+      "expectedOutput": {
+        "answer": "I do not know. That incident is not in this fixture corpus; evidence is insufficient.",
+        "sseEvents": [
+          {
+            "event": "stage",
+            "data": {
+              "key": "retrieve",
+              "status": "done",
+              "detail": "0 concepts"
+            }
+          },
+          {
+            "event": "delta",
+            "data": {
+              "text": "I do not know. That incident is not in this fixture corpus; evidence is insufficient."
+            }
+          },
+          {
+            "event": "done",
+            "data": {
+              "citedConceptIds": [],
+              "citedSourceIds": [],
+              "citedChunkIds": [],
+              "citedEvidenceIds": [],
+              "citedConcepts": [],
+              "retrievedConcepts": [],
+              "archivable": false,
+              "suggestedQuestions": [],
+              "stageDurations": { "retrieve": 1, "synthesize": 1 },
+              "retrievalMode": "fts-only",
+              "faithfulness": { "score": 1, "level": "high" }
+            }
+          }
+        ]
+      }
     }
   ]
 }

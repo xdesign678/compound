@@ -32,6 +32,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run test
       - run: npm run test:restore
+      - name: Deterministic citation eval
+        run: npm run eval:ci:test && npm run eval:ci
       - run: npm run knip
       - run: npm run validate:profiling
 
