@@ -211,7 +211,7 @@ export function Header(props: HeaderProps) {
   if (detail) {
     return (
       <header className="header detail-header">
-        <button type="button" className="back-btn" onClick={back}>
+        <button type="button" className="back-btn" onClick={back} data-app-history-back="true">
           <span aria-hidden="true">
             <Icon.Back />
           </span>

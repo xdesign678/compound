@@ -8,6 +8,13 @@ import { getDb } from '@/lib/db';
 import { resolvePrivateCacheAccess } from '@/lib/admin-auth-client';
 import { resetLocalKnowledgeCache } from '@/lib/private-cache';
 import { useAppStore, type TabId } from '@/lib/store';
+import {
+  establishAppHistoryShell,
+  finalizeAppHistoryTabCollapse,
+  hydrateUiFromHistoryState,
+  parseAppHistoryState,
+  withAppHistoryHydration,
+} from '@/lib/app-history';
 import { DESKTOP_LAYOUT_MIN_WIDTH, isDesktopWidth } from '@/lib/responsive';
 import type { SyncQuarantine } from '@/lib/sync-reconciliation';
 
@@ -230,15 +237,23 @@ export default function Page() {
     };
   }, [cacheAccessGranted, hydrateHomeStyle, hydrateFontSize, hydrateLineHeight]);
 
-  // Browser history support for detail navigation
-  useEffect(() => {
-    const handler = (e: PopStateEvent) => {
-      const state = e.state;
-      if (state?.detail) {
-        useAppStore.setState({ detail: state.detail });
-      } else {
-        useAppStore.setState({ detail: null });
-      }
+  // Versioned Compound history is the navigation source of truth for tab/detail.
+  useIsomorphicLayoutEffect(() => {
+    const parsed = parseAppHistoryState(window.history.state);
+    if (parsed) {
+      withAppHistoryHydration(() => {
+        useAppStore.setState(hydrateUiFromHistoryState(window.history.state));
+      });
+    } else {
+      useAppStore.setState({ detail: null });
+      establishAppHistoryShell(useAppStore.getState().tab);
+    }
+
+    const handler = (event: PopStateEvent) => {
+      if (finalizeAppHistoryTabCollapse()) return;
+      withAppHistoryHydration(() => {
+        useAppStore.setState(hydrateUiFromHistoryState(event.state));
+      });
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);

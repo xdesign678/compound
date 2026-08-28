@@ -116,6 +116,7 @@ export function SwipeBack() {
       const start = startRef.current;
       if (progressRef.current >= 1) {
         hapticSuccess();
+        // store.back shares history-safe close with Header / Escape / overlay.
         back();
       } else if (start) {
         // Velocity-based trigger: fast swipe even below threshold

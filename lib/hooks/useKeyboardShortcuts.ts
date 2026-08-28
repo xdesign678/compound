@@ -55,6 +55,7 @@ export function useKeyboardShortcuts() {
           store.closeGithubSync();
         } else if (store.detail) {
           e.preventDefault();
+          // store.back shares history-safe close with Header / SwipeBack / overlay.
           store.back();
         }
         // If nothing is open, do nothing
@@ -72,7 +73,38 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // If detail is open, skip single-key shortcuts (except Escape)
+      // g followed by w/s/a/h switches tabs even from a pushed detail so setTab
+      // can collapse the app-owned detail chain.
+      if (e.key === 'g') {
+        const prev = gKeyRef.current;
+        if (prev && Date.now() - prev.at < G_KEY_TIMEOUT_MS) {
+          gKeyRef.current = null;
+          return;
+        }
+        gKeyRef.current = { key: 'g', at: Date.now() };
+        return;
+      }
+
+      const gPrev = gKeyRef.current;
+      if (gPrev && Date.now() - gPrev.at < G_KEY_TIMEOUT_MS) {
+        let targetTab: TabId | null = null;
+        if (e.key === 'w') targetTab = 'wiki';
+        else if (e.key === 's') targetTab = 'sources';
+        else if (e.key === 'a') targetTab = 'ask';
+        else if (e.key === 'h') targetTab = 'activity';
+
+        if (targetTab) {
+          e.preventDefault();
+          store.setTab(targetTab);
+          gKeyRef.current = null;
+          return;
+        }
+      }
+
+      if (gKeyRef.current && e.key !== 'g') {
+        gKeyRef.current = null;
+      }
+
       if (store.detail) return;
 
       // / : open command palette (search)
@@ -96,40 +128,6 @@ export function useKeyboardShortcuts() {
         // Delay event so CommandPalette mounts & effects run before dispatch
         setTimeout(() => window.dispatchEvent(new CustomEvent('command-palette-help')), 0);
         return;
-      }
-
-      // g followed by w/s/a/h : switch tabs (vim-style)
-      if (e.key === 'g') {
-        const prev = gKeyRef.current;
-        if (prev && Date.now() - prev.at < G_KEY_TIMEOUT_MS) {
-          // Double g - ignore
-          gKeyRef.current = null;
-          return;
-        }
-        gKeyRef.current = { key: 'g', at: Date.now() };
-        return;
-      }
-
-      // Check for g-<key> combo
-      const gPrev = gKeyRef.current;
-      if (gPrev && Date.now() - gPrev.at < G_KEY_TIMEOUT_MS) {
-        let targetTab: TabId | null = null;
-        if (e.key === 'w') targetTab = 'wiki';
-        else if (e.key === 's') targetTab = 'sources';
-        else if (e.key === 'a') targetTab = 'ask';
-        else if (e.key === 'h') targetTab = 'activity';
-
-        if (targetTab) {
-          e.preventDefault();
-          store.setTab(targetTab);
-          gKeyRef.current = null;
-          return;
-        }
-      }
-
-      // Reset g-key if another key was pressed
-      if (gKeyRef.current && e.key !== 'g') {
-        gKeyRef.current = null;
       }
     }
 

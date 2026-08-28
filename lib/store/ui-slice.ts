@@ -1,5 +1,11 @@
 import type { StateCreator } from 'zustand';
 import type { AppState } from './types';
+import {
+  closeAppHistoryDetail,
+  fromStoreDetail,
+  pushAppHistoryDetail,
+  replaceAppHistoryTab,
+} from '../app-history';
 
 export type TabId = 'wiki' | 'sources' | 'ask' | 'activity';
 export type ActivitySubTab = 'health' | 'log';
@@ -25,7 +31,7 @@ export const LINE_HEIGHT_MAP: Record<LineHeight, { label: string; value: number 
   loose: { label: '舒展', value: 2.0 },
 };
 
-interface DetailState {
+export interface DetailState {
   type: 'concept' | 'source' | 'category-wiki';
   id: string;
   primary?: string;
@@ -175,7 +181,7 @@ export interface UISlice {
 // Toast timer managed inside slice closure
 let _toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => ({
+export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get) => ({
   tab: 'wiki',
   detail: null,
   modalOpen: false,
@@ -193,22 +199,45 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => (
   activitySubTab: 'health',
   activityFilter: 'all',
 
-  setTab: (t) => set({ tab: t, detail: null }),
+  setTab: (t) => {
+    set({ tab: t, detail: null });
+    replaceAppHistoryTab(t);
+  },
   openConcept: (id) => {
+    const current = get().detail;
+    if (current?.type === 'concept' && current.id === id) {
+      const historyDetail = fromStoreDetail(current);
+      if (historyDetail) pushAppHistoryDetail(get().tab, historyDetail);
+      return;
+    }
     const newDetail: DetailState = { type: 'concept', id };
     set({ detail: newDetail });
-    if (typeof window !== 'undefined') {
-      history.pushState({ detail: newDetail }, '');
-    }
+    const historyDetail = fromStoreDetail(newDetail);
+    if (historyDetail) pushAppHistoryDetail(get().tab, historyDetail);
   },
   openSource: (id) => {
+    const current = get().detail;
+    if (current?.type === 'source' && current.id === id) {
+      const historyDetail = fromStoreDetail(current);
+      if (historyDetail) pushAppHistoryDetail(get().tab, historyDetail);
+      return;
+    }
     const newDetail: DetailState = { type: 'source', id };
     set({ detail: newDetail });
-    if (typeof window !== 'undefined') {
-      history.pushState({ detail: newDetail }, '');
-    }
+    const historyDetail = fromStoreDetail(newDetail);
+    if (historyDetail) pushAppHistoryDetail(get().tab, historyDetail);
   },
   openCategoryWiki: (primary, secondary) => {
+    const current = get().detail;
+    if (
+      current?.type === 'category-wiki' &&
+      current.primary === primary &&
+      current.secondary === secondary
+    ) {
+      const historyDetail = fromStoreDetail(current);
+      if (historyDetail) pushAppHistoryDetail(get().tab, historyDetail);
+      return;
+    }
     const newDetail: DetailState = {
       type: 'category-wiki',
       id: `category-wiki:${primary}/${secondary}`,
@@ -216,11 +245,14 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => (
       secondary,
     };
     set({ detail: newDetail });
-    if (typeof window !== 'undefined') {
-      history.pushState({ detail: newDetail }, '');
-    }
+    const historyDetail = fromStoreDetail(newDetail);
+    if (historyDetail) pushAppHistoryDetail(get().tab, historyDetail);
   },
-  back: () => set({ detail: null }),
+  back: () => {
+    const mode = closeAppHistoryDetail(get().tab);
+    if (mode === 'back') return;
+    set({ detail: null });
+  },
   openModal: () => set({ modalOpen: true }),
   closeModal: () => set({ modalOpen: false }),
   openSettings: () => set({ settingsOpen: true }),
