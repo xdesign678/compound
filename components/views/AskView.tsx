@@ -12,6 +12,9 @@ export function AskView() {
     <div className="ask-view">
       <AskMessageList
         history={askState.history}
+        historyHasMore={askState.historyHasMore}
+        loadingEarlier={askState.loadingEarlier}
+        historyLimitReached={askState.historyLimitReached}
         loading={askState.loading}
         streamingText={askState.streamingText}
         liveStages={askState.liveStages}
@@ -23,6 +26,7 @@ export function AskView() {
         onRestart={askState.restartConversation}
         onArchive={askState.handleArchive}
         onOpenConcept={askState.openConcept}
+        onLoadEarlier={askState.handleLoadEarlier}
       />
 
       <AskComposer

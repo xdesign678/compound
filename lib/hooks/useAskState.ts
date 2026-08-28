@@ -33,6 +33,15 @@ import type {
   Source,
 } from '@/lib/types';
 import { SOURCE_TYPE_LABELS } from '@/lib/constants';
+import {
+  ASK_HISTORY_MAX_WINDOW,
+  ASK_HISTORY_PAGE_SIZE,
+  askHistoryCursorOf,
+  queryAskHistoryWindowFrom,
+  queryEarlierAskHistoryPage,
+  queryLatestAskHistoryPage,
+  type AskHistoryCursor,
+} from '@/lib/ask-history';
 
 /** LRU cache for @-mention lookups（带 TTL：新建/更新的概念需要在约 1 分钟后可被 @ 到） */
 const MENTION_CACHE_TTL_MS = 60_000;
@@ -215,6 +224,12 @@ export function useAskState() {
   const pickerSearchRef = useRef<HTMLInputElement>(null);
   const throttleRef = useRef<StreamingThrottleState>(createThrottleState());
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const windowFloorRef = useRef<AskHistoryCursor | null>(null);
+  const pendingScrollRestoreRef = useRef<{ height: number; top: number } | null>(null);
+  const [windowEpoch, setWindowEpoch] = useState(0);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [historyLimitReached, setHistoryLimitReached] = useState(false);
 
   // The fallback flush timer is normally cleared in handleSend's finally
   // block, but unmounting mid-stream (tab switch) would leave it pending.
@@ -227,7 +242,23 @@ export function useAskState() {
     };
   }, []);
 
-  const history = useLiveQuery(async () => getDb().askHistory.orderBy('at').toArray(), []);
+  const historyPage = useLiveQuery(async () => {
+    const table = getDb().askHistory;
+    const floor = windowFloorRef.current;
+    if (!floor) {
+      const page = await queryLatestAskHistoryPage(table, ASK_HISTORY_PAGE_SIZE);
+      if (page.messages[0]) {
+        windowFloorRef.current = askHistoryCursorOf(page.messages[0]);
+      }
+      return page;
+    }
+    const messages = await queryAskHistoryWindowFrom(table, floor, ASK_HISTORY_MAX_WINDOW);
+    if (messages[0]) {
+      windowFloorRef.current = askHistoryCursorOf(messages[0]);
+    }
+    return { messages };
+  }, [windowEpoch]);
+  const history = historyPage?.messages;
   const conceptCount = useLiveQuery(async () => getDb().concepts.count(), []);
 
   useEffect(() => {
@@ -256,8 +287,31 @@ export function useAskState() {
   }, []);
 
   useEffect(() => {
+    if (!historyPage) return;
+    if ('hasMore' in historyPage && typeof historyPage.hasMore === 'boolean') {
+      setHistoryHasMore(historyPage.hasMore);
+    }
+  }, [historyPage]);
+
+  useEffect(() => {
+    setHistoryLimitReached(
+      Boolean(
+        historyHasMore &&
+        historyPage?.messages &&
+        historyPage.messages.length >= ASK_HISTORY_MAX_WINDOW - 1,
+      ),
+    );
+  }, [historyHasMore, historyPage]);
+
+  useEffect(() => {
     const el = messagesRef.current;
     if (!el) return;
+    const pending = pendingScrollRestoreRef.current;
+    if (pending) {
+      el.scrollTop = pending.top + (el.scrollHeight - pending.height);
+      pendingScrollRestoreRef.current = null;
+      return;
+    }
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
     if (nearBottom) {
       el.scrollTop = el.scrollHeight;
@@ -662,6 +716,38 @@ export function useAskState() {
     [llmConfig],
   );
 
+  const handleLoadEarlier = useCallback(async () => {
+    const floor = windowFloorRef.current;
+    if (!floor || !historyHasMore || loadingEarlier) return;
+    const remainingCapacity = ASK_HISTORY_MAX_WINDOW - (history?.length ?? 0);
+    if (remainingCapacity <= 1) {
+      setHistoryLimitReached(true);
+      return;
+    }
+    const el = messagesRef.current;
+    if (el) {
+      pendingScrollRestoreRef.current = { height: el.scrollHeight, top: el.scrollTop };
+    }
+    setLoadingEarlier(true);
+    try {
+      const page = await queryEarlierAskHistoryPage(
+        getDb().askHistory,
+        floor,
+        Math.min(ASK_HISTORY_PAGE_SIZE, remainingCapacity),
+      );
+      if (page.messages[0]) {
+        windowFloorRef.current = askHistoryCursorOf(page.messages[0]);
+      }
+      setHistoryHasMore(page.hasMore);
+      setHistoryLimitReached(
+        page.hasMore && (history?.length ?? 0) + page.messages.length >= ASK_HISTORY_MAX_WINDOW - 1,
+      );
+      setWindowEpoch((epoch) => epoch + 1);
+    } finally {
+      setLoadingEarlier(false);
+    }
+  }, [history, historyHasMore, loadingEarlier]);
+
   const restartConversation = useCallback(async () => {
     if (loading) return;
     setInput('');
@@ -671,6 +757,12 @@ export function useAskState() {
     setModelMenuOpen(false);
     setInlineResults([]);
     await clearAskHistory();
+    windowFloorRef.current = null;
+    pendingScrollRestoreRef.current = null;
+    setHistoryHasMore(false);
+    setLoadingEarlier(false);
+    setHistoryLimitReached(false);
+    setWindowEpoch((epoch) => epoch + 1);
     showToast('已开始新对话');
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, [loading, clearAskHistory, showToast]);
@@ -704,6 +796,9 @@ export function useAskState() {
     streamingText,
     liveStages,
     history,
+    historyHasMore,
+    loadingEarlier,
+    historyLimitReached,
     conceptCount,
     suggestions,
 
@@ -717,6 +812,7 @@ export function useAskState() {
     autoResize,
     setCaretPosition,
     handleSend,
+    handleLoadEarlier,
     handleArchive,
     handleSelectMention,
     removeMention,

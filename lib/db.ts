@@ -153,6 +153,11 @@ export class CompoundDB extends Dexie {
       offlineOutbox: 'id, operationId, state, createdAt, nextAttemptAt',
       syncMeta: 'id',
     });
+    // v12: compound [at+id] for stable Ask history cursor pagination.
+    // Additive and reentrant: existing rows stay, no data rewrite.
+    this.version(12).stores({
+      askHistory: 'id, at, [at+id]',
+    });
   }
 }
 

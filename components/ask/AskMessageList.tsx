@@ -3,6 +3,7 @@
 import type { RefObject } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '../../lib/db';
+import { ASK_HISTORY_MAX_WINDOW } from '../../lib/ask-history';
 import { formatConceptBodyForDisplay } from '../../lib/concept-body-format';
 import type { AskMessage, AskMessageStage } from '../../lib/types';
 import { Icon } from '../Icons';
@@ -12,6 +13,9 @@ import { ThinkingPanel, ThinkingTrace } from './ThinkingPanel';
 
 export function AskMessageList({
   history,
+  historyHasMore,
+  loadingEarlier,
+  historyLimitReached,
   loading,
   streamingText,
   liveStages,
@@ -23,8 +27,12 @@ export function AskMessageList({
   onRestart,
   onArchive,
   onOpenConcept,
+  onLoadEarlier,
 }: {
   history: AskMessage[] | undefined;
+  historyHasMore: boolean;
+  loadingEarlier: boolean;
+  historyLimitReached: boolean;
   loading: boolean;
   streamingText: string;
   liveStages: AskMessageStage[];
@@ -36,6 +44,7 @@ export function AskMessageList({
   onRestart: () => void | Promise<void>;
   onArchive: (message: AskMessage, userQuestion: string | null) => void | Promise<void>;
   onOpenConcept: (id: string) => void;
+  onLoadEarlier: () => void | Promise<void>;
 }) {
   const lastAnswerFailed = (() => {
     const lastAnswer = [...(history ?? [])].reverse().find((message) => message.role === 'ai');
@@ -66,6 +75,27 @@ export function AskMessageList({
           />
         ) : (
           <>
+            {historyHasMore && (
+              <div className="ask-load-earlier-wrap">
+                <button
+                  type="button"
+                  className="ask-load-earlier"
+                  onClick={() => void onLoadEarlier()}
+                  disabled={loadingEarlier || historyLimitReached}
+                  aria-label={
+                    historyLimitReached
+                      ? `已达 ${ASK_HISTORY_MAX_WINDOW} 条显示上限`
+                      : '加载更早的对话'
+                  }
+                >
+                  {historyLimitReached
+                    ? `已达 ${ASK_HISTORY_MAX_WINDOW} 条显示上限`
+                    : loadingEarlier
+                      ? '正在加载更早的对话…'
+                      : '加载更早'}
+                </button>
+              </div>
+            )}
             {lastAnswerFailed && (
               <div className="ask-recovery-banner">
                 <div>
@@ -86,7 +116,12 @@ export function AskMessageList({
             {history?.map((message, index) => {
               if (message.role === 'user') {
                 return (
-                  <div key={message.id} className="msg msg-user-row">
+                  <div
+                    key={message.id}
+                    className="msg msg-user-row"
+                    data-ask-message-id={message.id}
+                    data-ask-role="user"
+                  >
                     <div className="msg-user">{message.text}</div>
                   </div>
                 );
@@ -97,7 +132,12 @@ export function AskMessageList({
               const failedAnswer = isAskFailureMessage(message.text);
               const failureDetail = failedAnswer ? getAskFailureDetail(message.text) : '';
               return (
-                <div key={message.id} className="msg msg-ai-row">
+                <div
+                  key={message.id}
+                  className="msg msg-ai-row"
+                  data-ask-message-id={message.id}
+                  data-ask-role="ai"
+                >
                   <div className={`msg-ai-card${failedAnswer ? ' ask-failure-card' : ''}`}>
                     <div className="msg-ai-label">Wiki 答案</div>
                     {!failedAnswer && message.stages && message.stages.length > 0 && (
