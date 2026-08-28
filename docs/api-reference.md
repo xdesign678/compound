@@ -825,9 +825,12 @@ Source: [`app/api/sync/github/webhook/route.ts`](../app/api/sync/github/webhook/
 
 GitHub `push` webhook receiver. Verifies the `x-hub-signature-256` HMAC
 against `GITHUB_WEBHOOK_SECRET`, ignores unrelated events, replies to
-`ping` events with `{ ok: true }`, and otherwise enqueues a webhook-
-triggered sync via `startGithubSync`. Returns the resulting `jobId` and
-an `existing` flag indicating whether a job was already running.
+`ping` events with `{ ok: true }`, and otherwise persists the delivery
+into the durable webhook inbox in the same transaction before ACK.
+Duplicate `X-GitHub-Delivery` values are idempotent. A delivery that
+arrives while another sync is running stays queued until that job
+finishes or boot recovery drains the inbox. Returns `jobId`, `existing`,
+and `queued`.
 
 Guards: IP rate limit (before HMAC), HMAC SHA-256 signature (no admin
 token; webhooks are anonymous), body size limit.
