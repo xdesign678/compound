@@ -23,7 +23,8 @@ export type ReviewKind =
   | 'relation_suggestion'
   | 'conflict'
   | 'manual'
-  | 'concept_incorrect';
+  | 'concept_incorrect'
+  | 'derived_draft';
 
 export const REVIEW_KINDS: readonly ReviewKind[] = [
   'low_confidence_summary',
@@ -33,9 +34,11 @@ export const REVIEW_KINDS: readonly ReviewKind[] = [
   'conflict',
   'manual',
   'concept_incorrect',
+  'derived_draft',
 ] as const;
 
 export const CONCEPT_INCORRECT_KIND: ReviewKind = 'concept_incorrect';
+export const DERIVED_DRAFT_KIND: ReviewKind = 'derived_draft';
 
 export function isReviewKind(value: unknown): value is ReviewKind {
   return typeof value === 'string' && (REVIEW_KINDS as readonly string[]).includes(value);
@@ -81,7 +84,31 @@ function normalizeRelationKind(value: unknown): ConceptRelationKind {
   return 'related';
 }
 
+function applyDerivedDraftReview(
+  item: ReviewItem,
+  status: Extract<ReviewStatus, 'approved' | 'rejected'>,
+): Record<string, unknown> | null {
+  if (item.kind !== DERIVED_DRAFT_KIND || item.target_type !== 'concept' || !item.target_id) {
+    return null;
+  }
+  // Lazy import: query-provenance archives drafts and would cycle at load time.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { approveDerivedDraft, rejectDerivedDraft } =
+    require('./query-provenance') as typeof import('./query-provenance');
+  const concept =
+    status === 'approved'
+      ? approveDerivedDraft(item.target_id)
+      : rejectDerivedDraft(item.target_id);
+  if (!concept) return { applied: false, reason: 'derived draft concept not found' };
+  return {
+    applied: true,
+    conceptId: concept.id,
+    knowledgeStatus: concept.knowledgeStatus,
+  };
+}
+
 function applyApprovedReviewItem(item: ReviewItem): Record<string, unknown> | null {
+  if (item.kind === DERIVED_DRAFT_KIND) return applyDerivedDraftReview(item, 'approved');
   if (item.kind !== 'relation_suggestion') return null;
   const payload = parseReviewPayload<{
     sourceConceptId?: string;
@@ -137,6 +164,9 @@ export function ensureReviewQueueSchema(): void {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_review_items_open_concept_incorrect
       ON review_items(target_id)
       WHERE status = 'open' AND target_type = 'concept' AND kind = 'concept_incorrect';
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_review_items_open_derived_draft
+      ON review_items(target_id)
+      WHERE status = 'open' AND target_type = 'concept' AND kind = 'derived_draft';
   `);
 }
 
@@ -290,38 +320,55 @@ export function resolveReviewItem(
   resolution?: unknown,
 ): ReviewItem | null {
   ensureReviewQueueSchema();
-  const existing = getServerDb().prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as
-    | ReviewItem
-    | undefined;
-  if (!existing) return null;
+  const db = getServerDb();
+  return db
+    .transaction((): ReviewItem | null => {
+      const existing = db.prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as
+        | ReviewItem
+        | undefined;
+      if (!existing) return null;
+      if (existing.status !== 'open') return existing;
 
-  const ts = now();
-  const applied =
-    status === 'approved' && existing.status === 'open' ? applyApprovedReviewItem(existing) : null;
-  const resolutionPayload =
-    applied && resolution && typeof resolution === 'object'
-      ? { ...(resolution as Record<string, unknown>), application: applied }
-      : applied
-        ? { application: applied }
-        : resolution;
-  getServerDb()
-    .prepare(
-      `UPDATE review_items
-       SET status = ?, resolution_json = ?, resolved_at = ?, updated_at = ?
-       WHERE id = ? AND status = 'open'`,
-    )
-    .run(
-      status,
-      resolutionPayload === undefined ? null : JSON.stringify(resolutionPayload),
-      ts,
-      ts,
-      id,
-    );
-  return (
-    (getServerDb().prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as
-      | ReviewItem
-      | undefined) ?? null
-  );
+      const ts = now();
+      const claim = db
+        .prepare(
+          `UPDATE review_items
+           SET status = ?, resolution_json = ?, resolved_at = ?, updated_at = ?
+           WHERE id = ? AND status = 'open'`,
+        )
+        .run(status, resolution === undefined ? null : JSON.stringify(resolution), ts, ts, id);
+      if (claim.changes !== 1) {
+        return (
+          (db.prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as
+            | ReviewItem
+            | undefined) ?? existing
+        );
+      }
+
+      const applied =
+        status === 'approved'
+          ? applyApprovedReviewItem(existing)
+          : status === 'rejected' && existing.kind === DERIVED_DRAFT_KIND
+            ? applyDerivedDraftReview(existing, 'rejected')
+            : null;
+      const resolutionPayload =
+        applied && resolution && typeof resolution === 'object'
+          ? { ...(resolution as Record<string, unknown>), application: applied }
+          : applied
+            ? { application: applied }
+            : resolution;
+      if (resolutionPayload !== undefined) {
+        db.prepare(`UPDATE review_items SET resolution_json = ? WHERE id = ?`).run(
+          JSON.stringify(resolutionPayload),
+          id,
+        );
+      }
+      return (
+        (db.prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as ReviewItem | undefined) ??
+        null
+      );
+    })
+    .immediate();
 }
 
 export function reopenReviewItem(id: string, resolution?: unknown): ReviewItem | null {

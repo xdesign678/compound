@@ -1,5 +1,24 @@
 export type SourceType = 'link' | 'text' | 'file' | 'article' | 'book' | 'pdf' | 'gist';
 export type ContentStatus = 'partial' | 'full';
+export type KnowledgeStatus = 'approved' | 'draft' | 'rejected';
+export type OriginKind = 'manual' | 'derived';
+
+export const DEFAULT_KNOWLEDGE_STATUS: KnowledgeStatus = 'approved';
+export const DEFAULT_ORIGIN_KIND: OriginKind = 'manual';
+
+export function parseKnowledgeStatus(value: unknown): KnowledgeStatus {
+  if (value === 'draft' || value === 'rejected' || value === 'approved') return value;
+  return DEFAULT_KNOWLEDGE_STATUS;
+}
+
+export function parseOriginKind(value: unknown): OriginKind {
+  if (value === 'derived' || value === 'manual') return value;
+  return DEFAULT_ORIGIN_KIND;
+}
+
+export function isApprovedKnowledgeStatus(status: unknown): boolean {
+  return parseKnowledgeStatus(status) === 'approved';
+}
 
 export interface Source {
   id: string;
@@ -51,6 +70,16 @@ export interface Concept {
    * (user-visible document version) and of `updatedAt`.
    */
   serverRevision?: number;
+  /**
+   * Review / publication state. Legacy rows and omitted values read as
+   * `approved`. Ask archives are created as `draft` until review.
+   */
+  knowledgeStatus?: KnowledgeStatus;
+  /**
+   * How the concept was created. Legacy rows and omitted values read as
+   * `manual`. Ask archives are `derived`.
+   */
+  originKind?: OriginKind;
 }
 
 export interface ConceptVersion {
@@ -103,6 +132,11 @@ export interface AskMessage {
   suggestedTitle?: string;
   suggestedSummary?: string;
   suggestedQuestions?: string[];
+  /**
+   * Complete query-run id from a finished Ask `done` event. Clients should
+   * persist this and send it back to `/api/concepts/archive-answer`.
+   */
+  queryRunId?: string;
   /** Captured RAG pipeline stages, when available. */
   stages?: AskMessageStage[];
   at: number;
@@ -216,6 +250,32 @@ export interface QueryRequest {
   llmConfig?: LlmConfig;
 }
 
+export interface QueryCitationQuote {
+  sourceId: string;
+  chunkId?: string;
+  evidenceId?: string;
+  quote: string;
+}
+
+export interface ConceptProvenanceRecord {
+  conceptId: string;
+  queryRunId?: string;
+  originalQuestion: string;
+  rewrittenQuestion?: string;
+  modelId: string;
+  promptVersion: string;
+  citedConceptIds: string[];
+  citedSourceIds: string[];
+  citedChunkIds: string[];
+  citedEvidenceIds: string[];
+  quotes: QueryCitationQuote[];
+  faithfulness?: {
+    score: number;
+    level: 'low' | 'mid' | 'high';
+  };
+  createdAt: number;
+}
+
 export interface QueryResponse {
   answer: string;
   citedConceptIds: string[];
@@ -230,6 +290,21 @@ export interface QueryResponse {
   suggestedSummary?: string;
   /** Follow-up questions the user might be interested in. */
   suggestedQuestions?: string[];
+  /**
+   * Stable id for a completed query run. Present only on a complete `done`
+   * payload (JSON or SSE). Disconnect / cancel must not emit it.
+   */
+  queryRunId?: string;
+  /** Original user question captured for archival provenance. */
+  originalQuestion?: string;
+  /** Final model id used for answer synthesis. Never an API key. */
+  modelId?: string;
+  /** Query system-prompt version used for this run. */
+  promptVersion?: string;
+  citedSourceIds?: string[];
+  citedChunkIds?: string[];
+  citedEvidenceIds?: string[];
+  citationQuotes?: QueryCitationQuote[];
   /**
    * The history-aware rewrite the retriever used (only set when it differs
    * from the original question). Surfaced for UX/diagnostics only — clients

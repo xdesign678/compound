@@ -34,7 +34,14 @@ import {
 import { classifyQueryError, publicQueryErrorMessage } from '@/lib/retrieval/query-errors';
 import { checkFaithfulness } from '@/lib/retrieval/faithfulness';
 import { repo } from '@/lib/server-db';
+import {
+  canEmitCompleteQueryDone,
+  filterRetrievalEligibleConcepts,
+  finalizeCompleteQueryRun,
+  toPublicQueryDoneFields,
+} from '@/lib/query-provenance';
 import type { Concept, QueryRequest, QueryResponse, LlmConfig } from '@/lib/types';
+import { isApprovedKnowledgeStatus } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const maxDuration = 90;
@@ -271,6 +278,7 @@ async function runRetrievalPipeline(opts: {
   stageTelemetry.start('retrieve');
   emit({ key: 'retrieve', status: 'start' });
   const serverContext = await getServerContext(effectiveQuery);
+  serverContext.concepts = filterRetrievalEligibleConcepts(serverContext.concepts);
   const embeddingMode = getEmbeddingMode();
   const retrievalMode: RetrievalResult['retrievalMode'] =
     embeddingMode === 'remote' ? 'remote-emb' : 'fts-only';
@@ -287,6 +295,7 @@ async function runRetrievalPipeline(opts: {
   emit({ key: 'graph', status: 'start' });
   const seedConceptIds = serverContext.concepts.slice(0, 8).map((c) => c.id);
   const graph = graphExpand(seedConceptIds, 5);
+  graph.concepts = filterRetrievalEligibleConcepts(graph.concepts);
   const graphConceptIds = new Set(graph.concepts.map((c) => c.id));
   emit({
     key: 'graph',
@@ -427,8 +436,12 @@ export const POST = withRequestTracing(async (req: Request) => {
     }
 
     const llmConfig = readLlmConfigOverride(req, body);
-    const requestConcepts = (body.concepts || []).map(conceptFromRequest);
+    const requestConcepts = (body.concepts || []).map(conceptFromRequest).filter((concept) => {
+      const server = repo.getConcept(concept.id);
+      return !server || isApprovedKnowledgeStatus(server.knowledgeStatus);
+    });
     const history = body.conversationHistory?.slice(-MAX_HISTORY_MESSAGES);
+    const modelId = llmConfig?.model || getModelForTask('query');
 
     function buildPromptInputs(retrieval: RetrievalResult) {
       const concepts = mergeConcepts(requestConcepts, retrieval.finalContext.concepts).slice(
@@ -466,8 +479,7 @@ export const POST = withRequestTracing(async (req: Request) => {
 
     // ---- Streaming path ----
     if (wantStream) {
-      const model = llmConfig?.model || getModelForTask('query');
-      const reasoning = isReasoningModel(model);
+      const reasoning = isReasoningModel(modelId);
 
       // Shared AbortController linked to the client's request signal.
       // When the client disconnects (req.signal aborts), the controller
@@ -568,6 +580,7 @@ export const POST = withRequestTracing(async (req: Request) => {
             const answerText = parsed.answer;
             const CHUNK_SIZE = 4;
             for (let i = 0; i < answerText.length; i += CHUNK_SIZE) {
+              if (!canEmitCompleteQueryDone(abortController.signal)) break;
               sendSSE('delta', { text: answerText.slice(i, i + CHUNK_SIZE) });
             }
 
@@ -617,21 +630,37 @@ export const POST = withRequestTracing(async (req: Request) => {
               detail: `综合完成 · 引用 ${parsed.citedConceptIds.length} 个概念`,
             });
 
-            sendSSE('done', {
+            // Persist only when abort has not fired. A later disconnect can
+            // still leave an unread query_runs audit row; that is a transport
+            // race, not a done event.
+            const queryRun = finalizeCompleteQueryRun({
+              originalQuestion: question,
+              rewrittenQuestion: retrieval.rewrittenQuestion,
+              rewriteUsed: retrieval.rewriteUsed,
+              modelId,
+              promptVersion: QUERY_SYSTEM_PROMPT_VERSION,
               citedConceptIds: parsed.citedConceptIds,
-              archivable: parsed.archivable,
-              suggestedTitle: parsed.suggestedTitle,
-              suggestedSummary: parsed.suggestedSummary,
-              suggestedQuestions: parsed.suggestedQuestions,
-              rewrittenQuestion: parsed.rewrittenQuestion,
-              retrievalMode: parsed.retrievalMode,
-              rerankUsed: parsed.rerankUsed,
-              rerankReason: parsed.rerankReason,
-              retrievedConcepts: parsed.retrievedConcepts,
-              citedConcepts: parsed.citedConcepts,
-              stageDurations,
+              concepts,
+              chunks: retrieval.finalContext.chunks,
+              evidence: retrieval.finalContext.evidence,
               faithfulness: parsed.faithfulness,
+              signal: abortController.signal,
             });
+            if (queryRun) {
+              sendSSE('done', {
+                ...toPublicQueryDoneFields(queryRun),
+                archivable: parsed.archivable,
+                suggestedTitle: parsed.suggestedTitle,
+                suggestedSummary: parsed.suggestedSummary,
+                suggestedQuestions: parsed.suggestedQuestions,
+                retrievalMode: parsed.retrievalMode,
+                rerankUsed: parsed.rerankUsed,
+                rerankReason: parsed.rerankReason,
+                retrievedConcepts: parsed.retrievedConcepts,
+                citedConcepts: parsed.citedConcepts,
+                stageDurations,
+              });
+            }
 
             clearInterval(keepaliveInterval);
             controller.close();
@@ -767,7 +796,45 @@ export const POST = withRequestTracing(async (req: Request) => {
     stageTelemetry.finish('synthesize');
     parsed.stageDurations = stageDurations;
 
-    return NextResponse.json(parsed);
+    const queryRun = finalizeCompleteQueryRun({
+      originalQuestion: question,
+      rewrittenQuestion: retrieval.rewrittenQuestion,
+      rewriteUsed: retrieval.rewriteUsed,
+      modelId,
+      promptVersion: QUERY_SYSTEM_PROMPT_VERSION,
+      citedConceptIds: parsed.citedConceptIds,
+      concepts,
+      chunks: retrieval.finalContext.chunks,
+      evidence: retrieval.finalContext.evidence,
+      faithfulness: parsed.faithfulness,
+      signal: req.signal,
+    });
+    if (!queryRun) {
+      return NextResponse.json(
+        {
+          error: publicQueryErrorMessage(new DOMException('Client disconnected', 'AbortError')),
+          errorType: 'timeout',
+          stageDurations: stageTelemetry.snapshot(),
+          requestId: getRequestContext()?.requestId,
+        },
+        { status: 499 },
+      );
+    }
+
+    return NextResponse.json({
+      ...toPublicQueryDoneFields(queryRun),
+      answer: parsed.answer,
+      citedConcepts: parsed.citedConcepts,
+      retrievedConcepts: parsed.retrievedConcepts,
+      archivable: parsed.archivable,
+      suggestedTitle: parsed.suggestedTitle,
+      suggestedSummary: parsed.suggestedSummary,
+      suggestedQuestions: parsed.suggestedQuestions,
+      retrievalMode: parsed.retrievalMode,
+      rerankUsed: parsed.rerankUsed,
+      rerankReason: parsed.rerankReason,
+      stageDurations: parsed.stageDurations,
+    });
   } catch (err) {
     if (isRequestBodyTooLargeError(err)) {
       return NextResponse.json({ error: err.message }, { status: err.status });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -151,3 +151,168 @@ test('reopening a resolved concept flag reuses a newer open flag', async (t) => 
   assert.equal(getReviewItem(first.review.id)?.status, 'resolved');
   assert.equal(getReviewItem(second.review.id)?.status, 'open');
 });
+
+test(
+  'derived-draft reject after approve is idempotent and does not re-apply',
+  { concurrency: false },
+  async (t) => {
+    const env = setupTempDb();
+    t.after(env.cleanup);
+
+    const { repo, getServerDb } = await import('./server-db');
+    const { wikiRepo } = await import('./wiki-db');
+    const { archiveAnswerAsDraft } = await import('./query-provenance');
+    const { resolveReviewItem, getReviewItem } = await import('./review-queue');
+
+    const ts = Date.now();
+    repo.insertSource({
+      id: 's-race',
+      title: 'Race',
+      type: 'text',
+      rawContent: '# Race\n\nRace notes for review claim tests.',
+      ingestedAt: ts,
+    });
+    repo.upsertConcept({
+      id: 'c-race-src',
+      title: 'Race source concept',
+      summary: 'Race notes',
+      body: 'Race notes for review claim tests.',
+      sources: ['s-race'],
+      related: [],
+      categories: [],
+      categoryKeys: [],
+      createdAt: ts,
+      updatedAt: ts,
+      version: 1,
+    });
+    wikiRepo.rebuildAllIndexes();
+    const archived = archiveAnswerAsDraft({
+      title: 'Race 综述',
+      summary: '综合 Race',
+      body: 'Race notes for review claim tests.',
+      citedConceptIds: ['c-race-src'],
+    });
+
+    const approved = resolveReviewItem(archived.reviewId, 'approved');
+    assert.equal(approved?.status, 'approved');
+    assert.equal(repo.getConcept(archived.conceptId)?.knowledgeStatus, 'approved');
+
+    const second = resolveReviewItem(archived.reviewId, 'rejected');
+    assert.equal(second?.status, 'approved');
+    assert.equal(repo.getConcept(archived.conceptId)?.knowledgeStatus, 'approved');
+    assert.equal(getReviewItem(archived.reviewId)?.status, 'approved');
+    assert.equal(
+      Number(
+        (
+          getServerDb()
+            .prepare(`SELECT COUNT(*) AS n FROM concept_fts WHERE concept_id = ?`)
+            .get(archived.conceptId) as { n: number }
+        ).n,
+      ),
+      1,
+    );
+  },
+);
+
+test(
+  'approve vs reject race on two connections applies at most one outcome',
+  { concurrency: false },
+  async (t) => {
+    const env = setupTempDb();
+    t.after(env.cleanup);
+
+    const { repo } = await import('./server-db');
+    const { wikiRepo } = await import('./wiki-db');
+    const { archiveAnswerAsDraft } = await import('./query-provenance');
+    const { resolveReviewItem, getReviewItem } = await import('./review-queue');
+    const { Worker } = await import('node:worker_threads');
+
+    const ts = Date.now();
+    repo.insertSource({
+      id: 's-conn',
+      title: 'Conn',
+      type: 'text',
+      rawContent: '# Conn\n\nTwo-connection review claim race.',
+      ingestedAt: ts,
+    });
+    repo.upsertConcept({
+      id: 'c-conn-src',
+      title: 'Conn source concept',
+      summary: 'Conn notes',
+      body: 'Two-connection review claim race.',
+      sources: ['s-conn'],
+      related: [],
+      categories: [],
+      categoryKeys: [],
+      createdAt: ts,
+      updatedAt: ts,
+      version: 1,
+    });
+    wikiRepo.rebuildAllIndexes();
+    const archived = archiveAnswerAsDraft({
+      title: 'Conn 综述',
+      summary: '综合 Conn',
+      body: 'Two-connection review claim race.',
+      citedConceptIds: ['c-conn-src'],
+    });
+
+    const reviewQueuePath = [
+      path.join(process.cwd(), 'node_modules/.cache/compound-node-tests/lib/review-queue.js'),
+      path.join(
+        process.cwd(),
+        'node_modules/.cache/compound-node-tests-focused/lib/review-queue.js',
+      ),
+    ].find((candidate) => existsSync(candidate));
+    assert.ok(reviewQueuePath, 'compiled review-queue.js must exist for the two-connection race');
+    const worker = new Worker(
+      `
+        const { parentPort, workerData } = require('node:worker_threads');
+        process.env.DATA_DIR = workerData.dataDir;
+        delete global.__compound_sqlite__;
+        const { resolveReviewItem } = require(workerData.reviewQueuePath);
+        try {
+          const item = resolveReviewItem(workerData.reviewId, workerData.status);
+          parentPort.postMessage({ ok: true, status: item && item.status });
+        } catch (err) {
+          parentPort.postMessage({ ok: false, error: String(err) });
+        }
+      `,
+      {
+        eval: true,
+        workerData: {
+          dataDir: process.env.DATA_DIR,
+          reviewQueuePath,
+          reviewId: archived.reviewId,
+          status: 'rejected',
+        },
+      },
+    );
+
+    const workerResult = new Promise<{ ok: boolean; status?: string; error?: string }>(
+      (resolve, reject) => {
+        worker.once('message', resolve);
+        worker.once('error', reject);
+        worker.once('exit', (code) => {
+          if (code !== 0) reject(new Error(`worker exited ${code}`));
+        });
+      },
+    );
+
+    const parent = resolveReviewItem(archived.reviewId, 'approved');
+    const child = await workerResult;
+    await worker.terminate();
+
+    const finalReview = getReviewItem(archived.reviewId);
+    const finalConcept = repo.getConcept(archived.conceptId);
+    assert.ok(finalReview);
+    assert.ok(finalReview!.status === 'approved' || finalReview!.status === 'rejected');
+    assert.equal(
+      finalConcept?.knowledgeStatus,
+      finalReview!.status === 'approved' ? 'approved' : 'rejected',
+    );
+    assert.ok(parent?.status === 'approved' || parent?.status === 'rejected');
+    if (child.ok) {
+      assert.equal(child.status, finalReview!.status);
+    }
+  },
+);

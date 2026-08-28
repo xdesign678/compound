@@ -1,16 +1,11 @@
-import { nanoid } from 'nanoid';
 import { NextResponse } from 'next/server';
-import { normalizeCategoryState } from '@/lib/category-normalization';
-import { escapeHTML } from '@/lib/format';
 import {
   enforceContentLength,
   isRequestBodyTooLargeError,
   readJsonWithLimit,
 } from '@/lib/request-guards';
 import { requireAdmin } from '@/lib/server-auth';
-import { getServerDb, repo } from '@/lib/server-db';
-import { compileConceptArtifactsAfterManualChange } from '@/lib/wiki-compiler';
-import type { ActivityLog, Concept } from '@/lib/types';
+import { ArchiveAnswerError, archiveAnswerAsDraft } from '@/lib/query-provenance';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -40,9 +35,10 @@ function normalizeIds(value: unknown): string[] {
 }
 
 /**
- * Archive an Ask answer as a first-class server Wiki concept. The new concept
- * is linked to the cited concepts, indexed into FTS, versioned, and mirrored
- * back to the caller with all touched related concepts.
+ * Archive an Ask answer as a derived draft Wiki concept. The new concept,
+ * provenance, open review item, activity, and sync change share one SQLite
+ * transaction. Drafts stay visible for review but are excluded from retrieval
+ * until approved.
  */
 export async function POST(req: Request) {
   const denied = requireAdmin(req) || enforceContentLength(req, MAX_BODY_BYTES);
@@ -64,79 +60,35 @@ export async function POST(req: Request) {
   const summary = clampString(body.summary, MAX_SUMMARY_CHARS) || title;
   const answerBody = clampString(body.body, MAX_ANSWER_CHARS);
   const citedConceptIds = normalizeIds(body.citedConceptIds);
+  const queryRunId = clampString(body.queryRunId, 80);
 
   if (!answerBody) {
     return NextResponse.json({ error: 'body is required' }, { status: 400 });
   }
-  if (citedConceptIds.length === 0) {
+  if (citedConceptIds.length === 0 && !queryRunId) {
     return NextResponse.json({ error: 'citedConceptIds is required' }, { status: 400 });
   }
 
-  const citedConcepts = repo.getConceptsByIds(citedConceptIds);
-  const validCitedIds = citedConcepts.map((concept) => concept.id);
-  if (validCitedIds.length === 0) {
-    return NextResponse.json({ error: 'no cited concepts found' }, { status: 404 });
-  }
-
-  const now = Date.now();
-  const conceptId = `c-${nanoid(8)}`;
-  const { categories, categoryKeys } = normalizeCategoryState({ categories: [] });
-  const concept: Concept = {
-    id: conceptId,
-    title,
-    summary,
-    body: answerBody,
-    sources: [],
-    related: validCitedIds,
-    categories,
-    categoryKeys,
-    createdAt: now,
-    updatedAt: now,
-    version: 1,
-  };
-
-  const citedById = new Map(citedConcepts.map((item) => [item.id, item]));
-  const relatedUpdates: Concept[] = [];
-  for (const relatedId of validCitedIds) {
-    const related = citedById.get(relatedId);
-    if (!related || related.related.includes(conceptId)) continue;
-    relatedUpdates.push({
-      ...related,
-      related: [...related.related, conceptId],
-      updatedAt: now,
+  try {
+    const result = archiveAnswerAsDraft({
+      title,
+      summary,
+      body: answerBody,
+      citedConceptIds,
+      queryRunId: queryRunId || undefined,
     });
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof ArchiveAnswerError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.status },
+      );
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === 'concept_provenance requires an existing concept') {
+      return NextResponse.json({ error: 'failed to persist draft provenance' }, { status: 500 });
+    }
+    return NextResponse.json({ error: 'failed to archive answer' }, { status: 500 });
   }
-
-  const activity: ActivityLog = {
-    id: `a-${nanoid(8)}`,
-    type: 'query',
-    title: `归档问答为新概念 <em>${escapeHTML(title)}</em>`,
-    details: `基于 ${validCitedIds.length} 个现有概念综合生成`,
-    relatedConceptIds: [conceptId, ...validCitedIds],
-    at: now,
-  };
-
-  const trx = getServerDb().transaction(() => {
-    repo.upsertConcept(concept);
-    for (const update of relatedUpdates) repo.upsertConcept(update);
-    compileConceptArtifactsAfterManualChange({
-      createdConcepts: [concept],
-      updatedConcepts: relatedUpdates
-        .map((next) => {
-          const previous = citedById.get(next.id);
-          return previous ? { previous, next } : null;
-        })
-        .filter((item): item is { previous: Concept; next: Concept } => Boolean(item)),
-      sourceIds: [],
-      changeSummary: `归档问答为「${title}」。`,
-    });
-    repo.insertActivity(activity);
-  });
-  trx();
-
-  return NextResponse.json({
-    conceptId,
-    concepts: repo.getConceptsByIds([conceptId, ...validCitedIds]),
-    activity,
-  });
 }

@@ -1,12 +1,12 @@
 /**
  * Data retention / GC for high-frequency append-only tables.
  *
- * Caps the unbounded growth of `sync_events`, `model_runs`,
- * `source_analysis_stage_cache` and `concept_versions` (per concept), purges
- * orphaned `concept_evidence` / `concept_relations` / `chunk_embeddings`, and
- * opportunistically checkpoints the WAL. Limits are configurable via
- * `COMPOUND_RETENTION_*` env vars with safe (large) defaults so a default
- * deployment never deletes active data.
+ * Caps the unbounded growth of `sync_events`, `model_runs`, `query_runs`,
+ * `webhook_deliveries`, `source_analysis_stage_cache` and `concept_versions`
+ * (per concept), purges orphaned `concept_evidence` / `concept_relations` /
+ * `chunk_embeddings`, and opportunistically checkpoints the WAL. Limits are
+ * configurable via `COMPOUND_RETENTION_*` env vars with safe (large) defaults
+ * so a default deployment never deletes active data.
  *
  * Triggered opportunistically from the existing worker tick and sync wrap-up
  * via `maybeRunRetention()` (throttled). No resident timer is created, so this
@@ -32,6 +32,8 @@ export interface TableRetentionLimit {
 export interface RetentionLimits {
   syncEvents: TableRetentionLimit;
   modelRuns: TableRetentionLimit;
+  queryRuns: TableRetentionLimit;
+  webhookDeliveries: TableRetentionLimit;
   stageCache: TableRetentionLimit;
   syncChanges: TableRetentionLimit;
   terminalHistory: TableRetentionLimit;
@@ -42,6 +44,8 @@ export interface RetentionLimits {
 export interface RetentionResult {
   syncEventsDeleted: number;
   modelRunsDeleted: number;
+  queryRunsDeleted: number;
+  webhookDeliveriesDeleted: number;
   stageCacheDeleted: number;
   syncChangesDeleted: number;
   terminalHistoryDeleted: number;
@@ -58,12 +62,16 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_LIMITS: RetentionLimits = {
   syncEvents: { maxRows: 50_000, maxAgeDays: 90 },
   modelRuns: { maxRows: 100_000, maxAgeDays: 180 },
+  queryRuns: { maxRows: 100_000, maxAgeDays: 180 },
+  webhookDeliveries: { maxRows: 50_000, maxAgeDays: 90 },
   stageCache: { maxRows: 50_000, maxAgeDays: 120 },
   syncChanges: { maxRows: 250_000, maxAgeDays: 180 },
   terminalHistory: { maxRows: 50_000, maxAgeDays: 90 },
   conceptVersionsPerConcept: 50,
   payloadBlobMaxAgeDays: 7,
 };
+
+const WEBHOOK_TERMINAL_STATUSES_SQL = `'processed', 'failed', 'coalesced', 'rejected'`;
 
 const DEFAULT_MIN_INTERVAL_MS = 5 * 60_000;
 const RETENTION_LAST_RUN_KEY = '__compound_retention_last_run__';
@@ -97,6 +105,30 @@ export function resolveRetentionLimits(overrides?: Partial<RetentionLimits>): Re
       maxAgeDays: envInt(
         'COMPOUND_RETENTION_MODEL_RUNS_MAX_AGE_DAYS',
         DEFAULT_LIMITS.modelRuns.maxAgeDays,
+        1,
+      ),
+    },
+    queryRuns: {
+      maxRows: envInt(
+        'COMPOUND_RETENTION_QUERY_RUNS_MAX_ROWS',
+        DEFAULT_LIMITS.queryRuns.maxRows,
+        1,
+      ),
+      maxAgeDays: envInt(
+        'COMPOUND_RETENTION_QUERY_RUNS_MAX_AGE_DAYS',
+        DEFAULT_LIMITS.queryRuns.maxAgeDays,
+        1,
+      ),
+    },
+    webhookDeliveries: {
+      maxRows: envInt(
+        'COMPOUND_RETENTION_WEBHOOK_DELIVERIES_MAX_ROWS',
+        DEFAULT_LIMITS.webhookDeliveries.maxRows,
+        1,
+      ),
+      maxAgeDays: envInt(
+        'COMPOUND_RETENTION_WEBHOOK_DELIVERIES_MAX_AGE_DAYS',
+        DEFAULT_LIMITS.webhookDeliveries.maxAgeDays,
         1,
       ),
     },
@@ -151,6 +183,8 @@ export function resolveRetentionLimits(overrides?: Partial<RetentionLimits>): Re
   return {
     syncEvents: { ...base.syncEvents, ...overrides.syncEvents },
     modelRuns: { ...base.modelRuns, ...overrides.modelRuns },
+    queryRuns: { ...base.queryRuns, ...overrides.queryRuns },
+    webhookDeliveries: { ...base.webhookDeliveries, ...overrides.webhookDeliveries },
     stageCache: { ...base.stageCache, ...overrides.stageCache },
     syncChanges: { ...base.syncChanges, ...overrides.syncChanges },
     terminalHistory: { ...base.terminalHistory, ...overrides.terminalHistory },
@@ -350,6 +384,84 @@ function deleteOrphanPayloadBlobs(db: DB, maxAgeDays: number, now: number): numb
 }
 
 /**
+ * Drop unreferenced `query_runs` by age then by count. Any id still stored on
+ * `concept_provenance.query_run_id` is kept forever so archived drafts keep
+ * their audit chain. Missing tables or SQL errors are a no-op.
+ */
+function trimQueryRuns(db: DB, limit: TableRetentionLimit, now: number): number {
+  if (!tableExists(db, 'query_runs') || !tableExists(db, 'concept_provenance')) return 0;
+  const cutoff = now - limit.maxAgeDays * DAY_MS;
+  const unreferenced = `id NOT IN (
+    SELECT query_run_id FROM concept_provenance
+     WHERE query_run_id IS NOT NULL AND query_run_id != ''
+  )`;
+  try {
+    let deleted = Number(
+      db.prepare(`DELETE FROM query_runs WHERE created_at < ? AND ${unreferenced}`).run(cutoff)
+        .changes || 0,
+    );
+    deleted += Number(
+      db
+        .prepare(
+          `DELETE FROM query_runs
+            WHERE ${unreferenced}
+              AND id NOT IN (
+                SELECT id FROM query_runs
+                 WHERE ${unreferenced}
+                 ORDER BY created_at DESC
+                 LIMIT ?
+              )`,
+        )
+        .run(limit.maxRows).changes || 0,
+    );
+    return deleted;
+  } catch (err) {
+    logger.warn('retention.query_runs_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return 0;
+  }
+}
+
+/**
+ * Drop terminal webhook deliveries by `received_at` age then count.
+ * Active statuses (`pending` / `claimed` / `received` / `queued`) are never
+ * deleted, even when very old. Terminal `processed` / `failed` / `coalesced` /
+ * `rejected` are eligible. Missing table or SQL errors are a no-op.
+ */
+function trimWebhookDeliveries(db: DB, limit: TableRetentionLimit, now: number): number {
+  if (!tableExists(db, 'webhook_deliveries')) return 0;
+  const cutoff = now - limit.maxAgeDays * DAY_MS;
+  const terminal = `status IN (${WEBHOOK_TERMINAL_STATUSES_SQL})`;
+  try {
+    let deleted = Number(
+      db.prepare(`DELETE FROM webhook_deliveries WHERE ${terminal} AND received_at < ?`).run(cutoff)
+        .changes || 0,
+    );
+    deleted += Number(
+      db
+        .prepare(
+          `DELETE FROM webhook_deliveries
+            WHERE ${terminal}
+              AND delivery_id NOT IN (
+                SELECT delivery_id FROM webhook_deliveries
+                 WHERE ${terminal}
+                 ORDER BY received_at DESC
+                 LIMIT ?
+              )`,
+        )
+        .run(limit.maxRows).changes || 0,
+    );
+    return deleted;
+  } catch (err) {
+    logger.warn('retention.webhook_deliveries_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return 0;
+  }
+}
+
+/**
  * Run all retention passes once, unconditionally. Each pass is independent and
  * idempotent; missing tables are skipped. Safe to call from tests directly.
  */
@@ -371,6 +483,8 @@ export function runRetention(overrides?: Partial<RetentionLimits>): RetentionRes
       limits.modelRuns,
       now,
     ),
+    queryRunsDeleted: trimQueryRuns(db, limits.queryRuns, now),
+    webhookDeliveriesDeleted: trimWebhookDeliveries(db, limits.webhookDeliveries, now),
     stageCacheDeleted: trimByAgeAndCount(
       db,
       'source_analysis_stage_cache',
@@ -418,7 +532,22 @@ export function maybeRunRetention(overrides?: Partial<RetentionLimits>): Retenti
   if (now - holder.value < minInterval) return null;
   holder.value = now;
   try {
-    return runRetention(overrides);
+    const result = runRetention(overrides);
+    logger.info('retention.completed', {
+      queryRunsDeleted: result.queryRunsDeleted,
+      webhookDeliveriesDeleted: result.webhookDeliveriesDeleted,
+      syncEventsDeleted: result.syncEventsDeleted,
+      modelRunsDeleted: result.modelRunsDeleted,
+      stageCacheDeleted: result.stageCacheDeleted,
+      syncChangesDeleted: result.syncChangesDeleted,
+      terminalHistoryDeleted: result.terminalHistoryDeleted,
+      conceptVersionsDeleted: result.conceptVersionsDeleted,
+      orphanEvidenceDeleted: result.orphanEvidenceDeleted,
+      orphanRelationsDeleted: result.orphanRelationsDeleted,
+      orphanChunkEmbeddingsDeleted: result.orphanChunkEmbeddingsDeleted,
+      orphanPayloadBlobsDeleted: result.orphanPayloadBlobsDeleted,
+    });
+    return result;
   } catch (err) {
     logger.warn('retention.run_failed', {
       error: err instanceof Error ? err.message : String(err),

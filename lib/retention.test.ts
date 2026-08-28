@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import type { Database as DB } from 'better-sqlite3';
 
 function closeServerDbGlobal() {
   const holder = (globalThis as Record<string, unknown>).__compound_sqlite__ as
@@ -380,6 +381,141 @@ test('runRetention deletes aged orphan payload blobs but keeps blobs of active j
   assert.equal(
     remaining[0].ref,
     (JSON.parse(activePayload.payload_json) as { rawContentRef: string }).rawContentRef,
+  );
+});
+
+function insertQueryRun(db: DB, id: string, createdAt: number) {
+  db.prepare(
+    `INSERT INTO query_runs (id, original_question, model_id, prompt_version, created_at)
+     VALUES (?, 'q', 'm', 'p', ?)`,
+  ).run(id, createdAt);
+}
+
+test('runRetention caps unreferenced query_runs and keeps provenance-linked runs', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { getServerDb } = await import('./server-db');
+  const { runRetention } = await import('./retention');
+  const { ensureQueryRunSchema } = await import('./query-provenance');
+  const { ensureWikiCompilerSchema } = await import('./wiki-db');
+  ensureQueryRunSchema();
+  ensureWikiCompilerSchema();
+  const db = getServerDb();
+
+  const now = Date.now();
+  for (let i = 0; i < 200; i += 1) {
+    insertQueryRun(db, `qr-${i}`, now + i * 1000);
+  }
+  insertQueryRun(db, 'qr-pinned', now - 400 * 24 * 60 * 60 * 1000);
+  db.prepare(
+    `INSERT INTO concept_provenance (
+        concept_id, query_run_id, original_question, model_id, prompt_version,
+        cited_concept_ids, cited_source_ids, cited_chunk_ids, cited_evidence_ids,
+        quotes_json, created_at
+      ) VALUES ('c-pinned', 'qr-pinned', 'q', 'm', 'p', '[]', '[]', '[]', '[]', '[]', ?)`,
+  ).run(now);
+
+  const result = runRetention({ queryRuns: { maxRows: 40, maxAgeDays: 30 } });
+  const count = Number(
+    (db.prepare(`SELECT COUNT(*) AS c FROM query_runs`).get() as { c: number }).c,
+  );
+  assert.equal(count, 41);
+  assert.equal(result.queryRunsDeleted, 160);
+  assert.ok(db.prepare(`SELECT id FROM query_runs WHERE id = 'qr-pinned'`).get());
+  assert.ok(db.prepare(`SELECT id FROM query_runs WHERE id = 'qr-199'`).get());
+  assert.equal(db.prepare(`SELECT id FROM query_runs WHERE id = 'qr-0'`).get(), undefined);
+
+  const again = runRetention({ queryRuns: { maxRows: 40, maxAgeDays: 30 } });
+  assert.equal(again.queryRunsDeleted, 0);
+  assert.equal(
+    Number((db.prepare(`SELECT COUNT(*) AS c FROM query_runs`).get() as { c: number }).c),
+    41,
+  );
+});
+
+test('runRetention is a no-op when query_runs or webhook_deliveries tables are missing', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { getServerDb } = await import('./server-db');
+  const { runRetention } = await import('./retention');
+  const db = getServerDb();
+  assert.equal(
+    db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'query_runs'`).get(),
+    undefined,
+  );
+  assert.equal(
+    db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'webhook_deliveries'`,
+      )
+      .get(),
+    undefined,
+  );
+
+  const result = runRetention({
+    queryRuns: { maxRows: 1, maxAgeDays: 1 },
+    webhookDeliveries: { maxRows: 1, maxAgeDays: 1 },
+  });
+  assert.equal(result.queryRunsDeleted, 0);
+  assert.equal(result.webhookDeliveriesDeleted, 0);
+});
+
+test('runRetention only GCs terminal webhook_deliveries and protects active rows', async (t) => {
+  const env = setupTempDb();
+  t.after(env.cleanup);
+
+  const { getServerDb } = await import('./server-db');
+  const { runRetention } = await import('./retention');
+  const db = getServerDb();
+  db.exec(`
+    CREATE TABLE webhook_deliveries (
+      delivery_id TEXT PRIMARY KEY,
+      event TEXT NOT NULL DEFAULT 'push',
+      received_at INTEGER NOT NULL,
+      status TEXT NOT NULL
+    );
+  `);
+
+  const now = Date.now();
+  const insert = db.prepare(
+    `INSERT INTO webhook_deliveries (delivery_id, received_at, status) VALUES (?, ?, ?)`,
+  );
+  insert.run('wh-pending-old', now - 400 * 24 * 60 * 60 * 1000, 'pending');
+  insert.run('wh-claimed-old', now - 400 * 24 * 60 * 60 * 1000, 'claimed');
+  insert.run('wh-received-old', now - 400 * 24 * 60 * 60 * 1000, 'received');
+  insert.run('wh-queued-old', now - 400 * 24 * 60 * 60 * 1000, 'queued');
+  insert.run('wh-processed-old', now - 400 * 24 * 60 * 60 * 1000, 'processed');
+  insert.run('wh-failed-old', now - 400 * 24 * 60 * 60 * 1000, 'failed');
+  insert.run('wh-rejected-old', now - 400 * 24 * 60 * 60 * 1000, 'rejected');
+  for (let i = 0; i < 30; i += 1) {
+    insert.run(`wh-processed-${i}`, now + i * 1000, 'processed');
+  }
+  insert.run('wh-coalesced-new', now + 40_000, 'coalesced');
+
+  const result = runRetention({ webhookDeliveries: { maxRows: 10, maxAgeDays: 30 } });
+  const remaining = db
+    .prepare(`SELECT delivery_id, status FROM webhook_deliveries ORDER BY delivery_id`)
+    .all() as Array<{ delivery_id: string; status: string }>;
+  const byId = new Set(remaining.map((row) => row.delivery_id));
+  assert.ok(byId.has('wh-pending-old'));
+  assert.ok(byId.has('wh-claimed-old'));
+  assert.ok(byId.has('wh-received-old'));
+  assert.ok(byId.has('wh-queued-old'));
+  assert.equal(byId.has('wh-processed-old'), false);
+  assert.equal(byId.has('wh-failed-old'), false);
+  assert.equal(byId.has('wh-rejected-old'), false);
+  assert.ok(byId.has('wh-coalesced-new'));
+  assert.ok(byId.has('wh-processed-29'));
+  assert.equal(byId.has('wh-processed-0'), false);
+  assert.ok(result.webhookDeliveriesDeleted > 0);
+
+  const again = runRetention({ webhookDeliveries: { maxRows: 10, maxAgeDays: 30 } });
+  assert.equal(again.webhookDeliveriesDeleted, 0);
+  assert.equal(
+    Number((db.prepare(`SELECT COUNT(*) AS c FROM webhook_deliveries`).get() as { c: number }).c),
+    remaining.length,
   );
 });
 

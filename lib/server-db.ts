@@ -27,6 +27,15 @@ import type {
   SourceType,
   ActivityType,
   CategoryWiki,
+  KnowledgeStatus,
+  OriginKind,
+} from './types';
+import {
+  DEFAULT_KNOWLEDGE_STATUS,
+  DEFAULT_ORIGIN_KIND,
+  isApprovedKnowledgeStatus,
+  parseKnowledgeStatus,
+  parseOriginKind,
 } from './types';
 
 const DEFAULT_DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -152,7 +161,9 @@ function runMigrations(db: DB): void {
       created_at      INTEGER NOT NULL,
       updated_at      INTEGER NOT NULL,
       version         INTEGER NOT NULL DEFAULT 1,
-      server_revision INTEGER NOT NULL DEFAULT 1
+      server_revision INTEGER NOT NULL DEFAULT 1,
+      knowledge_status TEXT NOT NULL DEFAULT 'approved',
+      origin_kind      TEXT NOT NULL DEFAULT 'manual'
     );
     CREATE INDEX IF NOT EXISTS idx_concepts_updated_at ON concepts(updated_at);
     CREATE INDEX IF NOT EXISTS idx_concepts_created_at ON concepts(created_at);
@@ -310,6 +321,15 @@ function runMigrations(db: DB): void {
   if (!conceptColumns.has('server_revision')) {
     db.exec(`ALTER TABLE concepts ADD COLUMN server_revision INTEGER NOT NULL DEFAULT 1;`);
   }
+  if (!conceptColumns.has('knowledge_status')) {
+    db.exec(`ALTER TABLE concepts ADD COLUMN knowledge_status TEXT NOT NULL DEFAULT 'approved';`);
+  }
+  if (!conceptColumns.has('origin_kind')) {
+    db.exec(`ALTER TABLE concepts ADD COLUMN origin_kind TEXT NOT NULL DEFAULT 'manual';`);
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_concepts_knowledge_status ON concepts(knowledge_status);
+  `);
 
   runCategoryNormalizationIfNeeded(db);
   backfillSyncChangesIfNeeded(db);
@@ -464,6 +484,8 @@ interface ConceptRow {
   updated_at: number;
   version: number;
   server_revision: number;
+  knowledge_status?: string | null;
+  origin_kind?: string | null;
 }
 
 interface ActivityRow {
@@ -823,6 +845,8 @@ function rowToConcept(r: ConceptRow, contentStatus: ContentStatus = 'full'): Con
     version: r.version,
     contentStatus,
     serverRevision: r.server_revision ?? DEFAULT_SERVER_REVISION,
+    knowledgeStatus: parseKnowledgeStatus(r.knowledge_status),
+    originKind: parseOriginKind(r.origin_kind),
   };
 }
 
@@ -834,8 +858,29 @@ function selectSourceColumns(summariesOnly = false): string {
 
 function selectConceptColumns(summariesOnly = false): string {
   return summariesOnly
-    ? `id, title, summary, '' AS body, sources, related, categories, category_keys, created_at, updated_at, version, server_revision`
+    ? `id, title, summary, '' AS body, sources, related, categories, category_keys, created_at, updated_at, version, server_revision, knowledge_status, origin_kind`
     : '*';
+}
+
+/** SQL predicate: only concepts that may appear in FTS/vector/graph retrieval. */
+export const RETRIEVAL_ELIGIBLE_CONCEPT_SQL = `(knowledge_status = 'approved' OR knowledge_status IS NULL)`;
+
+function resolvePersistedKnowledgeStatus(
+  incoming: KnowledgeStatus | undefined,
+  previous: string | null | undefined,
+): KnowledgeStatus {
+  if (incoming !== undefined) return parseKnowledgeStatus(incoming);
+  if (previous !== undefined && previous !== null) return parseKnowledgeStatus(previous);
+  return DEFAULT_KNOWLEDGE_STATUS;
+}
+
+function resolvePersistedOriginKind(
+  incoming: OriginKind | undefined,
+  previous: string | null | undefined,
+): OriginKind {
+  if (incoming !== undefined) return parseOriginKind(incoming);
+  if (previous !== undefined && previous !== null) return parseOriginKind(previous);
+  return DEFAULT_ORIGIN_KIND;
 }
 
 function mapRowsById<T extends { id: string }>(rows: T[]): Map<string, T> {
@@ -877,6 +922,7 @@ function findDirectTitleMentionConcepts(searchText: string, limit: number): Conc
        FROM concepts
        WHERE length(trim(title)) >= ?
          AND instr(?, lower(title)) > 0
+         AND ${RETRIEVAL_ELIGIBLE_CONCEPT_SQL}
        ORDER BY length(title) DESC, updated_at DESC
        LIMIT ?`,
   ).all(MIN_DIRECT_TITLE_MENTION_LENGTH, normalizedSearchText, limit) as ConceptRow[];
@@ -1230,16 +1276,28 @@ export const repo = {
   // ---- concepts --------------------------------------------------
   upsertConcept(c: Concept): void {
     const previous = cachedPrepare(
-      `SELECT updated_at, server_revision FROM concepts WHERE id = ?`,
-    ).get(c.id) as { updated_at: number; server_revision: number } | undefined;
+      `SELECT updated_at, server_revision, knowledge_status, origin_kind FROM concepts WHERE id = ?`,
+    ).get(c.id) as
+      | {
+          updated_at: number;
+          server_revision: number;
+          knowledge_status: string | null;
+          origin_kind: string | null;
+        }
+      | undefined;
     const updatedAt = previous ? Math.max(c.updatedAt, previous.updated_at + 1) : c.updatedAt;
     const serverRevision = previous
       ? nextServerRevision(readPersistedServerRevision(previous))
       : DEFAULT_SERVER_REVISION;
+    const knowledgeStatus = resolvePersistedKnowledgeStatus(
+      c.knowledgeStatus,
+      previous?.knowledge_status,
+    );
+    const originKind = resolvePersistedOriginKind(c.originKind, previous?.origin_kind);
     cachedPrepare(
       `INSERT OR REPLACE INTO concepts
-          (id, title, summary, body, sources, related, categories, category_keys, created_at, updated_at, version, server_revision)
-          VALUES (@id, @title, @summary, @body, @sources, @related, @categories, @category_keys, @created_at, @updated_at, @version, @server_revision)`,
+          (id, title, summary, body, sources, related, categories, category_keys, created_at, updated_at, version, server_revision, knowledge_status, origin_kind)
+          VALUES (@id, @title, @summary, @body, @sources, @related, @categories, @category_keys, @created_at, @updated_at, @version, @server_revision, @knowledge_status, @origin_kind)`,
     ).run({
       id: c.id,
       title: c.title,
@@ -1253,6 +1311,8 @@ export const repo = {
       updated_at: updatedAt,
       version: c.version ?? 1,
       server_revision: serverRevision,
+      knowledge_status: knowledgeStatus,
+      origin_kind: originKind,
     });
     noteCategoryKeysOnWrite(c.categoryKeys);
     recordSyncChange('concept', c.id, 'upsert', updatedAt);
@@ -1435,6 +1495,7 @@ export const repo = {
       db.prepare(`DELETE FROM concepts WHERE id = ?`).run(id);
       safeExec(`DELETE FROM concept_fts WHERE concept_id = ?`, [id]);
       safeExec(`DELETE FROM concept_evidence WHERE concept_id = ?`, [id]);
+      safeExec(`DELETE FROM concept_provenance WHERE concept_id = ?`, [id]);
       safeExec(
         `DELETE FROM concept_relations WHERE source_concept_id = ? OR target_concept_id = ?`,
         [id, id],
@@ -1496,7 +1557,9 @@ export const repo = {
 
     if (keywords.length === 0) {
       if (directMatches.length > 0) return directMatches;
-      return repo.listConcepts({ summariesOnly: true, limit: normalizedLimit });
+      return repo
+        .listConcepts({ summariesOnly: true, limit: normalizedLimit })
+        .filter((concept) => isApprovedKnowledgeStatus(concept.knowledgeStatus));
     }
 
     // --- FTS5 fast path (concept_fts created lazily by wiki-db.ts) ---
@@ -1505,14 +1568,22 @@ export const repo = {
       try {
         const ftsRows = getServerDb()
           .prepare(
-            `SELECT concept_id FROM concept_fts WHERE concept_fts MATCH ? ORDER BY bm25(concept_fts) LIMIT ?`,
+            `SELECT concept_fts.concept_id AS concept_id
+               FROM concept_fts
+               JOIN concepts ON concepts.id = concept_fts.concept_id
+              WHERE concept_fts MATCH ?
+                AND ${RETRIEVAL_ELIGIBLE_CONCEPT_SQL}
+              ORDER BY bm25(concept_fts)
+              LIMIT ?`,
           )
           .all(ftsQuery, normalizedLimit) as Array<{ concept_id: string }>;
         if (ftsRows.length > 0) {
-          const matched = repo.getConceptsByIds(
-            ftsRows.map((r) => r.concept_id),
-            { summariesOnly: true },
-          );
+          const matched = repo
+            .getConceptsByIds(
+              ftsRows.map((r) => r.concept_id),
+              { summariesOnly: true },
+            )
+            .filter((concept) => isApprovedKnowledgeStatus(concept.knowledgeStatus));
           const candidates = mergeConceptCandidateLists([directMatches, matched], normalizedLimit);
           if (candidates.length >= Math.min(normalizedLimit, 80)) {
             return candidates;
@@ -1521,7 +1592,7 @@ export const repo = {
           const existingIds = new Set(candidates.map((c) => c.id));
           const fallback = repo
             .listConcepts({ summariesOnly: true, limit: normalizedLimit * 2 })
-            .filter((c) => !existingIds.has(c.id));
+            .filter((c) => !existingIds.has(c.id) && isApprovedKnowledgeStatus(c.knowledgeStatus));
           return mergeConceptCandidateLists([candidates, fallback], normalizedLimit);
         }
       } catch {
@@ -1539,7 +1610,8 @@ export const repo = {
       .prepare(
         `SELECT ${selectConceptColumns(true)}
          FROM concepts
-         WHERE ${queryParts.join(' OR ')}
+         WHERE (${queryParts.join(' OR ')})
+           AND ${RETRIEVAL_ELIGIBLE_CONCEPT_SQL}
          ORDER BY updated_at DESC
          LIMIT ?`,
       )
@@ -1557,7 +1629,10 @@ export const repo = {
         summariesOnly: true,
         limit: normalizedLimit * 2,
       })
-      .filter((concept) => !existingIds.has(concept.id));
+      .filter(
+        (concept) =>
+          !existingIds.has(concept.id) && isApprovedKnowledgeStatus(concept.knowledgeStatus),
+      );
 
     return mergeConceptCandidateLists([candidates, fallback], normalizedLimit);
   },

@@ -1,8 +1,15 @@
 import { nanoid } from 'nanoid';
 import { logger } from './logging';
-import { getServerDb, repo } from './server-db';
+import { getServerDb, repo, RETRIEVAL_ELIGIBLE_CONCEPT_SQL } from './server-db';
 import { splitMarkdownIntoChunks, type SourceChunkDraft } from './wiki-chunk';
-import type { Concept, ConceptVersion, Source } from './types';
+import type {
+  Concept,
+  ConceptProvenanceRecord,
+  ConceptVersion,
+  QueryCitationQuote,
+  Source,
+} from './types';
+import { isApprovedKnowledgeStatus } from './types';
 
 export type EvidenceKind =
   | 'definition'
@@ -268,6 +275,24 @@ export function ensureWikiCompilerSchema(): void {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_model_runs_task ON model_runs(task, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS concept_provenance (
+      concept_id TEXT PRIMARY KEY,
+      query_run_id TEXT,
+      original_question TEXT NOT NULL,
+      rewritten_question TEXT,
+      model_id TEXT NOT NULL,
+      prompt_version TEXT NOT NULL,
+      cited_concept_ids TEXT NOT NULL DEFAULT '[]',
+      cited_source_ids TEXT NOT NULL DEFAULT '[]',
+      cited_chunk_ids TEXT NOT NULL DEFAULT '[]',
+      cited_evidence_ids TEXT NOT NULL DEFAULT '[]',
+      quotes_json TEXT NOT NULL DEFAULT '[]',
+      faithfulness_json TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_concept_provenance_query_run
+      ON concept_provenance(query_run_id);
   `);
 
   try {
@@ -375,6 +400,44 @@ function uniqueById<T extends { id: string }>(items: T[]): T[] {
     out.push(item);
   }
   return out;
+}
+
+function mapRowsPreserveOrder<T extends { id: string }>(ids: string[], items: T[]): T[] {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  return ids.map((id) => byId.get(id)).filter((item): item is T => Boolean(item));
+}
+
+function parseFaithfulness(value: unknown): ConceptProvenanceRecord['faithfulness'] | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    if (!parsed || typeof parsed !== 'object') return undefined;
+    const score = Number((parsed as { score?: unknown }).score);
+    const level = (parsed as { level?: unknown }).level;
+    if (!Number.isFinite(score)) return undefined;
+    if (level !== 'low' && level !== 'mid' && level !== 'high') return undefined;
+    return { score, level };
+  } catch {
+    return undefined;
+  }
+}
+
+function rowToConceptProvenance(row: Record<string, unknown>): ConceptProvenanceRecord {
+  return {
+    conceptId: String(row.concept_id),
+    queryRunId: row.query_run_id ? String(row.query_run_id) : undefined,
+    originalQuestion: String(row.original_question ?? ''),
+    rewrittenQuestion: row.rewritten_question ? String(row.rewritten_question) : undefined,
+    modelId: String(row.model_id ?? ''),
+    promptVersion: String(row.prompt_version ?? ''),
+    citedConceptIds: parseJsonArray<string>(String(row.cited_concept_ids ?? '[]')),
+    citedSourceIds: parseJsonArray<string>(String(row.cited_source_ids ?? '[]')),
+    citedChunkIds: parseJsonArray<string>(String(row.cited_chunk_ids ?? '[]')),
+    citedEvidenceIds: parseJsonArray<string>(String(row.cited_evidence_ids ?? '[]')),
+    quotes: parseJsonArray<QueryCitationQuote>(String(row.quotes_json ?? '[]')),
+    faithfulness: parseFaithfulness(row.faithfulness_json),
+    createdAt: Number(row.created_at),
+  };
 }
 
 function tableExists(tableName: string): boolean {
@@ -547,12 +610,25 @@ export const wikiRepo = {
   indexConcept(concept: Concept): void {
     ensureWikiCompilerSchema();
     if (!hasFts()) return;
+    if (!isApprovedKnowledgeStatus(concept.knowledgeStatus)) {
+      this.unindexConcept(concept.id);
+      return;
+    }
     const db = getServerDb();
     safeRunFts(() => {
       db.prepare(`DELETE FROM concept_fts WHERE concept_id = ?`).run(concept.id);
       db.prepare(
         `INSERT INTO concept_fts (concept_id, title, summary, body) VALUES (?, ?, ?, ?)`,
       ).run(concept.id, concept.title, concept.summary, concept.body);
+    });
+  },
+
+  unindexConcept(conceptId: string): void {
+    ensureWikiCompilerSchema();
+    if (!hasFts() || !conceptId) return;
+    const db = getServerDb();
+    safeRunFts(() => {
+      db.prepare(`DELETE FROM concept_fts WHERE concept_id = ?`).run(conceptId);
     });
   },
 
@@ -584,6 +660,10 @@ export const wikiRepo = {
 
     let evidenceCount = 0;
     for (const concept of concepts) {
+      if (!isApprovedKnowledgeStatus(concept.knowledgeStatus)) {
+        this.unindexConcept(concept.id);
+        continue;
+      }
       this.indexConcept(concept);
       for (const sourceId of concept.sources) {
         const source = sourceMap.get(sourceId);
@@ -878,10 +958,18 @@ export const wikiRepo = {
       try {
         const rows = getServerDb()
           .prepare(
-            `SELECT concept_id FROM concept_fts WHERE concept_fts MATCH ? ORDER BY bm25(concept_fts) LIMIT ?`,
+            `SELECT concept_fts.concept_id AS concept_id
+               FROM concept_fts
+               JOIN concepts ON concepts.id = concept_fts.concept_id
+              WHERE concept_fts MATCH ?
+                AND ${RETRIEVAL_ELIGIBLE_CONCEPT_SQL}
+              ORDER BY bm25(concept_fts)
+              LIMIT ?`,
           )
           .all(ftsQuery, normalizedLimit) as Array<{ concept_id: string }>;
-        const concepts = repo.getConceptsByIds(rows.map((row) => row.concept_id));
+        const concepts = repo
+          .getConceptsByIds(rows.map((row) => row.concept_id))
+          .filter((concept) => isApprovedKnowledgeStatus(concept.knowledgeStatus));
         if (concepts.length > 0) return concepts;
       } catch (error) {
         logger.warn('wiki.concept_fts_search_failed', {
@@ -889,7 +977,10 @@ export const wikiRepo = {
         });
       }
     }
-    return repo.findConceptCandidates(query, normalizedLimit).slice(0, normalizedLimit);
+    return repo
+      .findConceptCandidates(query, normalizedLimit)
+      .filter((concept) => isApprovedKnowledgeStatus(concept.knowledgeStatus))
+      .slice(0, normalizedLimit);
   },
 
   searchChunks(query: string, limit = 12): SourceChunk[] {
@@ -969,7 +1060,9 @@ export const wikiRepo = {
     query: string,
     options: { conceptLimit?: number; chunkLimit?: number } = {},
   ): QueryContext {
-    const concepts = this.searchConcepts(query, options.conceptLimit ?? 24);
+    const concepts = this.searchConcepts(query, options.conceptLimit ?? 24).filter((concept) =>
+      isApprovedKnowledgeStatus(concept.knowledgeStatus),
+    );
     const chunks = this.searchChunks(query, options.chunkLimit ?? 12);
     const evidence = this.getEvidenceForConcepts(
       concepts.map((concept) => concept.id),
@@ -980,6 +1073,83 @@ export const wikiRepo = {
       chunks: uniqueById(chunks),
       evidence: uniqueById(evidence),
     };
+  },
+
+  getChunksByIds(ids: string[]): SourceChunk[] {
+    ensureWikiCompilerSchema();
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) return [];
+    const placeholders = uniqueIds.map(() => '?').join(', ');
+    const rows = getServerDb()
+      .prepare(`SELECT * FROM source_chunks WHERE id IN (${placeholders})`)
+      .all(...uniqueIds) as Array<Record<string, unknown>>;
+    return mapRowsPreserveOrder(uniqueIds, rows.map(rowToChunk));
+  },
+
+  getEvidenceByIds(ids: string[]): ConceptEvidence[] {
+    ensureWikiCompilerSchema();
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) return [];
+    const placeholders = uniqueIds.map(() => '?').join(', ');
+    const rows = getServerDb()
+      .prepare(`SELECT * FROM concept_evidence WHERE id IN (${placeholders})`)
+      .all(...uniqueIds) as Array<Record<string, unknown>>;
+    return mapRowsPreserveOrder(uniqueIds, rows.map(rowToEvidence));
+  },
+
+  getConceptProvenance(conceptId: string): ConceptProvenanceRecord | null {
+    ensureWikiCompilerSchema();
+    if (!conceptId) return null;
+    const row = getServerDb()
+      .prepare(`SELECT * FROM concept_provenance WHERE concept_id = ?`)
+      .get(conceptId) as Record<string, unknown> | undefined;
+    return row ? rowToConceptProvenance(row) : null;
+  },
+
+  upsertConceptProvenance(record: ConceptProvenanceRecord): void {
+    ensureWikiCompilerSchema();
+    if (!repo.getConcept(record.conceptId)) {
+      throw new Error('concept_provenance requires an existing concept');
+    }
+    getServerDb()
+      .prepare(
+        `INSERT INTO concept_provenance (
+            concept_id, query_run_id, original_question, rewritten_question,
+            model_id, prompt_version, cited_concept_ids, cited_source_ids,
+            cited_chunk_ids, cited_evidence_ids, quotes_json, faithfulness_json, created_at
+          ) VALUES (
+            @concept_id, @query_run_id, @original_question, @rewritten_question,
+            @model_id, @prompt_version, @cited_concept_ids, @cited_source_ids,
+            @cited_chunk_ids, @cited_evidence_ids, @quotes_json, @faithfulness_json, @created_at
+          )
+          ON CONFLICT(concept_id) DO UPDATE SET
+            query_run_id = excluded.query_run_id,
+            original_question = excluded.original_question,
+            rewritten_question = excluded.rewritten_question,
+            model_id = excluded.model_id,
+            prompt_version = excluded.prompt_version,
+            cited_concept_ids = excluded.cited_concept_ids,
+            cited_source_ids = excluded.cited_source_ids,
+            cited_chunk_ids = excluded.cited_chunk_ids,
+            cited_evidence_ids = excluded.cited_evidence_ids,
+            quotes_json = excluded.quotes_json,
+            faithfulness_json = excluded.faithfulness_json`,
+      )
+      .run({
+        concept_id: record.conceptId,
+        query_run_id: record.queryRunId ?? null,
+        original_question: record.originalQuestion,
+        rewritten_question: record.rewrittenQuestion ?? null,
+        model_id: record.modelId,
+        prompt_version: record.promptVersion,
+        cited_concept_ids: json(record.citedConceptIds),
+        cited_source_ids: json(record.citedSourceIds),
+        cited_chunk_ids: json(record.citedChunkIds),
+        cited_evidence_ids: json(record.citedEvidenceIds),
+        quotes_json: json(record.quotes),
+        faithfulness_json: record.faithfulness ? json(record.faithfulness) : null,
+        created_at: record.createdAt,
+      });
   },
 
   getMetrics(): Record<string, number | boolean> {
