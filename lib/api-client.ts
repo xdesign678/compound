@@ -5,6 +5,7 @@ import { normalizeCategoryKeys, normalizeCategoryState } from './category-normal
 import { getLlmConfigForPurpose } from './llm-config';
 import type { ModelPurpose } from './model-defaults';
 import { getAdminAuthHeaders } from './admin-auth-client';
+import { fetchCompoundPrivateApi } from './auth-response-guard';
 import { generateClientRequestId } from './trace-client';
 import type {
   Source,
@@ -235,7 +236,7 @@ async function postJSON<T>(
 
     let res: Response;
     try {
-      res = await fetch(path, {
+      res = await fetchCompoundPrivateApi(path, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),
@@ -260,8 +261,6 @@ async function postJSON<T>(
         throw new Error('请求过于频繁，请稍后重试（可切换模型或减少并发）');
       }
       if (res.status === 401 || res.status === 403) {
-        const { applyHttpAuthLock } = await import('./admin-auth-client');
-        applyHttpAuthLock(res.status);
         const error = new Error('认证失败，请在设置中检查 API Key 和 Admin Token') as Error & {
           status: number;
         };
@@ -456,7 +455,6 @@ async function replayDurableIngestOutboxInner(): Promise<OutboxReplayReport> {
     listReplayableOutbox,
     nextOutboxAttempt,
   } = await import('./offline-outbox');
-  const { applyHttpAuthLock } = await import('./admin-auth-client');
   const { getLlmConfigForPurpose } = await import('./llm-config');
   const items = await listReplayableOutbox();
   const currentContext = await buildCredentialContext(getLlmConfigForPurpose('wiki'));
@@ -510,7 +508,6 @@ async function replayDurableIngestOutboxInner(): Promise<OutboxReplayReport> {
         message: parsed.message,
         status: parsed.status ?? (error as { status?: number }).status,
       });
-      if (errorClass === 'auth_locked') applyHttpAuthLock(parsed.status ?? 401);
       const next = nextOutboxAttempt({
         ...claimed,
         error: parsed.message,
@@ -606,7 +603,7 @@ export async function askWikiStream(
 
   let res: Response;
   try {
-    res = await fetch('/api/query', {
+    res = await fetchCompoundPrivateApi('/api/query', {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
@@ -746,7 +743,7 @@ export async function startWikiFromSelection(input: {
 export async function getWikiFromSelectionRun(
   runId: string,
 ): Promise<SelectionWikiRunStatusResponse> {
-  const res = await fetch(
+  const res = await fetchCompoundPrivateApi(
     `/api/concepts/from-selection/status?runId=${encodeURIComponent(runId)}`,
     {
       headers: {
@@ -823,7 +820,7 @@ export async function updateSourceContent(input: {
   activity?: ActivityLog;
 }> {
   assertOnlineForWrite();
-  const res = await fetch('/api/data/sources', {
+  const res = await fetchCompoundPrivateApi('/api/data/sources', {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
@@ -902,10 +899,13 @@ export async function startRepair(findings: RepairFindingPayload[]): Promise<Rep
 }
 
 export async function getRepairStatus(runId: string): Promise<RepairStatusResponse> {
-  const res = await fetch(`/api/repair/status?runId=${encodeURIComponent(runId)}`, {
-    headers: { 'X-Request-ID': generateClientRequestId(), ...getAdminAuthHeaders() },
-    cache: 'no-store',
-  });
+  const res = await fetchCompoundPrivateApi(
+    `/api/repair/status?runId=${encodeURIComponent(runId)}`,
+    {
+      headers: { 'X-Request-ID': generateClientRequestId(), ...getAdminAuthHeaders() },
+      cache: 'no-store',
+    },
+  );
   if (res.status === 404) throw new Error('run not found');
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -922,7 +922,7 @@ export async function pruneDeletedConcepts(ids: string[]): Promise<void> {
 }
 
 export async function exportWiki(): Promise<WikiExportPayload> {
-  const res = await fetch('/api/wiki/export', {
+  const res = await fetchCompoundPrivateApi('/api/wiki/export', {
     cache: 'no-store',
     headers: {
       'X-Request-ID': generateClientRequestId(),
@@ -993,7 +993,7 @@ export async function startLintRun(): Promise<LintRunStartResponse> {
 
 /** Poll the status of an async lint run. Throws on 404 (run not found). */
 export async function getLintStatus(runId: string): Promise<LintRunStatusResponse> {
-  const res = await fetch(`/api/lint/status?runId=${encodeURIComponent(runId)}`, {
+  const res = await fetchCompoundPrivateApi(`/api/lint/status?runId=${encodeURIComponent(runId)}`, {
     headers: { 'X-Request-ID': generateClientRequestId(), ...getAdminAuthHeaders() },
     cache: 'no-store',
   });
@@ -1206,7 +1206,7 @@ export async function getCategoryWiki(
   secondary: string,
 ): Promise<CategoryWiki | null> {
   const params = new URLSearchParams({ primary, secondary });
-  const res = await fetch(`/api/wiki/category?${params}`, {
+  const res = await fetchCompoundPrivateApi(`/api/wiki/category?${params}`, {
     headers: {
       'X-Request-ID': generateClientRequestId(),
       ...getAdminAuthHeaders(),
@@ -1235,12 +1235,15 @@ export async function createCategoryWikiRun(
 export async function getCategoryWikiRunStatus(
   runId: string,
 ): Promise<CategoryWikiRunStatusResponse> {
-  const res = await fetch(`/api/wiki/category/runs/${encodeURIComponent(runId)}`, {
-    headers: {
-      'X-Request-ID': generateClientRequestId(),
-      ...getAdminAuthHeaders(),
+  const res = await fetchCompoundPrivateApi(
+    `/api/wiki/category/runs/${encodeURIComponent(runId)}`,
+    {
+      headers: {
+        'X-Request-ID': generateClientRequestId(),
+        ...getAdminAuthHeaders(),
+      },
     },
-  });
+  );
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(text.slice(0, 200) || `状态查询失败 (${res.status})`);
@@ -1254,7 +1257,7 @@ export async function listCategoryWikiRuns(
   limit = 20,
 ): Promise<CategoryWikiRunSummary[]> {
   const params = new URLSearchParams({ primary, secondary, limit: String(limit) });
-  const res = await fetch(`/api/wiki/category/runs?${params}`, {
+  const res = await fetchCompoundPrivateApi(`/api/wiki/category/runs?${params}`, {
     headers: {
       'X-Request-ID': generateClientRequestId(),
       ...getAdminAuthHeaders(),

@@ -14,6 +14,7 @@ import { useAppStore } from '@/lib/store';
 import { formatRelativeTime } from '@/lib/format';
 import { formatConceptBodyForDisplay } from '@/lib/concept-body-format';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
+import { fetchCompoundPrivateApi } from '@/lib/auth-response-guard';
 import { startWikiFromSelection } from '@/lib/api-client';
 import { rememberSelectionWikiRun } from '@/lib/selection-wiki-runs';
 import {
@@ -660,9 +661,10 @@ export function ConceptDetail({ id }: { id: string }) {
     if (versionDialog.versions.length > 0) return;
 
     try {
-      const res = await fetch(`/api/data/concepts/${encodeURIComponent(id)}/versions`, {
-        headers: getAdminAuthHeaders(),
-      });
+      const res = await fetchCompoundPrivateApi(
+        `/api/data/concepts/${encodeURIComponent(id)}/versions`,
+        { headers: getAdminAuthHeaders() },
+      );
       if (!res.ok) throw new Error('读取失败');
       const data = (await res.json()) as { versions?: ConceptVersion[] };
       setVersionDialog({

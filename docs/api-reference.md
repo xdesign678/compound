@@ -305,11 +305,14 @@ Source: [`app/api/health/ready/route.ts`](../app/api/health/ready/route.ts)
 #### GET
 
 GET /api/health/ready
-Readiness probe. Public body is only `{ status, probe }`. Detailed failure
-reasons are written to authenticated logs, not the response.
+Readiness probe. Public body is `{ status, probe, identityAnchor }`, where
+`identityAnchor` is `verified`, `unverified`, or `not_configured`. Detailed
+failure reasons are written to internal structured logs, not the response.
 
 Checks process liveness, SQLite readability, critical schema/meta, and that
-DATA_DIR is writable. A missing backup directory is not a ready failure.
+DATA_DIR is writable. When COMPOUND_EXPECTED_DATASET_ID is configured, the
+mounted dataset must match it. A missing backup directory is not a ready
+failure. `not_configured` does not verify persistent-volume identity.
 
 ### `/api/health`
 

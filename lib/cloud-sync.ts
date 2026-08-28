@@ -17,6 +17,7 @@
 import { getDb, type CompoundDB } from './db';
 import { mergeRemoteConcept, mergeRemoteSource } from './snapshot-merge';
 import { getAdminAuthHeaders } from './admin-auth-client';
+import { fetchCompoundPrivateApi } from './auth-response-guard';
 import { withRequestId } from './trace-client';
 import type { SyncMetaRecord } from './offline-outbox';
 import type { Source, Concept, ActivityLog, AskMessage } from './types';
@@ -224,10 +225,13 @@ async function fetchConceptDetails(ids: string[]): Promise<Concept[]> {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
   if (uniqueIds.length === 0) return [];
   const search = new URLSearchParams({ ids: uniqueIds.join(',') });
-  const res = await fetch(buildSameOriginRequestUrl(`/api/data/concepts?${search.toString()}`), {
-    cache: 'no-store',
-    headers: withRequestId(getAdminAuthHeaders()),
-  });
+  const res = await fetchCompoundPrivateApi(
+    buildSameOriginRequestUrl(`/api/data/concepts?${search.toString()}`),
+    {
+      cache: 'no-store',
+      headers: withRequestId(getAdminAuthHeaders()),
+    },
+  );
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`concept detail failed (${res.status}): ${text.slice(0, 200)}`);
@@ -239,10 +243,13 @@ async function fetchSourceDetails(ids: string[]): Promise<Source[]> {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
   if (uniqueIds.length === 0) return [];
   const search = new URLSearchParams({ ids: uniqueIds.join(',') });
-  const res = await fetch(buildSameOriginRequestUrl(`/api/data/sources?${search.toString()}`), {
-    cache: 'no-store',
-    headers: withRequestId(getAdminAuthHeaders()),
-  });
+  const res = await fetchCompoundPrivateApi(
+    buildSameOriginRequestUrl(`/api/data/sources?${search.toString()}`),
+    {
+      cache: 'no-store',
+      headers: withRequestId(getAdminAuthHeaders()),
+    },
+  );
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`source detail failed (${res.status}): ${text.slice(0, 200)}`);
@@ -282,7 +289,7 @@ async function fetchSnapshotPage(input: {
   beforeCursor: number | null;
   offset: number;
 }): Promise<SnapshotResponse> {
-  const res = await fetch(
+  const res = await fetchCompoundPrivateApi(
     buildSameOriginRequestUrl(
       buildSnapshotRequestPath({
         cursor: input.cursor,

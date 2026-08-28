@@ -17,6 +17,7 @@ import {
 } from '@/lib/llm-config';
 import { DEFAULT_LLM_MODEL } from '@/lib/model-defaults';
 import { clearAdminToken, getAdminToken, saveAdminToken } from '@/lib/admin-auth-client';
+import { fetchCompoundPrivateApi } from '@/lib/auth-response-guard';
 import { clearPrivateOfflineCache } from '@/lib/private-cache';
 import { t, useLocale, type Locale } from '@/lib/i18n';
 import type { LlmConfig } from '@/lib/types';
@@ -146,7 +147,9 @@ export function ModelTab() {
   const loadUsage = useCallback(async () => {
     setUsageLoading(true);
     try {
-      const res = await fetch('/api/ops/model-runs?days=14', { method: 'GET' });
+      const res = await fetchCompoundPrivateApi('/api/ops/model-runs?days=14', {
+        method: 'GET',
+      });
       if (!res.ok) throw new Error(`usage status ${res.status}`);
       setUsage((await res.json()) as ModelUsageSummary);
       setUsageStatus(null);

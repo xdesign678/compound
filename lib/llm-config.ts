@@ -1,5 +1,6 @@
 import type { LlmConfig } from './types';
 import { getAdminAuthHeaders } from './admin-auth-client';
+import { fetchCompoundPrivateApi } from './auth-response-guard';
 import { withRequestId } from './trace-client';
 import { DEFAULT_LLM_MODEL, type ModelPurpose } from './model-defaults';
 
@@ -122,7 +123,7 @@ export function setLlmRemember(remember: boolean): void {
 }
 
 export async function fetchModelSettings(): Promise<ModelSettings> {
-  const res = await fetch('/api/settings/models', {
+  const res = await fetchCompoundPrivateApi('/api/settings/models', {
     headers: withRequestId(getAdminAuthHeaders()),
   });
   if (!res.ok) {
@@ -145,7 +146,7 @@ export async function rememberCustomModelOnServer(model: string): Promise<string
   const trimmed = model.trim();
   if (!trimmed || PRESET_MODELS.some((item) => item.value === trimmed)) return fetchCustomModels();
 
-  const res = await fetch('/api/settings/models', {
+  const res = await fetchCompoundPrivateApi('/api/settings/models', {
     method: 'POST',
     headers: withRequestId({
       'Content-Type': 'application/json',
@@ -161,7 +162,7 @@ export async function removeCustomModelOnServer(model: string): Promise<string[]
   const trimmed = model.trim();
   if (!trimmed || PRESET_MODELS.some((item) => item.value === trimmed)) return fetchCustomModels();
 
-  const res = await fetch('/api/settings/models', {
+  const res = await fetchCompoundPrivateApi('/api/settings/models', {
     method: 'DELETE',
     headers: withRequestId({
       'Content-Type': 'application/json',
@@ -174,7 +175,7 @@ export async function removeCustomModelOnServer(model: string): Promise<string[]
 }
 
 export async function saveSelectedModelOnServer(model: string): Promise<ModelSettings> {
-  const res = await fetch('/api/settings/models', {
+  const res = await fetchCompoundPrivateApi('/api/settings/models', {
     method: 'PATCH',
     headers: withRequestId({
       'Content-Type': 'application/json',
@@ -190,7 +191,7 @@ export async function saveSelectedModelsOnServer(input: {
   wikiModel: string;
   askModel: string;
 }): Promise<ModelSettings> {
-  const res = await fetch('/api/settings/models', {
+  const res = await fetchCompoundPrivateApi('/api/settings/models', {
     method: 'PATCH',
     headers: withRequestId({
       'Content-Type': 'application/json',
@@ -206,7 +207,7 @@ export async function saveSelectedModelsOnServer(input: {
 }
 
 export async function hidePresetModelOnServer(model: string): Promise<ModelSettings> {
-  const res = await fetch('/api/settings/models', {
+  const res = await fetchCompoundPrivateApi('/api/settings/models', {
     method: 'PATCH',
     headers: withRequestId({
       'Content-Type': 'application/json',

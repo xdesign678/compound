@@ -6,10 +6,13 @@ import dynamic from 'next/dynamic';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/lib/db';
 import { resolvePrivateCacheAccess } from '@/lib/admin-auth-client';
+import { resetLocalKnowledgeCache } from '@/lib/private-cache';
 import { useAppStore, type TabId } from '@/lib/store';
 import { DESKTOP_LAYOUT_MIN_WIDTH, isDesktopWidth } from '@/lib/responsive';
+import type { SyncQuarantine } from '@/lib/sync-reconciliation';
 
 import { Header } from '@/components/Header';
+import { SyncQuarantinePanel } from '@/components/SyncQuarantinePanel';
 import { TabBar } from '@/components/TabBar';
 import { ListTree } from 'lucide-react';
 import { useKeyboardShortcuts } from '@/lib/hooks/useKeyboardShortcuts';
@@ -153,6 +156,8 @@ export default function Page() {
   const hydrateLineHeight = useAppStore((s) => s.hydrateLineHeight);
   const [cacheAccessGranted, setCacheAccessGranted] = useState(false);
   const [authGate, setAuthGate] = useState<'checking' | 'unavailable' | null>(null);
+  const [quarantineDismissed, setQuarantineDismissed] = useState(false);
+  const [latestPullQuarantine, setLatestPullQuarantine] = useState<SyncQuarantine | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -247,19 +252,55 @@ export default function Page() {
     async () => (mounted ? getDb().sources.count() : undefined),
     [mounted],
   );
+  const persistedSyncQuarantine = useLiveQuery(
+    async () =>
+      mounted ? ((await getDb().syncMeta.get('current'))?.quarantine ?? null) : undefined,
+    [mounted],
+  );
+  const syncQuarantine = latestPullQuarantine ?? persistedSyncQuarantine;
+  const quarantineKey = syncQuarantine
+    ? `${syncQuarantine.at}:${syncQuarantine.reason}:${syncQuarantine.remoteCursor}`
+    : null;
+
+  useEffect(() => {
+    setQuarantineDismissed(false);
+  }, [quarantineKey]);
+
+  async function acceptRemoteSnapshot() {
+    try {
+      await resetLocalKnowledgeCache();
+      setLatestPullQuarantine(null);
+      const { pullSnapshotFromCloud } = await import('@/lib/cloud-sync');
+      const result = await pullSnapshotFromCloud();
+      setLatestPullQuarantine(result.quarantine);
+      if (result.destructiveReconcileBlocked) {
+        throw new Error('完整远端快照仍未通过校验');
+      }
+      useAppStore.getState().showToast('已清空本机缓存并重新拉取远端副本');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      useAppStore
+        .getState()
+        .showErrorToast(`本机缓存已清空，但重新拉取失败：${message.slice(0, 120)}`);
+    }
+  }
 
   // Cloud reconciliation must finish before first-run sample seeding, otherwise
   // a populated server can be mixed with local demo records.
-  const bootstrapRef = useRef(false);
+  const bootstrapGenerationRef = useRef(0);
   useEffect(() => {
-    if (!mounted || bootstrapRef.current) return;
-    bootstrapRef.current = true;
+    if (!mounted) return;
+    const generation = bootstrapGenerationRef.current + 1;
+    bootstrapGenerationRef.current = generation;
     let cancelled = false;
+    const isCurrent = () => !cancelled && bootstrapGenerationRef.current === generation;
     (async () => {
       let cloudAuthorityEmpty = false;
       try {
         const { pullSnapshotFromCloud } = await import('@/lib/cloud-sync');
         const pullResult = await pullSnapshotFromCloud();
+        if (!isCurrent()) return;
+        setLatestPullQuarantine(pullResult.quarantine);
         cloudAuthorityEmpty = pullResult.authoritativeEmpty;
         if (pullResult.destructiveReconcileBlocked && pullResult.quarantine) {
           const isolated =
@@ -282,6 +323,7 @@ export default function Page() {
         db.concepts.count(),
         db.sources.count(),
       ]);
+      if (!isCurrent()) return;
       if (
         cloudAuthorityEmpty &&
         currentConceptCount === 0 &&
@@ -297,7 +339,7 @@ export default function Page() {
         localStorage.setItem('compound_seeded', '1');
         localStorage.setItem('compound_is_sample', '1');
       }
-      if (!cancelled) setBootstrapReady(true);
+      if (isCurrent()) setBootstrapReady(true);
     })();
     return () => {
       cancelled = true;
@@ -604,10 +646,20 @@ export default function Page() {
     );
   }
 
+  const quarantinePanel =
+    syncQuarantine && !quarantineDismissed ? (
+      <SyncQuarantinePanel
+        quarantine={syncQuarantine}
+        onDismiss={() => setQuarantineDismissed(true)}
+        onAcceptRemote={acceptRemoteSnapshot}
+      />
+    ) : null;
+
   if (isDesktop) {
     return (
       <div className="app-shell desktop-shell">
         <OfflineBanner />
+        {quarantinePanel}
         <CommandPalette />
 
         <div className="desktop-frame">
@@ -784,12 +836,14 @@ export default function Page() {
   return (
     <div className="app-shell">
       <OfflineBanner />
+      {quarantinePanel}
       <CommandPalette />
       <SwipeBack />
       <PullToRefresh
         onRefresh={async () => {
           const { pullSnapshotFromCloud } = await import('@/lib/cloud-sync');
           const pullResult = await pullSnapshotFromCloud();
+          setLatestPullQuarantine(pullResult.quarantine);
           if (pullResult.destructiveReconcileBlocked && pullResult.quarantine) {
             const isolated =
               pullResult.quarantine.staleSourceCount + pullResult.quarantine.staleConceptCount;

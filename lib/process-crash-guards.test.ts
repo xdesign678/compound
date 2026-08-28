@@ -5,6 +5,7 @@ import {
   describeCrashReason,
   handleProcessCrash,
   handleUncaughtExceptionAndStop,
+  isExpectedTransportAbort,
   registerGlobalCrashGuards,
 } from './process-crash-guards';
 import { isProcessReady, resetProcessReadinessForTests } from './process-readiness';
@@ -99,6 +100,30 @@ test('uncaughtException listener control flow marks unready and requests exit wi
   assert.equal(isProcessReady(), false);
   resetProcessReadinessForTests();
   process.exitCode = previousExitCode;
+});
+
+test('an exact HTTP transport abort does not make the process unready or exit', () => {
+  resetProcessReadinessForTests();
+  const previousExitCode = process.exitCode;
+  let exitCalls = 0;
+  const abort = Object.assign(new Error('aborted'), { code: 'ECONNRESET' });
+
+  assert.equal(isExpectedTransportAbort(abort), true);
+  assert.equal(
+    isExpectedTransportAbort(Object.assign(new Error('boom'), { code: 'ECONNRESET' })),
+    false,
+  );
+  assert.equal(
+    isExpectedTransportAbort(Object.assign(new Error('aborted'), { code: 'EPIPE' })),
+    false,
+  );
+
+  handleUncaughtExceptionAndStop(abort, () => {
+    exitCalls += 1;
+  });
+  assert.equal(exitCalls, 0);
+  assert.equal(isProcessReady(), true);
+  assert.equal(process.exitCode, previousExitCode);
 });
 
 test('registerGlobalCrashGuards is idempotent and wires both listeners once', () => {

@@ -8,6 +8,7 @@ import { Icon } from './Icons';
 import { pullSnapshotFromCloud } from '@/lib/cloud-sync';
 import { getPollFailurePlan } from '@/lib/github-sync-poll';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
+import { fetchCompoundPrivateApi } from '@/lib/auth-response-guard';
 import { withRequestId } from '@/lib/trace-client';
 import {
   buildSyncStageItems,
@@ -205,10 +206,13 @@ export function GithubSyncModal() {
     async (jobId: string, consecutiveFailures = 0) => {
       const generation = pollGenerationRef.current;
       try {
-        const res = await fetch(`/api/sync/status?jobId=${encodeURIComponent(jobId)}`, {
-          cache: 'no-store',
-          headers: withRequestId(getAdminAuthHeaders()),
-        });
+        const res = await fetchCompoundPrivateApi(
+          `/api/sync/status?jobId=${encodeURIComponent(jobId)}`,
+          {
+            cache: 'no-store',
+            headers: withRequestId(getAdminAuthHeaders()),
+          },
+        );
         if (generation !== pollGenerationRef.current) return;
         if (!res.ok) {
           const text = await res.text().catch(() => '');
@@ -275,7 +279,7 @@ export function GithubSyncModal() {
       detail: '远端仓库增量同步',
     });
     try {
-      const res = await fetch('/api/sync/github/run', {
+      const res = await fetchCompoundPrivateApi('/api/sync/github/run', {
         method: 'POST',
         headers: withRequestId(getAdminAuthHeaders()),
       });
@@ -298,7 +302,7 @@ export function GithubSyncModal() {
 
   const cancel = useCallback(async () => {
     try {
-      await fetch('/api/sync/cancel', {
+      await fetchCompoundPrivateApi('/api/sync/cancel', {
         method: 'POST',
         headers: withRequestId(getAdminAuthHeaders()),
       });

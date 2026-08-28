@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   clearLlmConfig,
+  fetchModelSettings,
   getLlmConfig,
   getLlmConfigForPurpose,
   saveLlmConfig,
@@ -42,7 +43,11 @@ function installBrowserStorage() {
   const sessionStorage = new MemoryStorage();
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
-    value: {},
+    value: {
+      localStorage,
+      sessionStorage,
+      location: { origin: 'https://compound.example' },
+    },
   });
   Object.defineProperty(globalThis, 'localStorage', {
     configurable: true,
@@ -114,4 +119,18 @@ test('getLlmConfigForPurpose returns the model selected for that workflow', () =
     apiUrl: 'https://example.com/v1/chat/completions',
     model: 'wiki-model',
   });
+});
+
+test('model settings 401 locks an existing offline grant', async () => {
+  const { localStorage } = installBrowserStorage();
+  localStorage.setItem('compound:offline-access', '1');
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response('Unauthorized', { status: 401 })) as typeof fetch;
+  try {
+    await fetchModelSettings();
+    assert.equal(localStorage.getItem('compound:offline-access'), null);
+    assert.equal(localStorage.getItem('compound:local-cache-lock'), '1');
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
 });

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
+import { fetchCompoundPrivateApi } from '@/lib/auth-response-guard';
 import { withRequestId } from '@/lib/trace-client';
 import { useAppStore, friendlyErrorMessage } from '@/lib/store';
 
@@ -191,7 +192,7 @@ async function postJson(path: string, body: unknown) {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     throw new Error('当前离线，审核决定已暂停，请联网后重试。');
   }
-  const res = await fetch(path, {
+  const res = await fetchCompoundPrivateApi(path, {
     method: 'POST',
     headers: withRequestId({ ...getAdminAuthHeaders(), 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
@@ -218,7 +219,7 @@ export default function ReviewQueue() {
   const load = useCallback(
     async (nextStatus = status) => {
       try {
-        const res = await fetch(`/api/review/queue?status=${nextStatus}`, {
+        const res = await fetchCompoundPrivateApi(`/api/review/queue?status=${nextStatus}`, {
           headers: withRequestId(getAdminAuthHeaders()),
           cache: 'no-store',
         });

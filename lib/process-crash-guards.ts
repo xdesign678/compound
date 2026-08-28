@@ -1,11 +1,10 @@
 /**
  * Process-level crash guards.
  *
- * Registers global `unhandledRejection` / `uncaughtException` handlers so a
- * single failing background tick (e.g. a synchronous better-sqlite3
- * `SQLITE_BUSY` / disk error inside a worker loop) can never take down the
- * whole Node.js process. Both handlers emit a structured log line and forward
- * the error to Sentry when configured.
+ * Registers global `unhandledRejection` / `uncaughtException` handlers so
+ * background failures are observed and classified instead of disappearing.
+ * Both handlers emit a structured log line and forward the error to Sentry
+ * when configured.
  *
  * Policy: unhandledRejection is logged and the process stays up. uncaughtException
  * marks readiness failed, logs, then exits non-zero so the supervisor can
@@ -44,6 +43,13 @@ export function describeCrashReason(reason: unknown): { name: string; message: s
     message = String(reason);
   }
   return { name: 'NonError', message };
+}
+
+/** Next/Node may surface an already-disconnected HTTP request as an uncaught abort. */
+export function isExpectedTransportAbort(reason: unknown): boolean {
+  if (!(reason instanceof Error)) return false;
+  const code = (reason as Error & { code?: unknown }).code;
+  return reason.name === 'Error' && reason.message === 'aborted' && code === 'ECONNRESET';
 }
 
 /**
@@ -93,6 +99,15 @@ export function handleUncaughtExceptionAndStop(
     process.exit(code);
   },
 ): void {
+  if (isExpectedTransportAbort(err)) {
+    logger.warn('process.transport_abort_ignored', {
+      kind: 'uncaughtException',
+      name: 'Error',
+      message: 'aborted',
+      code: 'ECONNRESET',
+    });
+    return;
+  }
   handleProcessCrash('uncaughtException', err);
   process.exitCode = 1;
   exitProcess(1);

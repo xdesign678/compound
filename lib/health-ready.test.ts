@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  checkDatasetIdentityAnchor,
+  datasetIdentityAnchorConfigured,
   getUnreadinessReason,
   isProcessReady,
   markProcessUnready,
@@ -28,4 +30,30 @@ test('process readiness state is shared via globalThis across chunks', () => {
   assert.equal(holder.reason, 'drain');
   assert.equal(isProcessReady(), false);
   resetProcessReadinessForTests();
+});
+
+test('dataset identity anchor is explicit when not configured', () => {
+  assert.equal(datasetIdentityAnchorConfigured(undefined), false);
+  assert.equal(datasetIdentityAnchorConfigured('   '), false);
+  assert.equal(checkDatasetIdentityAnchor(undefined, 'dataset-local'), 'not_configured');
+  assert.equal(checkDatasetIdentityAnchor('   ', 'dataset-local'), 'not_configured');
+});
+
+test('dataset identity anchor verifies an exact match', () => {
+  assert.equal(datasetIdentityAnchorConfigured(' dataset-production '), true);
+  assert.equal(
+    checkDatasetIdentityAnchor(' dataset-production ', 'dataset-production'),
+    'verified',
+  );
+});
+
+test('dataset identity anchor rejects a missing or mismatched dataset', () => {
+  assert.throws(
+    () => checkDatasetIdentityAnchor('dataset-production', null),
+    /dataset identity is missing/,
+  );
+  assert.throws(
+    () => checkDatasetIdentityAnchor('dataset-production', 'dataset-empty-volume'),
+    /dataset identity anchor mismatch/,
+  );
 });

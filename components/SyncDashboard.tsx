@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getAdminAuthHeaders } from '@/lib/admin-auth-client';
+import { fetchCompoundPrivateApi } from '@/lib/auth-response-guard';
 import { withRequestId } from '@/lib/trace-client';
 import { friendlyErrorMessage, useAppStore } from '@/lib/store';
 import HeroStatus from './sync/HeroStatus';
@@ -22,7 +23,7 @@ const POLL_IDLE_MS = 10_000;
 type ApiResult = { message?: string; error?: string } & Record<string, unknown>;
 
 async function postJson(path: string, body?: unknown): Promise<ApiResult> {
-  const res = await fetch(path, {
+  const res = await fetchCompoundPrivateApi(path, {
     method: 'POST',
     headers: withRequestId({ ...getAdminAuthHeaders(), 'Content-Type': 'application/json' }),
     body: body ? JSON.stringify(body) : undefined,
@@ -45,7 +46,7 @@ function DashboardInner() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/sync/dashboard', {
+      const res = await fetchCompoundPrivateApi('/api/sync/dashboard', {
         headers: withRequestId(getAdminAuthHeaders()),
         cache: 'no-store',
       });

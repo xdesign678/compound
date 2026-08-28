@@ -1,3 +1,5 @@
+import { fetchCompoundPrivateApi, lockPrivateCacheForLogout } from './auth-response-guard';
+
 const AUTH_SESSION_PATH = '/api/auth/session';
 const OFFLINE_ACCESS_KEY = 'compound:offline-access';
 const LOCAL_CACHE_LOCK_KEY = 'compound:local-cache-lock';
@@ -14,27 +16,6 @@ function updateOfflineAccess(granted: boolean): void {
   } catch {
     // Ignore — storage may be unavailable.
   }
-}
-
-function lockPrivateCache(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.removeItem(OFFLINE_ACCESS_KEY);
-    window.localStorage.setItem(LOCAL_CACHE_LOCK_KEY, '1');
-  } catch {
-    // Ignore — storage may be unavailable.
-  }
-}
-
-/** Authoritative 401/403: drop the offline grant and lock private cache. */
-export function lockPrivateCacheOnAuthoritativeReject(): void {
-  lockPrivateCache();
-}
-
-export function applyHttpAuthLock(status: number): boolean {
-  if (status !== 401 && status !== 403) return false;
-  lockPrivateCacheOnAuthoritativeReject();
-  return true;
 }
 
 function hasOfflineAccess(): boolean {
@@ -74,7 +55,7 @@ export async function saveAdminToken(token: string): Promise<void> {
   const trimmed = token.trim();
   if (!trimmed) throw new Error('请先填写访问保护密钥。');
 
-  const res = await fetch(AUTH_SESSION_PATH, {
+  const res = await fetchCompoundPrivateApi(AUTH_SESSION_PATH, {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
@@ -97,9 +78,9 @@ export async function saveAdminToken(token: string): Promise<void> {
  * storage credentials left by older builds.
  */
 export async function clearAdminToken(): Promise<void> {
-  lockPrivateCache();
+  lockPrivateCacheForLogout();
   try {
-    await fetch(AUTH_SESSION_PATH, {
+    await fetchCompoundPrivateApi(AUTH_SESSION_PATH, {
       method: 'DELETE',
       credentials: 'same-origin',
     });
@@ -141,14 +122,13 @@ export async function probeAdminSession(): Promise<SessionProbeResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SESSION_CHECK_TIMEOUT_MS);
   try {
-    const res = await fetch(AUTH_SESSION_PATH, {
+    const res = await fetchCompoundPrivateApi(AUTH_SESSION_PATH, {
       method: 'GET',
       credentials: 'same-origin',
       cache: 'no-store',
       signal: controller.signal,
     });
     if (res.status === 401 || res.status === 403) {
-      lockPrivateCache();
       return { kind: 'revoked' };
     }
     if (!res.ok) return { kind: 'unavailable', reason: 'server_error' };

@@ -13,6 +13,8 @@ interface ProcessReadinessState {
   reason: string | null;
 }
 
+export type DatasetIdentityAnchorStatus = 'not_configured' | 'verified';
+
 function readinessState(): ProcessReadinessState {
   const holder = globalThis as typeof globalThis & {
     [PROCESS_READINESS_KEY]?: ProcessReadinessState;
@@ -29,6 +31,25 @@ export function isProcessReady(): boolean {
 
 export function getUnreadinessReason(): string | null {
   return readinessState().reason;
+}
+
+export function datasetIdentityAnchorConfigured(expectedDatasetId: string | undefined): boolean {
+  return Boolean(expectedDatasetId?.trim());
+}
+
+export function checkDatasetIdentityAnchor(
+  expectedDatasetId: string | undefined,
+  actualDatasetId: string | null,
+): DatasetIdentityAnchorStatus {
+  const expected = expectedDatasetId?.trim();
+  if (!expected) return 'not_configured';
+  if (!actualDatasetId) {
+    throw new Error('dataset identity anchor expected but dataset identity is missing');
+  }
+  if (actualDatasetId !== expected) {
+    throw new Error('dataset identity anchor mismatch');
+  }
+  return 'verified';
 }
 
 export function markProcessUnready(reason: string): void {

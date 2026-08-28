@@ -31,6 +31,7 @@ jobs:
       - run: npm run lint -- --max-warnings=0
       - run: npm run typecheck
       - run: npm run test
+      - run: npm run test:restore
       - run: npm run knip
       - run: npm run validate:profiling
 
@@ -139,11 +140,15 @@ jobs:
             -e COMPOUND_ADMIN_TOKEN=e2e-token \
             -e DATA_DIR=/data \
             compound
-          trap 'docker logs compound-ci; docker rm -f compound-ci >/dev/null 2>&1 || true' EXIT
-          for attempt in $(seq 1 45); do
-            if curl --fail --silent --show-error http://127.0.0.1:3000/api/health >/dev/null; then
-              docker inspect --format='{{.State.Health.Status}}' compound-ci
+          trap 'docker logs compound-ci || true; docker rm -f compound-ci >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 60); do
+            health_status="$(docker inspect --format='{{.State.Health.Status}}' compound-ci 2>/dev/null || true)"
+            if [ "$health_status" = "healthy" ] && \
+              curl --fail --silent --show-error http://127.0.0.1:3000/api/health/ready >/dev/null; then
               exit 0
+            fi
+            if [ "$health_status" = "unhealthy" ]; then
+              exit 1
             fi
             sleep 2
           done

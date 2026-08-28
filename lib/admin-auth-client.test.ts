@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  applyHttpAuthLock,
   canReadPrivateCache,
   checkAdminSession,
   clearAdminToken,
@@ -92,13 +91,18 @@ test('saveAdminToken creates an httpOnly admin session through the server', asyn
 });
 
 test('saveAdminToken rejects invalid admin tokens with a useful message', async () => {
+  const browser = withMockWindow();
+  browser.localStorage.setItem('compound:offline-access', '1');
   const mock = withMockFetch(
     () => new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 }),
   );
   try {
     await assert.rejects(() => saveAdminToken('bad-token'), /访问保护密钥无效/);
+    assert.equal(browser.localStorage.getItem('compound:offline-access'), null);
+    assert.equal(browser.localStorage.getItem('compound:local-cache-lock'), '1');
   } finally {
     mock.restore();
+    browser.restore();
   }
 });
 
@@ -226,33 +230,6 @@ test('session abort is classified as timeout rather than revoke', async () => {
     assert.equal(browser.localStorage.getItem('compound:local-cache-lock'), null);
   } finally {
     mock.restore();
-    browser.restore();
-  }
-});
-
-test('authoritative 401/403 lock the private cache; timeout and 5xx do not', () => {
-  const browser = withMockWindow();
-  browser.localStorage.setItem('compound:offline-access', '1');
-  try {
-    assert.equal(applyHttpAuthLock(503), false);
-    assert.equal(browser.localStorage.getItem('compound:offline-access'), '1');
-    assert.equal(browser.localStorage.getItem('compound:local-cache-lock'), null);
-
-    assert.equal(applyHttpAuthLock(401), true);
-    assert.equal(browser.localStorage.getItem('compound:offline-access'), null);
-    assert.equal(browser.localStorage.getItem('compound:local-cache-lock'), '1');
-  } finally {
-    browser.restore();
-  }
-});
-
-test('403 also drops the offline grant', () => {
-  const browser = withMockWindow();
-  browser.localStorage.setItem('compound:offline-access', '1');
-  try {
-    assert.equal(applyHttpAuthLock(403), true);
-    assert.equal(browser.localStorage.getItem('compound:local-cache-lock'), '1');
-  } finally {
     browser.restore();
   }
 });

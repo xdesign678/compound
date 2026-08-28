@@ -14,11 +14,16 @@ out of sync with the UI.
 
 1. Confirm `DATA_DIR` is set in production and points to a mounted persistent
    volume, usually `/data`.
-2. Confirm the deployment platform mounts the same volume across restarts.
-3. Check deployment logs for SQLite open, migration, disk, or permission
+2. Confirm `COMPOUND_EXPECTED_DATASET_ID` is set in the deployment environment
+   to the verified volume's existing `meta.dataset_id`. Keep this anchor outside
+   the data volume. `/api/health/ready` reports `identityAnchor: "verified"`
+   only when the mounted database matches it. `"not_configured"` is development
+   compatibility, not evidence that the persistent volume is correct.
+3. Confirm the deployment platform mounts the same volume across restarts.
+4. Check deployment logs for SQLite open, migration, disk, or permission
    errors.
-4. Check free disk space and write permissions on the mounted directory.
-5. Compare browser cache behavior with server state. IndexedDB can make old
+5. Check free disk space and write permissions on the mounted directory.
+6. Compare browser cache behavior with server state. IndexedDB can make old
    content visible locally even when the server database is missing data.
 
 ## Recovery
@@ -70,11 +75,17 @@ from this repository**. They need separate production authorization.
    DATA_DIR=/data npm run restore -- --from /data/backups/compound-<timestamp>.db --force
    ```
 
-4. The restore command requires checksum metadata by default, validates the
-   SHA-256 and SQLite integrity, creates a safety snapshot of the current target
-   when it exists, swaps the restored database atomically, and runs foreign-key
-   checks. `--allow-missing-checksum` is break-glass only.
+4. The restore command requires checksum metadata by default, creates a safety
+   snapshot of the current target when it exists, and writes
+   `max(target generation, backup generation) + 1` into the restored temporary
+   database. It validates SQLite integrity and foreign keys before atomically
+   replacing the target. `--allow-missing-checksum` is break-glass only.
 5. Start the service and complete the verification checklist below.
+
+The restored database keeps the backup's `dataset_id`. When intentionally
+restoring a backup from a different dataset, verify that identity first and
+update `COMPOUND_EXPECTED_DATASET_ID` to the restored dataset before restart;
+otherwise readiness will correctly remain at `503 unverified`.
 
 Never restore into a running container. Never copy `compound.db` together with
 stale `-wal` or `-shm` files.
@@ -89,6 +100,9 @@ encrypted snapshot into an isolated environment and record the result below.
 ## Verify
 
 - `DATA_DIR` is present in `/api/health` output.
+- `/api/health/ready` returns `identityAnchor: "verified"` in production. A
+  `503` with `"unverified"` means the configured identity could not be proved;
+  inspect internal logs for missing/mismatch details before restarting again.
 - New concepts survive a service restart.
 - GitHub sync does not re-ingest unchanged files unexpectedly.
 - `/sync` and `/review` state remains stable after reloads.
