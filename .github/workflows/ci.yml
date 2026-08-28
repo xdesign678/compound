@@ -5,7 +5,8 @@ on:
   pull_request:
 
 jobs:
-  check:
+  static:
+    name: static, unit, security, backup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,22 +16,16 @@ jobs:
           cache: npm
       - run: npm ci
 
-      # Cache Next.js build output per the official recommendation:
-      # https://nextjs.org/docs/pages/guides/ci-build-caching#github-actions
-      - name: Cache Next.js build
-        uses: actions/cache@v4
-        with:
-          path: .next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.[jt]s', '**/*.[jt]sx') }}
-          restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
-            ${{ runner.os }}-nextjs-
-
       - run: npm run validate:agents-md
       - run: npm run format:check
       - run: npm run lint -- --max-warnings=0
       - run: npm run typecheck
-      - run: npm run test
+
+      # Coverage compiles and runs the complete Node test set. Keeping it as
+      # the single unit-test entry avoids running the same suite twice.
+      - name: Node tests with coverage
+        run: npm run test:coverage
+
       - run: npm run test:restore
       - name: Deterministic citation eval
         run: npm run eval:ci:test && npm run eval:ci
@@ -43,9 +38,6 @@ jobs:
       - name: SQLite backup and restore drill
         run: npm run backup:drill
 
-      - name: Test coverage
-        run: npm run test:coverage
-
       - name: Code quality metrics
         run: npm run quality:metrics
 
@@ -57,6 +49,9 @@ jobs:
 
       - name: Check alerting rules
         run: npm run alerts:check
+
+      - name: Check generated API reference
+        run: npm run docs:api:check
 
       - name: Publish code quality summary
         if: always()
@@ -93,11 +88,16 @@ jobs:
             tmp/tech-debt-report.md
           if-no-files-found: warn
 
-      # Verify the auto-generated API reference (docs/api-reference.md) is
-      # in sync with app/api/**/route.ts. If a route was added/removed/renamed
-      # without regenerating the docs, this fails with a clear remediation.
-      - name: Check generated API reference
-        run: npm run docs:api:check
+  browser:
+    name: browser, accessibility, UX
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
@@ -122,7 +122,29 @@ jobs:
             tmp/ux-audit
           if-no-files-found: warn
 
-      - name: Build (with performance tracking)
+  build:
+    name: build, metrics, container
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Cache Next.js build output per the official recommendation:
+      # https://nextjs.org/docs/pages/guides/ci-build-caching#github-actions
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.[jt]s', '**/*.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+            ${{ runner.os }}-nextjs-
+
+      - name: Build with performance tracking
         run: npm run build:measure
 
       - name: Upload build metrics
@@ -155,3 +177,21 @@ jobs:
             sleep 2
           done
           exit 1
+
+  # Preserve the historical required-check name while the heavy work runs in
+  # parallel. This job fails closed if any branch of the matrix did not pass.
+  check:
+    name: check
+    if: always()
+    needs: [static, browser, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every quality branch
+        env:
+          STATIC_RESULT: ${{ needs.static.result }}
+          BROWSER_RESULT: ${{ needs.browser.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          test "$STATIC_RESULT" = "success"
+          test "$BROWSER_RESULT" = "success"
+          test "$BUILD_RESULT" = "success"
