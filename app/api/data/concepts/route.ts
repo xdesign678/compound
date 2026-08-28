@@ -24,6 +24,7 @@ function parseIdsParam(value: string | null): string[] {
 /**
  * GET /api/data/concepts?ids=c-1,c-2
  * Returns full concept documents for on-demand hydration.
+ * Each concept includes `serverRevision` (monotonic server mutation token).
  */
 export async function GET(req: Request) {
   const denied = requireAdmin(req);

@@ -20,6 +20,12 @@ export interface Source {
    */
   externalKey?: string;
   lastSyncedCommitSha?: string;
+  /**
+   * Server-assigned monotonic mutation token. Independent of `updatedAt`
+   * (client clocks are untrusted) and of concept `version` (user-visible
+   * document version). Absent on legacy local-only rows.
+   */
+  serverRevision?: number;
 }
 
 export interface CategoryTag {
@@ -40,6 +46,11 @@ export interface Concept {
   contentStatus?: ContentStatus;
   categories: CategoryTag[];
   categoryKeys: string[];
+  /**
+   * Server-assigned monotonic mutation token. Independent of `version`
+   * (user-visible document version) and of `updatedAt`.
+   */
+  serverRevision?: number;
 }
 
 export interface ConceptVersion {

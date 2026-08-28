@@ -8,10 +8,18 @@ import {
   isRequestBodyTooLargeError,
   readJsonWithLimit,
 } from '@/lib/request-guards';
-import { getServerDb, repo } from '@/lib/server-db';
+import {
+  assertWritableRevision,
+  DEFAULT_SERVER_REVISION,
+  EntityNotFoundError,
+  getServerDb,
+  mutationFailureResponse,
+  parseExpectedRevision,
+  repo,
+} from '@/lib/server-db';
 import { requireAdmin } from '@/lib/server-auth';
 import { recompileSourceArtifactsAfterEdit } from '@/lib/wiki-compiler';
-import type { ActivityLog } from '@/lib/types';
+import type { ActivityLog, Source } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -35,6 +43,7 @@ function parseIdsParam(value: string | null): string[] {
 /**
  * GET /api/data/sources?ids=s-1,s-2
  * Returns full source documents for on-demand hydration.
+ * Each source includes `serverRevision` (monotonic server mutation token).
  */
 export async function GET(req: Request) {
   const denied = requireAdmin(req);
@@ -76,7 +85,14 @@ function clampText(value: unknown, max: number): string {
 /**
  * PATCH /api/data/sources
  * Updates a source document and recompiles retrieval artifacts for all
- * concepts backed by that source. Body: `{ id, rawContent, title? }`.
+ * concepts backed by that source.
+ * Body: `{ id, rawContent, title?, expectedRevision? }`.
+ *
+ * CAS: `expectedRevision` is compared in the same transaction before any
+ * index / activity / analysis-job side effects. Mismatch returns 409
+ * `{ code: "revision_conflict", expectedRevision, currentRevision }`.
+ * Missing `expectedRevision` follows `COMPOUND_MUTATION_CAS_MODE`
+ * (`log-only` default, or `enforce`).
  */
 export async function PATCH(req: Request) {
   const denied = requireAdmin(req) || enforceContentLength(req, MAX_PATCH_BODY_BYTES);
@@ -85,10 +101,20 @@ export async function PATCH(req: Request) {
   try {
     let body: Record<string, unknown>;
     try {
-      body = await readJsonWithLimit<Record<string, unknown>>(req, MAX_PATCH_BODY_BYTES);
+      const parsed = await readJsonWithLimit<unknown>(req, MAX_PATCH_BODY_BYTES);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return NextResponse.json(
+          { error: 'Request body must be a JSON object', code: 'invalid_json' },
+          { status: 400 },
+        );
+      }
+      body = parsed as Record<string, unknown>;
     } catch (error) {
       if (isRequestBodyTooLargeError(error)) throw error;
-      body = {};
+      return NextResponse.json(
+        { error: 'Request body must be valid JSON', code: 'invalid_json' },
+        { status: 400 },
+      );
     }
     const id = clampString(body.id, 120);
     const rawContent = clampText(body.rawContent, MAX_RAW_CONTENT_CHARS);
@@ -98,37 +124,63 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'rawContent is required' }, { status: 400 });
     }
 
-    const existing = repo.getSource(id);
-    if (!existing) return NextResponse.json({ error: 'source not found' }, { status: 404 });
-
-    const nextSource = {
-      ...existing,
-      title: title || existing.title,
-      rawContent,
-      updatedAt: Date.now(),
-    };
-    const activity: ActivityLog = {
-      id: `a-${nanoid(8)}`,
-      type: 'ingest',
-      title: `更新资料 <em>${escapeHTML(nextSource.title)}</em>`,
-      details: '手动编辑资料正文后重建 chunk、证据链与检索索引。',
-      relatedSourceIds: [nextSource.id],
-      at: Date.now(),
-    };
+    let expectedRevision: number | undefined;
+    try {
+      expectedRevision = parseExpectedRevision(body.expectedRevision);
+    } catch (error) {
+      const failure = mutationFailureResponse(error);
+      if (failure) return NextResponse.json(failure.body, { status: failure.status });
+      throw error;
+    }
 
     let compiler: ReturnType<typeof recompileSourceArtifactsAfterEdit> | undefined;
-    const trx = getServerDb().transaction(() => {
-      repo.insertSource(nextSource);
-      compiler = recompileSourceArtifactsAfterEdit({
-        source: nextSource,
-        changeSummary: `资料「${nextSource.title}」手动编辑后重建索引。`,
+    let nextSource: Source | undefined;
+    let activity: ActivityLog | undefined;
+    try {
+      const trx = getServerDb().transaction(() => {
+        const existing = repo.getSource(id);
+        if (!existing) throw new EntityNotFoundError('source', id);
+        assertWritableRevision(
+          'source',
+          id,
+          expectedRevision,
+          existing.serverRevision ?? DEFAULT_SERVER_REVISION,
+        );
+
+        nextSource = {
+          ...existing,
+          title: title || existing.title,
+          rawContent,
+          updatedAt: Date.now(),
+        };
+        activity = {
+          id: `a-${nanoid(8)}`,
+          type: 'ingest',
+          title: `更新资料 <em>${escapeHTML(nextSource.title)}</em>`,
+          details: '手动编辑资料正文后重建 chunk、证据链与检索索引。',
+          relatedSourceIds: [nextSource.id],
+          at: Date.now(),
+        };
+        repo.insertSource(nextSource);
+        compiler = recompileSourceArtifactsAfterEdit({
+          source: nextSource,
+          changeSummary: `资料「${nextSource.title}」手动编辑后重建索引。`,
+        });
+        repo.insertActivity({
+          ...activity,
+          relatedConceptIds: compiler?.affectedConceptIds ?? [],
+        });
       });
-      repo.insertActivity({
-        ...activity,
-        relatedConceptIds: compiler?.affectedConceptIds ?? [],
-      });
-    });
-    trx();
+      trx.immediate();
+    } catch (error) {
+      const failure = mutationFailureResponse(error);
+      if (failure) return NextResponse.json(failure.body, { status: failure.status });
+      throw error;
+    }
+
+    if (!nextSource || !activity) {
+      return NextResponse.json({ error: 'source not found' }, { status: 404 });
+    }
 
     try {
       const { queueSourceEnhancementJobs, startAnalysisWorker } =
@@ -158,6 +210,8 @@ export async function PATCH(req: Request) {
     if (isRequestBodyTooLargeError(err)) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
+    const failure = mutationFailureResponse(err);
+    if (failure) return NextResponse.json(failure.body, { status: failure.status });
     const requestId = req.headers.get('x-request-id') ?? undefined;
     return NextResponse.json(apiError(err, requestId, 'data.sources_patch_failed'), {
       status: 500,

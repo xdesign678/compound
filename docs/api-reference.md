@@ -6,8 +6,8 @@
 
 This document is generated automatically from the Next.js Route Handlers under `app/api/**/route.ts`. It enumerates every public HTTP endpoint, the methods it implements, runtime hints, and obvious security guards (admin token, rate limit, payload size, webhook signatures).
 
-- Routes: **45**
-- Handlers (HTTP methods): **55**
+- Routes: **47**
+- Handlers (HTTP methods): **57**
 - Generator: `scripts/generate-api-docs.mjs`
 
 ## Table of contents
@@ -21,6 +21,8 @@ This document is generated automatically from the Next.js Route Handlers under `
   - [`/api/concepts/from-selection`](#api-concepts-from-selection)
   - [`/api/concepts/from-selection/status`](#api-concepts-from-selection-status)
 - **data**
+  - [`/api/data/concepts/{id}/flag`](#api-data-concepts--id--flag)
+  - [`/api/data/concepts/{id}`](#api-data-concepts--id)
   - [`/api/data/concepts/{id}/versions`](#api-data-concepts--id--versions)
   - [`/api/data/concepts`](#api-data-concepts)
   - [`/api/data/snapshot`](#api-data-snapshot)
@@ -196,6 +198,59 @@ Guards: admin token.
 
 ## data
 
+### `/api/data/concepts/{id}/flag`
+
+Source: [`app/api/data/concepts/[id]/flag/route.ts`](../app/api/data/concepts/[id]/flag/route.ts)
+
+| Field       | Value                                   |
+| ----------- | --------------------------------------- |
+| Methods     | `POST`                                  |
+| Runtime     | `nodejs`                                |
+| maxDuration | 10                                      |
+| Guards      | `admin-token`, `content-length-guarded` |
+
+#### POST
+
+POST /api/data/concepts/:id/flag
+Mark a concept as incorrect. Creates a deduplicated server review item
+and a server activity + sync change in the same transaction, then returns
+both so the current client can mirror them.
+
+Consecutive clicks reuse the open review item and do not enqueue more
+pending reviews or extra activity. Body (optional): `{ expectedRevision }`.
+
+CAS mismatch returns 409
+`{ code: "revision_conflict", expectedRevision, currentRevision }`.
+Missing `expectedRevision` follows `COMPOUND_MUTATION_CAS_MODE`
+(`log-only` default, or `enforce`).
+
+### `/api/data/concepts/{id}`
+
+Source: [`app/api/data/concepts/[id]/route.ts`](../app/api/data/concepts/[id]/route.ts)
+
+| Field       | Value                                   |
+| ----------- | --------------------------------------- |
+| Methods     | `DELETE`                                |
+| Runtime     | `nodejs`                                |
+| maxDuration | 30                                      |
+| Guards      | `admin-token`, `content-length-guarded` |
+
+#### DELETE
+
+DELETE /api/data/concepts/:id
+Server-authoritative concept delete. Body (optional): `{ expectedRevision }`.
+
+Same transaction, in order: CAS → strip this id from other concepts'
+`related` arrays → delete the main row → FTS / evidence / relations /
+versions / category-derived cleanup → sync tombstone.
+Repeat DELETE is idempotent when a tombstone already exists (no extra
+tombstone). Never-existed ids return 404.
+
+CAS mismatch returns 409
+`{ code: "revision_conflict", expectedRevision, currentRevision }`.
+Missing `expectedRevision` follows `COMPOUND_MUTATION_CAS_MODE`
+(`log-only` default, or `enforce`).
+
 ### `/api/data/concepts/{id}/versions`
 
 Source: [`app/api/data/concepts/[id]/versions/route.ts`](../app/api/data/concepts/[id]/versions/route.ts)
@@ -227,6 +282,7 @@ Source: [`app/api/data/concepts/route.ts`](../app/api/data/concepts/route.ts)
 
 GET /api/data/concepts?ids=c-1,c-2
 Returns full concept documents for on-demand hydration.
+Each concept includes `serverRevision` (monotonic server mutation token).
 
 ### `/api/data/snapshot`
 
@@ -250,6 +306,7 @@ Full snapshots paginate sources, concepts, activity, and ask with the same
 offset/limit and expose `totalSources/totalConcepts/totalActivity/totalAsk`.
 Full concept bodies / source raw content are fetched on demand by detail views
 and heavy workflows such as ask / categorize.
+Source and concept entities include `serverRevision`.
 
 ### `/api/data/sources`
 
@@ -266,12 +323,20 @@ Source: [`app/api/data/sources/route.ts`](../app/api/data/sources/route.ts)
 
 GET /api/data/sources?ids=s-1,s-2
 Returns full source documents for on-demand hydration.
+Each source includes `serverRevision` (monotonic server mutation token).
 
 #### PATCH
 
 PATCH /api/data/sources
 Updates a source document and recompiles retrieval artifacts for all
-concepts backed by that source. Body: `{ id, rawContent, title? }`.
+concepts backed by that source.
+Body: `{ id, rawContent, title?, expectedRevision? }`.
+
+CAS: `expectedRevision` is compared in the same transaction before any
+index / activity / analysis-job side effects. Mismatch returns 409
+`{ code: "revision_conflict", expectedRevision, currentRevision }`.
+Missing `expectedRevision` follows `COMPOUND_MUTATION_CAS_MODE`
+(`log-only` default, or `enforce`).
 
 ## health
 

@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { normalizeCategoryState } from './category-normalization';
+import { logger } from './logging';
 import { instrumentDatabase } from './observability/query-analyzer';
 import type {
   Source,
@@ -135,7 +136,8 @@ function runMigrations(db: DB): void {
       ingested_at   INTEGER NOT NULL,
       updated_at    INTEGER NOT NULL,
       external_key  TEXT,
-      last_synced_commit_sha TEXT
+      last_synced_commit_sha TEXT,
+      server_revision INTEGER NOT NULL DEFAULT 1
     );
     CREATE INDEX IF NOT EXISTS idx_sources_ingested_at ON sources(ingested_at);
     CREATE INDEX IF NOT EXISTS idx_sources_external_key ON sources(external_key);
@@ -149,7 +151,8 @@ function runMigrations(db: DB): void {
       related         TEXT NOT NULL,  -- JSON array of {id, kind}
       created_at      INTEGER NOT NULL,
       updated_at      INTEGER NOT NULL,
-      version         INTEGER NOT NULL DEFAULT 1
+      version         INTEGER NOT NULL DEFAULT 1,
+      server_revision INTEGER NOT NULL DEFAULT 1
     );
     CREATE INDEX IF NOT EXISTS idx_concepts_updated_at ON concepts(updated_at);
     CREATE INDEX IF NOT EXISTS idx_concepts_created_at ON concepts(created_at);
@@ -296,10 +299,17 @@ function runMigrations(db: DB): void {
   if (!sourceColumns.has('updated_at')) {
     db.exec(`ALTER TABLE sources ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;`);
   }
+  if (!sourceColumns.has('server_revision')) {
+    db.exec(`ALTER TABLE sources ADD COLUMN server_revision INTEGER NOT NULL DEFAULT 1;`);
+  }
   db.exec(`
     UPDATE sources SET updated_at = ingested_at WHERE updated_at <= 0;
     CREATE INDEX IF NOT EXISTS idx_sources_updated_at ON sources(updated_at);
   `);
+
+  if (!conceptColumns.has('server_revision')) {
+    db.exec(`ALTER TABLE concepts ADD COLUMN server_revision INTEGER NOT NULL DEFAULT 1;`);
+  }
 
   runCategoryNormalizationIfNeeded(db);
   backfillSyncChangesIfNeeded(db);
@@ -438,6 +448,7 @@ interface SourceRow {
   updated_at: number;
   external_key: string | null;
   last_synced_commit_sha: string | null;
+  server_revision: number;
 }
 
 interface ConceptRow {
@@ -452,6 +463,7 @@ interface ConceptRow {
   created_at: number;
   updated_at: number;
   version: number;
+  server_revision: number;
 }
 
 interface ActivityRow {
@@ -491,6 +503,168 @@ interface RecordQueryOptions extends TimeWindowWithLimit {
 
 export type SyncEntityType = 'source' | 'concept' | 'activity' | 'ask';
 export type SyncOperation = 'upsert' | 'delete';
+export type MutationCasMode = 'log-only' | 'enforce';
+
+export const DEFAULT_SERVER_REVISION = 1;
+export const MUTATION_CAS_MODE_ENV = 'COMPOUND_MUTATION_CAS_MODE';
+
+export class RevisionConflictError extends Error {
+  readonly code = 'revision_conflict' as const;
+
+  constructor(
+    readonly expectedRevision: number,
+    readonly currentRevision: number,
+  ) {
+    super('revision_conflict');
+    this.name = 'RevisionConflictError';
+  }
+}
+
+export class RevisionRequiredError extends Error {
+  readonly code = 'revision_required' as const;
+
+  constructor(readonly currentRevision: number) {
+    super('revision_required');
+    this.name = 'RevisionRequiredError';
+  }
+}
+
+export class InvalidExpectedRevisionError extends Error {
+  readonly code = 'invalid_expected_revision' as const;
+
+  constructor() {
+    super('expectedRevision must be a positive integer');
+    this.name = 'InvalidExpectedRevisionError';
+  }
+}
+
+export class EntityNotFoundError extends Error {
+  readonly code = 'not_found' as const;
+
+  constructor(
+    readonly entityType: 'source' | 'concept',
+    readonly entityId: string,
+  ) {
+    super(`${entityType} not found`);
+    this.name = 'EntityNotFoundError';
+  }
+}
+
+export interface DeleteConceptResult {
+  outcome: 'deleted' | 'already_deleted';
+  tombstoneWritten: boolean;
+}
+
+/**
+ * Explicit CAS compatibility mode. Default is `log-only`.
+ * Missing expectedRevision is never an implicit no-op: log-only logs and
+ * allows; enforce rejects. A provided expectedRevision is always checked.
+ */
+export function getMutationCasMode(): MutationCasMode {
+  const configured = process.env[MUTATION_CAS_MODE_ENV];
+  if (configured === undefined || configured.trim() === '') return 'log-only';
+  const normalized = configured.trim().toLowerCase();
+  if (normalized === 'log-only' || normalized === 'enforce') return normalized;
+  logger.warn('mutation.cas_mode_invalid', {
+    handled: 'enforce-fail-closed',
+  });
+  return 'enforce';
+}
+
+export function parseExpectedRevision(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 1) return value;
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+    const parsed = Number(value.trim());
+    if (Number.isSafeInteger(parsed) && parsed >= 1) return parsed;
+  }
+  throw new InvalidExpectedRevisionError();
+}
+
+/**
+ * Compare `expectedRevision` with the row currently locked in this
+ * transaction. Must run before any index / relation / activity / job
+ * side effect. A provided token is always validated; a missing token is
+ * handled by the explicit log-only | enforce configuration.
+ */
+export function assertWritableRevision(
+  entityType: 'source' | 'concept',
+  entityId: string,
+  expectedRevision: number | undefined,
+  currentRevision: number,
+): MutationCasMode {
+  const mode = getMutationCasMode();
+  if (typeof expectedRevision === 'number') {
+    if (expectedRevision !== currentRevision) {
+      throw new RevisionConflictError(expectedRevision, currentRevision);
+    }
+    return mode;
+  }
+  if (mode === 'enforce') {
+    logger.warn('mutation.cas_revision_missing', {
+      entityType,
+      entityId,
+      currentRevision,
+      mode,
+      handled: 'enforce-reject',
+    });
+    throw new RevisionRequiredError(currentRevision);
+  }
+  logger.warn('mutation.cas_revision_missing', {
+    entityType,
+    entityId,
+    currentRevision,
+    mode,
+    handled: 'log-only-allow',
+  });
+  return mode;
+}
+
+export function mutationFailureResponse(
+  err: unknown,
+): { status: number; body: Record<string, unknown> } | null {
+  if (err instanceof RevisionConflictError) {
+    return {
+      status: 409,
+      body: {
+        code: 'revision_conflict',
+        expectedRevision: err.expectedRevision,
+        currentRevision: err.currentRevision,
+      },
+    };
+  }
+  if (err instanceof RevisionRequiredError) {
+    return {
+      status: 400,
+      body: {
+        code: 'revision_required',
+        currentRevision: err.currentRevision,
+      },
+    };
+  }
+  if (err instanceof InvalidExpectedRevisionError) {
+    return { status: 400, body: { error: err.message, code: err.code } };
+  }
+  if (err instanceof EntityNotFoundError) {
+    return { status: 404, body: { error: `${err.entityType} not found` } };
+  }
+  return null;
+}
+
+function nextServerRevision(previous: number | undefined): number {
+  if (typeof previous !== 'number' || !Number.isFinite(previous) || previous < 1) {
+    return DEFAULT_SERVER_REVISION;
+  }
+  return Math.trunc(previous) + 1;
+}
+
+function readPersistedServerRevision(
+  row: { server_revision?: number } | undefined,
+): number | undefined {
+  if (!row) return undefined;
+  const value = Number(row.server_revision);
+  return Number.isFinite(value) && value >= 1 ? Math.trunc(value) : DEFAULT_SERVER_REVISION;
+}
 
 export interface SyncChange {
   seq: number;
@@ -512,6 +686,47 @@ function recordSyncChange(
        VALUES (?, ?, ?, ?)`,
     )
     .run(entityType, entityId, operation, Math.trunc(changedAt));
+}
+
+function latestSyncChange(entityType: SyncEntityType, entityId: string): SyncChange | null {
+  const row = cachedPrepare(
+    `SELECT seq, entity_type, entity_id, operation, changed_at
+       FROM sync_changes
+      WHERE entity_type = ? AND entity_id = ?
+      ORDER BY seq DESC
+      LIMIT 1`,
+  ).get(entityType, entityId) as
+    | {
+        seq: number;
+        entity_type: SyncEntityType;
+        entity_id: string;
+        operation: SyncOperation;
+        changed_at: number;
+      }
+    | undefined;
+  if (!row) return null;
+  return {
+    seq: row.seq,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    operation: row.operation,
+    changedAt: row.changed_at,
+  };
+}
+
+function categoryWikiPairsFromConcept(
+  concept: Concept,
+): Array<{ primary: string; secondary: string }> {
+  const pairs: Array<{ primary: string; secondary: string }> = [];
+  const seen = new Set<string>();
+  for (const cat of concept.categories ?? []) {
+    if (!cat.primary || !cat.secondary) continue;
+    const key = `${cat.primary}/${cat.secondary}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    pairs.push({ primary: cat.primary, secondary: cat.secondary });
+  }
+  return pairs;
 }
 
 function parseJsonArray<T>(s: string | null | undefined, fallback: T[] = []): T[] {
@@ -589,6 +804,7 @@ function rowToSource(r: SourceRow, contentStatus: ContentStatus = 'full'): Sourc
     contentStatus,
     externalKey: r.external_key ?? undefined,
     lastSyncedCommitSha: r.last_synced_commit_sha ?? undefined,
+    serverRevision: r.server_revision ?? DEFAULT_SERVER_REVISION,
   };
 }
 
@@ -606,18 +822,19 @@ function rowToConcept(r: ConceptRow, contentStatus: ContentStatus = 'full'): Con
     updatedAt: r.updated_at,
     version: r.version,
     contentStatus,
+    serverRevision: r.server_revision ?? DEFAULT_SERVER_REVISION,
   };
 }
 
 function selectSourceColumns(summariesOnly = false): string {
   return summariesOnly
-    ? `id, title, type, author, url, '' AS raw_content, ingested_at, updated_at, external_key, last_synced_commit_sha`
+    ? `id, title, type, author, url, '' AS raw_content, ingested_at, updated_at, external_key, last_synced_commit_sha, server_revision`
     : '*';
 }
 
 function selectConceptColumns(summariesOnly = false): string {
   return summariesOnly
-    ? `id, title, summary, '' AS body, sources, related, categories, category_keys, created_at, updated_at, version`
+    ? `id, title, summary, '' AS body, sources, related, categories, category_keys, created_at, updated_at, version, server_revision`
     : '*';
 }
 
@@ -856,17 +1073,20 @@ export const repo = {
 
   // ---- sources ---------------------------------------------------
   insertSource(s: Source): void {
-    const previous = cachedPrepare(`SELECT updated_at FROM sources WHERE id = ?`).get(s.id) as
-      | { updated_at: number }
-      | undefined;
+    const previous = cachedPrepare(
+      `SELECT updated_at, server_revision FROM sources WHERE id = ?`,
+    ).get(s.id) as { updated_at: number; server_revision: number } | undefined;
     const requestedUpdatedAt = s.updatedAt ?? s.ingestedAt;
     const updatedAt = previous
       ? Math.max(requestedUpdatedAt, previous.updated_at + 1)
       : requestedUpdatedAt;
+    const serverRevision = previous
+      ? nextServerRevision(readPersistedServerRevision(previous))
+      : DEFAULT_SERVER_REVISION;
     cachedPrepare(
       `INSERT OR REPLACE INTO sources
-          (id, title, type, author, url, raw_content, ingested_at, updated_at, external_key, last_synced_commit_sha)
-          VALUES (@id, @title, @type, @author, @url, @raw_content, @ingested_at, @updated_at, @external_key, @last_synced_commit_sha)`,
+          (id, title, type, author, url, raw_content, ingested_at, updated_at, external_key, last_synced_commit_sha, server_revision)
+          VALUES (@id, @title, @type, @author, @url, @raw_content, @ingested_at, @updated_at, @external_key, @last_synced_commit_sha, @server_revision)`,
     ).run({
       id: s.id,
       title: s.title,
@@ -878,6 +1098,7 @@ export const repo = {
       updated_at: updatedAt,
       external_key: s.externalKey ?? null,
       last_synced_commit_sha: s.lastSyncedCommitSha ?? null,
+      server_revision: serverRevision,
     });
     recordSyncChange('source', s.id, 'upsert', updatedAt);
   },
@@ -922,22 +1143,29 @@ export const repo = {
   updateSourceLastSyncedCommitSha(id: string, commitSha: string): void {
     const updatedAt = Date.now();
     const result = cachedPrepare(
-      `UPDATE sources SET last_synced_commit_sha = ?, updated_at = ? WHERE id = ?`,
-    ).run(commitSha, updatedAt, id);
+      `UPDATE sources
+          SET last_synced_commit_sha = ?, updated_at = ?
+        WHERE id = ? AND COALESCE(last_synced_commit_sha, '') != ?`,
+    ).run(commitSha, updatedAt, id, commitSha);
     if (result.changes > 0) recordSyncChange('source', id, 'upsert', updatedAt);
   },
 
   updateGithubSourcesLastSyncedCommitSha(repoSlug: string, commitSha: string): number {
     const db = getServerDb();
     const ids = db
-      .prepare(`SELECT id FROM sources WHERE external_key LIKE ?`)
-      .all(`github:${repoSlug}:%`) as Array<{ id: string }>;
+      .prepare(
+        `SELECT id FROM sources
+          WHERE external_key LIKE ? AND COALESCE(last_synced_commit_sha, '') != ?`,
+      )
+      .all(`github:${repoSlug}:%`, commitSha) as Array<{ id: string }>;
     if (ids.length === 0) return 0;
     const updatedAt = Date.now();
     db.transaction(() => {
       db.prepare(
-        `UPDATE sources SET last_synced_commit_sha = ?, updated_at = ? WHERE external_key LIKE ?`,
-      ).run(commitSha, updatedAt, `github:${repoSlug}:%`);
+        `UPDATE sources
+            SET last_synced_commit_sha = ?, updated_at = ?
+          WHERE external_key LIKE ? AND COALESCE(last_synced_commit_sha, '') != ?`,
+      ).run(commitSha, updatedAt, `github:${repoSlug}:%`, commitSha);
       for (const row of ids) recordSyncChange('source', row.id, 'upsert', updatedAt);
     })();
     return ids.length;
@@ -1001,14 +1229,17 @@ export const repo = {
 
   // ---- concepts --------------------------------------------------
   upsertConcept(c: Concept): void {
-    const previous = cachedPrepare(`SELECT updated_at FROM concepts WHERE id = ?`).get(c.id) as
-      | { updated_at: number }
-      | undefined;
+    const previous = cachedPrepare(
+      `SELECT updated_at, server_revision FROM concepts WHERE id = ?`,
+    ).get(c.id) as { updated_at: number; server_revision: number } | undefined;
     const updatedAt = previous ? Math.max(c.updatedAt, previous.updated_at + 1) : c.updatedAt;
+    const serverRevision = previous
+      ? nextServerRevision(readPersistedServerRevision(previous))
+      : DEFAULT_SERVER_REVISION;
     cachedPrepare(
       `INSERT OR REPLACE INTO concepts
-          (id, title, summary, body, sources, related, categories, category_keys, created_at, updated_at, version)
-          VALUES (@id, @title, @summary, @body, @sources, @related, @categories, @category_keys, @created_at, @updated_at, @version)`,
+          (id, title, summary, body, sources, related, categories, category_keys, created_at, updated_at, version, server_revision)
+          VALUES (@id, @title, @summary, @body, @sources, @related, @categories, @category_keys, @created_at, @updated_at, @version, @server_revision)`,
     ).run({
       id: c.id,
       title: c.title,
@@ -1021,6 +1252,7 @@ export const repo = {
       created_at: c.createdAt,
       updated_at: updatedAt,
       version: c.version ?? 1,
+      server_revision: serverRevision,
     });
     noteCategoryKeysOnWrite(c.categoryKeys);
     recordSyncChange('concept', c.id, 'upsert', updatedAt);
@@ -1157,12 +1389,20 @@ export const repo = {
   },
 
   /**
-   * Delete a concept row and best-effort clean associated auxiliary tables.
+   * Delete a concept row and clean associated auxiliary tables in one
+   * transaction: CAS → related-id cleanup → main row → FTS/evidence/
+   * relations/versions/category-derived → sync tombstone.
    * Tables created lazily by `wiki-db.ts` (concept_fts/concept_evidence/…) may
    * not exist yet in a cold database, so we swallow "no such table" errors.
+   * Repeat deletes are idempotent when a tombstone already exists.
    */
-  deleteConcept(id: string): void {
-    if (!id) return;
+  deleteConcept(
+    id: string,
+    options?: { expectedRevision?: number; cas?: boolean },
+  ): DeleteConceptResult {
+    if (!id) {
+      throw new EntityNotFoundError('concept', id);
+    }
     const db = getServerDb();
     const safeExec = (sql: string, params: unknown[] = []) => {
       try {
@@ -1172,7 +1412,26 @@ export const repo = {
         if (!/no such table/i.test(msg)) throw err;
       }
     };
-    db.transaction(() => {
+    const result = db.transaction((): DeleteConceptResult => {
+      const existing = repo.getConcept(id);
+      if (!existing) {
+        const latest = latestSyncChange('concept', id);
+        if (latest?.operation === 'delete') {
+          return { outcome: 'already_deleted', tombstoneWritten: false };
+        }
+        throw new EntityNotFoundError('concept', id);
+      }
+      const shouldCas = options?.cas === true || options?.expectedRevision !== undefined;
+      if (shouldCas) {
+        assertWritableRevision(
+          'concept',
+          id,
+          options?.expectedRevision,
+          existing.serverRevision ?? DEFAULT_SERVER_REVISION,
+        );
+      }
+      const categoryPairs = categoryWikiPairsFromConcept(existing);
+      repo.replaceRelatedId(id, null);
       db.prepare(`DELETE FROM concepts WHERE id = ?`).run(id);
       safeExec(`DELETE FROM concept_fts WHERE concept_id = ?`, [id]);
       safeExec(`DELETE FROM concept_evidence WHERE concept_id = ?`, [id]);
@@ -1181,9 +1440,14 @@ export const repo = {
         [id, id],
       );
       safeExec(`DELETE FROM concept_versions WHERE concept_id = ?`, [id]);
+      if (categoryPairs.length > 0) {
+        repo.markCategoryWikisStale(categoryPairs);
+      }
       recordSyncChange('concept', id, 'delete');
+      return { outcome: 'deleted', tombstoneWritten: true };
     })();
     invalidateCategoryKeysCache();
+    return result;
   },
 
   /**

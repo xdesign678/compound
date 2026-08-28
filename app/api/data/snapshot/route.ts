@@ -36,6 +36,7 @@ function parseIntParam(value: string | null, defaultVal: number, max: number): n
  * offset/limit and expose `totalSources/totalConcepts/totalActivity/totalAsk`.
  * Full concept bodies / source raw content are fetched on demand by detail views
  * and heavy workflows such as ask / categorize.
+ * Source and concept entities include `serverRevision`.
  */
 export async function GET(req: Request) {
   const denied = requireAdmin(req);

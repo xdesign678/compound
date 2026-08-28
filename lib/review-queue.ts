@@ -5,7 +5,14 @@
  * conflict candidates are written here instead of being blindly applied.
  */
 import { nanoid } from 'nanoid';
-import { getServerDb, repo } from './server-db';
+import {
+  assertWritableRevision,
+  DEFAULT_SERVER_REVISION,
+  EntityNotFoundError,
+  getServerDb,
+  repo,
+} from './server-db';
+import type { ActivityLog } from './types';
 import { wikiRepo, type ConceptRelationKind } from './wiki-db';
 
 export type ReviewStatus = 'open' | 'approved' | 'rejected' | 'resolved';
@@ -15,7 +22,8 @@ export type ReviewKind =
   | 'concept_merge_candidate'
   | 'relation_suggestion'
   | 'conflict'
-  | 'manual';
+  | 'manual'
+  | 'concept_incorrect';
 
 export const REVIEW_KINDS: readonly ReviewKind[] = [
   'low_confidence_summary',
@@ -24,7 +32,10 @@ export const REVIEW_KINDS: readonly ReviewKind[] = [
   'relation_suggestion',
   'conflict',
   'manual',
+  'concept_incorrect',
 ] as const;
+
+export const CONCEPT_INCORRECT_KIND: ReviewKind = 'concept_incorrect';
 
 export function isReviewKind(value: unknown): value is ReviewKind {
   return typeof value === 'string' && (REVIEW_KINDS as readonly string[]).includes(value);
@@ -45,8 +56,6 @@ export interface ReviewItem {
   updated_at: number;
   resolved_at: number | null;
 }
-
-let schemaReady = false;
 
 function now(): number {
   return Date.now();
@@ -106,7 +115,6 @@ function applyApprovedReviewItem(item: ReviewItem): Record<string, unknown> | nu
 }
 
 export function ensureReviewQueueSchema(): void {
-  if (schemaReady) return;
   getServerDb().exec(`
     CREATE TABLE IF NOT EXISTS review_items (
       id TEXT PRIMARY KEY,
@@ -126,8 +134,105 @@ export function ensureReviewQueueSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_review_items_status_created ON review_items(status, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_review_items_kind_status ON review_items(kind, status);
     CREATE INDEX IF NOT EXISTS idx_review_items_source ON review_items(source_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_review_items_open_concept_incorrect
+      ON review_items(target_id)
+      WHERE status = 'open' AND target_type = 'concept' AND kind = 'concept_incorrect';
   `);
-  schemaReady = true;
+}
+
+export function getReviewItem(id: string): ReviewItem | null {
+  ensureReviewQueueSchema();
+  return (
+    (getServerDb().prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as
+      | ReviewItem
+      | undefined) ?? null
+  );
+}
+
+export function findOpenConceptIncorrectReview(conceptId: string): ReviewItem | null {
+  ensureReviewQueueSchema();
+  if (!conceptId) return null;
+  return (
+    (getServerDb()
+      .prepare(
+        `SELECT * FROM review_items
+          WHERE status = 'open'
+            AND kind = 'concept_incorrect'
+            AND target_type = 'concept'
+            AND target_id = ?
+          ORDER BY created_at ASC
+          LIMIT 1`,
+      )
+      .get(conceptId) as ReviewItem | undefined) ?? null
+  );
+}
+
+export interface FlagConceptIncorrectResult {
+  created: boolean;
+  review: ReviewItem;
+  activity: ActivityLog | null;
+}
+
+/**
+ * Create or reuse a server review item for a user-flagged concept.
+ * Consecutive clicks on the same open concept do not create extra pending
+ * reviews or extra activity. CAS, review insert, activity, and sync change
+ * share one transaction.
+ */
+export function flagConceptIncorrect(input: {
+  conceptId: string;
+  expectedRevision?: number;
+  cas?: boolean;
+}): FlagConceptIncorrectResult {
+  ensureReviewQueueSchema();
+  const db = getServerDb();
+  return db.transaction((): FlagConceptIncorrectResult => {
+    const concept = repo.getConcept(input.conceptId);
+    if (!concept) throw new EntityNotFoundError('concept', input.conceptId);
+
+    const existing = findOpenConceptIncorrectReview(input.conceptId);
+    if (existing) {
+      const payload = parseReviewPayload<{ activityId?: string }>(existing.payload_json);
+      const activity = payload?.activityId
+        ? (repo.getActivityByIds([payload.activityId])[0] ?? null)
+        : null;
+      return { created: false, review: existing, activity };
+    }
+
+    const shouldCas = input.cas === true || input.expectedRevision !== undefined;
+    if (shouldCas) {
+      assertWritableRevision(
+        'concept',
+        input.conceptId,
+        input.expectedRevision,
+        concept.serverRevision ?? DEFAULT_SERVER_REVISION,
+      );
+    }
+
+    const ts = now();
+    const activity: ActivityLog = {
+      id: `a-${nanoid(8)}`,
+      type: 'lint',
+      title: `标记有误：${concept.title}`,
+      details: `用户手动标记概念 "${concept.title}" 需要审核`,
+      status: 'success',
+      relatedConceptIds: [concept.id],
+      at: ts,
+    };
+    const reviewId = createReviewItem({
+      kind: CONCEPT_INCORRECT_KIND,
+      title: `标记有误：${concept.title}`,
+      targetType: 'concept',
+      targetId: concept.id,
+      payload: { reason: 'user_flagged_incorrect', activityId: activity.id },
+    });
+    repo.insertActivity(activity);
+    const review = getReviewItem(reviewId);
+    if (!review) {
+      throw new Error('failed to persist concept-incorrect review item');
+    }
+    return { created: true, review, activity };
+  })();
 }
 
 export function createReviewItem(input: {
@@ -221,24 +326,36 @@ export function resolveReviewItem(
 
 export function reopenReviewItem(id: string, resolution?: unknown): ReviewItem | null {
   ensureReviewQueueSchema();
-  const existing = getServerDb().prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as
-    | ReviewItem
-    | undefined;
-  if (!existing) return null;
+  const db = getServerDb();
+  return db
+    .transaction((): ReviewItem | null => {
+      const existing = db.prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as
+        | ReviewItem
+        | undefined;
+      if (!existing) return null;
 
-  const ts = now();
-  getServerDb()
-    .prepare(
-      `UPDATE review_items
-       SET status = 'open', resolution_json = ?, resolved_at = NULL, updated_at = ?
-       WHERE id = ?`,
-    )
-    .run(resolution === undefined ? null : JSON.stringify(resolution), ts, id);
-  return (
-    (getServerDb().prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as
-      | ReviewItem
-      | undefined) ?? null
-  );
+      if (
+        existing.status !== 'open' &&
+        existing.kind === CONCEPT_INCORRECT_KIND &&
+        existing.target_type === 'concept' &&
+        existing.target_id
+      ) {
+        const alreadyOpen = findOpenConceptIncorrectReview(existing.target_id);
+        if (alreadyOpen && alreadyOpen.id !== existing.id) return alreadyOpen;
+      }
+
+      const ts = now();
+      db.prepare(
+        `UPDATE review_items
+         SET status = 'open', resolution_json = ?, resolved_at = NULL, updated_at = ?
+         WHERE id = ?`,
+      ).run(resolution === undefined ? null : JSON.stringify(resolution), ts, id);
+      return (
+        (db.prepare(`SELECT * FROM review_items WHERE id = ?`).get(id) as ReviewItem | undefined) ??
+        null
+      );
+    })
+    .immediate();
 }
 
 export function getReviewMetrics(): Record<string, number> {
